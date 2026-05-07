@@ -1,4 +1,4 @@
-import { createServiceClient } from "./supabase";
+import { createServerClient } from "./supabase-server";
 import { PacketType } from "./types";
 
 // CA-YYYYMMDD-XXXX (standard packets) or ON-YYYYMMDD-XXXX (online orders)
@@ -9,7 +9,7 @@ export async function generateReferenceNumber(
   const d = date ?? new Date();
   const isoDate = d.toISOString().split("T")[0];
 
-  const supabase = createServiceClient();
+  const supabase = createServerClient();
   const isOnline = packetType === "online_order";
 
   const { data, error } = await supabase.rpc(
@@ -39,7 +39,7 @@ export async function generateQuoteReferenceNumber(date?: Date): Promise<string>
   const isoDate = d.toISOString().split("T")[0];
   const dateCompact = isoDate.replace(/-/g, "");
 
-  const supabase = createServiceClient();
+  const supabase = createServerClient();
 
   const { data, error } = await supabase.rpc("increment_quote_counter", {
     input_date: isoDate,

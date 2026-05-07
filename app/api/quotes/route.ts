@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
-import { createServiceClient } from "@/lib/supabase";
+import { createServerClient } from "@/lib/supabase-server";
 import { Quote } from "@/lib/types";
 
+// Force dynamic so this route never gets statically pre-rendered at build time
+export const dynamic = "force-dynamic";
+
 export async function GET(): Promise<NextResponse> {
-  const supabase = createServiceClient();
+  const supabase = createServerClient();
 
   const { data, error } = await supabase
     .from("quotes")

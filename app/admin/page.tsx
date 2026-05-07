@@ -48,7 +48,7 @@ export default function AdminPage() {
       if (q.from) params.set("from", q.from);
       if (q.to) params.set("to", q.to);
 
-      const res = await fetch(`/api/admin/packets?${params}`);
+      const res = await fetch(`/api/admin/packets?${params}`, { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to fetch packets");
       const json = await res.json();
       setPackets(json.packets ?? []);
@@ -67,7 +67,7 @@ export default function AdminPage() {
   const fetchQuotes = useCallback(async () => {
     setQuotesLoading(true);
     try {
-      const res = await fetch("/api/quotes");
+      const res = await fetch("/api/quotes", { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to fetch quotes");
       const json = await res.json();
       setQuotes(json.quotes ?? []);
