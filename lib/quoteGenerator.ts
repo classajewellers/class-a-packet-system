@@ -17,6 +17,18 @@ function formatDateAU(iso: string | null | undefined): string {
   return `${d}/${m}/${y}`;
 }
 
+function staffEmail(staffMember: string | null | undefined): string {
+  if (!staffMember) return "jewellery@classa.com.au";
+  const lower = staffMember.toLowerCase().trim();
+  const map: Record<string, string> = {
+    "josh mucklow": "josh@classa.com.au",
+    "brad mucklow": "brad@classa.com.au",
+    "ben mucklow": "ben@classa.com.au",
+    "sam mucklow": "sam@classa.com.au",
+  };
+  return map[lower] ?? "jewellery@classa.com.au";
+}
+
 export function generateQuoteHTML(quote: Quote): string {
   const customerName = [quote.customer_first_name, quote.customer_last_name]
     .filter(Boolean)
@@ -25,319 +37,299 @@ export function generateQuoteHTML(quote: Quote): string {
   const lineItems: LineItem[] = quote.line_items ?? [];
   const total = quote.total ?? lineItems.reduce((s, li) => s + li.price, 0);
 
-  const lineItemRows = lineItems
-    .map(
-      (li) => `
-    <tr>
-      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:10pt;">${esc(li.description)}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:10pt;text-align:right;white-space:nowrap;">${formatCurrency(li.price)}</td>
-    </tr>`
-    )
+  // Build table rows — minimum 8 rows (fill with empties)
+  const MIN_ROWS = 8;
+  const filledItems = [...lineItems];
+  while (filledItems.length < MIN_ROWS) {
+    filledItems.push({ description: "", price: 0, _empty: true } as LineItem & { _empty?: boolean });
+  }
+
+  const tableRows = filledItems
+    .map((li, i) => {
+      const isEven = i % 2 === 0;
+      const bg = isEven ? "#ffffff" : "#f0f0f0";
+      const isEmpty = (li as LineItem & { _empty?: boolean })._empty;
+      const rowNum = isEmpty ? "" : String(i + 1);
+      const desc = isEmpty ? "&nbsp;" : esc(li.description);
+      const price = isEmpty ? "&nbsp;" : (li.price ? formatCurrency(li.price) : "&nbsp;");
+      return `<tr style="background:${bg};">
+        <td style="padding:6px 10px;font-size:9pt;color:#333;border-right:1px solid #ddd;width:32px;text-align:center;">${rowNum}</td>
+        <td style="padding:6px 10px;font-size:9pt;color:#333;border-right:1px solid #ddd;">${desc}</td>
+        <td style="padding:6px 10px;font-size:9pt;color:#333;text-align:right;white-space:nowrap;width:110px;">${price}</td>
+      </tr>`;
+    })
     .join("");
 
-  const createdDate = formatDateAU(quote.created_at);
-
-  const quoteTypeLabel =
-    quote.quote_type === "repair" ? "Repair Quote" : "Custom Order Quote";
+  const createdDate = formatDateAU(quote.created_at) || formatDateAU(new Date().toISOString());
+  const staffName = esc(quote.staff_member ?? "");
+  const staffEmailAddr = staffEmail(quote.staff_member);
 
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
-<title>Quote ${esc(quote.reference_number)} — Class A Jewellers</title>
+<title>Quotation ${esc(quote.reference_number)} — Class A Jewellers</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  @page { size: A4 portrait; margin: 15mm; }
+  @page { size: A4 portrait; margin: 15mm 15mm 15mm 15mm; }
   body {
-    font-family: Arial, sans-serif;
+    font-family: Arial, Helvetica, sans-serif;
     font-size: 10pt;
     color: #000;
     background: #fff;
-    position: relative;
   }
-  .header-banner {
-    background: #A3B2A4;
-    color: #fff;
-    text-align: center;
-    padding: 14px 20px;
-    margin-bottom: 6px;
-  }
-  .header-banner h1 {
-    font-family: Georgia, serif;
-    font-size: 22pt;
-    font-weight: bold;
-    letter-spacing: 2px;
-  }
-  .store-details {
-    text-align: center;
-    font-size: 8pt;
-    color: #666;
-    margin-bottom: 20px;
-  }
-  .meta-row {
+
+  /* ── Header ── */
+  .header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 20px;
+    margin-bottom: 14px;
   }
-  .quote-heading {
-    font-size: 24pt;
+  .wordmark-class-a {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 28pt;
     font-weight: bold;
+    letter-spacing: 3px;
+    line-height: 1;
     color: #000;
   }
-  .quote-meta {
+  .wordmark-jewellers {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 7.5pt;
+    font-weight: normal;
+    letter-spacing: 5px;
+    text-transform: uppercase;
+    color: #000;
+    margin-top: 3px;
+  }
+  .header-right {
     text-align: right;
-    font-size: 9pt;
+  }
+  .quotation-title {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 22pt;
+    font-weight: bold;
+    letter-spacing: 2px;
+    color: #000;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+  .header-address {
+    font-size: 8pt;
     color: #333;
+    margin-top: 5px;
     line-height: 1.6;
   }
-  .quote-meta .ref {
-    font-family: monospace;
-    font-size: 10pt;
-    font-weight: bold;
-    color: #000;
+
+  /* ── Divider ── */
+  .divider {
+    border: none;
+    border-top: 1.5px solid #000;
+    margin: 10px 0 16px 0;
   }
-  .section {
-    margin-bottom: 18px;
+
+  /* ── Customer / Date row ── */
+  .customer-date-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 20px;
+    gap: 20px;
   }
-  .section-title {
-    font-size: 8pt;
-    font-weight: bold;
-    text-transform: uppercase;
-    color: #666;
-    letter-spacing: 1px;
-    border-bottom: 1px solid #e5e7eb;
-    padding-bottom: 4px;
-    margin-bottom: 8px;
+  .underline-field {
+    flex: 1;
   }
-  .customer-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px 20px;
+  .underline-field-right {
+    flex: 0 0 auto;
+    min-width: 140px;
+    text-align: right;
   }
   .field-label {
-    font-size: 7.5pt;
-    color: #888;
-    margin-bottom: 1px;
+    font-size: 8pt;
+    color: #555;
+    margin-bottom: 3px;
   }
-  .field-value {
-    font-size: 10pt;
+  .field-underline {
+    font-size: 11pt;
+    font-weight: 600;
+    color: #000;
+    border-bottom: 1px solid #000;
+    padding-bottom: 2px;
+    min-height: 20px;
+  }
+
+  /* ── Reference number row ── */
+  .ref-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .ref-label {
+    font-size: 8pt;
+    color: #555;
+  }
+  .ref-number {
+    font-family: 'Courier New', monospace;
+    font-size: 9pt;
+    font-weight: bold;
     color: #000;
   }
+
+  /* ── Line items table ── */
   table.line-items {
     width: 100%;
     border-collapse: collapse;
-    font-size: 10pt;
+    border: 1px solid #ccc;
+    margin-bottom: 0;
   }
   table.line-items thead tr {
-    background: #f3f4f6;
+    background: #000;
   }
   table.line-items thead th {
-    padding: 8px 12px;
+    padding: 8px 10px;
     text-align: left;
-    font-size: 8pt;
+    font-size: 8.5pt;
     font-weight: bold;
-    text-transform: uppercase;
-    color: #666;
+    color: #fff;
     letter-spacing: 0.5px;
   }
   table.line-items thead th:last-child {
     text-align: right;
+    white-space: nowrap;
   }
-  .total-row td {
-    background: #000;
-    color: #fff;
-    font-weight: bold;
+  table.line-items thead th:first-child {
+    text-align: center;
+    width: 32px;
+  }
+  .table-divider {
+    border: none;
+    border-top: 1.5px solid #000;
+    margin: 0;
+  }
+  .total-section {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 8px;
+    margin-bottom: 24px;
+  }
+  .total-label {
     font-size: 11pt;
-    padding: 10px 12px;
+    font-weight: bold;
+    color: #000;
+    margin-right: 20px;
+    letter-spacing: 1px;
   }
-  .total-row td:last-child {
+  .total-amount {
+    font-size: 11pt;
+    font-weight: bold;
+    color: #000;
+    min-width: 110px;
     text-align: right;
   }
-  .description-text {
-    font-size: 10pt;
+
+  /* ── Footer ── */
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+    margin-top: 10px;
+    padding-top: 12px;
+    border-top: 1px solid #ccc;
+  }
+  .footer-terms {
+    flex: 1;
+    font-size: 8pt;
+    color: #777;
+    font-style: italic;
+    line-height: 1.7;
+  }
+  .footer-staff {
+    flex: 0 0 auto;
+    text-align: right;
+    font-size: 9pt;
+    line-height: 1.7;
+  }
+  .footer-staff-name {
+    font-weight: bold;
+    color: #000;
+  }
+  .footer-staff-contact {
     color: #333;
-    line-height: 1.5;
-    white-space: pre-wrap;
-  }
-  .footer-contact {
-    margin-top: 24px;
-    padding: 12px;
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
-    border-radius: 4px;
-    font-size: 9pt;
-    color: #444;
-    text-align: center;
-  }
-  .fine-print {
-    margin-top: 12px;
-    font-size: 7.5pt;
-    color: #999;
-    text-align: center;
-    line-height: 1.5;
-  }
-  .turnaround-badge {
-    display: inline-block;
-    background: #A3B2A4;
-    color: #fff;
-    font-size: 9pt;
-    font-weight: bold;
-    padding: 4px 12px;
-    border-radius: 4px;
-  }
-  .type-label {
-    font-size: 8.5pt;
-    color: #A3B2A4;
-    font-weight: bold;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 2px;
   }
 </style>
 </head>
 <body>
 
-  <div class="header-banner">
-    <h1>CLASS A JEWELLERS</h1>
-  </div>
-
-  <div class="store-details">
-    40 North East Road, Walkerville SA 5081 &nbsp;|&nbsp; +61 8 8344 7722 &nbsp;|&nbsp; jewellery@classa.com.au &nbsp;|&nbsp; www.classa.com.au
-  </div>
-
-  <div class="meta-row">
+  <!-- Header -->
+  <div class="header">
     <div>
-      <div class="type-label">${esc(quoteTypeLabel)}</div>
-      <div class="quote-heading">QUOTE</div>
+      <div class="wordmark-class-a">CLASS A</div>
+      <div class="wordmark-jewellers">Jewellers</div>
     </div>
-    <div class="quote-meta">
-      <div class="ref">${esc(quote.reference_number)}</div>
-      <div>Date: ${esc(createdDate)}</div>
-      ${quote.staff_member ? `<div>Prepared by: ${esc(quote.staff_member)}</div>` : ""}
-    </div>
-  </div>
-
-  <!-- Customer -->
-  <div class="section">
-    <div class="section-title">Customer Details</div>
-    <div class="customer-grid">
-      <div>
-        <div class="field-label">Name</div>
-        <div class="field-value">${esc(customerName) || "—"}</div>
-      </div>
-      <div>
-        <div class="field-label">Phone</div>
-        <div class="field-value">${esc(quote.customer_phone) || "—"}</div>
-      </div>
-      <div>
-        <div class="field-label">Email</div>
-        <div class="field-value">${esc(quote.customer_email) || "—"}</div>
+    <div class="header-right">
+      <div class="quotation-title">Quotation</div>
+      <div class="header-address">
+        40 North East Road, Walkerville SA 5081<br>
+        08 8344 7722 &nbsp;|&nbsp; classa.com.au
       </div>
     </div>
   </div>
 
-  <!-- Item Description -->
-  ${
-    quote.item_description
-      ? `
-  <div class="section">
-    <div class="section-title">Item Description</div>
-    <div class="description-text">${esc(quote.item_description)}</div>
-  </div>`
-      : ""
-  }
+  <hr class="divider">
 
-  <!-- Repair specific -->
-  ${
-    quote.quote_type === "repair" && quote.repair_description
-      ? `
-  <div class="section">
-    <div class="section-title">Repair Description</div>
-    <div class="description-text">${esc(quote.repair_description)}</div>
-  </div>`
-      : ""
-  }
-
-  <!-- Custom order specific -->
-  ${
-    quote.quote_type === "custom_order" && quote.design_brief
-      ? `
-  <div class="section">
-    <div class="section-title">Design Brief</div>
-    <div class="description-text">${esc(quote.design_brief)}</div>
-  </div>`
-      : ""
-  }
-
-  ${
-    quote.quote_type === "custom_order" && quote.metal_type
-      ? `
-  <div class="section">
-    <div class="section-title">Metal Type</div>
-    <div class="field-value">${esc(quote.metal_type)}</div>
-  </div>`
-      : ""
-  }
-
-  ${
-    quote.quote_type === "custom_order" && quote.stone_details
-      ? `
-  <div class="section">
-    <div class="section-title">Stone Details</div>
-    <div class="description-text">${esc(quote.stone_details)}</div>
-  </div>`
-      : ""
-  }
-
-  <!-- Line Items -->
-  <div class="section">
-    <div class="section-title">Pricing</div>
-    <table class="line-items">
-      <thead>
-        <tr>
-          <th>Description</th>
-          <th>Price</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${lineItemRows || `<tr><td style="padding:8px 12px;font-size:10pt;color:#999;" colspan="2">No line items</td></tr>`}
-        <tr class="total-row">
-          <td>Total</td>
-          <td>${formatCurrency(total)}</td>
-        </tr>
-      </tbody>
-    </table>
+  <!-- Reference row -->
+  <div class="ref-row">
+    <span class="ref-label">Reference: <span class="ref-number">${esc(quote.reference_number)}</span></span>
   </div>
 
-  <!-- Estimated Turnaround -->
-  ${
-    quote.estimated_turnaround
-      ? `
-  <div class="section">
-    <div class="section-title">Estimated Turnaround</div>
-    <div><span class="turnaround-badge">${esc(quote.estimated_turnaround)}</span></div>
-  </div>`
-      : ""
-  }
-
-  <!-- Notes -->
-  ${
-    quote.notes
-      ? `
-  <div class="section">
-    <div class="section-title">Notes</div>
-    <div class="description-text">${esc(quote.notes)}</div>
-  </div>`
-      : ""
-  }
-
-  <div class="footer-contact">
-    To proceed with this quote please contact us at <strong>jewellery@classa.com.au</strong> or call <strong>+61 8 8344 7722</strong>
+  <!-- Customer / Date row -->
+  <div class="customer-date-row">
+    <div class="underline-field">
+      <div class="field-label">Customer Name</div>
+      <div class="field-underline">${esc(customerName) || "&nbsp;"}</div>
+    </div>
+    <div class="underline-field-right">
+      <div class="field-label">Date</div>
+      <div class="field-underline">${esc(createdDate)}</div>
+    </div>
   </div>
 
-  <div class="fine-print">
-    Prices are valid for 7 days from the date of this quote. Class A Jewellers reserves the right to amend this quote if item specifications change.
+  <!-- Line items table -->
+  <table class="line-items">
+    <thead>
+      <tr>
+        <th style="text-align:center;width:32px;">#</th>
+        <th>Description</th>
+        <th style="text-align:right;white-space:nowrap;">Price (incl. GST)</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${tableRows}
+    </tbody>
+  </table>
+
+  <hr class="table-divider">
+
+  <!-- Total -->
+  <div class="total-section">
+    <span class="total-label">TOTAL</span>
+    <span class="total-amount">${formatCurrency(total)}</span>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="footer-terms">
+      Valid for 7 business days from the date of this quotation, subject to availability.<br>
+      A 20% deposit is required to commence work.
+    </div>
+    <div class="footer-staff">
+      ${staffName ? `<div class="footer-staff-name">${staffName}</div>` : ""}
+      <div class="footer-staff-contact">${esc(staffEmailAddr)}</div>
+      <div class="footer-staff-contact">08 8344 7722</div>
+    </div>
   </div>
 
 </body>
