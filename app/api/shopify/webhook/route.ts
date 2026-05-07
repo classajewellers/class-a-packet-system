@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { generateReferenceNumber } from "@/lib/referenceNumber";
 import {
   verifyShopifyWebhook,
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   };
 
   // ── 7. Insert into Supabase ────────────────────────────────────────────────
-  const supabase = createServerClient();
+  const supabase = createServerSupabaseClient();
   const { error: insertError } = await supabase
     .from("packets")
     .insert(insertData);

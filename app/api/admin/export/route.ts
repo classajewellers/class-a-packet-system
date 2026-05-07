@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { Packet, AdminPacketsQuery } from "@/lib/types";
 import { formatDateAU, formatCurrency, packetTypeLabel } from "@/lib/formatters";
 
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     to: searchParams.get("to") ?? undefined,
   };
 
-  const supabase = createServerClient();
+  const supabase = createServerSupabaseClient();
   let dbQuery = supabase
     .from("packets")
     .select("*")

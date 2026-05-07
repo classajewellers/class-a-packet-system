@@ -46,3 +46,6 @@ export function createServerClient(): SupabaseClient {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
+
+// Alias used by API routes — same client, clearer name
+export const createServerSupabaseClient = createServerClient;

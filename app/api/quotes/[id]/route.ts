@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { Quote } from "@/lib/types";
 import { PIPELINE_STAGES, PipelineStage } from "@/lib/pipeline";
 
@@ -7,7 +7,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
-  const supabase = createServerClient();
+  const supabase = createServerSupabaseClient();
   const { data, error } = await supabase
     .from("quotes")
     .select("*")
@@ -72,7 +72,7 @@ export async function PATCH(
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });
   }
 
-  const supabase = createServerClient();
+  const supabase = createServerSupabaseClient();
   const { data, error } = await supabase
     .from("quotes")
     .update(updates)

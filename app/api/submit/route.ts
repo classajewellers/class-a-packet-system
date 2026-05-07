@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { generateReferenceNumber, generateRepairTrackerNumber } from "@/lib/referenceNumber";
 import { parseCurrency } from "@/lib/formatters";
 import { PacketFormData, Packet, SubmitResponse } from "@/lib/types";
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
 
   // ── 4. Insert into Supabase ────────────────────────────────────────────────
   console.log("[submit] Inserting into packets table...");
-  const supabase = createServerClient();
+  const supabase = createServerSupabaseClient();
 
   const { data: insertedPacket, error: insertError } = await supabase
     .from("packets")

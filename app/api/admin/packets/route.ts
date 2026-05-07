@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { Packet, AdminPacketsQuery } from "@/lib/types";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -13,7 +13,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     offset: parseInt(searchParams.get("offset") ?? "0"),
   };
 
-  const supabase = createServerClient();
+  const supabase = createServerSupabaseClient();
   let dbQuery = supabase
     .from("packets")
     .select("*")
@@ -63,7 +63,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
   const { id, updates } = body;
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
-  const supabase = createServerClient();
+  const supabase = createServerSupabaseClient();
   const { data, error } = await supabase
     .from("packets")
     .update(updates)
