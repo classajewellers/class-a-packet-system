@@ -68,7 +68,7 @@ export default function QuoteSuccessScreen({ quote, onNew }: Props) {
             onClick={handleConvert}
             className="w-full rounded-xl bg-[#A3B2A4] text-white py-3.5 font-semibold text-sm hover:bg-[#8fa290] active:scale-[0.99] transition-all"
           >
-            Convert to Packet
+            Convert to Order
           </button>
         )}
 

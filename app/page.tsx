@@ -31,7 +31,7 @@ import SuccessScreen from "@/components/SuccessScreen";
 
 function validate(data: PacketFormData): Partial<Record<keyof PacketFormData, string>> {
   const errors: Partial<Record<keyof PacketFormData, string>> = {};
-  if (!data.packet_type) errors.packet_type = "Select a packet type";
+  if (!data.packet_type) errors.packet_type = "Select an order type";
   if (!data.customer_first_name.trim()) errors.customer_first_name = "Required";
   if (!data.customer_last_name.trim()) errors.customer_last_name = "Required";
   if (!data.customer_phone.trim()) errors.customer_phone = "Required";
@@ -91,6 +91,7 @@ function PacketFormPageInner() {
   });
   const [submittedPacket, setSubmittedPacket] = useState<Packet | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [fromQuoteRef, setFromQuoteRef] = useState<string | null>(null);
   const formRef = useRef<HTMLDivElement>(null);
 
   // Pre-fill from quote if from_quote param is present
@@ -103,16 +104,31 @@ function PacketFormPageInner() {
       .then((json: { quote?: Quote }) => {
         if (!json.quote) return;
         const q = json.quote;
+
+        // Build articles: item_description + formatted line items
+        const lineItemsText = (q.line_items ?? []).length > 0
+          ? "\n\nLine Items:\n" + (q.line_items ?? []).map((li) => `${li.item} — ${li.stone} — ${li.price}`).join("\n")
+          : "";
+        const articles = (q.item_description ?? "") + lineItemsText;
+
+        // Build instructions: type-specific fields + metal/stone for custom orders
+        let instructions = q.repair_description ?? q.design_brief ?? "";
+        if (q.quote_type === "custom_order") {
+          if (q.metal_type) instructions += (instructions ? "\n\n" : "") + `Metal: ${q.metal_type}`;
+          if (q.stone_details) instructions += (instructions ? "\n" : "") + `Stone: ${q.stone_details}`;
+        }
+
+        setFromQuoteRef(q.reference_number);
         setFormData((prev) => ({
           ...prev,
           customer_first_name: q.customer_first_name ?? prev.customer_first_name,
           customer_last_name: q.customer_last_name ?? prev.customer_last_name,
           customer_email: q.customer_email ?? prev.customer_email,
           customer_phone: q.customer_phone ?? prev.customer_phone,
-          articles: q.item_description ?? prev.articles,
-          instructions:
-            q.repair_description ?? q.design_brief ?? prev.instructions,
-          total_charges: prev.total_charges,
+          articles: articles || prev.articles,
+          instructions: instructions || prev.instructions,
+          total_charges: q.total != null ? String(q.total) : prev.total_charges,
+          staff_member: q.assigned_to ?? prev.staff_member,
           packet_type:
             q.quote_type === "repair"
               ? "repair"
@@ -233,6 +249,7 @@ function PacketFormPageInner() {
     setSubmittedPacket(null);
     setShowSuccess(false);
     setSubmitting(false);
+    setFromQuoteRef(null);
     setResults({ supabase: "pending", label: "pending", klaviyo: "pending", email: "pending", sms: "pending", sheets: "pending" });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -257,10 +274,20 @@ function PacketFormPageInner() {
       <NavBar />
 
       <main className="max-w-5xl mx-auto px-4 py-6 pb-32">
+        {fromQuoteRef && (
+          <div className="mb-4 rounded-xl bg-emerald-50 border border-emerald-300 px-4 py-3 flex items-center gap-3">
+            <svg className="w-5 h-5 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-sm font-semibold text-emerald-800">
+              Pre-filled from Quote {fromQuoteRef} — review and submit when ready
+            </p>
+          </div>
+        )}
         <div className="lg:flex lg:gap-6">
           {/* Form column */}
           <div className="flex-1 min-w-0 space-y-4" ref={formRef}>
-            <Card title="Step 1 — Packet Type">
+            <Card title="Step 1 — Order Type">
               <PacketTypeSelector value={formData.packet_type} onChange={handleTypeChange} />
               {errors.packet_type && (
                 <p className="mt-2 text-xs text-red-600" data-error>{errors.packet_type}</p>

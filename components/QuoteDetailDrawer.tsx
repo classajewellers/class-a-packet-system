@@ -175,7 +175,7 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate }: Props) {
             Reprint Quote
           </button>
 
-          {/* ── Convert to Packet (prominent when Job Won) ── */}
+          {/* ── Convert to Order (prominent when Job Won) ── */}
           {stage === "job_won" && !isConverted && (
             <button
               onClick={handleConvert}
@@ -184,7 +184,7 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate }: Props) {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
               </svg>
-              Convert to Packet
+              Convert to Order
             </button>
           )}
 
@@ -241,13 +241,13 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate }: Props) {
             </div>
           </Section>
 
-          {/* ── Convert to Packet (secondary — for pending stage) ── */}
+          {/* ── Convert to Order (secondary — for pending stage) ── */}
           {stage === "pending" && !isConverted && (
             <button
               onClick={handleConvert}
               className="w-full flex items-center justify-center gap-2 bg-[#A3B2A4] text-white text-sm font-semibold py-3 rounded-xl hover:bg-[#8fa290] active:scale-[0.98] transition-all"
             >
-              Convert to Packet
+              Convert to Order
             </button>
           )}
 

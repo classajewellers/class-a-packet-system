@@ -493,9 +493,9 @@ export function generatePrintHTML(packet: Packet): string {
 <title>Class A Jewellers — ${packet.reference_number}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  @page { size: 104mm 159mm portrait; margin: 4mm; }
+  @page { size: 105mm 148mm portrait; margin: 4mm; }
   body {
-    width: 96mm;
+    width: 97mm;
     font-family: Arial, sans-serif;
     font-size: 8pt;
     line-height: 1.3;

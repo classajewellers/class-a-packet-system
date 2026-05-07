@@ -3,8 +3,8 @@ import Script from "next/script";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Class A Packet System",
-  description: "Internal repair and order packet system for Class A Jewellers",
+  title: "Class A Order System",
+  description: "Internal repair and order system for Class A Jewellers",
   robots: "noindex, nofollow",
 };
 

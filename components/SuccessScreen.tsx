@@ -45,7 +45,7 @@ export default function SuccessScreen({
 
         <div className="text-center mb-6">
           <p className="text-sm font-medium text-gray-500 uppercase tracking-widest mb-1">
-            Packet Created
+            Order Created
           </p>
           <h1 className="text-4xl font-bold text-black mb-2 font-mono tracking-wider">
             {packet.reference_number}
@@ -114,7 +114,7 @@ export default function SuccessScreen({
             onClick={onNewPacket}
             className="flex-1 rounded-xl bg-black py-3.5 text-sm font-semibold text-white hover:bg-[#222222] transition-colors"
           >
-            New Packet
+            New Order
           </button>
         </div>
       </div>

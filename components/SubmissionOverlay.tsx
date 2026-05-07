@@ -52,7 +52,7 @@ export default function SubmissionOverlay({ results }: Props) {
             </svg>
           </div>
           <div>
-            <h2 className="text-base font-bold text-black">Submitting Packet</h2>
+            <h2 className="text-base font-bold text-black">Submitting Order</h2>
             <p className="text-xs text-gray-500">Please wait…</p>
           </div>
         </div>

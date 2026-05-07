@@ -20,7 +20,7 @@ const TYPE_OPTIONS: { value: "all" | PacketType; label: string }[] = [
 ];
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<"packets" | "quotes">("packets");
+  const [activeTab, setActiveTab] = useState<"orders" | "quotes">("orders");
 
   // Packets state
   const [packets, setPackets] = useState<Packet[]>([]);
@@ -139,7 +139,7 @@ export default function AdminPage() {
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex gap-0">
-            {(["packets", "quotes"] as const).map((tab) => (
+            {(["orders", "quotes"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -157,7 +157,7 @@ export default function AdminPage() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 py-6">
-        {activeTab === "packets" && (
+        {activeTab === "orders" && (
           <>
             {/* Filter bar */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 mb-5">
@@ -230,11 +230,11 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Packets Table */}
+            {/* Orders Table */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
               <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-black">
-                  {loading ? "Loading…" : `${packets.length} packet${packets.length !== 1 ? "s" : ""}`}
+                  {loading ? "Loading…" : `${packets.length} order${packets.length !== 1 ? "s" : ""}`}
                 </h2>
                 <div className="text-xs text-gray-400 flex items-center gap-2">
                   <span className="flex items-center gap-1">
