@@ -1,5 +1,6 @@
 import { Packet } from "./types";
 import { formatDateAU, formatCurrency } from "./formatters";
+import { WHITE_LOGO_DATA_URI } from "./logoDataURIs";
 
 // ─── Dymo Label XML ───────────────────────────────────────────────────────────
 // Target: LabelWriter 5XL — 104mm × 159mm label stock
@@ -510,9 +511,9 @@ export function generatePrintHTML(packet: Packet): string {
     margin-bottom: 2mm;
     letter-spacing: 2px;
   }
-  .header { text-align: center; border-bottom: 1.5pt solid #000000; padding-bottom: 2mm; margin-bottom: 2mm; }
-  .store-name { font-family: Georgia, serif; font-size: 14pt; font-weight: 600; color: #000000; }
-  .store-addr { font-size: 6.5pt; color: #555; }
+  .header { text-align: center; border-bottom: 1.5pt solid #000000; padding-bottom: 2mm; margin-bottom: 2mm; background: #A3B2A4; padding: 2mm; }
+  .store-logo { height: 40px; width: auto; object-fit: contain; display: block; margin: 0 auto; }
+  .store-addr { font-size: 6.5pt; color: #eee; margin-top: 1mm; }
   .ref-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2mm; }
   .ref-num { font-size: 14pt; font-weight: 600; }
   .due-box {
@@ -552,7 +553,7 @@ export function generatePrintHTML(packet: Packet): string {
   ${isOnline ? '<div class="online-banner">ONLINE ORDER</div>' : ""}
 
   <div class="header">
-    <div class="store-name">CLASS A JEWELLERS</div>
+    <img class="store-logo" src="${WHITE_LOGO_DATA_URI}" alt="Class A Jewellers">
     <div class="store-addr">40 North East Road, Walkerville SA 5081 &bull; +61 8 8344 7722</div>
   </div>
 

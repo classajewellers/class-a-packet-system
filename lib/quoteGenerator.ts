@@ -1,5 +1,6 @@
 import { Quote, LineItem } from "./types";
 import { formatCurrency } from "./formatters";
+import { BLACK_LOGO_DATA_URI } from "./logoDataURIs";
 
 function esc(s: string | null | undefined): string {
   if (!s) return "";
@@ -86,22 +87,11 @@ export function generateQuoteHTML(quote: Quote): string {
     align-items: flex-start;
     margin-bottom: 14px;
   }
-  .wordmark-class-a {
-    font-family: Georgia, 'Times New Roman', serif;
-    font-size: 28pt;
-    font-weight: bold;
-    letter-spacing: 3px;
-    line-height: 1;
-    color: #000;
-  }
-  .wordmark-jewellers {
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 7.5pt;
-    font-weight: normal;
-    letter-spacing: 5px;
-    text-transform: uppercase;
-    color: #000;
-    margin-top: 3px;
+  .wordmark-logo {
+    max-height: 60px;
+    width: auto;
+    object-fit: contain;
+    display: block;
   }
   .header-right {
     text-align: right;
@@ -266,8 +256,7 @@ export function generateQuoteHTML(quote: Quote): string {
   <!-- Header -->
   <div class="header">
     <div>
-      <div class="wordmark-class-a">CLASS A</div>
-      <div class="wordmark-jewellers">Jewellers</div>
+      <img class="wordmark-logo" src="${BLACK_LOGO_DATA_URI}" alt="Class A Jewellers">
     </div>
     <div class="header-right">
       <div class="quotation-title">Quotation</div>
