@@ -188,11 +188,11 @@ export type OutputStatus = "success" | "failed" | "pending";
 
 export interface SubmissionResults {
   supabase: OutputStatus;
-  label: OutputStatus;
-  klaviyo: OutputStatus;
-  email: OutputStatus;
-  sms: OutputStatus;
-  sheets: OutputStatus;
+  label?: OutputStatus;
+  klaviyo?: OutputStatus;
+  email?: OutputStatus;
+  sms?: OutputStatus;
+  sheets?: OutputStatus;
 }
 
 export interface SubmitResponse {
