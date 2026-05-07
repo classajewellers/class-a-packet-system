@@ -22,9 +22,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 
-  // Calculate total from line_items
   const lineItems = formData.line_items ?? [];
-  const total = lineItems.reduce((sum, li) => sum + (li.price || 0), 0);
 
   const supabase = createServiceClient();
 
@@ -38,7 +36,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     customer_phone: formData.customer_phone || null,
     item_description: formData.item_description || null,
     line_items: lineItems.length > 0 ? lineItems : null,
-    total: total || null,
     notes: formData.notes || null,
     repair_description: formData.repair_description || null,
     design_brief: formData.design_brief || null,

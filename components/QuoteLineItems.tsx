@@ -1,18 +1,17 @@
 "use client";
 
 import { LineItem } from "@/lib/types";
-import { formatCurrency } from "@/lib/formatters";
 
 interface Props {
   lineItems: LineItem[];
   onChange: (lineItems: LineItem[]) => void;
 }
 
-export default function QuoteLineItems({ lineItems, onChange }: Props) {
-  const total = lineItems.reduce((sum, li) => sum + (li.price || 0), 0);
+const EMPTY_ITEM: LineItem = { item: "", stone: "", price: "" };
 
+export default function QuoteLineItems({ lineItems, onChange }: Props) {
   function addItem() {
-    onChange([...lineItems, { description: "", price: 0 }]);
+    onChange([...lineItems, { ...EMPTY_ITEM }]);
   }
 
   function removeItem(index: number) {
@@ -20,19 +19,11 @@ export default function QuoteLineItems({ lineItems, onChange }: Props) {
   }
 
   function updateItem(index: number, field: keyof LineItem, value: string) {
-    const updated = lineItems.map((li, i) => {
-      if (i !== index) return li;
-      if (field === "price") {
-        const n = parseFloat(value);
-        return { ...li, price: isNaN(n) ? 0 : n };
-      }
-      return { ...li, [field]: value };
-    });
-    onChange(updated);
+    onChange(lineItems.map((li, i) => (i === index ? { ...li, [field]: value } : li)));
   }
 
   const inputClass =
-    "rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-black";
+    "rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-black w-full";
 
   return (
     <div className="space-y-3">
@@ -42,32 +33,50 @@ export default function QuoteLineItems({ lineItems, onChange }: Props) {
 
       {lineItems.map((li, i) => (
         <div key={i} className="flex gap-2 items-center">
+          {/* Item */}
           <input
             type="text"
-            value={li.description}
-            onChange={(e) => updateItem(i, "description", e.target.value)}
-            placeholder="Description"
-            className={`${inputClass} flex-1`}
+            value={li.item}
+            onChange={(e) => updateItem(i, "item", e.target.value)}
+            placeholder="Item (e.g. Resize ring)"
+            className={`${inputClass} flex-[3]`}
           />
+          {/* Stone */}
           <input
-            type="number"
-            value={li.price === 0 ? "" : li.price}
-            onChange={(e) => updateItem(i, "price", e.target.value)}
-            placeholder="0.00"
-            min={0}
-            step={0.01}
-            className={`${inputClass} w-28`}
+            type="text"
+            value={li.stone}
+            onChange={(e) => updateItem(i, "stone", e.target.value)}
+            placeholder="Stone (optional)"
+            className={`${inputClass} flex-[2]`}
           />
+          {/* Price */}
+          <input
+            type="text"
+            value={li.price}
+            onChange={(e) => updateItem(i, "price", e.target.value)}
+            placeholder="$450 / POA"
+            className={`${inputClass} flex-[1] min-w-[80px]`}
+          />
+          {/* Remove */}
           <button
             type="button"
             onClick={() => removeItem(i)}
             className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-red-50 text-red-500 hover:bg-red-100 transition-colors font-bold text-lg leading-none"
-            title="Remove"
+            title="Remove row"
           >
             &times;
           </button>
         </div>
       ))}
+
+      {lineItems.length > 0 && (
+        <div className="grid grid-cols-[3fr_2fr_1fr_32px] gap-2 px-0.5 mb-0">
+          <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide">Item</p>
+          <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide">Stone</p>
+          <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide">Price</p>
+          <span />
+        </div>
+      )}
 
       <button
         type="button"
@@ -76,15 +85,6 @@ export default function QuoteLineItems({ lineItems, onChange }: Props) {
       >
         + Add Line Item
       </button>
-
-      {lineItems.length > 0 && (
-        <div className="flex justify-end pt-2 border-t border-gray-200">
-          <div className="text-right">
-            <div className="text-xs text-gray-500 uppercase tracking-wide font-semibold">Total</div>
-            <div className="text-lg font-bold text-black">{formatCurrency(total)}</div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

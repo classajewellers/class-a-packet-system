@@ -112,7 +112,7 @@ function PacketFormPageInner() {
           articles: q.item_description ?? prev.articles,
           instructions:
             q.repair_description ?? q.design_brief ?? prev.instructions,
-          total_charges: q.total != null ? String(q.total) : prev.total_charges,
+          total_charges: prev.total_charges,
           packet_type:
             q.quote_type === "repair"
               ? "repair"

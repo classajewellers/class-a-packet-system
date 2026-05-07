@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Packet, PacketType, AdminPacketsQuery, Quote } from "@/lib/types";
-import { formatCurrency } from "@/lib/formatters";
 import AdminTable from "@/components/AdminTable";
 import PacketDetailDrawer from "@/components/PacketDetailDrawer";
 import QuoteDetailDrawer from "@/components/QuoteDetailDrawer";
@@ -329,9 +328,7 @@ export default function AdminPage() {
                               <div className="font-medium text-black">{customerName}</div>
                               <div className="text-xs text-gray-400">{q.customer_phone ?? ""}</div>
                             </td>
-                            <td className="py-3 pr-4 text-gray-700">
-                              {q.total != null ? formatCurrency(q.total) : "—"}
-                            </td>
+                            <td className="py-3 pr-4 text-gray-700">—</td>
                             <td className="py-3 pr-4">
                               <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${statusBadge}`}>
                                 {q.status}

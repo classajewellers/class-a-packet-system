@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { Quote } from "@/lib/types";
-import { formatCurrency } from "@/lib/formatters";
 import { generateQuoteHTML } from "@/lib/quoteGenerator";
 
 interface Props {
@@ -42,7 +41,6 @@ export default function QuoteDetailDrawer({ quote, onClose }: Props) {
     quote.quote_type === "repair" ? "Repair Quote" : "Custom Order Quote";
 
   const lineItems = quote.line_items ?? [];
-  const total = quote.total ?? lineItems.reduce((s, li) => s + li.price, 0);
 
   function handleReprintQuote() {
     const html = generateQuoteHTML(quote);
@@ -161,27 +159,21 @@ export default function QuoteDetailDrawer({ quote, onClose }: Props) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-200">
-                    <th className="pb-2 text-left text-xs font-semibold text-gray-500 uppercase">
-                      Description
-                    </th>
-                    <th className="pb-2 text-right text-xs font-semibold text-gray-500 uppercase">
-                      Price
-                    </th>
+                    <th className="pb-2 text-left text-xs font-semibold text-gray-500 uppercase w-5">#</th>
+                    <th className="pb-2 text-left text-xs font-semibold text-gray-500 uppercase">Item</th>
+                    <th className="pb-2 text-left text-xs font-semibold text-gray-500 uppercase">Stone</th>
+                    <th className="pb-2 text-right text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Price</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {lineItems.map((li, i) => (
                     <tr key={i}>
-                      <td className="py-2 text-black">{li.description}</td>
-                      <td className="py-2 text-right text-black">{formatCurrency(li.price)}</td>
+                      <td className="py-2 text-gray-400 text-xs">{i + 1}</td>
+                      <td className="py-2 text-black pr-2">{li.item}</td>
+                      <td className="py-2 text-gray-600 pr-2">{li.stone}</td>
+                      <td className="py-2 text-right text-black font-medium whitespace-nowrap">{li.price}</td>
                     </tr>
                   ))}
-                  <tr className="bg-black">
-                    <td className="py-2 px-1 text-white font-bold">Total</td>
-                    <td className="py-2 px-1 text-right text-white font-bold">
-                      {formatCurrency(total)}
-                    </td>
-                  </tr>
                 </tbody>
               </table>
             )}

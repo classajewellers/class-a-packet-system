@@ -232,8 +232,9 @@ export interface AdminPacketsQuery {
 export type QuoteType = "repair" | "custom_order";
 
 export interface LineItem {
-  description: string;
-  price: number;
+  item: string;
+  stone: string;
+  price: string;
 }
 
 export interface Quote {
@@ -248,7 +249,6 @@ export interface Quote {
   customer_phone: string | null;
   item_description: string | null;
   line_items: LineItem[] | null;
-  total: number | null;
   notes: string | null;
   repair_description: string | null;
   design_brief: string | null;

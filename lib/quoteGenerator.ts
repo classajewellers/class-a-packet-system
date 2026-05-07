@@ -1,5 +1,4 @@
 import { Quote, LineItem } from "./types";
-import { formatCurrency } from "./formatters";
 import { BLACK_LOGO_DATA_URI } from "./logoDataURIs";
 
 function esc(s: string | null | undefined): string {
@@ -36,26 +35,28 @@ export function generateQuoteHTML(quote: Quote): string {
     .join(" ");
 
   const lineItems: LineItem[] = quote.line_items ?? [];
-  const total = quote.total ?? lineItems.reduce((s, li) => s + li.price, 0);
 
   // Build table rows — minimum 8 rows (fill with empties)
+  type FilledItem = LineItem & { _empty?: boolean };
   const MIN_ROWS = 8;
-  const filledItems = [...lineItems];
+  const filledItems: FilledItem[] = [...lineItems];
   while (filledItems.length < MIN_ROWS) {
-    filledItems.push({ description: "", price: 0, _empty: true } as LineItem & { _empty?: boolean });
+    filledItems.push({ item: "", stone: "", price: "", _empty: true });
   }
 
   const tableRows = filledItems
     .map((li, i) => {
       const isEven = i % 2 === 0;
       const bg = isEven ? "#ffffff" : "#f0f0f0";
-      const isEmpty = (li as LineItem & { _empty?: boolean })._empty;
+      const isEmpty = li._empty;
       const rowNum = isEmpty ? "" : String(i + 1);
-      const desc = isEmpty ? "&nbsp;" : esc(li.description);
-      const price = isEmpty ? "&nbsp;" : (li.price ? formatCurrency(li.price) : "&nbsp;");
+      const item  = isEmpty ? "&nbsp;" : esc(li.item);
+      const stone = isEmpty ? "&nbsp;" : esc(li.stone);
+      const price = isEmpty ? "&nbsp;" : esc(li.price);
       return `<tr style="background:${bg};">
         <td style="padding:6px 10px;font-size:9pt;color:#333;border-right:1px solid #ddd;width:32px;text-align:center;">${rowNum}</td>
-        <td style="padding:6px 10px;font-size:9pt;color:#333;border-right:1px solid #ddd;">${desc}</td>
+        <td style="padding:6px 10px;font-size:9pt;color:#333;border-right:1px solid #ddd;">${item}</td>
+        <td style="padding:6px 10px;font-size:9pt;color:#333;border-right:1px solid #ddd;">${stone}</td>
         <td style="padding:6px 10px;font-size:9pt;color:#333;text-align:right;white-space:nowrap;width:110px;">${price}</td>
       </tr>`;
     })
@@ -189,6 +190,9 @@ export function generateQuoteHTML(quote: Quote): string {
     text-align: right;
     white-space: nowrap;
   }
+  table.line-items thead th:nth-child(3) {
+    width: 160px;
+  }
   table.line-items thead th:first-child {
     text-align: center;
     width: 32px;
@@ -198,27 +202,6 @@ export function generateQuoteHTML(quote: Quote): string {
     border-top: 1.5px solid #000;
     margin: 0;
   }
-  .total-section {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 8px;
-    margin-bottom: 24px;
-  }
-  .total-label {
-    font-size: 11pt;
-    font-weight: bold;
-    color: #000;
-    margin-right: 20px;
-    letter-spacing: 1px;
-  }
-  .total-amount {
-    font-size: 11pt;
-    font-weight: bold;
-    color: #000;
-    min-width: 110px;
-    text-align: right;
-  }
-
   /* ── Footer ── */
   .footer {
     display: flex;
@@ -291,7 +274,8 @@ export function generateQuoteHTML(quote: Quote): string {
     <thead>
       <tr>
         <th style="text-align:center;width:32px;">#</th>
-        <th>Description</th>
+        <th>Item</th>
+        <th>Stone</th>
         <th style="text-align:right;white-space:nowrap;">Price (incl. GST)</th>
       </tr>
     </thead>
@@ -301,12 +285,6 @@ export function generateQuoteHTML(quote: Quote): string {
   </table>
 
   <hr class="table-divider">
-
-  <!-- Total -->
-  <div class="total-section">
-    <span class="total-label">TOTAL</span>
-    <span class="total-amount">${formatCurrency(total)}</span>
-  </div>
 
   <!-- Footer -->
   <div class="footer">

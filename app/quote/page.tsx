@@ -2,7 +2,6 @@
 
 import { useState, useCallback } from "react";
 import { QuoteFormData, QuoteType, LineItem, Quote } from "@/lib/types";
-import { formatCurrency } from "@/lib/formatters";
 import NavBar from "@/components/NavBar";
 import QuoteTypeSelector from "@/components/QuoteTypeSelector";
 import QuoteCustomerSection from "@/components/QuoteCustomerSection";
@@ -120,7 +119,6 @@ export default function QuoteFormPage() {
     return <QuoteSuccessScreen quote={submittedQuote} onNew={handleNew} />;
   }
 
-  const total = formData.line_items.reduce((s, li) => s + (li.price || 0), 0);
   const customerName = [formData.customer_first_name, formData.customer_last_name]
     .filter(Boolean)
     .join(" ");
@@ -234,15 +232,16 @@ export default function QuoteFormPage() {
                       </div>
                       <div className="space-y-1">
                         {formData.line_items.map((li, i) => (
-                          <div key={i} className="flex justify-between text-xs text-gray-700">
-                            <span className="truncate mr-2">{li.description || "—"}</span>
-                            <span className="flex-shrink-0">{formatCurrency(li.price)}</span>
+                          <div key={i} className="text-xs text-gray-700">
+                            <div className="flex justify-between">
+                              <span className="font-medium truncate mr-2">{li.item || "—"}</span>
+                              <span className="flex-shrink-0 text-black font-semibold">{li.price || ""}</span>
+                            </div>
+                            {li.stone && (
+                              <div className="text-gray-400 truncate">{li.stone}</div>
+                            )}
                           </div>
                         ))}
-                      </div>
-                      <div className="mt-2 pt-2 border-t border-gray-200 flex justify-between font-semibold text-sm text-black">
-                        <span>Total</span>
-                        <span>{formatCurrency(total)}</span>
                       </div>
                     </div>
                   )}
