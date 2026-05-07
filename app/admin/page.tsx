@@ -309,6 +309,7 @@ export default function AdminPage() {
               <QuotePipelineBoard
                 quotes={quotes}
                 onQuoteClick={setSelectedQuote}
+                onUpdate={handleUpdateQuote}
               />
             ) : (
               /* ── List view ── */
