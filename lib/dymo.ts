@@ -57,9 +57,12 @@ async function printViaDymo(packet: Packet): Promise<boolean> {
   const labelXml = generateDymoXML(packet);
 
   try {
+    const printParamsXml =
+      `<LabelWriterPrintParams><Orientation>Portrait</Orientation></LabelWriterPrintParams>`;
+
     const body = new URLSearchParams({
       printerName,
-      printParamsXml: "",
+      printParamsXml,
       labelXml,
       labelSetXml: "",
     });
