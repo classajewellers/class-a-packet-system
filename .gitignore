@@ -34,3 +34,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# prisma (not used in this project)
+/prisma/dev.db
+
+# env files (never commit real credentials)
+.env
+.env.local
