@@ -1,17 +1,20 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
-import Image from "next/image";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   PacketFormData,
   PacketType,
   defaultFormData,
   SubmissionResults,
   Packet,
+  Quote,
 } from "@/lib/types";
 import { todayISO } from "@/lib/formatters";
 import { printLabel } from "@/lib/dymo";
+import NavBar from "@/components/NavBar";
 
+import { Suspense } from "react";
 import PacketTypeSelector from "@/components/PacketTypeSelector";
 import CustomerSection from "@/components/CustomerSection";
 import ValueContactSection from "@/components/ValueContactSection";
@@ -70,7 +73,8 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
-export default function PacketFormPage() {
+function PacketFormPageInner() {
+  const searchParams = useSearchParams();
   const [formData, setFormData] = useState<PacketFormData>({
     ...defaultFormData,
     in_date: todayISO(),
@@ -90,6 +94,38 @@ export default function PacketFormPage() {
   const [submittedPacket, setSubmittedPacket] = useState<Packet | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const formRef = useRef<HTMLDivElement>(null);
+
+  // Pre-fill from quote if from_quote param is present
+  useEffect(() => {
+    const fromQuoteId = searchParams.get("from_quote");
+    if (!fromQuoteId) return;
+
+    fetch(`/api/quotes/${fromQuoteId}`)
+      .then((r) => r.json())
+      .then((json: { quote?: Quote }) => {
+        if (!json.quote) return;
+        const q = json.quote;
+        setFormData((prev) => ({
+          ...prev,
+          customer_first_name: q.customer_first_name ?? prev.customer_first_name,
+          customer_last_name: q.customer_last_name ?? prev.customer_last_name,
+          customer_email: q.customer_email ?? prev.customer_email,
+          customer_phone: q.customer_phone ?? prev.customer_phone,
+          articles: q.item_description ?? prev.articles,
+          instructions:
+            q.repair_description ?? q.design_brief ?? prev.instructions,
+          total_charges: q.total != null ? String(q.total) : prev.total_charges,
+          packet_type:
+            q.quote_type === "repair"
+              ? "repair"
+              : q.quote_type === "custom_order"
+              ? "custom_order"
+              : prev.packet_type,
+          from_quote_id: q.id,
+        }));
+      })
+      .catch(() => {/* ignore fetch errors */});
+  }, [searchParams]);
 
   const handleChange = useCallback(
     (field: keyof PacketFormData, value: string | boolean | string[]) => {
@@ -220,25 +256,7 @@ export default function PacketFormPage() {
         />
       )}
 
-      <header className="sticky top-0 z-30 bg-[#A3B2A4] shadow-md">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div>
-            <Image
-              src="/class-a-logo.png"
-              alt="Class A Jewellers"
-              width={240}
-              height={60}
-              className="h-[60px] w-auto object-contain"
-            />
-          </div>
-          <a
-            href="/admin"
-            className="text-xs font-semibold text-white/80 hover:text-white border border-white/30 hover:border-white rounded-lg px-3 py-1.5 transition-colors"
-          >
-            Admin →
-          </a>
-        </div>
-      </header>
+      <NavBar />
 
       <main className="max-w-5xl mx-auto px-4 py-6 pb-32">
         <div className="lg:flex lg:gap-6">
@@ -423,5 +441,13 @@ export default function PacketFormPage() {
         </div>
       </div>
     </>
+  );
+}
+
+export default function PacketFormPage() {
+  return (
+    <Suspense>
+      <PacketFormPageInner />
+    </Suspense>
   );
 }

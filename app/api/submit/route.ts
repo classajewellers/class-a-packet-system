@@ -118,7 +118,20 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
 
   const packet = insertedPacket as Packet;
 
-  // ─── 3. Return success ─────────────────────────────────────────────────────
+  // ─── 3. Mark quote as converted (if this packet was created from a quote) ──
+  if (formData.from_quote_id) {
+    await supabase
+      .from("quotes")
+      .update({
+        status: "converted",
+        converted_to_packet_id: packet.id,
+        converted_at: new Date().toISOString(),
+        packet_reference: packet.reference_number,
+      })
+      .eq("id", formData.from_quote_id);
+  }
+
+  // ─── 4. Return success ─────────────────────────────────────────────────────
   // External integrations (Klaviyo, Podium, Sheets) will be connected via Zapier.
   return NextResponse.json({
     packet,

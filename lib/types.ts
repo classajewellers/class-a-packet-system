@@ -45,6 +45,9 @@ export interface PacketFormData {
   // Repair / Custom Order
   from_date: string;
 
+  // Quote conversion
+  from_quote_id?: string;
+
   // Layby
   layby_schedule: string;
   number_of_payments: string;
@@ -221,4 +224,57 @@ export interface AdminPacketsQuery {
   to?: string;
   limit?: number;
   offset?: number;
+}
+
+// ─────────────────────────────────────────────
+// Quotes
+// ─────────────────────────────────────────────
+export type QuoteType = "repair" | "custom_order";
+
+export interface LineItem {
+  description: string;
+  price: number;
+}
+
+export interface Quote {
+  id: string;
+  created_at: string;
+  reference_number: string;
+  quote_type: QuoteType;
+  status: string;
+  customer_first_name: string | null;
+  customer_last_name: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
+  item_description: string | null;
+  line_items: LineItem[] | null;
+  total: number | null;
+  notes: string | null;
+  repair_description: string | null;
+  design_brief: string | null;
+  metal_type: string | null;
+  stone_details: string | null;
+  estimated_turnaround: string | null;
+  staff_member: string | null;
+  converted_to_packet_id: string | null;
+  converted_at: string | null;
+  packet_reference: string | null;
+}
+
+export interface QuoteFormData {
+  quote_type: QuoteType | "";
+  customer_first_name: string;
+  customer_last_name: string;
+  customer_email: string;
+  customer_phone: string;
+  item_description: string;
+  line_items: LineItem[];
+  notes: string;
+  repair_description: string;
+  design_brief: string;
+  metal_type: string;
+  stone_details: string;
+  estimated_turnaround: string;
+  staff_member: string;
+  from_quote_id?: string;
 }

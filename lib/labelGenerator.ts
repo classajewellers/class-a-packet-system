@@ -142,7 +142,7 @@ export function generateDymoXML(packet: Packet): string {
           <Element>
             <String>^RefNumber</String>
             <Attributes>
-              <Font Family="Arial" Size="14" Bold="True" Italic="False" Underline="False" StrikeOut="False" />
+              <Font Family="Arial" Size="16" Bold="True" Italic="False" Underline="False" StrikeOut="False" />
             </Attributes>
           </Element>
         </StyledText>
@@ -198,7 +198,7 @@ export function generateDymoXML(packet: Packet): string {
           <Element>
             <String>^CustomerName</String>
             <Attributes>
-              <Font Family="Arial" Size="10" Bold="True" Italic="False" Underline="False" StrikeOut="False" />
+              <Font Family="Arial" Size="12" Bold="True" Italic="False" Underline="False" StrikeOut="False" />
             </Attributes>
           </Element>
         </StyledText>
@@ -511,10 +511,10 @@ export function generatePrintHTML(packet: Packet): string {
     letter-spacing: 2px;
   }
   .header { text-align: center; border-bottom: 1.5pt solid #000000; padding-bottom: 2mm; margin-bottom: 2mm; }
-  .store-name { font-family: Georgia, serif; font-size: 14pt; font-weight: bold; color: #000000; }
+  .store-name { font-family: Georgia, serif; font-size: 14pt; font-weight: 600; color: #000000; }
   .store-addr { font-size: 6.5pt; color: #555; }
   .ref-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2mm; }
-  .ref-num { font-size: 12pt; font-weight: bold; }
+  .ref-num { font-size: 14pt; font-weight: 600; }
   .due-box {
     background: #000000;
     border: 1pt solid #000000;
@@ -535,10 +535,10 @@ export function generatePrintHTML(packet: Packet): string {
   }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1mm; margin-bottom: 2mm; }
   .field { font-size: 7.5pt; }
-  .field-label { font-weight: bold; font-size: 6.5pt; color: #666; text-transform: uppercase; }
+  .field-label { font-weight: 700; font-size: 6.5pt; color: #666; text-transform: uppercase; }
   .full-width { grid-column: 1 / -1; }
-  .articles { font-size: 8pt; font-weight: bold; }
-  .instructions { font-size: 7pt; color: #333; white-space: pre-wrap; }
+  .articles { font-size: 8pt; font-weight: 600; }
+  .instructions { font-size: 7pt; color: #333; white-space: pre-wrap; font-weight: 500; }
   .pricing { display: flex; justify-content: space-between; border-top: 1pt solid #ccc; border-bottom: 1pt solid #ccc; padding: 1mm 0; margin: 2mm 0; }
   .price-item { text-align: center; }
   .price-label { font-size: 6pt; color: #666; text-transform: uppercase; }
@@ -568,7 +568,7 @@ export function generatePrintHTML(packet: Packet): string {
   </div>
 
   <div class="grid">
-    <div class="field"><div class="field-label">Name</div>${esc(customerName)}</div>
+    <div class="field" style="font-size:13pt;font-weight:600;"><div class="field-label">Name</div>${esc(customerName)}</div>
     <div class="field"><div class="field-label">In Date</div>${esc(formatDateAU(packet.in_date))}</div>
     <div class="field"><div class="field-label">Address</div>${esc(addressLine)}</div>
     <div class="field"><div class="field-label">Cust #</div>${esc(packet.customer_number)}</div>
