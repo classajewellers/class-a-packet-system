@@ -282,7 +282,7 @@ export interface QuoteFormData {
   line_items: LineItem[];
   notes: string;
   staff_member: string;
-  assigned_to: string;
+  assigned_to?: string;
   follow_up_date: string;
   from_quote_id?: string;
 }

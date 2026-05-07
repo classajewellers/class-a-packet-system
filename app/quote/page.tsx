@@ -26,7 +26,6 @@ function makeDefaultFormData(): QuoteFormData {
     line_items:          [...DEFAULT_LINE_ITEMS],
     notes:               "",
     staff_member:        "",
-    assigned_to:         "",
     follow_up_date:      defaultFollowUpDate(),
   };
 }
@@ -37,7 +36,6 @@ function validate(data: QuoteFormData): Partial<Record<keyof QuoteFormData, stri
   if (!data.customer_first_name.trim())      errors.customer_first_name = "Required";
   if (!data.customer_last_name.trim())       errors.customer_last_name  = "Required";
   if (!data.staff_member)                    errors.staff_member        = "Required";
-  if (!data.assigned_to)                     errors.assigned_to         = "Required";
   return errors;
 }
 
