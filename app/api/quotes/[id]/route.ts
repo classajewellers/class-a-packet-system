@@ -15,6 +15,7 @@ export async function GET(
     .single();
 
   if (error || !data) {
+    console.error("[quotes/[id]] GET failed:", { id: params.id, code: error?.code, message: error?.message });
     return NextResponse.json({ error: "Quote not found" }, { status: 404 });
   }
 

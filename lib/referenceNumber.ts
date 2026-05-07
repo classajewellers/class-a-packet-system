@@ -33,9 +33,11 @@ export function generateRepairTrackerNumber(referenceNumber: string): string {
 }
 
 // QT-YYYYMMDD-XXXX (quotes)
+// Falls back to a timestamp-based suffix if the RPC doesn't exist yet.
 export async function generateQuoteReferenceNumber(date?: Date): Promise<string> {
   const d = date ?? new Date();
   const isoDate = d.toISOString().split("T")[0];
+  const dateCompact = isoDate.replace(/-/g, "");
 
   const supabase = createServiceClient();
 
@@ -43,11 +45,18 @@ export async function generateQuoteReferenceNumber(date?: Date): Promise<string>
     input_date: isoDate,
   });
 
-  if (error) throw new Error(`Failed to generate quote reference number: ${error.message}`);
+  if (error) {
+    // RPC missing or failed — use a timestamp-based suffix so the quote still saves.
+    console.warn(
+      "[referenceNumber] increment_quote_counter RPC failed, using timestamp fallback:",
+      { code: error.code, message: error.message }
+    );
+    // Last 6 digits of current ms timestamp → unique within the session
+    const suffix = String(Date.now()).slice(-6);
+    return `QT-${dateCompact}-${suffix}`;
+  }
 
   const count = data as number;
-  const dateCompact = isoDate.replace(/-/g, "");
   const sequence = String(count).padStart(4, "0");
-
   return `QT-${dateCompact}-${sequence}`;
 }
