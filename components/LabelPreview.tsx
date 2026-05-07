@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { PacketFormData, Packet } from "@/lib/types";
 import { formatDateAU, formatCurrency, computeBalance, parseCurrency } from "@/lib/formatters";
 import { generatePrintHTML } from "@/lib/labelGenerator";
@@ -69,19 +70,13 @@ export default function LabelPreview({ data }: Props) {
 
       {/* Header */}
       <div className="bg-[#A3B2A4] px-3 py-1.5 text-center">
-        <img
+        <Image
           src="/class-a-logo.png"
           alt="Class A Jewellers"
+          width={112}
+          height={28}
           className="h-[28px] w-auto mx-auto object-contain"
-          onError={(e) => {
-            (e.currentTarget as HTMLImageElement).style.display = "none";
-            const fallback = e.currentTarget.nextElementSibling as HTMLElement | null;
-            if (fallback) fallback.style.display = "block";
-          }}
         />
-        <div className="font-serif text-[11px] font-bold text-white tracking-wider hidden">
-          CLASS A JEWELLERS
-        </div>
         <div className="text-[7px] text-white/70 mt-0.5">
           40 North East Road, Walkerville SA 5081
         </div>

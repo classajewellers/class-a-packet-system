@@ -58,23 +58,26 @@ export default function SubmissionOverlay({ results }: Props) {
         </div>
 
         <div className="space-y-3">
-          {ROWS.map(({ key, label }) => (
-            <div key={key} className="flex items-center gap-3">
-              <StatusIcon status={results[key]} />
-              <span
-                className={`text-sm ${
-                  results[key] === "failed"
-                    ? "text-red-600 font-medium"
-                    : results[key] === "success"
-                    ? "text-green-700"
-                    : "text-gray-700"
-                }`}
-              >
-                {label}
-                {results[key] === "pending" ? "…" : ""}
-              </span>
-            </div>
-          ))}
+          {ROWS.map(({ key, label }) => {
+            const status = results[key] ?? "pending";
+            return (
+              <div key={key} className="flex items-center gap-3">
+                <StatusIcon status={status} />
+                <span
+                  className={`text-sm ${
+                    status === "failed"
+                      ? "text-red-600 font-medium"
+                      : status === "success"
+                      ? "text-green-700"
+                      : "text-gray-700"
+                  }`}
+                >
+                  {label}
+                  {status === "pending" ? "…" : ""}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

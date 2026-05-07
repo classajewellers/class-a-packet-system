@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import { Packet, PacketType, AdminPacketsQuery } from "@/lib/types";
 import AdminTable from "@/components/AdminTable";
 import PacketDetailDrawer from "@/components/PacketDetailDrawer";
@@ -90,22 +91,13 @@ export default function AdminPage() {
       <header className="bg-[#A3B2A4] shadow-md">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div>
-            <img
+            <Image
               src="/class-a-logo.png"
               alt="Class A Jewellers"
+              width={160}
+              height={40}
               className="h-[40px] w-auto object-contain"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).style.display = "none";
-                const fallback = e.currentTarget.nextElementSibling as HTMLElement | null;
-                if (fallback) fallback.style.display = "block";
-              }}
             />
-            <div style={{ display: "none" }}>
-              <p className="font-serif text-white font-bold text-lg tracking-wider leading-none">
-                CLASS A JEWELLERS
-              </p>
-              <p className="text-white/60 text-xs mt-0.5">Admin — Packet History</p>
-            </div>
           </div>
           <a
             href="/"

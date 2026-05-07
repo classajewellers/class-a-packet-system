@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
+import Image from "next/image";
 import {
   PacketFormData,
   PacketType,
@@ -222,22 +223,13 @@ export default function PacketFormPage() {
       <header className="sticky top-0 z-30 bg-[#A3B2A4] shadow-md">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
           <div>
-            <img
+            <Image
               src="/class-a-logo.png"
               alt="Class A Jewellers"
+              width={240}
+              height={60}
               className="h-[60px] w-auto object-contain"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).style.display = "none";
-                const fallback = e.currentTarget.nextElementSibling as HTMLElement | null;
-                if (fallback) fallback.style.display = "block";
-              }}
             />
-            <div style={{ display: "none" }}>
-              <p className="font-serif text-white font-bold text-lg tracking-wider leading-none">
-                CLASS A JEWELLERS
-              </p>
-              <p className="text-white/60 text-xs mt-0.5">Packet System</p>
-            </div>
           </div>
           <a
             href="/admin"
