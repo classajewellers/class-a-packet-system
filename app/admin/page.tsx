@@ -1,14 +1,22 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Packet, PacketType, AdminPacketsQuery, Quote } from "@/lib/types";
 import { STAGE_CONFIG, quoteStage, isOverdue } from "@/lib/pipeline";
+import { getSupabaseClient } from "@/lib/supabase";
 import AdminTable from "@/components/AdminTable";
 import PacketDetailDrawer from "@/components/PacketDetailDrawer";
 import QuoteDetailDrawer from "@/components/QuoteDetailDrawer";
 import QuotePipelineBoard from "@/components/QuotePipelineBoard";
 import QuoteStatsBar from "@/components/QuoteStatsBar";
 import NavBar from "@/components/NavBar";
+
+// ── Note for deployment ───────────────────────────────────────────────────────
+// Real-time subscriptions require Supabase replication enabled on both tables.
+// In Supabase dashboard → Database → Replication, enable real-time for the
+// "quotes" and "packets" tables. Without this, the channel subscribes but
+// receives no events — the 10-second poll is the fallback in that case.
+// ─────────────────────────────────────────────────────────────────────────────
 
 const TYPE_OPTIONS: { value: "all" | PacketType; label: string }[] = [
   { value: "all", label: "All Types" },
@@ -39,6 +47,19 @@ export default function AdminPage() {
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
   const [quoteView, setQuoteView] = useState<"board" | "list">("board");
 
+  // Keep a ref to the latest query so the polling interval can read it
+  const queryRef = useRef(query);
+  useEffect(() => { queryRef.current = query; }, [query]);
+
+  // ── Read ?tab= from URL on mount ─────────────────────────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get("tab");
+    if (tab === "quotes" || tab === "orders") setActiveTab(tab);
+  }, []);
+
+  // ── Data fetchers ─────────────────────────────────────────────────────────
+
   const fetchPackets = useCallback(async (q: AdminPacketsQuery) => {
     setLoading(true);
     try {
@@ -47,7 +68,6 @@ export default function AdminPage() {
       if (q.type && q.type !== "all") params.set("type", q.type);
       if (q.from) params.set("from", q.from);
       if (q.to) params.set("to", q.to);
-
       const res = await fetch(`/api/admin/packets?${params}`, { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to fetch packets");
       const json = await res.json();
@@ -58,11 +78,6 @@ export default function AdminPage() {
       setLoading(false);
     }
   }, []);
-
-  useEffect(() => {
-    const timer = setTimeout(() => fetchPackets(query), 300);
-    return () => clearTimeout(timer);
-  }, [query, fetchPackets]);
 
   const fetchQuotes = useCallback(async () => {
     setQuotesLoading(true);
@@ -78,11 +93,115 @@ export default function AdminPage() {
     }
   }, []);
 
+  // Silent refresh — no loading spinner, used by the poll interval
+  const silentRefreshQuotes = useCallback(async () => {
+    try {
+      const res = await fetch("/api/quotes", { cache: "no-store" });
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.quotes) setQuotes(json.quotes);
+    } catch { /* ignore */ }
+  }, []);
+
+  const silentRefreshPackets = useCallback(async (q: AdminPacketsQuery) => {
+    try {
+      const params = new URLSearchParams();
+      if (q.search) params.set("search", q.search);
+      if (q.type && q.type !== "all") params.set("type", q.type);
+      if (q.from) params.set("from", q.from);
+      if (q.to) params.set("to", q.to);
+      const res = await fetch(`/api/admin/packets?${params}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.packets) setPackets(json.packets);
+    } catch { /* ignore */ }
+  }, []);
+
+  // ── Initial data load ────────────────────────────────────────────────────
   useEffect(() => {
-    if (activeTab === "quotes") {
-      fetchQuotes();
-    }
+    const timer = setTimeout(() => fetchPackets(query), 300);
+    return () => clearTimeout(timer);
+  }, [query, fetchPackets]);
+
+  useEffect(() => {
+    if (activeTab === "quotes") fetchQuotes();
   }, [activeTab, fetchQuotes]);
+
+  // ── Supabase real-time subscriptions ────────────────────────────────────
+  // Subscribes to INSERT/UPDATE on both tables immediately on mount.
+  // Requires real-time enabled for these tables in Supabase dashboard.
+  useEffect(() => {
+    const supabase = getSupabaseClient();
+
+    const channel = supabase
+      .channel("admin-realtime")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "quotes" },
+        (payload) => {
+          const incoming = payload.new as Quote;
+          setQuotes((prev) => {
+            if (prev.some((q) => q.id === incoming.id)) return prev;
+            return [incoming, ...prev];
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "quotes" },
+        (payload) => {
+          const updated = payload.new as Quote;
+          setQuotes((prev) =>
+            prev.map((q) => (q.id === updated.id ? updated : q))
+          );
+          // Keep selected quote in sync
+          setSelectedQuote((cur) =>
+            cur && cur.id === updated.id ? updated : cur
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "packets" },
+        (payload) => {
+          const incoming = payload.new as Packet;
+          setPackets((prev) => {
+            if (prev.some((p) => p.id === incoming.id)) return prev;
+            return [incoming, ...prev];
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "packets" },
+        (payload) => {
+          const updated = payload.new as Packet;
+          setPackets((prev) =>
+            prev.map((p) => (p.id === updated.id ? updated : p))
+          );
+          setSelectedPacket((cur) =>
+            cur && cur.id === updated.id ? updated : cur
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // ── 10-second fallback poll ──────────────────────────────────────────────
+  // Runs silently (no loading state) in case the websocket drops.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      silentRefreshQuotes();
+      silentRefreshPackets(queryRef.current);
+    }, 10_000);
+    return () => clearInterval(interval);
+  }, [silentRefreshQuotes, silentRefreshPackets]);
+
+  // ── Event handlers ───────────────────────────────────────────────────────
 
   function handleUpdateQuote(updated: Quote) {
     setQuotes((prev) => prev.map((q) => (q.id === updated.id ? updated : q)));
@@ -107,9 +226,7 @@ export default function AdminPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ packetId, output }),
     });
-    if (res.ok) {
-      fetchPackets(query);
-    }
+    if (res.ok) fetchPackets(query);
   }
 
   const inputClass =
@@ -179,24 +296,22 @@ export default function AdminPage() {
                 </div>
 
                 {/* Type filter */}
-                <div>
-                  <select
-                    value={query.type ?? "all"}
-                    onChange={(e) =>
-                      setQuery((q) => ({
-                        ...q,
-                        type: e.target.value as AdminPacketsQuery["type"],
-                      }))
-                    }
-                    className={inputClass}
-                  >
-                    {TYPE_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <select
+                  value={query.type ?? "all"}
+                  onChange={(e) =>
+                    setQuery((q) => ({
+                      ...q,
+                      type: e.target.value as AdminPacketsQuery["type"],
+                    }))
+                  }
+                  className={inputClass}
+                >
+                  {TYPE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
 
                 {/* Date range */}
                 <div className="flex items-center gap-2">
@@ -230,7 +345,7 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Orders Table */}
+            {/* Orders table */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
               <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-black">
@@ -247,7 +362,6 @@ export default function AdminPage() {
                   <span>Label · Klaviyo · Email · SMS · Sheets</span>
                 </div>
               </div>
-
               <div className="px-5 py-4">
                 {loading ? (
                   <div className="text-center py-12 text-gray-400">
@@ -255,7 +369,7 @@ export default function AdminPage() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
-                    <p className="text-sm">Loading packets…</p>
+                    <p className="text-sm">Loading orders…</p>
                   </div>
                 ) : (
                   <AdminTable packets={packets} onRowClick={setSelectedPacket} />
@@ -272,21 +386,29 @@ export default function AdminPage() {
               <QuoteStatsBar quotes={quotes} />
             )}
 
-            {/* View toggle + header */}
+            {/* View toggle + count */}
             <div className="flex items-center justify-between mb-4">
               <p className="text-sm text-gray-500">
-                {quotesLoading ? "Loading…" : `${quotes.filter(q => q.status !== "converted").length} active quote${quotes.filter(q => q.status !== "converted").length !== 1 ? "s" : ""}`}
+                {quotesLoading
+                  ? "Loading…"
+                  : `${quotes.filter((q) => q.status !== "converted").length} active quote${
+                      quotes.filter((q) => q.status !== "converted").length !== 1 ? "s" : ""
+                    }`}
               </p>
               <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm font-semibold">
                 <button
                   onClick={() => setQuoteView("board")}
-                  className={`px-4 py-2 transition-colors ${quoteView === "board" ? "bg-black text-white" : "bg-white text-gray-500 hover:text-black"}`}
+                  className={`px-4 py-2 transition-colors ${
+                    quoteView === "board" ? "bg-black text-white" : "bg-white text-gray-500 hover:text-black"
+                  }`}
                 >
                   Board
                 </button>
                 <button
                   onClick={() => setQuoteView("list")}
-                  className={`px-4 py-2 transition-colors border-l border-gray-200 ${quoteView === "list" ? "bg-black text-white" : "bg-white text-gray-500 hover:text-black"}`}
+                  className={`px-4 py-2 transition-colors border-l border-gray-200 ${
+                    quoteView === "list" ? "bg-black text-white" : "bg-white text-gray-500 hover:text-black"
+                  }`}
                 >
                   List
                 </button>
@@ -312,7 +434,6 @@ export default function AdminPage() {
                 onUpdate={handleUpdateQuote}
               />
             ) : (
-              /* ── List view ── */
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -329,9 +450,13 @@ export default function AdminPage() {
                     <tbody className="divide-y divide-gray-100">
                       {quotes.map((q) => {
                         const customerName =
-                          [q.customer_first_name, q.customer_last_name].filter(Boolean).join(" ") || "—";
+                          [q.customer_first_name, q.customer_last_name]
+                            .filter(Boolean)
+                            .join(" ") || "—";
                         const created = new Date(q.created_at).toLocaleDateString("en-AU", {
-                          day: "2-digit", month: "short", year: "numeric",
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
                         });
                         const stage = quoteStage(q.status);
                         const stageConf = STAGE_CONFIG[stage];
@@ -345,7 +470,9 @@ export default function AdminPage() {
                             className="hover:bg-gray-50 cursor-pointer transition-colors"
                           >
                             <td className="px-4 py-3">
-                              <span className="font-mono text-xs font-semibold text-black">{q.reference_number}</span>
+                              <span className="font-mono text-xs font-semibold text-black">
+                                {q.reference_number}
+                              </span>
                             </td>
                             <td className="px-4 py-3">
                               <div className="font-medium text-black">{customerName}</div>
@@ -365,15 +492,23 @@ export default function AdminPage() {
                                 </span>
                               )}
                             </td>
-                            <td className={`px-4 py-3 whitespace-nowrap text-xs font-medium ${overdue && activeStage ? "text-red-600 font-bold" : "text-gray-600"}`}>
+                            <td
+                              className={`px-4 py-3 whitespace-nowrap text-xs font-medium ${
+                                overdue && activeStage ? "text-red-600 font-bold" : "text-gray-600"
+                              }`}
+                            >
                               {q.follow_up_date
                                 ? new Date(q.follow_up_date + "T00:00:00").toLocaleDateString("en-AU", {
-                                    day: "2-digit", month: "short", year: "numeric",
+                                    day: "2-digit",
+                                    month: "short",
+                                    year: "numeric",
                                   })
                                 : "—"}
                               {overdue && activeStage && " ⚠"}
                             </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-gray-500 text-xs">{created}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-gray-500 text-xs">
+                              {created}
+                            </td>
                           </tr>
                         );
                       })}

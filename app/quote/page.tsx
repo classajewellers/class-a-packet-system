@@ -7,7 +7,7 @@ import NavBar from "@/components/NavBar";
 import QuoteTypeSelector from "@/components/QuoteTypeSelector";
 import QuoteCustomerSection from "@/components/QuoteCustomerSection";
 import QuoteLineItems from "@/components/QuoteLineItems";
-import QuoteSuccessScreen from "@/components/QuoteSuccessScreen";
+import QuotePreviewScreen from "@/components/QuotePreviewScreen";
 
 // Default 3 blank rows so staff can start filling immediately
 const DEFAULT_LINE_ITEMS: LineItem[] = [
@@ -118,7 +118,7 @@ export default function QuoteFormPage() {
   }
 
   if (submittedQuote) {
-    return <QuoteSuccessScreen quote={submittedQuote} onNew={handleNew} />;
+    return <QuotePreviewScreen quote={submittedQuote} onNew={handleNew} />;
   }
 
   return (
