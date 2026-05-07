@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { generateReferenceNumber, generateRepairTrackerNumber } from "@/lib/referenceNumber";
-import { upsertKlaviyoProfile, fireKlaviyoEvent, sendKlaviyoConfirmationEmail } from "@/lib/klaviyo";
-import { sendPodiumSMS } from "@/lib/podium";
-import { appendToSheet } from "@/lib/sheets";
 import { parseCurrency } from "@/lib/formatters";
 import { PacketFormData, Packet, SubmitResponse } from "@/lib/types";
 
@@ -54,7 +51,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
     packetData.consent_to_marketing = formData.consent_to_marketing;
   }
 
-  // ─── 2. Insert into Supabase (synchronous — must succeed) ─────────────────
+  // ─── 2. Insert into Supabase ───────────────────────────────────────────────
   const supabase = createServiceClient();
 
   const insertData: Record<string, unknown> = {
@@ -121,52 +118,11 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
 
   const packet = insertedPacket as Packet;
 
-  // ─── 3. Fire 4 outputs in parallel ────────────────────────────────────────
-  const [klaviyoResult, emailResult, smsResult, sheetsResult] =
-    await Promise.allSettled([
-      upsertKlaviyoProfile(packet).then(() => fireKlaviyoEvent(packet)),
-      sendKlaviyoConfirmationEmail(packet),
-      sendPodiumSMS(packet),
-      appendToSheet(packet),
-    ]);
-
-  const klaviyoOk = klaviyoResult.status === "fulfilled";
-  const emailOk = emailResult.status === "fulfilled";
-  const smsOk = smsResult.status === "fulfilled";
-  const sheetsOk = sheetsResult.status === "fulfilled";
-
-  // ─── 4. Update status flags ───────────────────────────────────────────────
-  await supabase
-    .from("packets")
-    .update({
-      klaviyo_synced: klaviyoOk,
-      email_sent: emailOk,
-      sms_sent: smsOk,
-      sheets_logged: sheetsOk,
-    })
-    .eq("id", packet.id);
-
-  const { data: updatedPacket } = await supabase
-    .from("packets")
-    .select()
-    .eq("id", packet.id)
-    .single();
-
-  const errors: Record<string, string> = {};
-  if (!klaviyoOk) errors.klaviyo = (klaviyoResult as PromiseRejectedResult).reason?.message ?? "Failed";
-  if (!emailOk) errors.email = (emailResult as PromiseRejectedResult).reason?.message ?? "Failed";
-  if (!smsOk) errors.sms = (smsResult as PromiseRejectedResult).reason?.message ?? "Failed";
-  if (!sheetsOk) errors.sheets = (sheetsResult as PromiseRejectedResult).reason?.message ?? "Failed";
-
+  // ─── 3. Return success ─────────────────────────────────────────────────────
+  // External integrations (Klaviyo, Podium, Sheets) will be connected via Zapier.
   return NextResponse.json({
-    packet: (updatedPacket ?? packet) as Packet,
-    results: {
-      supabase: "success",
-      klaviyo: klaviyoOk ? "success" : "failed",
-      email: emailOk ? "success" : "failed",
-      sms: smsOk ? "success" : "failed",
-      sheets: sheetsOk ? "success" : "failed",
-    },
-    errors,
+    packet,
+    results: { supabase: "success" },
+    errors: {},
   });
 }
