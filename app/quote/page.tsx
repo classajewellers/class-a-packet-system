@@ -7,39 +7,37 @@ import NavBar from "@/components/NavBar";
 import QuoteTypeSelector from "@/components/QuoteTypeSelector";
 import QuoteCustomerSection from "@/components/QuoteCustomerSection";
 import QuoteLineItems from "@/components/QuoteLineItems";
-import QuoteRepairFields from "@/components/QuoteRepairFields";
-import QuoteCustomOrderFields from "@/components/QuoteCustomOrderFields";
 import QuoteSuccessScreen from "@/components/QuoteSuccessScreen";
+
+// Default 3 blank rows so staff can start filling immediately
+const DEFAULT_LINE_ITEMS: LineItem[] = [
+  { design: "", stone: "", price: "" },
+  { design: "", stone: "", price: "" },
+  { design: "", stone: "", price: "" },
+];
 
 function makeDefaultFormData(): QuoteFormData {
   return {
-    quote_type: "",
+    quote_type:          "",
     customer_first_name: "",
-    customer_last_name: "",
-    customer_email: "",
-    customer_phone: "",
-    item_description: "",
-    line_items: [],
-    notes: "",
-    repair_description: "",
-    design_brief: "",
-    metal_type: "",
-    stone_details: "",
-    estimated_turnaround: "",
-    staff_member: "",
-    assigned_to: "",
-    follow_up_date: defaultFollowUpDate(),
+    customer_last_name:  "",
+    customer_email:      "",
+    customer_phone:      "",
+    line_items:          [...DEFAULT_LINE_ITEMS],
+    notes:               "",
+    staff_member:        "",
+    assigned_to:         "",
+    follow_up_date:      defaultFollowUpDate(),
   };
 }
 
 function validate(data: QuoteFormData): Partial<Record<keyof QuoteFormData, string>> {
   const errors: Partial<Record<keyof QuoteFormData, string>> = {};
-  if (!data.quote_type) errors.quote_type = "Select a quote type";
-  if (!data.customer_first_name.trim()) errors.customer_first_name = "Required";
-  if (!data.customer_last_name.trim()) errors.customer_last_name = "Required";
-  if (!data.item_description.trim()) errors.item_description = "Required";
-  if (!data.staff_member) errors.staff_member = "Required";
-  if (!data.assigned_to) errors.assigned_to = "Required";
+  if (!data.quote_type)                      errors.quote_type          = "Select a quote type";
+  if (!data.customer_first_name.trim())      errors.customer_first_name = "Required";
+  if (!data.customer_last_name.trim())       errors.customer_last_name  = "Required";
+  if (!data.staff_member)                    errors.staff_member        = "Required";
+  if (!data.assigned_to)                     errors.assigned_to         = "Required";
   return errors;
 }
 
@@ -55,9 +53,9 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 }
 
 export default function QuoteFormPage() {
-  const [formData, setFormData] = useState<QuoteFormData>(makeDefaultFormData());
-  const [errors, setErrors] = useState<Partial<Record<keyof QuoteFormData, string>>>({});
-  const [submitting, setSubmitting] = useState(false);
+  const [formData, setFormData]       = useState<QuoteFormData>(makeDefaultFormData());
+  const [errors, setErrors]           = useState<Partial<Record<keyof QuoteFormData, string>>>({});
+  const [submitting, setSubmitting]   = useState(false);
   const [submittedQuote, setSubmittedQuote] = useState<Quote | null>(null);
 
   const handleChange = useCallback(
@@ -92,9 +90,9 @@ export default function QuoteFormPage() {
     setSubmitting(true);
     try {
       const res = await fetch("/api/quotes/submit", {
-        method: "POST",
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ formData }),
+        body:    JSON.stringify({ formData }),
       });
       const json = await res.json();
 
@@ -125,160 +123,56 @@ export default function QuoteFormPage() {
     return <QuoteSuccessScreen quote={submittedQuote} onNew={handleNew} />;
   }
 
-  const customerName = [formData.customer_first_name, formData.customer_last_name]
-    .filter(Boolean)
-    .join(" ");
-
   return (
     <>
       <NavBar />
 
-      <main className="max-w-5xl mx-auto px-4 py-6 pb-32">
-        <div className="lg:flex lg:gap-6">
-          {/* Form column */}
-          <div className="flex-1 min-w-0 space-y-4">
-            <Card title="Step 1 — Quote Type">
-              <QuoteTypeSelector value={formData.quote_type} onChange={handleTypeChange} />
-              {errors.quote_type && (
-                <p className="mt-2 text-xs text-red-600">{errors.quote_type}</p>
-              )}
+      <main className="max-w-3xl mx-auto px-4 py-6 pb-32 space-y-4">
+
+        {/* Step 1 — Quote Type */}
+        <Card title="Step 1 — Quote Type">
+          <QuoteTypeSelector value={formData.quote_type} onChange={handleTypeChange} />
+          {errors.quote_type && (
+            <p className="mt-2 text-xs text-red-600">{errors.quote_type}</p>
+          )}
+        </Card>
+
+        {formData.quote_type && (
+          <>
+            {/* Customer & Staff */}
+            <Card title="Customer & Staff">
+              <QuoteCustomerSection
+                data={formData}
+                onChange={handleChange}
+                errors={errors}
+              />
             </Card>
 
-            {formData.quote_type && (
-              <>
-                <Card title="Customer & Staff">
-                  <QuoteCustomerSection
-                    data={formData}
-                    onChange={handleChange}
-                    errors={errors}
-                  />
-                </Card>
+            {/* Line Items */}
+            <Card title="Line Items">
+              <QuoteLineItems
+                lineItems={formData.line_items}
+                onChange={handleLineItemsChange}
+              />
+            </Card>
 
-                <Card title="Item Description">
-                  <div>
-                    <label className="block text-sm font-semibold text-black mb-1">
-                      Item Description<span className="text-black ml-0.5">*</span>
-                    </label>
-                    <textarea
-                      value={formData.item_description}
-                      onChange={(e) => handleChange("item_description", e.target.value)}
-                      rows={3}
-                      placeholder="Describe the item(s)…"
-                      className={`w-full rounded-lg border px-3 py-2.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-black ${
-                        errors.item_description
-                          ? "border-red-500 bg-red-50"
-                          : "border-gray-300 bg-white"
-                      }`}
-                    />
-                    {errors.item_description && (
-                      <p className="mt-1 text-xs text-red-600">{errors.item_description}</p>
-                    )}
-                  </div>
-                </Card>
-
-                <Card title="Line Items">
-                  <QuoteLineItems
-                    lineItems={formData.line_items}
-                    onChange={handleLineItemsChange}
-                  />
-                </Card>
-
-                <Card title="Notes">
-                  <textarea
-                    value={formData.notes}
-                    onChange={(e) => handleChange("notes", e.target.value)}
-                    rows={2}
-                    placeholder="Any additional notes for the customer…"
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-black"
-                  />
-                </Card>
-
-                {formData.quote_type === "repair" && (
-                  <Card title="Repair Details">
-                    <QuoteRepairFields data={formData} onChange={handleChange} />
-                  </Card>
-                )}
-
-                {formData.quote_type === "custom_order" && (
-                  <Card title="Custom Order Details">
-                    <QuoteCustomOrderFields data={formData} onChange={handleChange} />
-                  </Card>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* Summary preview */}
-          {formData.quote_type && (
-            <div className="hidden lg:block w-72 flex-shrink-0">
-              <div className="sticky top-20">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
-                  Quote Summary
-                </p>
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-3">
-                  <div>
-                    <div className="text-xs text-gray-400 uppercase font-semibold mb-0.5">
-                      Customer
-                    </div>
-                    <div className="text-sm font-semibold text-black">
-                      {customerName || "—"}
-                    </div>
-                    {formData.customer_email && (
-                      <div className="text-xs text-gray-500">{formData.customer_email}</div>
-                    )}
-                    {formData.customer_phone && (
-                      <div className="text-xs text-gray-500">{formData.customer_phone}</div>
-                    )}
-                  </div>
-
-                  {formData.line_items.length > 0 && (
-                    <div>
-                      <div className="text-xs text-gray-400 uppercase font-semibold mb-1">
-                        Line Items
-                      </div>
-                      <div className="space-y-1">
-                        {formData.line_items.map((li, i) => (
-                          <div key={i} className="text-xs text-gray-700">
-                            <div className="flex justify-between">
-                              <span className="font-medium truncate mr-2">{li.item || "—"}</span>
-                              <span className="flex-shrink-0 text-black font-semibold">{li.price || ""}</span>
-                            </div>
-                            {li.stone && (
-                              <div className="text-gray-400 truncate">{li.stone}</div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {formData.estimated_turnaround && (
-                    <div>
-                      <div className="text-xs text-gray-400 uppercase font-semibold mb-0.5">
-                        Turnaround
-                      </div>
-                      <div className="text-sm text-black">{formData.estimated_turnaround}</div>
-                    </div>
-                  )}
-
-                  {formData.staff_member && (
-                    <div>
-                      <div className="text-xs text-gray-400 uppercase font-semibold mb-0.5">
-                        Staff
-                      </div>
-                      <div className="text-sm text-black">{formData.staff_member}</div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+            {/* Notes */}
+            <Card title="Notes">
+              <textarea
+                value={formData.notes}
+                onChange={(e) => handleChange("notes", e.target.value)}
+                rows={3}
+                placeholder="Any additional notes for the customer (optional)…"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-black"
+              />
+            </Card>
+          </>
+        )}
       </main>
 
       {/* Fixed submit bar */}
       <div className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-gray-200 shadow-lg px-4 py-3">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-3xl mx-auto">
           <button
             type="button"
             onClick={handleSubmit}

@@ -18,7 +18,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const { formData } = body;
-  console.log("[quotes/submit] Quote type:", formData.quote_type, "| Customer:", formData.customer_email, "| Assigned:", formData.assigned_to);
+  console.log("[quotes/submit] Quote type:", formData.quote_type, "| Customer:", formData.customer_email || formData.customer_last_name, "| Assigned:", formData.assigned_to);
 
   // ── 2. Generate QT- reference number (with timestamp fallback) ─────────────
   let referenceNumber: string;
@@ -36,27 +36,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const now       = new Date().toISOString();
 
   const insertData = {
-    reference_number:     referenceNumber,
-    quote_type:           formData.quote_type,
-    status:               "pending",
-    customer_first_name:  formData.customer_first_name  || null,
-    customer_last_name:   formData.customer_last_name   || null,
-    customer_email:       formData.customer_email        || null,
-    customer_phone:       formData.customer_phone        || null,
-    item_description:     formData.item_description      || null,
-    line_items:           lineItems.length > 0 ? lineItems : null,
-    notes:                formData.notes                 || null,
-    repair_description:   formData.repair_description    || null,
-    design_brief:         formData.design_brief          || null,
-    metal_type:           formData.metal_type            || null,
-    stone_details:        formData.stone_details         || null,
-    estimated_turnaround: formData.estimated_turnaround  || null,
-    staff_member:         formData.staff_member          || null,
+    reference_number:    referenceNumber,
+    quote_type:          formData.quote_type,
+    status:              "pending",
+    customer_first_name: formData.customer_first_name || null,
+    customer_last_name:  formData.customer_last_name  || null,
+    customer_email:      formData.customer_email      || null,
+    customer_phone:      formData.customer_phone      || null,
+    line_items:          lineItems.length > 0 ? lineItems : null,
+    notes:               formData.notes               || null,
+    staff_member:        formData.staff_member        || null,
     // CRM pipeline fields
-    assigned_to:          formData.assigned_to           || null,
-    follow_up_date:       formData.follow_up_date        || null,
-    pending_at:           now,
-    status_changed_at:    now,
+    assigned_to:         formData.assigned_to         || null,
+    follow_up_date:      formData.follow_up_date      || null,
+    pending_at:          now,
+    status_changed_at:   now,
   };
 
   console.log("[quotes/submit] Inserting into quotes table:", {

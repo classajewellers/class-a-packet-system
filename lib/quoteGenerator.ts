@@ -33,6 +33,7 @@ export function generateQuoteHTML(quote: Quote): string {
   const customerName = [quote.customer_first_name, quote.customer_last_name]
     .filter(Boolean)
     .join(" ");
+  const lastName = (quote.customer_last_name ?? "").trim().replace(/\s+/g, "_") || "Customer";
 
   const lineItems: LineItem[] = quote.line_items ?? [];
 
@@ -41,7 +42,7 @@ export function generateQuoteHTML(quote: Quote): string {
   const MIN_ROWS = 8;
   const filledItems: FilledItem[] = [...lineItems];
   while (filledItems.length < MIN_ROWS) {
-    filledItems.push({ item: "", stone: "", price: "", _empty: true });
+    filledItems.push({ design: "", stone: "", price: "", _empty: true });
   }
 
   const tableRows = filledItems
@@ -50,12 +51,12 @@ export function generateQuoteHTML(quote: Quote): string {
       const bg = isEven ? "#ffffff" : "#f0f0f0";
       const isEmpty = li._empty;
       const rowNum = isEmpty ? "" : String(i + 1);
-      const item  = isEmpty ? "&nbsp;" : esc(li.item);
-      const stone = isEmpty ? "&nbsp;" : esc(li.stone);
-      const price = isEmpty ? "&nbsp;" : esc(li.price);
+      const design = isEmpty ? "&nbsp;" : esc(li.design);
+      const stone  = isEmpty ? "&nbsp;" : esc(li.stone);
+      const price  = isEmpty ? "&nbsp;" : esc(li.price);
       return `<tr style="background:${bg};">
         <td style="padding:6px 10px;font-size:9pt;color:#333;border-right:1px solid #ddd;width:32px;text-align:center;">${rowNum}</td>
-        <td style="padding:6px 10px;font-size:9pt;color:#333;border-right:1px solid #ddd;">${item}</td>
+        <td style="padding:6px 10px;font-size:9pt;color:#333;border-right:1px solid #ddd;">${design}</td>
         <td style="padding:6px 10px;font-size:9pt;color:#333;border-right:1px solid #ddd;">${stone}</td>
         <td style="padding:6px 10px;font-size:9pt;color:#333;text-align:right;white-space:nowrap;width:110px;">${price}</td>
       </tr>`;
@@ -70,10 +71,49 @@ export function generateQuoteHTML(quote: Quote): string {
 <html>
 <head>
 <meta charset="utf-8">
-<title>Quotation ${esc(quote.reference_number)} — Class A Jewellers</title>
+<title>Quote_${esc(quote.reference_number)}_${esc(lastName)}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   @page { size: A4 portrait; margin: 15mm 15mm 15mm 15mm; }
+
+  /* ── Screen-only PDF save bar (hidden when printing) ── */
+  @media screen {
+    .pdf-bar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      background: #1d4ed8;
+      color: #fff;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      z-index: 1000;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 13px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    }
+    .pdf-bar p { margin: 0; line-height: 1.4; }
+    .pdf-bar strong { font-weight: bold; }
+    .pdf-bar button {
+      background: #fff;
+      color: #1d4ed8;
+      border: none;
+      padding: 9px 22px;
+      border-radius: 7px;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 13px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .pdf-bar button:hover { background: #e0e7ff; }
+    body { margin-top: 56px; }
+  }
+  @media print {
+    .pdf-bar { display: none !important; }
+    body { margin-top: 0; }
+  }
   body {
     font-family: Arial, Helvetica, sans-serif;
     font-size: 10pt;
@@ -274,7 +314,7 @@ export function generateQuoteHTML(quote: Quote): string {
     <thead>
       <tr>
         <th style="text-align:center;width:32px;">#</th>
-        <th>Item</th>
+        <th>Design</th>
         <th>Stone</th>
         <th style="text-align:right;white-space:nowrap;">Price (incl. GST)</th>
       </tr>
@@ -297,6 +337,12 @@ export function generateQuoteHTML(quote: Quote): string {
       <div class="footer-staff-contact">${esc(staffEmailAddr)}</div>
       <div class="footer-staff-contact">08 8344 7722</div>
     </div>
+  </div>
+
+  <!-- Screen-only: PDF save bar -->
+  <div class="pdf-bar">
+    <p>To save as PDF: click <strong>Save as PDF</strong> → choose <em>Save as PDF</em> as the printer → click Save.</p>
+    <button onclick="window.print()">🖨&nbsp; Save as PDF</button>
   </div>
 
 </body>

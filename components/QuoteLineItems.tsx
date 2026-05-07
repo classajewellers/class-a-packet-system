@@ -7,7 +7,7 @@ interface Props {
   onChange: (lineItems: LineItem[]) => void;
 }
 
-const EMPTY_ITEM: LineItem = { item: "", stone: "", price: "" };
+const EMPTY_ITEM: LineItem = { design: "", stone: "", price: "" };
 
 export default function QuoteLineItems({ lineItems, onChange }: Props) {
   function addItem() {
@@ -15,6 +15,7 @@ export default function QuoteLineItems({ lineItems, onChange }: Props) {
   }
 
   function removeItem(index: number) {
+    if (lineItems.length <= 1) return; // keep at least 1 row
     onChange(lineItems.filter((_, i) => i !== index));
   }
 
@@ -26,19 +27,23 @@ export default function QuoteLineItems({ lineItems, onChange }: Props) {
     "rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-black w-full";
 
   return (
-    <div className="space-y-3">
-      {lineItems.length === 0 && (
-        <p className="text-sm text-gray-400 italic">No line items added yet.</p>
-      )}
+    <div className="space-y-2">
+      {/* Column headers */}
+      <div className="grid grid-cols-[3fr_2fr_1fr_32px] gap-2 px-0.5 mb-1">
+        <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide">Design</p>
+        <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide">Stone</p>
+        <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide">Price</p>
+        <span />
+      </div>
 
       {lineItems.map((li, i) => (
         <div key={i} className="flex gap-2 items-center">
-          {/* Item */}
+          {/* Design */}
           <input
             type="text"
-            value={li.item}
-            onChange={(e) => updateItem(i, "item", e.target.value)}
-            placeholder="Item (e.g. Resize ring)"
+            value={li.design}
+            onChange={(e) => updateItem(i, "design", e.target.value)}
+            placeholder="e.g. Diamond solitaire ring"
             className={`${inputClass} flex-[3]`}
           />
           {/* Stone */}
@@ -61,7 +66,8 @@ export default function QuoteLineItems({ lineItems, onChange }: Props) {
           <button
             type="button"
             onClick={() => removeItem(i)}
-            className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-red-50 text-red-500 hover:bg-red-100 transition-colors font-bold text-lg leading-none"
+            disabled={lineItems.length <= 1}
+            className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors font-bold text-lg leading-none disabled:opacity-30 disabled:cursor-not-allowed"
             title="Remove row"
           >
             &times;
@@ -69,21 +75,12 @@ export default function QuoteLineItems({ lineItems, onChange }: Props) {
         </div>
       ))}
 
-      {lineItems.length > 0 && (
-        <div className="grid grid-cols-[3fr_2fr_1fr_32px] gap-2 px-0.5 mb-0">
-          <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide">Item</p>
-          <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide">Stone</p>
-          <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide">Price</p>
-          <span />
-        </div>
-      )}
-
       <button
         type="button"
         onClick={addItem}
         className="text-sm font-semibold text-black border border-gray-300 rounded-lg px-4 py-2 hover:bg-gray-50 transition-colors"
       >
-        + Add Line Item
+        + Add Row
       </button>
     </div>
   );

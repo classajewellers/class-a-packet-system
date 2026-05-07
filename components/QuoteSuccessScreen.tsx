@@ -12,14 +12,13 @@ interface Props {
 export default function QuoteSuccessScreen({ quote, onNew }: Props) {
   const router = useRouter();
 
-  function handleReprint() {
+  function handleOpenQuote() {
     const html = generateQuoteHTML(quote);
     const win = window.open("", "_blank");
     if (!win) return;
     win.document.write(html);
     win.document.close();
     win.focus();
-    setTimeout(() => win.print(), 400);
   }
 
   function handleConvert() {
@@ -56,10 +55,10 @@ export default function QuoteSuccessScreen({ quote, onNew }: Props) {
       <div className="w-full max-w-xs space-y-3">
         <button
           type="button"
-          onClick={handleReprint}
+          onClick={handleOpenQuote}
           className="w-full rounded-xl bg-black text-white py-3.5 font-semibold text-sm hover:bg-[#222222] active:scale-[0.99] transition-all"
         >
-          Reprint Quote
+          Open Quote / Save PDF
         </button>
 
         {quote.status === "pending" && (

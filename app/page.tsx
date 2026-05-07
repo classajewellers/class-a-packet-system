@@ -105,18 +105,27 @@ function PacketFormPageInner() {
         if (!json.quote) return;
         const q = json.quote;
 
-        // Build articles: item_description + formatted line items
+        // Build articles from line items: "Design — Stone — Price"
         const lineItemsText = (q.line_items ?? []).length > 0
-          ? "\n\nLine Items:\n" + (q.line_items ?? []).map((li) => `${li.item} — ${li.stone} — ${li.price}`).join("\n")
+          ? (q.line_items ?? [])
+              .map((li) => {
+                // Handle both old (item) and new (design) field names
+                const label = (li as {design?: string; item?: string}).design ?? (li as {item?: string}).item ?? "";
+                return [label, li.stone, li.price].filter(Boolean).join(" — ");
+              })
+              .filter(Boolean)
+              .join("\n")
           : "";
-        const articles = (q.item_description ?? "") + lineItemsText;
+        const articles = [q.item_description, lineItemsText].filter(Boolean).join("\n\n");
 
-        // Build instructions: type-specific fields + metal/stone for custom orders
-        let instructions = q.repair_description ?? q.design_brief ?? "";
-        if (q.quote_type === "custom_order") {
-          if (q.metal_type) instructions += (instructions ? "\n\n" : "") + `Metal: ${q.metal_type}`;
-          if (q.stone_details) instructions += (instructions ? "\n" : "") + `Stone: ${q.stone_details}`;
-        }
+        // Build instructions from notes and legacy fields
+        const instructions = [
+          q.repair_description,
+          q.design_brief,
+          q.metal_type  ? `Metal: ${q.metal_type}` : null,
+          q.stone_details ? `Stone: ${q.stone_details}` : null,
+          q.notes,
+        ].filter(Boolean).join("\n");
 
         setFromQuoteRef(q.reference_number);
         setFormData((prev) => ({
