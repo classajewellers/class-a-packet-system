@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   PacketFormData,
@@ -13,8 +13,6 @@ import {
 import { todayISO } from "@/lib/formatters";
 import { printLabel } from "@/lib/dymo";
 import NavBar from "@/components/NavBar";
-
-import { Suspense } from "react";
 import PacketTypeSelector from "@/components/PacketTypeSelector";
 import CustomerSection from "@/components/CustomerSection";
 import ValueContactSection from "@/components/ValueContactSection";
