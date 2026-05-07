@@ -117,6 +117,39 @@ export default function QuoteCustomerSection({ data, onChange, errors }: Props) 
           <p className="mt-1 text-xs text-red-600">{errors.staff_member}</p>
         )}
       </div>
+
+      <div>
+        <label className="block text-sm font-semibold text-black mb-1">
+          Assigned To<span className="text-black ml-0.5">*</span>
+        </label>
+        <select
+          value={data.assigned_to}
+          onChange={(e) => onChange("assigned_to", e.target.value)}
+          className={inputClass("assigned_to")}
+        >
+          <option value="">— Select —</option>
+          {STAFF_MEMBERS.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+        {errors.assigned_to && (
+          <p className="mt-1 text-xs text-red-600">{errors.assigned_to}</p>
+        )}
+      </div>
+
+      <div>
+        <label className="block text-sm font-semibold text-black mb-1">
+          Follow Up Date
+        </label>
+        <input
+          type="date"
+          value={data.follow_up_date}
+          onChange={(e) => onChange("follow_up_date", e.target.value)}
+          className={inputClass("follow_up_date")}
+        />
+      </div>
     </div>
   );
 }

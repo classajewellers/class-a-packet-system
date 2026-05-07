@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PacketFormData } from "@/lib/types";
 
 declare global {
@@ -94,6 +94,71 @@ export function Input({
 
 export default function CustomerSection({ data, onChange, errors }: Props) {
   const streetInputRef = useRef<HTMLInputElement>(null);
+  const shopifyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastLookedUpEmail = useRef<string>("");
+  const [shopifyFound, setShopifyFound] = useState(false);
+
+  // ── Shopify customer lookup (debounced 500ms on email change) ────────────
+  useEffect(() => {
+    const email = data.customer_email.trim();
+
+    // Reset badge when email is cleared or changed
+    setShopifyFound(false);
+
+    // Clear any pending timer
+    if (shopifyTimerRef.current) clearTimeout(shopifyTimerRef.current);
+
+    // Don't look up if email hasn't changed since last lookup, is short, or has no @
+    if (!email || !email.includes("@") || email === lastLookedUpEmail.current) return;
+
+    shopifyTimerRef.current = setTimeout(async () => {
+      lastLookedUpEmail.current = email;
+      try {
+        const res = await fetch(
+          `/api/shopify/customer?email=${encodeURIComponent(email)}`
+        );
+        if (!res.ok) return;
+        const json = await res.json() as {
+          customer: {
+            first_name: string | null;
+            last_name: string | null;
+            phone: string | null;
+            street: string | null;
+            suburb: string | null;
+            state: string | null;
+            postcode: string | null;
+          } | null;
+        };
+        if (!json.customer) return;
+
+        const c = json.customer;
+        // Only fill fields that are still blank to avoid overwriting staff input
+        if (c.first_name && !data.customer_first_name)
+          onChange("customer_first_name", c.first_name);
+        if (c.last_name && !data.customer_last_name)
+          onChange("customer_last_name", c.last_name);
+        if (c.phone && !data.customer_phone)
+          onChange("customer_phone", c.phone);
+        if (c.street && !data.customer_street)
+          onChange("customer_street", c.street);
+        if (c.suburb && !data.customer_suburb)
+          onChange("customer_suburb", c.suburb);
+        if (c.state && !data.customer_state)
+          onChange("customer_state", c.state);
+        if (c.postcode && !data.customer_postcode)
+          onChange("customer_postcode", c.postcode);
+
+        setShopifyFound(true);
+      } catch {
+        // Silently ignore network errors — Shopify lookup is best-effort
+      }
+    }, 500);
+
+    return () => {
+      if (shopifyTimerRef.current) clearTimeout(shopifyTimerRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.customer_email]);
 
   useEffect(() => {
     const el = streetInputRef.current;
@@ -238,7 +303,18 @@ export default function CustomerSection({ data, onChange, errors }: Props) {
             hasError={!!errors.customer_phone}
           />
         </Field>
-        <Field label="Email" required error={errors.customer_email}>
+        <div>
+          <label className="block text-sm font-semibold text-black mb-1 flex items-center gap-2">
+            Email<span className="text-black">*</span>
+            {shopifyFound && (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+                Found in Shopify
+              </span>
+            )}
+          </label>
           <Input
             value={data.customer_email}
             onChange={(v) => onChange("customer_email", v)}
@@ -246,7 +322,10 @@ export default function CustomerSection({ data, onChange, errors }: Props) {
             type="email"
             hasError={!!errors.customer_email}
           />
-        </Field>
+          {errors.customer_email && (
+            <p className="mt-1 text-xs text-red-600">{errors.customer_email}</p>
+          )}
+        </div>
       </div>
     </div>
   );

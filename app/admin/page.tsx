@@ -2,9 +2,12 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Packet, PacketType, AdminPacketsQuery, Quote } from "@/lib/types";
+import { STAGE_CONFIG, quoteStage, isOverdue } from "@/lib/pipeline";
 import AdminTable from "@/components/AdminTable";
 import PacketDetailDrawer from "@/components/PacketDetailDrawer";
 import QuoteDetailDrawer from "@/components/QuoteDetailDrawer";
+import QuotePipelineBoard from "@/components/QuotePipelineBoard";
+import QuoteStatsBar from "@/components/QuoteStatsBar";
 import NavBar from "@/components/NavBar";
 
 const TYPE_OPTIONS: { value: "all" | PacketType; label: string }[] = [
@@ -34,6 +37,7 @@ export default function AdminPage() {
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [quotesLoading, setQuotesLoading] = useState(false);
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
+  const [quoteView, setQuoteView] = useState<"board" | "list">("board");
 
   const fetchPackets = useCallback(async (q: AdminPacketsQuery) => {
     setLoading(true);
@@ -80,6 +84,11 @@ export default function AdminPage() {
     }
   }, [activeTab, fetchQuotes]);
 
+  function handleUpdateQuote(updated: Quote) {
+    setQuotes((prev) => prev.map((q) => (q.id === updated.id ? updated : q)));
+    setSelectedQuote(updated);
+  }
+
   function handleExport() {
     const params = new URLSearchParams();
     if (query.search) params.set("search", query.search);
@@ -120,6 +129,7 @@ export default function AdminPage() {
         <QuoteDetailDrawer
           quote={selectedQuote}
           onClose={() => setSelectedQuote(null)}
+          onUpdate={handleUpdateQuote}
         />
       )}
 
@@ -256,57 +266,76 @@ export default function AdminPage() {
         )}
 
         {activeTab === "quotes" && (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
-            <div className="px-5 py-3 border-b border-gray-100">
-              <h2 className="text-sm font-semibold text-black">
-                {quotesLoading ? "Loading…" : `${quotes.length} quote${quotes.length !== 1 ? "s" : ""}`}
-              </h2>
+          <>
+            {/* Stats bar */}
+            {!quotesLoading && quotes.length > 0 && (
+              <QuoteStatsBar quotes={quotes} />
+            )}
+
+            {/* View toggle + header */}
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm text-gray-500">
+                {quotesLoading ? "Loading…" : `${quotes.filter(q => q.status !== "converted").length} active quote${quotes.filter(q => q.status !== "converted").length !== 1 ? "s" : ""}`}
+              </p>
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm font-semibold">
+                <button
+                  onClick={() => setQuoteView("board")}
+                  className={`px-4 py-2 transition-colors ${quoteView === "board" ? "bg-black text-white" : "bg-white text-gray-500 hover:text-black"}`}
+                >
+                  Board
+                </button>
+                <button
+                  onClick={() => setQuoteView("list")}
+                  className={`px-4 py-2 transition-colors border-l border-gray-200 ${quoteView === "list" ? "bg-black text-white" : "bg-white text-gray-500 hover:text-black"}`}
+                >
+                  List
+                </button>
+              </div>
             </div>
 
-            <div className="px-5 py-4">
-              {quotesLoading ? (
-                <div className="text-center py-12 text-gray-400">
-                  <svg className="w-8 h-8 mx-auto mb-2 spinner" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  <p className="text-sm">Loading quotes…</p>
-                </div>
-              ) : quotes.length === 0 ? (
-                <div className="text-center py-16 text-gray-400">
-                  <p className="text-sm">No quotes found</p>
-                </div>
-              ) : (
+            {quotesLoading ? (
+              <div className="text-center py-16 text-gray-400">
+                <svg className="w-8 h-8 mx-auto mb-2 spinner" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <p className="text-sm">Loading quotes…</p>
+              </div>
+            ) : quotes.length === 0 ? (
+              <div className="text-center py-16 text-gray-400">
+                <p className="text-sm">No quotes yet</p>
+              </div>
+            ) : quoteView === "board" ? (
+              <QuotePipelineBoard
+                quotes={quotes}
+                onQuoteClick={setSelectedQuote}
+              />
+            ) : (
+              /* ── List view ── */
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-gray-200 text-left">
-                        <th className="pb-3 pr-4 font-semibold text-black whitespace-nowrap">Reference No.</th>
-                        <th className="pb-3 pr-4 font-semibold text-black">Type</th>
-                        <th className="pb-3 pr-4 font-semibold text-black">Customer Name</th>
-                        <th className="pb-3 pr-4 font-semibold text-black">Total</th>
-                        <th className="pb-3 pr-4 font-semibold text-black">Status</th>
-                        <th className="pb-3 pr-4 font-semibold text-black">Staff</th>
-                        <th className="pb-3 font-semibold text-black whitespace-nowrap">Created At</th>
+                      <tr className="border-b border-gray-200 text-left bg-gray-50">
+                        <th className="px-4 py-3 font-semibold text-black whitespace-nowrap">Reference No.</th>
+                        <th className="px-4 py-3 font-semibold text-black">Customer</th>
+                        <th className="px-4 py-3 font-semibold text-black">Assigned To</th>
+                        <th className="px-4 py-3 font-semibold text-black">Stage</th>
+                        <th className="px-4 py-3 font-semibold text-black whitespace-nowrap">Follow Up Date</th>
+                        <th className="px-4 py-3 font-semibold text-black whitespace-nowrap">Created At</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {quotes.map((q) => {
                         const customerName =
-                          [q.customer_first_name, q.customer_last_name]
-                            .filter(Boolean)
-                            .join(" ") || "—";
+                          [q.customer_first_name, q.customer_last_name].filter(Boolean).join(" ") || "—";
                         const created = new Date(q.created_at).toLocaleDateString("en-AU", {
-                          day: "2-digit",
-                          month: "short",
-                          year: "numeric",
+                          day: "2-digit", month: "short", year: "numeric",
                         });
-                        const statusBadge =
-                          q.status === "converted"
-                            ? "bg-blue-100 text-blue-800"
-                            : "bg-gray-100 text-gray-600";
-                        const typeLabel =
-                          q.quote_type === "repair" ? "Repair" : "Custom Order";
+                        const stage = quoteStage(q.status);
+                        const stageConf = STAGE_CONFIG[stage];
+                        const overdue = isOverdue(q.follow_up_date);
+                        const activeStage = stage !== "job_won" && stage !== "job_lost";
 
                         return (
                           <tr
@@ -314,40 +343,45 @@ export default function AdminPage() {
                             onClick={() => setSelectedQuote(q)}
                             className="hover:bg-gray-50 cursor-pointer transition-colors"
                           >
-                            <td className="py-3 pr-4">
-                              <span className="font-mono text-xs font-semibold text-black">
-                                {q.reference_number}
-                              </span>
+                            <td className="px-4 py-3">
+                              <span className="font-mono text-xs font-semibold text-black">{q.reference_number}</span>
                             </td>
-                            <td className="py-3 pr-4">
-                              <span className="inline-block rounded-full px-2 py-0.5 text-xs font-medium bg-[#A3B2A4]/20 text-[#4a5e4b]">
-                                {typeLabel}
-                              </span>
-                            </td>
-                            <td className="py-3 pr-4">
+                            <td className="px-4 py-3">
                               <div className="font-medium text-black">{customerName}</div>
                               <div className="text-xs text-gray-400">{q.customer_phone ?? ""}</div>
                             </td>
-                            <td className="py-3 pr-4 text-gray-700">—</td>
-                            <td className="py-3 pr-4">
-                              <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${statusBadge}`}>
-                                {q.status}
-                                {q.status === "converted" && q.packet_reference
-                                  ? ` → ${q.packet_reference}`
-                                  : ""}
+                            <td className="px-4 py-3 text-gray-700 text-xs">{q.assigned_to ?? "—"}</td>
+                            <td className="px-4 py-3">
+                              <span
+                                className="inline-block rounded-full px-2 py-0.5 text-xs font-semibold text-white"
+                                style={{ backgroundColor: stageConf.color }}
+                              >
+                                {stageConf.label}
                               </span>
+                              {q.status === "converted" && (
+                                <span className="ml-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700">
+                                  Converted
+                                </span>
+                              )}
                             </td>
-                            <td className="py-3 pr-4 text-gray-700">{q.staff_member ?? "—"}</td>
-                            <td className="py-3 whitespace-nowrap text-gray-500 text-xs">{created}</td>
+                            <td className={`px-4 py-3 whitespace-nowrap text-xs font-medium ${overdue && activeStage ? "text-red-600 font-bold" : "text-gray-600"}`}>
+                              {q.follow_up_date
+                                ? new Date(q.follow_up_date + "T00:00:00").toLocaleDateString("en-AU", {
+                                    day: "2-digit", month: "short", year: "numeric",
+                                  })
+                                : "—"}
+                              {overdue && activeStage && " ⚠"}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-gray-500 text-xs">{created}</td>
                           </tr>
                         );
                       })}
                     </tbody>
                   </table>
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
+            )}
+          </>
         )}
       </main>
     </>

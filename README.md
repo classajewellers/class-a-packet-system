@@ -131,7 +131,47 @@ Have the Klaviyo marketing team create a **Flow** triggered by the metric **"Pac
 
 ---
 
-## 8 · Updating Staff Members
+## 8 · Shopify Integration
+
+The packet system integrates with Shopify in two ways:
+
+### Automatic order packets (webhook)
+
+When a customer places an order on the Shopify store, Shopify sends a webhook to `/api/shopify/webhook`. The app verifies the signature, maps the order data to an Online Order packet, and inserts it into Supabase automatically. Staff see the new packet in the admin view without any manual entry.
+
+**Setup steps:**
+
+1. **Create a Shopify app and get an Admin API token:**
+   - In Shopify admin go to **Apps → Develop apps → Create an app**.
+   - Under **Configuration → Admin API scopes**, enable `read_orders` and `read_customers`.
+   - Click **Install app**, then copy the **Admin API access token**.
+   - Add to env: `SHOPIFY_ADMIN_API_TOKEN=<token>`
+
+2. **Register the webhook:**
+   - In Shopify admin go to **Settings → Notifications → Webhooks**.
+   - Click **Create webhook**.
+   - **Event:** Order creation
+   - **URL:** `https://your-vercel-url.vercel.app/api/shopify/webhook`
+   - **Format:** JSON
+   - Click **Save**. Copy the **Signing secret** shown on the webhook detail page.
+   - Add to env: `SHOPIFY_WEBHOOK_SECRET=<signing secret>`
+
+3. **Set store domain:**
+   - Add to env: `SHOPIFY_STORE_DOMAIN=classajewellers.myshopify.com`
+
+4. **Add all three env vars to Vercel** under Settings → Environment Variables, then redeploy.
+
+### Customer auto-fill (email lookup)
+
+On the New Packet form, when staff type an email address, the app queries the Shopify customer database after 500 ms. If a matching customer is found, it auto-fills the name, phone, and most recent shipping address. A green **Found in Shopify** badge appears next to the email field to confirm the lookup. Fields that already have content are never overwritten.
+
+This feature requires `SHOPIFY_ADMIN_API_TOKEN` and `SHOPIFY_STORE_DOMAIN` to be set. If they're not set the form still works normally — the lookup just silently does nothing.
+
+---
+
+## 9 · Updating Staff Members
+
+
 
 Edit the `STAFF_MEMBERS` array in [`/components/ReferralStaffSection.tsx`](./components/ReferralStaffSection.tsx) and redeploy:
 

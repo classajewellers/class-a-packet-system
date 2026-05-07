@@ -26,6 +26,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const supabase = createServiceClient();
 
+  const now = new Date().toISOString();
+
   const insertData = {
     reference_number: referenceNumber,
     quote_type: formData.quote_type,
@@ -43,6 +45,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     stone_details: formData.stone_details || null,
     estimated_turnaround: formData.estimated_turnaround || null,
     staff_member: formData.staff_member || null,
+    // CRM pipeline
+    assigned_to: formData.assigned_to || null,
+    follow_up_date: formData.follow_up_date || null,
+    pending_at: now,
+    status_changed_at: now,
   };
 
   const { data: insertedQuote, error: insertError } = await supabase

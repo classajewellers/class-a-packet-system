@@ -259,6 +259,18 @@ export interface Quote {
   converted_to_packet_id: string | null;
   converted_at: string | null;
   packet_reference: string | null;
+  // CRM pipeline fields
+  assigned_to: string | null;
+  follow_up_date: string | null;
+  status_changed_at: string | null;
+  status_changed_by: string | null;
+  pending_at: string | null;
+  follow_up_1_at: string | null;
+  follow_up_2_at: string | null;
+  job_won_at: string | null;
+  job_lost_at: string | null;
+  // legacy compat — may be null on new quotes
+  total?: number | null;
 }
 
 export interface QuoteFormData {
@@ -276,5 +288,7 @@ export interface QuoteFormData {
   stone_details: string;
   estimated_turnaround: string;
   staff_member: string;
+  assigned_to: string;
+  follow_up_date: string;
   from_quote_id?: string;
 }

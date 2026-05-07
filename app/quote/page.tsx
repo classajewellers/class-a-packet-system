@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { QuoteFormData, QuoteType, LineItem, Quote } from "@/lib/types";
+import { defaultFollowUpDate } from "@/lib/pipeline";
 import NavBar from "@/components/NavBar";
 import QuoteTypeSelector from "@/components/QuoteTypeSelector";
 import QuoteCustomerSection from "@/components/QuoteCustomerSection";
@@ -10,22 +11,26 @@ import QuoteRepairFields from "@/components/QuoteRepairFields";
 import QuoteCustomOrderFields from "@/components/QuoteCustomOrderFields";
 import QuoteSuccessScreen from "@/components/QuoteSuccessScreen";
 
-const DEFAULT_FORM_DATA: QuoteFormData = {
-  quote_type: "",
-  customer_first_name: "",
-  customer_last_name: "",
-  customer_email: "",
-  customer_phone: "",
-  item_description: "",
-  line_items: [],
-  notes: "",
-  repair_description: "",
-  design_brief: "",
-  metal_type: "",
-  stone_details: "",
-  estimated_turnaround: "",
-  staff_member: "",
-};
+function makeDefaultFormData(): QuoteFormData {
+  return {
+    quote_type: "",
+    customer_first_name: "",
+    customer_last_name: "",
+    customer_email: "",
+    customer_phone: "",
+    item_description: "",
+    line_items: [],
+    notes: "",
+    repair_description: "",
+    design_brief: "",
+    metal_type: "",
+    stone_details: "",
+    estimated_turnaround: "",
+    staff_member: "",
+    assigned_to: "",
+    follow_up_date: defaultFollowUpDate(),
+  };
+}
 
 function validate(data: QuoteFormData): Partial<Record<keyof QuoteFormData, string>> {
   const errors: Partial<Record<keyof QuoteFormData, string>> = {};
@@ -34,6 +39,7 @@ function validate(data: QuoteFormData): Partial<Record<keyof QuoteFormData, stri
   if (!data.customer_last_name.trim()) errors.customer_last_name = "Required";
   if (!data.item_description.trim()) errors.item_description = "Required";
   if (!data.staff_member) errors.staff_member = "Required";
+  if (!data.assigned_to) errors.assigned_to = "Required";
   return errors;
 }
 
@@ -49,7 +55,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 }
 
 export default function QuoteFormPage() {
-  const [formData, setFormData] = useState<QuoteFormData>({ ...DEFAULT_FORM_DATA });
+  const [formData, setFormData] = useState<QuoteFormData>(makeDefaultFormData());
   const [errors, setErrors] = useState<Partial<Record<keyof QuoteFormData, string>>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submittedQuote, setSubmittedQuote] = useState<Quote | null>(null);
@@ -108,7 +114,7 @@ export default function QuoteFormPage() {
   }
 
   function handleNew() {
-    setFormData({ ...DEFAULT_FORM_DATA });
+    setFormData(makeDefaultFormData());
     setErrors({});
     setSubmittedQuote(null);
     setSubmitting(false);

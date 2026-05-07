@@ -64,13 +64,20 @@ export default function AdminTable({ packets, onRowClick }: Props) {
                   </span>
                 </td>
                 <td className="py-3 pr-4">
-                  <span
-                    className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                      TYPE_BADGE[p.packet_type] ?? "bg-gray-100 text-gray-700"
-                    }`}
-                  >
-                    {packetTypeLabel(p.packet_type)}
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span
+                      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                        TYPE_BADGE[p.packet_type] ?? "bg-gray-100 text-gray-700"
+                      }`}
+                    >
+                      {packetTypeLabel(p.packet_type)}
+                    </span>
+                    {p.packet_type === "online_order" && (
+                      <span className="inline-block rounded-full px-2 py-0.5 text-xs font-semibold bg-teal-100 text-teal-700 border border-teal-200">
+                        Shopify
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="py-3 pr-4">
                   <div className="font-medium text-black">{customerName}</div>
