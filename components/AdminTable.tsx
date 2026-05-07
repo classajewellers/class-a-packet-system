@@ -8,17 +8,6 @@ interface Props {
   onRowClick: (packet: Packet) => void;
 }
 
-function StatusDot({ on, label }: { on: boolean; label: string }) {
-  return (
-    <span
-      title={label}
-      className={`inline-block h-2.5 w-2.5 rounded-full ${
-        on ? "bg-green-500" : "bg-gray-300"
-      }`}
-    />
-  );
-}
-
 const TYPE_BADGE: Record<PacketType, string> = {
   repair: "bg-blue-100 text-blue-800",
   custom_order: "bg-purple-100 text-purple-800",
@@ -46,11 +35,10 @@ export default function AdminTable({ packets, onRowClick }: Props) {
           <tr className="border-b border-gray-200 text-left">
             <th className="pb-3 pr-4 font-semibold text-black whitespace-nowrap">Reference No.</th>
             <th className="pb-3 pr-4 font-semibold text-black">Type</th>
-            <th className="pb-3 pr-4 font-semibold text-black">Customer</th>
+            <th className="pb-3 pr-4 font-semibold text-black">Customer Name</th>
             <th className="pb-3 pr-4 font-semibold text-black whitespace-nowrap">Due Date</th>
-            <th className="pb-3 pr-4 font-semibold text-black">Staff</th>
-            <th className="pb-3 pr-4 font-semibold text-black whitespace-nowrap">Created</th>
-            <th className="pb-3 font-semibold text-black">Status</th>
+            <th className="pb-3 pr-4 font-semibold text-black">Staff Member</th>
+            <th className="pb-3 font-semibold text-black whitespace-nowrap">Created At</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -92,16 +80,7 @@ export default function AdminTable({ packets, onRowClick }: Props) {
                   {p.due_date ? formatDateAU(p.due_date) : "—"}
                 </td>
                 <td className="py-3 pr-4 text-gray-700">{p.staff_member ?? "—"}</td>
-                <td className="py-3 pr-4 whitespace-nowrap text-gray-500 text-xs">{created}</td>
-                <td className="py-3">
-                  <div className="flex gap-1.5 items-center" title="Label · Klaviyo · Email · SMS · Sheets">
-                    <StatusDot on={p.label_printed} label="Label" />
-                    <StatusDot on={p.klaviyo_synced} label="Klaviyo" />
-                    <StatusDot on={p.email_sent} label="Email" />
-                    <StatusDot on={p.sms_sent} label="SMS" />
-                    <StatusDot on={p.sheets_logged} label="Sheets" />
-                  </div>
-                </td>
+                <td className="py-3 whitespace-nowrap text-gray-500 text-xs">{created}</td>
               </tr>
             );
           })}

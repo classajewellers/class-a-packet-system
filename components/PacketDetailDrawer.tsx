@@ -14,17 +14,6 @@ interface Props {
   ) => Promise<void>;
 }
 
-type OutputKey = "label_printed" | "klaviyo_synced" | "email_sent" | "sms_sent" | "sheets_logged";
-type RetryKey = "label" | "klaviyo" | "email" | "sms" | "sheets";
-
-const OUTPUTS: { flag: OutputKey; retry: RetryKey; label: string }[] = [
-  { flag: "label_printed", retry: "label", label: "Label Printed" },
-  { flag: "klaviyo_synced", retry: "klaviyo", label: "Klaviyo" },
-  { flag: "email_sent", retry: "email", label: "Email" },
-  { flag: "sms_sent", retry: "sms", label: "SMS" },
-  { flag: "sheets_logged", retry: "sheets", label: "Sheets" },
-];
-
 function Field({ label, value }: { label: string; value?: string | null | boolean }) {
   if (value === null || value === undefined || value === "") return null;
   const display = typeof value === "boolean" ? (value ? "Yes" : "No") : value;
@@ -36,9 +25,8 @@ function Field({ label, value }: { label: string; value?: string | null | boolea
   );
 }
 
-export default function PacketDetailDrawer({ packet, onClose, onRetry }: Props) {
-  const [retrying, setRetrying] = useState<RetryKey | null>(null);
-  const [localPacket, setLocalPacket] = useState(packet);
+export default function PacketDetailDrawer({ packet, onClose }: Props) {
+  const [localPacket] = useState(packet);
 
   const customerName = [localPacket.customer_first_name, localPacket.customer_last_name]
     .filter(Boolean)
@@ -65,23 +53,6 @@ export default function PacketDetailDrawer({ packet, onClose, onRetry }: Props) 
     setTimeout(() => win.print(), 400);
   }
 
-  async function handleRetry(output: RetryKey) {
-    setRetrying(output);
-    try {
-      await onRetry(localPacket.id, output);
-      const flagMap: Record<RetryKey, OutputKey> = {
-        label: "label_printed",
-        klaviyo: "klaviyo_synced",
-        email: "email_sent",
-        sms: "sms_sent",
-        sheets: "sheets_logged",
-      };
-      setLocalPacket((p) => ({ ...p, [flagMap[output]]: true }));
-    } finally {
-      setRetrying(null);
-    }
-  }
-
   return (
     <div className="fixed inset-0 z-50 flex">
       {/* Backdrop */}
@@ -93,20 +64,9 @@ export default function PacketDetailDrawer({ packet, onClose, onRetry }: Props) 
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 sticky top-0 bg-white z-10">
           <div>
             <p className="text-xs text-gray-500">{packetTypeLabel(localPacket.packet_type)}</p>
-            <div className="flex items-center gap-2 mt-0.5">
-              <h2 className="font-mono text-base font-bold text-black">
-                {localPacket.reference_number}
-              </h2>
-              <button
-                onClick={handleReprintLabel}
-                className="flex items-center gap-1.5 bg-black text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-[#222222] active:scale-95 transition-all"
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.056 48.056 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
-                </svg>
-                Reprint Label
-              </button>
-            </div>
+            <h2 className="font-mono text-base font-bold text-black">
+              {localPacket.reference_number}
+            </h2>
           </div>
           <button
             onClick={onClose}
@@ -119,38 +79,16 @@ export default function PacketDetailDrawer({ packet, onClose, onRetry }: Props) 
         </div>
 
         <div className="flex-1 px-5 py-4 space-y-5">
-          {/* Output status */}
-          <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">
-              Output Status
-            </p>
-            <div className="space-y-2">
-              {OUTPUTS.map(({ flag, retry, label }) => {
-                const success = localPacket[flag];
-                return (
-                  <div key={flag} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${
-                          success ? "bg-green-500" : "bg-red-400"
-                        }`}
-                      />
-                      <span className="text-sm text-black">{label}</span>
-                    </div>
-                    {!success && (
-                      <button
-                        onClick={() => handleRetry(retry)}
-                        disabled={retrying === retry}
-                        className="text-xs font-semibold text-black border border-black rounded-lg px-3 py-1.5 hover:bg-black hover:text-white transition-colors disabled:opacity-50"
-                      >
-                        {retrying === retry ? "Retrying…" : "Retry"}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          {/* Reprint Label */}
+          <button
+            onClick={handleReprintLabel}
+            className="w-full flex items-center justify-center gap-2 bg-black text-white text-sm font-semibold py-3 rounded-xl hover:bg-[#222222] active:scale-[0.98] transition-all"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.056 48.056 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
+            </svg>
+            Reprint Label
+          </button>
 
           {/* Customer */}
           <Section title="Customer">
