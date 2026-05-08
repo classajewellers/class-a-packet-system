@@ -16,17 +16,56 @@ interface ZapierFlatOrder {
   orderNumber?: string;
   customerEmail?: string;
   customerPhone?: string;
+  // Customer name fields (used for click & collect where shipping name is blank)
+  customerFirstName?: string;
+  customerLastName?: string;
+  billingName?: string;          // billing address full name
   totalPrice?: number | string;
-  shippingFirstName?: string;      // full name — split on first space
+  shippingFirstName?: string;    // full name in shipping address — split on first space
   shippingAddress1?: string;
   shippingCity?: string;
-  shippingProvinceCode?: string;   // full province name e.g. "South Australia"
+  shippingProvinceCode?: string; // full province name e.g. "South Australia"
   shippingPostalCode?: string;
   shippingPhone?: string;
-  lineItems?: unknown;             // array OR raw text blob
-  shippingLines?: unknown;         // array OR raw text blob
+  lineItems?: unknown;           // array OR raw text blob
+  shippingLines?: unknown;       // array OR raw text blob
   orderNote?: string;
   [key: string]: unknown;
+}
+
+// ── Customer name resolution ──────────────────────────────────────────────────
+// Priority: shippingFirstName → customerFirstName/Last → billingName → fallback
+
+function resolveName(body: ZapierFlatOrder): { firstName: string | null; lastName: string | null } {
+  // 1. shippingFirstName (may contain full name e.g. "Ian Will")
+  const shipping = (body.shippingFirstName ?? "").trim();
+  if (shipping) {
+    const parts = shipping.split(/\s+/);
+    return {
+      firstName: parts[0] || null,
+      lastName:  parts.slice(1).join(" ") || null,
+    };
+  }
+
+  // 2. customerFirstName + customerLastName (separate fields from Shopify customer)
+  const custFirst = (body.customerFirstName ?? "").trim();
+  const custLast  = (body.customerLastName  ?? "").trim();
+  if (custFirst || custLast) {
+    return { firstName: custFirst || null, lastName: custLast || null };
+  }
+
+  // 3. billingName (full name on billing address)
+  const billing = (body.billingName ?? "").trim();
+  if (billing) {
+    const parts = billing.split(/\s+/);
+    return {
+      firstName: parts[0] || null,
+      lastName:  parts.slice(1).join(" ") || null,
+    };
+  }
+
+  // 4. Fallback — staff can update manually
+  return { firstName: "Online Customer", lastName: null };
 }
 
 // ── Line items → formatted articles string ────────────────────────────────────
@@ -44,10 +83,10 @@ function parseLineItems(raw: any): string {
     if (!nameMatch) continue;
     const name = nameMatch[1].trim();
 
-    // Skip free gifts
+    // Skip free gifts and product add-ons (zero-price add-ons)
     if (name.toLowerCase().includes("free gift")) continue;
 
-    // Extract price from discountedTotalSet amount
+    // Extract price from discountedTotalSet amount — skip zero-price items
     const priceMatch = block.match(/discountedTotalSet:.*?'amount':\s*'([\d.]+)'/);
     const price = parseFloat(priceMatch?.[1] || "0");
     if (price === 0) continue;
@@ -56,18 +95,29 @@ function parseLineItems(raw: any): string {
     const qtyMatch = block.match(/^quantity:\s*(\d+)$/m);
     const qty = qtyMatch?.[1] || "1";
 
-    // Extract customAttributes — use exec loop (matchAll spread fails on older TS targets)
+    // Extract customAttributes — exec loop (matchAll spread needs downlevelIteration)
     const meaningfulKeys = [
-      "metal", "stone", "size", "colour", "color", "engraving", "pendant",
-      "birthstone", "initial", "personalisation", "chain", "number of pendants",
+      "metal", "stone", "size", "colour", "color",
+      "engraving", "personalisation", "chain", "initial",
+      "birthstone", "pendant",
     ];
+
     const attrMatches: RegExpExecArray[] = [];
     const attrRe = /'key':\s*'([^']+)',\s*'value':\s*'([^']+)'/g;
     let attrM: RegExpExecArray | null;
     while ((attrM = attrRe.exec(block)) !== null) attrMatches.push(attrM);
 
     const attrs = attrMatches
-      .filter((m) => meaningfulKeys.some((k) => m[1].toLowerCase().includes(k)))
+      .filter((m) => {
+        const key = m[1].toLowerCase().trim();
+        const val = m[2].trim().toLowerCase();
+        // Skip internal / tracking keys
+        if (key.startsWith("_") || key.startsWith("cl_")) return false;
+        // Skip bare Yes / No flags (engraving: Yes means "has engraving" not useful text)
+        if (val === "yes" || val === "no") return false;
+        // Must be a recognised product attribute
+        return meaningfulKeys.some((k) => key.includes(k));
+      })
       .map((m) => `  ${m[1]}: ${m[2].trim()}`)
       .join("\n");
 
@@ -99,6 +149,14 @@ function extractShippingMethod(raw: unknown): string | null {
 }
 
 // ── Dispatch date extraction ──────────────────────────────────────────────────
+// Returns null for non-date strings like "Same Day Dispatch", "Express", etc.
+// Only returns a date if the value contains a recognisable month name + day number.
+
+const MONTH_NAMES = [
+  "january", "february", "march", "april", "may", "june",
+  "july", "august", "september", "october", "november", "december",
+  "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+];
 
 function extractDispatchDate(raw: any): string | null {
   if (!raw || typeof raw !== "string") return null;
@@ -106,12 +164,23 @@ function extractDispatchDate(raw: any): string | null {
   const match = raw.match(/'key':\s*'Estimated Dispatch',\s*'value':\s*'([^']+)'/);
   if (!match) return null;
 
+  const dateStr = match[1].trim(); // e.g. "Wednesday, May 13th" or "Same Day Dispatch"
+
+  // Require both a month name AND a day number — rejects "Same Day Dispatch" etc.
+  const hasMonth = MONTH_NAMES.some((m) => dateStr.toLowerCase().includes(m));
+  const hasDay   = /\d{1,2}/.test(dateStr);
+  if (!hasMonth || !hasDay) {
+    console.log(`[shopify/webhook] extractDispatchDate: "${dateStr}" is not a date — returning null`);
+    return null;
+  }
+
   try {
-    const dateStr = match[1].trim(); // e.g. "Wednesday, May 13th"
-    const cleaned = dateStr.replace(/(\d+)(st|nd|rd|th)/, "$1");
-    const year = new Date().getFullYear();
-    const parsed = new Date(`${cleaned} ${year}`);
+    // Strip ordinal suffixes: "13th" → "13"
+    const cleaned = dateStr.replace(/(\d+)(st|nd|rd|th)/gi, "$1");
+    const year    = new Date().getFullYear();
+    const parsed  = new Date(`${cleaned} ${year}`);
     if (isNaN(parsed.getTime())) return null;
+    // Roll forward if the date has already passed this year
     if (parsed < new Date()) parsed.setFullYear(year + 1);
     return parsed.toISOString().split("T")[0];
   } catch {
@@ -131,9 +200,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  console.log("Shopify webhook received:", JSON.stringify(body));
-  console.log("lineItems raw:", JSON.stringify(body.lineItems));
-  console.log("lineItems type:", typeof body.lineItems);
+  console.log("[shopify/webhook] Received:", JSON.stringify(body));
+  console.log("[shopify/webhook] lineItems type:", typeof body.lineItems);
+  console.log("[shopify/webhook] lineItems raw:", JSON.stringify(body.lineItems));
 
   // ── 2. Generate ON-YYYYMMDD-XXXX reference number ────────────────────────
   let referenceNumber: string;
@@ -156,23 +225,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   console.log("[shopify/webhook] dispatchDate:", dispatchDate);
 
   // ── 4. Map fields ─────────────────────────────────────────────────────────
-  const firstName = (body.shippingFirstName ?? "").split(" ")[0] || null;
-  const lastName  = (body.shippingFirstName ?? "").split(" ").slice(1).join(" ") || null;
-  const email     = body.customerEmail   ?? null;
-  const phone     = body.shippingPhone   ?? body.customerPhone ?? null;
-  const street    = body.shippingAddress1   ?? null;
-  const suburb    = body.shippingCity       ?? null;
-  const state     = body.shippingProvinceCode ?? null;
-  const postcode  = body.shippingPostalCode ?? null;
-  const orderNum  = body.orderNumber    ?? null;
-  const total     = parseFloat(String(body.totalPrice ?? "0")) || 0;
-  const note      = body.orderNote      || null;
+  const { firstName, lastName } = resolveName(body);
+  const email    = body.customerEmail      ?? null;
+  const phone    = body.shippingPhone      ?? body.customerPhone ?? null;
+  const street   = body.shippingAddress1   ?? null;
+  const suburb   = body.shippingCity       ?? null;
+  const state    = body.shippingProvinceCode ?? null;
+  const postcode = body.shippingPostalCode ?? null;
+  const orderNum = body.orderNumber        ?? null;
+  const total    = parseFloat(String(body.totalPrice ?? "0")) || 0;
+  const note     = body.orderNote          || null;
 
-  console.log("[shopify/webhook] Parsed:", {
-    orderNumber: orderNum, customerEmail: email,
-    firstName, lastName, total,
-    articlesLength: articles.length,
-    shippingMethod, dispatchDate,
+  console.log("[shopify/webhook] Resolved name:", { firstName, lastName });
+  console.log("[shopify/webhook] Mapped fields:", {
+    orderNumber: orderNum, email, phone, firstName, lastName,
+    total, articlesLength: articles.length, shippingMethod, dispatchDate,
   });
 
   // ── 5. Build insert payload ───────────────────────────────────────────────
