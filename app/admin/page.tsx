@@ -57,6 +57,8 @@ export default function AdminPage() {
   const [quotesLoading, setQuotesLoading] = useState(false);
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
   const [quoteView, setQuoteView]         = useState<"board" | "list">("board");
+  const [showConverted, setShowConverted] = useState(false);
+  const [quoteListFilter, setQuoteListFilter] = useState<"active" | "all" | "converted">("active");
 
   // Ref for polling so silent refresh always uses latest search params
   const fetchParamsRef = useRef({ search, from, to });
@@ -239,6 +241,13 @@ export default function AdminPage() {
     (packets ?? []).filter((p) => p.packet_type === "online_order" && !p.label_printed),
     [packets]
   );
+
+  // Quotes list view — filtered by active/converted/all
+  const filteredListQuotes = useMemo(() => {
+    if (quoteListFilter === "active")    return (quotes ?? []).filter((q) => q.status !== "converted");
+    if (quoteListFilter === "converted") return (quotes ?? []).filter((q) => q.status === "converted");
+    return quotes ?? [];
+  }, [quotes, quoteListFilter]);
 
   const inputClass =
     "rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-black";
@@ -433,12 +442,46 @@ export default function AdminPage() {
           <>
             {!quotesLoading && quotes.length > 0 && <QuoteStatsBar quotes={quotes} />}
 
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-sm text-gray-500">
-                {quotesLoading
-                  ? "Loading…"
-                  : `${(quotes ?? []).filter((q) => q.status !== "converted").length} active quote${(quotes ?? []).filter((q) => q.status !== "converted").length !== 1 ? "s" : ""}`}
-              </p>
+            <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+              <div className="flex items-center gap-3 flex-wrap">
+                <p className="text-sm text-gray-500">
+                  {quotesLoading
+                    ? "Loading…"
+                    : `${(quotes ?? []).filter((q) => q.status !== "converted").length} active quote${(quotes ?? []).filter((q) => q.status !== "converted").length !== 1 ? "s" : ""}`}
+                </p>
+                {/* Board: show-converted toggle */}
+                {quoteView === "board" && !quotesLoading && (
+                  <button
+                    onClick={() => setShowConverted((v) => !v)}
+                    className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      showConverted
+                        ? "border-gray-400 bg-gray-100 text-gray-700"
+                        : "border-gray-200 bg-white text-gray-400 hover:text-gray-600"
+                    }`}
+                  >
+                    <span className={`h-2 w-2 rounded-full ${showConverted ? "bg-gray-500" : "bg-gray-300"}`} />
+                    {showConverted ? "Hiding converted" : "Show converted"}
+                  </button>
+                )}
+                {/* List: filter pills */}
+                {quoteView === "list" && !quotesLoading && (
+                  <div className="flex gap-1">
+                    {(["active", "all", "converted"] as const).map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => setQuoteListFilter(f)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors capitalize ${
+                          quoteListFilter === f
+                            ? "bg-black text-white"
+                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        }`}
+                      >
+                        {f === "active" ? "Active" : f === "all" ? "All" : "Converted"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm font-semibold">
                 <button
                   onClick={() => setQuoteView("board")}
@@ -464,7 +507,7 @@ export default function AdminPage() {
                 <p className="text-sm">No quotes yet</p>
               </div>
             ) : quoteView === "board" ? (
-              <QuotePipelineBoard quotes={quotes} onQuoteClick={setSelectedQuote} onUpdate={handleUpdateQuote} />
+              <QuotePipelineBoard quotes={quotes} onQuoteClick={setSelectedQuote} onUpdate={handleUpdateQuote} showConverted={showConverted} />
             ) : (
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
@@ -476,39 +519,70 @@ export default function AdminPage() {
                         <th className="px-4 py-3 font-semibold text-black">Assigned To</th>
                         <th className="px-4 py-3 font-semibold text-black">Stage</th>
                         <th className="px-4 py-3 font-semibold text-black whitespace-nowrap">Follow Up Date</th>
+                        {quoteListFilter === "converted" && (
+                          <th className="px-4 py-3 font-semibold text-black whitespace-nowrap">Order</th>
+                        )}
                         <th className="px-4 py-3 font-semibold text-black whitespace-nowrap">Created At</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {(quotes ?? []).map((q) => {
+                      {filteredListQuotes.length === 0 ? (
+                        <tr>
+                          <td colSpan={quoteListFilter === "converted" ? 7 : 6} className="px-4 py-12 text-center text-sm text-gray-400">
+                            {quoteListFilter === "converted" ? "No converted quotes" : "No quotes found"}
+                          </td>
+                        </tr>
+                      ) : filteredListQuotes.map((q) => {
+                        const isConverted = q.status === "converted";
                         const customerName = [q.customer_first_name, q.customer_last_name].filter(Boolean).join(" ") || "—";
                         const created = new Date(q.created_at).toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" });
-                        const stage      = quoteStage(q.status);
-                        const stageConf  = STAGE_CONFIG[stage];
+                        const stage      = isConverted ? null : quoteStage(q.status);
+                        const stageConf  = stage ? STAGE_CONFIG[stage] : null;
                         const overdue    = isOverdue(q.follow_up_date);
                         const activeStage = stage !== "job_won" && stage !== "job_lost";
                         return (
-                          <tr key={q.id} onClick={() => setSelectedQuote(q)} className="hover:bg-gray-50 cursor-pointer transition-colors">
+                          <tr
+                            key={q.id}
+                            onClick={() => setSelectedQuote(q)}
+                            className={`cursor-pointer transition-colors ${isConverted ? "bg-gray-50 text-gray-400 hover:bg-gray-100" : "hover:bg-gray-50"}`}
+                          >
                             <td className="px-4 py-3">
-                              <span className="font-mono text-xs font-semibold text-black">{q.reference_number}</span>
+                              <span className={`font-mono text-xs font-semibold ${isConverted ? "text-gray-400" : "text-black"}`}>{q.reference_number}</span>
                             </td>
                             <td className="px-4 py-3">
-                              <div className="font-medium text-black">{customerName}</div>
+                              <div className={`font-medium ${isConverted ? "text-gray-400" : "text-black"}`}>{customerName}</div>
                               <div className="text-xs text-gray-400">{q.customer_phone ?? ""}</div>
                             </td>
-                            <td className="px-4 py-3 text-gray-700 text-xs">{q.assigned_to ?? "—"}</td>
+                            <td className="px-4 py-3 text-gray-400 text-xs">{q.assigned_to ?? "—"}</td>
                             <td className="px-4 py-3">
-                              <span className="inline-block rounded-full px-2 py-0.5 text-xs font-semibold text-white" style={{ backgroundColor: stageConf.color }}>
-                                {stageConf.label}
-                              </span>
+                              {isConverted ? (
+                                <span className="inline-block rounded-full px-2 py-0.5 text-xs font-semibold bg-gray-100 text-gray-500">
+                                  Converted
+                                </span>
+                              ) : stageConf ? (
+                                <span className="inline-block rounded-full px-2 py-0.5 text-xs font-semibold text-white" style={{ backgroundColor: stageConf.color }}>
+                                  {stageConf.label}
+                                </span>
+                              ) : null}
                             </td>
-                            <td className={`px-4 py-3 whitespace-nowrap text-xs font-medium ${overdue && activeStage ? "text-red-600 font-bold" : "text-gray-600"}`}>
+                            <td className={`px-4 py-3 whitespace-nowrap text-xs font-medium ${overdue && activeStage && !isConverted ? "text-red-600 font-bold" : "text-gray-400"}`}>
                               {q.follow_up_date
                                 ? new Date(q.follow_up_date + "T00:00:00").toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" })
                                 : "—"}
-                              {overdue && activeStage && " ⚠"}
+                              {overdue && activeStage && !isConverted && " ⚠"}
                             </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-gray-500 text-xs">{created}</td>
+                            {quoteListFilter === "converted" && (
+                              <td className="px-4 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                                {q.packet_reference ? (
+                                  <span className="font-mono text-xs font-semibold text-black bg-gray-100 rounded px-1.5 py-0.5">
+                                    {q.packet_reference}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-gray-400">—</span>
+                                )}
+                              </td>
+                            )}
+                            <td className="px-4 py-3 whitespace-nowrap text-gray-400 text-xs">{created}</td>
                           </tr>
                         );
                       })}

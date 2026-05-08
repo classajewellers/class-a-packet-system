@@ -21,6 +21,7 @@ interface Props {
   quotes: Quote[];
   onQuoteClick: (quote: Quote) => void;
   onUpdate: (updated: Quote) => void;
+  showConverted?: boolean;
 }
 
 function sortCards(cards: Quote[]): Quote[] {
@@ -42,7 +43,7 @@ function sortCards(cards: Quote[]): Quote[] {
   });
 }
 
-export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate }: Props) {
+export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate, showConverted = false }: Props) {
   // Local copy for optimistic updates during drag
   const [localQuotes, setLocalQuotes] = useState<Quote[]>(quotes ?? []);
   // Track whether we currently have a pending PATCH (prevents parent sync overwriting optimistic state)
@@ -62,6 +63,11 @@ export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate }: P
       return merged;
     });
   }, [quotes]);
+
+  // Hide converted quotes unless showConverted is true
+  const visibleQuotes = localQuotes.filter(
+    (q) => showConverted || q.status !== "converted"
+  );
 
   async function handleDragEnd(result: DropResult) {
     const { source, destination, draggableId } = result;
@@ -110,7 +116,7 @@ export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate }: P
         {PIPELINE_STAGES.map((stage) => {
           const config = STAGE_CONFIG[stage];
           const cards = sortCards(
-            localQuotes.filter((q) => quoteStage(q.status) === stage)
+            visibleQuotes.filter((q) => quoteStage(q.status) === stage)
           );
           const overdueCount = cards.filter(
             (q) =>
@@ -174,7 +180,7 @@ export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate }: P
                               dragSnapshot.isDragging
                                 ? "shadow-2xl ring-2 ring-black/10 rotate-1 scale-[1.02]"
                                 : ""
-                            }`}
+                            } ${q.status === "converted" ? "opacity-40 grayscale" : ""}`}
                           >
                             <QuoteCard
                               quote={q}

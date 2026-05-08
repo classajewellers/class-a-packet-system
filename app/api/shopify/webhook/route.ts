@@ -9,6 +9,28 @@ export const dynamic = "force-dynamic";
 // ── Zapier flat-field payload ─────────────────────────────────────────────────
 // Zapier sends Shopify order data as a flat object with camelCase keys.
 // No HMAC verification needed — Zapier authenticates with Shopify on its end.
+//
+// ── Zapier field mapping (update in your Zapier zap) ─────────────────────────
+// Map these Shopify fields in the Zapier "Code by Zapier" or "Webhooks by Zapier"
+// action that POSTs to this endpoint:
+//
+//   orderNumber       → Shopify order number (e.g. 1234)
+//   customerEmail     → Customer email
+//   customerPhone     → Customer phone
+//   customerFirstName → Customer first name  ← REQUIRED for click & collect
+//   customerLastName  → Customer last name   ← REQUIRED for click & collect
+//   billingName       → Billing address full name (fallback)
+//   totalPrice        → Order total (numeric)
+//   shippingFirstName → Shipping address first name (full name — split on first space)
+//   shippingAddress1  → Shipping street address
+//   shippingCity      → Shipping suburb/city
+//   shippingProvinceCode → Shipping state (e.g. "South Australia")
+//   shippingPostalCode   → Shipping postcode
+//   shippingPhone     → Shipping phone
+//   lineItems         → Line items blob (Zapier raw text format)
+//   shippingLines     → Shipping lines blob (Zapier raw text format)
+//   orderNote         → Order notes / customer instructions
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface ZapierFlatOrder {
   id?: string;
@@ -16,12 +38,12 @@ interface ZapierFlatOrder {
   orderNumber?: string;
   customerEmail?: string;
   customerPhone?: string;
-  // Customer name fields (used for click & collect where shipping name is blank)
+  // Customer name fields — required for click & collect (shippingFirstName is blank)
   customerFirstName?: string;
   customerLastName?: string;
-  billingName?: string;          // billing address full name
+  billingName?: string;          // billing address full name (last-resort fallback)
   totalPrice?: number | string;
-  shippingFirstName?: string;    // full name in shipping address — split on first space
+  shippingFirstName?: string;    // shipping address name — may contain full name
   shippingAddress1?: string;
   shippingCity?: string;
   shippingProvinceCode?: string; // full province name e.g. "South Australia"
@@ -34,38 +56,21 @@ interface ZapierFlatOrder {
 }
 
 // ── Customer name resolution ──────────────────────────────────────────────────
-// Priority: shippingFirstName → customerFirstName/Last → billingName → fallback
+// Priority: shippingFirstName → customerFirstName + customerLastName → billingName → "Online Customer"
+// Click & collect orders have no shippingFirstName — falls through to customerFirstName/LastName.
 
-function resolveName(body: ZapierFlatOrder): { firstName: string | null; lastName: string | null } {
-  // 1. shippingFirstName (may contain full name e.g. "Ian Will")
-  const shipping = (body.shippingFirstName ?? "").trim();
-  if (shipping) {
-    const parts = shipping.split(/\s+/);
-    return {
-      firstName: parts[0] || null,
-      lastName:  parts.slice(1).join(" ") || null,
-    };
-  }
+function resolveName(body: ZapierFlatOrder): { firstName: string; lastName: string } {
+  const fullName = (
+    body.shippingFirstName ||
+    `${body.customerFirstName || ""} ${body.customerLastName || ""}`.trim() ||
+    body.billingName ||
+    ""
+  ).trim();
 
-  // 2. customerFirstName + customerLastName (separate fields from Shopify customer)
-  const custFirst = (body.customerFirstName ?? "").trim();
-  const custLast  = (body.customerLastName  ?? "").trim();
-  if (custFirst || custLast) {
-    return { firstName: custFirst || null, lastName: custLast || null };
-  }
+  const firstName = fullName.split(" ")[0] || "Online";
+  const lastName  = fullName.split(" ").slice(1).join(" ") || "Customer";
 
-  // 3. billingName (full name on billing address)
-  const billing = (body.billingName ?? "").trim();
-  if (billing) {
-    const parts = billing.split(/\s+/);
-    return {
-      firstName: parts[0] || null,
-      lastName:  parts.slice(1).join(" ") || null,
-    };
-  }
-
-  // 4. Fallback — staff can update manually
-  return { firstName: "Online Customer", lastName: null };
+  return { firstName, lastName };
 }
 
 // ── Line items → formatted articles string ────────────────────────────────────
