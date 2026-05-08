@@ -120,13 +120,19 @@ export default function AdminPage() {
   const fetchShopifyOrders = useCallback(async () => {
     setShopifyLoading(true);
     try {
-      const res = await fetch("/api/admin/packets?type=online_order", { cache: "no-store" });
-      if (!res.ok) throw new Error("Failed to fetch Shopify orders");
+      const res = await fetch("/api/admin/shopify-orders", { cache: "no-store" });
+      console.log("[admin] fetchShopifyOrders: status", res.status, res.statusText);
+      if (!res.ok) {
+        const body = await res.text();
+        console.error("[admin] fetchShopifyOrders: error response:", body);
+        throw new Error(`API returned ${res.status}`);
+      }
       const json = await res.json();
       const all: Packet[] = json.packets ?? [];
-      console.log("[admin] fetchShopifyOrders: API returned", all.length, "online_order packets");
+      console.log("[admin] fetchShopifyOrders: received", all.length, "packet(s)");
       setShopifyOrders(all);
-    } catch {
+    } catch (err) {
+      console.error("[admin] fetchShopifyOrders: fetch failed:", err);
       setShopifyOrders([]);
     } finally {
       setShopifyLoading(false);
@@ -159,7 +165,7 @@ export default function AdminPage() {
 
   const silentRefreshShopify = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/packets?type=online_order", { cache: "no-store" });
+      const res = await fetch("/api/admin/shopify-orders", { cache: "no-store" });
       if (!res.ok) return;
       const json = await res.json();
       const all: Packet[] = json.packets ?? [];

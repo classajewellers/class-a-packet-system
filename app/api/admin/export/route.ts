@@ -3,6 +3,8 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { Packet, AdminPacketsQuery } from "@/lib/types";
 import { formatDateAU, formatCurrency, packetTypeLabel } from "@/lib/formatters";
 
+export const dynamic = "force-dynamic";
+
 function escape(val: string | null | undefined): string {
   if (!val) return "";
   const s = String(val);
