@@ -33,10 +33,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (query.type && query.type !== "all") {
     // Explicit type filter selected — show only that type
     dbQuery = dbQuery.eq("packet_type", query.type);
-  } else {
-    // Default: exclude online_order — those belong in the Shopify Orders tab
-    dbQuery = dbQuery.neq("packet_type", "online_order");
   }
+  // No else — return all packet types when no type filter specified (client-side filtering handles grouping)
 
   if (query.from) {
     dbQuery = dbQuery.gte("created_at", query.from);

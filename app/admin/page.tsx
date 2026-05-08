@@ -1,11 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { Packet, PacketType, AdminPacketsQuery, Quote } from "@/lib/types";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { Packet, PacketType, Quote } from "@/lib/types";
 import { STAGE_CONFIG, quoteStage, isOverdue } from "@/lib/pipeline";
 import { getSupabaseClient } from "@/lib/supabase";
-import { generatePrintHTML } from "@/lib/labelGenerator";
-import { formatCurrency } from "@/lib/formatters";
 import dynamic from "next/dynamic";
 import AdminTable from "@/components/AdminTable";
 import PacketDetailDrawer from "@/components/PacketDetailDrawer";
@@ -26,38 +24,33 @@ const QuotePipelineBoard = dynamic(
 // "quotes" and "packets" tables.
 // ─────────────────────────────────────────────────────────────────────────────
 
-type ActiveTab = "orders" | "quotes" | "shopify";
+type ActiveTab = "orders" | "quotes";
 
-const TYPE_OPTIONS: { value: "all" | PacketType; label: string }[] = [
-  { value: "all",           label: "All Types" },
+// "shopify" and "in-store" are meta-filters handled client-side;
+// the rest map directly to packet_type values.
+type OrderFilter = "all" | "shopify" | "in-store" | PacketType;
+
+const ORDER_FILTERS: { value: OrderFilter; label: string }[] = [
+  { value: "all",           label: "All Orders" },
+  { value: "shopify",       label: "Shopify" },
+  { value: "in-store",      label: "In-Store" },
   { value: "repair",        label: "Repair" },
   { value: "custom_order",  label: "Custom Order" },
   { value: "layby",         label: "Layby" },
   { value: "client_intake", label: "Client Intake" },
-  // online_order intentionally omitted — those appear in the Shopify Orders tab
 ];
-
-// ── Print helper (mirrors PacketDetailDrawer) ─────────────────────────────────
-function printLabel(packet: Packet) {
-  const html = generatePrintHTML(packet);
-  const win = window.open("", "_blank");
-  if (!win) return;
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  setTimeout(() => win.print(), 400);
-}
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("orders");
 
-  // ── Packets (Orders tab) ─────────────────────────────────────────────────
-  const [packets, setPackets]             = useState<Packet[]>([]);
-  const [loading, setLoading]             = useState(true);
+  // ── All packets — all types loaded, filtered client-side ─────────────────
+  const [packets, setPackets]               = useState<Packet[]>([]);
+  const [loading, setLoading]               = useState(true);
   const [selectedPacket, setSelectedPacket] = useState<Packet | null>(null);
-  const [query, setQuery] = useState<AdminPacketsQuery>({
-    search: "", type: "all", from: "", to: "",
-  });
+  const [orderFilter, setOrderFilter]       = useState<OrderFilter>("shopify");
+  const [search, setSearch]                 = useState("");
+  const [from, setFrom]                     = useState("");
+  const [to, setTo]                         = useState("");
 
   // ── Quotes tab ────────────────────────────────────────────────────────────
   const [quotes, setQuotes]               = useState<Quote[]>([]);
@@ -65,35 +58,30 @@ export default function AdminPage() {
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
   const [quoteView, setQuoteView]         = useState<"board" | "list">("board");
 
-  // ── Shopify Orders tab ────────────────────────────────────────────────────
-  const [shopifyOrders, setShopifyOrders]           = useState<Packet[]>([]);
-  const [shopifyLoading, setShopifyLoading]         = useState(false);
-
-  // Keep ref to latest query for the polling interval
-  const queryRef = useRef(query);
-  useEffect(() => { queryRef.current = query; }, [query]);
+  // Ref for polling so silent refresh always uses latest search params
+  const fetchParamsRef = useRef({ search, from, to });
+  useEffect(() => { fetchParamsRef.current = { search, from, to }; }, [search, from, to]);
 
   // ── Read ?tab= from URL on mount ─────────────────────────────────────────
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get("tab") as ActiveTab | null;
-    if (tab === "quotes" || tab === "orders" || tab === "shopify") {
-      setActiveTab(tab);
-    }
+    if (tab === "quotes" || tab === "orders") setActiveTab(tab);
   }, []);
 
   // ── Fetchers ──────────────────────────────────────────────────────────────
 
-  const fetchPackets = useCallback(async (q: AdminPacketsQuery) => {
+  // Fetch ALL packet types — type filter applied client-side
+  const fetchOrders = useCallback(async (params: { search?: string; from?: string; to?: string }) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (q.search) params.set("search", q.search);
-      if (q.type && q.type !== "all") params.set("type", q.type);
-      if (q.from) params.set("from", q.from);
-      if (q.to)   params.set("to",   q.to);
-      const res = await fetch(`/api/admin/packets?${params}`, { cache: "no-store" });
-      if (!res.ok) throw new Error("Failed to fetch packets");
+      const p = new URLSearchParams();
+      if (params.search) p.set("search", params.search);
+      if (params.from)   p.set("from",   params.from);
+      if (params.to)     p.set("to",     params.to);
+      // Deliberately no "type" param so API returns all packet types
+      const res = await fetch(`/api/admin/packets?${p}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("Failed to fetch orders");
       const json = await res.json();
       setPackets(json.packets ?? []);
     } catch {
@@ -117,29 +105,21 @@ export default function AdminPage() {
     }
   }, []);
 
-  const fetchShopifyOrders = useCallback(async () => {
-    setShopifyLoading(true);
+  // Silent refreshes — no loading spinner, used by poll interval
+  const silentRefreshOrders = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/shopify-orders", { cache: "no-store" });
-      console.log("[admin] fetchShopifyOrders: status", res.status, res.statusText);
-      if (!res.ok) {
-        const body = await res.text();
-        console.error("[admin] fetchShopifyOrders: error response:", body);
-        throw new Error(`API returned ${res.status}`);
-      }
+      const p = new URLSearchParams();
+      const { search, from, to } = fetchParamsRef.current;
+      if (search) p.set("search", search);
+      if (from)   p.set("from",   from);
+      if (to)     p.set("to",     to);
+      const res = await fetch(`/api/admin/packets?${p}`, { cache: "no-store" });
+      if (!res.ok) return;
       const json = await res.json();
-      const all: Packet[] = json.packets ?? [];
-      console.log("[admin] fetchShopifyOrders: received", all.length, "packet(s)");
-      setShopifyOrders(all);
-    } catch (err) {
-      console.error("[admin] fetchShopifyOrders: fetch failed:", err);
-      setShopifyOrders([]);
-    } finally {
-      setShopifyLoading(false);
-    }
+      if (json.packets) setPackets(json.packets);
+    } catch { /* ignore */ }
   }, []);
 
-  // Silent refreshes (no loading spinner — used by poll interval)
   const silentRefreshQuotes = useCallback(async () => {
     try {
       const res = await fetch("/api/quotes", { cache: "no-store" });
@@ -149,46 +129,17 @@ export default function AdminPage() {
     } catch { /* ignore */ }
   }, []);
 
-  const silentRefreshPackets = useCallback(async (q: AdminPacketsQuery) => {
-    try {
-      const params = new URLSearchParams();
-      if (q.search) params.set("search", q.search);
-      if (q.type && q.type !== "all") params.set("type", q.type);
-      if (q.from)   params.set("from", q.from);
-      if (q.to)     params.set("to",   q.to);
-      const res = await fetch(`/api/admin/packets?${params}`, { cache: "no-store" });
-      if (!res.ok) return;
-      const json = await res.json();
-      if (json.packets) setPackets(json.packets);
-    } catch { /* ignore */ }
-  }, []);
-
-  const silentRefreshShopify = useCallback(async () => {
-    try {
-      const res = await fetch("/api/admin/shopify-orders", { cache: "no-store" });
-      if (!res.ok) return;
-      const json = await res.json();
-      const all: Packet[] = json.packets ?? [];
-      setShopifyOrders(all);
-    } catch { /* ignore */ }
-  }, []);
-
-  // ── Initial data load ─────────────────────────────────────────────────────
-
+  // ── Initial load — debounced on search/date changes ──────────────────────
   useEffect(() => {
-    const timer = setTimeout(() => fetchPackets(query), 300);
+    const timer = setTimeout(() => fetchOrders({ search, from, to }), 300);
     return () => clearTimeout(timer);
-  }, [query, fetchPackets]);
-
-  // Always load Shopify orders on mount (badge needs the count even off-tab)
-  useEffect(() => { fetchShopifyOrders(); }, [fetchShopifyOrders]);
+  }, [search, from, to, fetchOrders]);
 
   useEffect(() => {
     if (activeTab === "quotes") fetchQuotes();
   }, [activeTab, fetchQuotes]);
 
   // ── Supabase real-time subscriptions ─────────────────────────────────────
-
   useEffect(() => {
     let supabase: ReturnType<typeof getSupabaseClient>;
     try {
@@ -219,12 +170,8 @@ export default function AdminPage() {
         { event: "INSERT", schema: "public", table: "packets" },
         (payload) => {
           const row = payload.new as Packet;
-          if (row.packet_type === "online_order") {
-            // Online orders belong in the Shopify tab only
-            setShopifyOrders((prev) => prev.some((p) => p.id === row.id) ? prev : [row, ...prev]);
-          } else {
-            setPackets((prev) => prev.some((p) => p.id === row.id) ? prev : [row, ...prev]);
-          }
+          // All packet types go into the single packets array; orderFilter handles display
+          setPackets((prev) => prev.some((p) => p.id === row.id) ? prev : [row, ...prev]);
         }
       )
       .on("postgres_changes",
@@ -232,7 +179,6 @@ export default function AdminPage() {
         (payload) => {
           const row = payload.new as Packet;
           setPackets((prev) => prev.map((p) => p.id === row.id ? row : p));
-          setShopifyOrders((prev) => prev.map((p) => p.id === row.id ? row : p));
           setSelectedPacket((cur) => cur?.id === row.id ? row : cur);
         }
       )
@@ -242,30 +188,26 @@ export default function AdminPage() {
   }, []);
 
   // ── 10-second fallback poll ───────────────────────────────────────────────
-
   useEffect(() => {
     const interval = setInterval(() => {
       silentRefreshQuotes();
-      silentRefreshPackets(queryRef.current);
-      silentRefreshShopify();
+      silentRefreshOrders();
     }, 10_000);
     return () => clearInterval(interval);
-  }, [silentRefreshQuotes, silentRefreshPackets, silentRefreshShopify]);
+  }, [silentRefreshQuotes, silentRefreshOrders]);
 
-  // ── Event handlers ────────────────────────────────────────────────────────
-
+  // ── Handlers ──────────────────────────────────────────────────────────────
   function handleUpdateQuote(updated: Quote) {
-    setQuotes((prev) => prev.map((q) => (q.id === updated.id ? updated : q)));
+    setQuotes((prev) => prev.map((q) => q.id === updated.id ? updated : q));
     setSelectedQuote(updated);
   }
 
   function handleExport() {
-    const params = new URLSearchParams();
-    if (query.search) params.set("search", query.search);
-    if (query.type && query.type !== "all") params.set("type", query.type);
-    if (query.from) params.set("from", query.from);
-    if (query.to)   params.set("to",   query.to);
-    window.open(`/api/admin/export?${params}`, "_blank");
+    const p = new URLSearchParams();
+    if (search) p.set("search", search);
+    if (from)   p.set("from",   from);
+    if (to)     p.set("to",     to);
+    window.open(`/api/admin/export?${p}`, "_blank");
   }
 
   async function handleRetry(
@@ -277,12 +219,26 @@ export default function AdminPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ packetId, output }),
     });
-    if (res.ok) fetchPackets(query);
+    if (res.ok) fetchOrders({ search, from, to });
   }
 
   // ── Derived values ────────────────────────────────────────────────────────
 
-  const unprintedShopify = (shopifyOrders ?? []).filter((p) => !p.label_printed);
+  // Client-side type filter applied to the full packets array
+  const filteredPackets = useMemo(() => {
+    return (packets ?? []).filter((p) => {
+      if (orderFilter === "shopify")  return p.packet_type === "online_order";
+      if (orderFilter === "in-store") return p.packet_type !== "online_order";
+      if (orderFilter === "all")      return true;
+      return p.packet_type === orderFilter;
+    });
+  }, [packets, orderFilter]);
+
+  // Unprinted online orders — drives the notification badge
+  const unprintedShopify = useMemo(() =>
+    (packets ?? []).filter((p) => p.packet_type === "online_order" && !p.label_printed),
+    [packets]
+  );
 
   const inputClass =
     "rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-black";
@@ -311,38 +267,36 @@ export default function AdminPage() {
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex gap-0">
 
-            {/* Orders + Quotes tabs */}
-            {(["orders", "quotes"] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-6 py-3 text-sm font-semibold transition-colors capitalize ${
-                  activeTab === tab
-                    ? "text-black border-b-2 border-black"
-                    : "text-gray-400 hover:text-gray-600"
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-
-            {/* Shopify Orders tab with unprinted badge */}
+            {/* Orders tab — pulsing badge when unprinted Shopify orders exist */}
             <button
-              onClick={() => setActiveTab("shopify")}
+              onClick={() => setActiveTab("orders")}
               className={`relative px-6 py-3 text-sm font-semibold transition-colors ${
-                activeTab === "shopify"
+                activeTab === "orders"
                   ? "text-black border-b-2 border-black"
                   : "text-gray-400 hover:text-gray-600"
               }`}
             >
-              Shopify Orders
+              Orders
               {unprintedShopify.length > 0 && (
-                <span className="absolute top-2.5 right-2 flex h-2.5 w-2.5">
+                <span className="absolute top-2.5 right-1.5 flex h-2.5 w-2.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
                 </span>
               )}
             </button>
+
+            {/* Quotes tab */}
+            <button
+              onClick={() => setActiveTab("quotes")}
+              className={`px-6 py-3 text-sm font-semibold transition-colors ${
+                activeTab === "quotes"
+                  ? "text-black border-b-2 border-black"
+                  : "text-gray-400 hover:text-gray-600"
+              }`}
+            >
+              Quotes
+            </button>
+
           </div>
         </div>
       </div>
@@ -353,6 +307,36 @@ export default function AdminPage() {
         {activeTab === "orders" && (
           <>
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 mb-5">
+
+              {/* ── Filter button group ── */}
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {ORDER_FILTERS.map((f) => {
+                  const isActive   = orderFilter === f.value;
+                  const isShopify  = f.value === "shopify";
+                  const hasBadge   = isShopify && unprintedShopify.length > 0;
+                  return (
+                    <button
+                      key={f.value}
+                      onClick={() => setOrderFilter(f.value)}
+                      className={`relative px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        isActive
+                          ? "bg-black text-white"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      {f.label}
+                      {hasBadge && (
+                        <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* ── Search + date range + export ── */}
               <div className="flex flex-wrap gap-3">
                 <div className="flex-1 min-w-[200px]">
                   <div className="relative">
@@ -362,27 +346,33 @@ export default function AdminPage() {
                     <input
                       type="text"
                       placeholder="Search by name, email, reference…"
-                      value={query.search ?? ""}
-                      onChange={(e) => setQuery((q) => ({ ...q, search: e.target.value }))}
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
                       className={`w-full pl-9 pr-3 ${inputClass}`}
                     />
                   </div>
                 </div>
-                <select
-                  value={query.type ?? "all"}
-                  onChange={(e) => setQuery((q) => ({ ...q, type: e.target.value as AdminPacketsQuery["type"] }))}
-                  className={inputClass}
-                >
-                  {TYPE_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
                 <div className="flex items-center gap-2">
-                  <input type="date" value={query.from ?? ""} onChange={(e) => setQuery((q) => ({ ...q, from: e.target.value }))} className={inputClass} title="From date" />
+                  <input
+                    type="date"
+                    value={from}
+                    onChange={(e) => setFrom(e.target.value)}
+                    className={inputClass}
+                    title="From date"
+                  />
                   <span className="text-gray-400 text-sm">to</span>
-                  <input type="date" value={query.to ?? ""} onChange={(e) => setQuery((q) => ({ ...q, to: e.target.value }))} className={inputClass} title="To date" />
+                  <input
+                    type="date"
+                    value={to}
+                    onChange={(e) => setTo(e.target.value)}
+                    className={inputClass}
+                    title="To date"
+                  />
                 </div>
-                <button onClick={handleExport} className="flex items-center gap-1.5 rounded-lg bg-black px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#222222] transition-colors">
+                <button
+                  onClick={handleExport}
+                  className="flex items-center gap-1.5 rounded-lg bg-black px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#222222] transition-colors"
+                >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
                   </svg>
@@ -391,14 +381,32 @@ export default function AdminPage() {
               </div>
             </div>
 
+            {/* ── Table ── */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
               <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-black">
-                  {loading ? "Loading…" : `${packets.length} order${packets.length !== 1 ? "s" : ""}`}
-                </h2>
+                <div className="flex items-center gap-3">
+                  <h2 className="text-sm font-semibold text-black">
+                    {loading
+                      ? "Loading…"
+                      : `${filteredPackets.length} order${filteredPackets.length !== 1 ? "s" : ""}`}
+                  </h2>
+                  {orderFilter === "shopify" && unprintedShopify.length > 0 && (
+                    <span className="flex items-center gap-1.5 text-xs font-semibold text-green-600">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                      </span>
+                      {unprintedShopify.length} to print
+                    </span>
+                  )}
+                </div>
                 <div className="text-xs text-gray-400 flex items-center gap-2">
-                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-green-500 inline-block" /> Success</span>
-                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-gray-300 inline-block" /> Pending/Failed</span>
+                  <span className="flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-green-500 inline-block" /> Success
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-gray-300 inline-block" /> Pending/Failed
+                  </span>
                   <span className="text-gray-300">|</span>
                   <span>Label · Klaviyo · Email · SMS · Sheets</span>
                 </div>
@@ -413,7 +421,7 @@ export default function AdminPage() {
                     <p className="text-sm">Loading orders…</p>
                   </div>
                 ) : (
-                  <AdminTable packets={packets} onRowClick={setSelectedPacket} />
+                  <AdminTable packets={filteredPackets} onRowClick={setSelectedPacket} />
                 )}
               </div>
             </div>
@@ -452,7 +460,9 @@ export default function AdminPage() {
                 <p className="text-sm">Loading quotes…</p>
               </div>
             ) : quotes.length === 0 ? (
-              <div className="text-center py-16 text-gray-400"><p className="text-sm">No quotes yet</p></div>
+              <div className="text-center py-16 text-gray-400">
+                <p className="text-sm">No quotes yet</p>
+              </div>
             ) : quoteView === "board" ? (
               <QuotePipelineBoard quotes={quotes} onQuoteClick={setSelectedQuote} onUpdate={handleUpdateQuote} />
             ) : (
@@ -473,13 +483,15 @@ export default function AdminPage() {
                       {(quotes ?? []).map((q) => {
                         const customerName = [q.customer_first_name, q.customer_last_name].filter(Boolean).join(" ") || "—";
                         const created = new Date(q.created_at).toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" });
-                        const stage = quoteStage(q.status);
-                        const stageConf = STAGE_CONFIG[stage];
-                        const overdue = isOverdue(q.follow_up_date);
+                        const stage      = quoteStage(q.status);
+                        const stageConf  = STAGE_CONFIG[stage];
+                        const overdue    = isOverdue(q.follow_up_date);
                         const activeStage = stage !== "job_won" && stage !== "job_lost";
                         return (
                           <tr key={q.id} onClick={() => setSelectedQuote(q)} className="hover:bg-gray-50 cursor-pointer transition-colors">
-                            <td className="px-4 py-3"><span className="font-mono text-xs font-semibold text-black">{q.reference_number}</span></td>
+                            <td className="px-4 py-3">
+                              <span className="font-mono text-xs font-semibold text-black">{q.reference_number}</span>
+                            </td>
                             <td className="px-4 py-3">
                               <div className="font-medium text-black">{customerName}</div>
                               <div className="text-xs text-gray-400">{q.customer_phone ?? ""}</div>
@@ -491,7 +503,9 @@ export default function AdminPage() {
                               </span>
                             </td>
                             <td className={`px-4 py-3 whitespace-nowrap text-xs font-medium ${overdue && activeStage ? "text-red-600 font-bold" : "text-gray-600"}`}>
-                              {q.follow_up_date ? new Date(q.follow_up_date + "T00:00:00").toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                              {q.follow_up_date
+                                ? new Date(q.follow_up_date + "T00:00:00").toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" })
+                                : "—"}
                               {overdue && activeStage && " ⚠"}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap text-gray-500 text-xs">{created}</td>
@@ -506,122 +520,6 @@ export default function AdminPage() {
           </>
         )}
 
-        {/* ── Shopify Orders tab ── */}
-        {activeTab === "shopify" && (
-          <>
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-sm text-gray-500">
-                {shopifyLoading
-                  ? "Loading…"
-                  : `${shopifyOrders.length} order${shopifyOrders.length !== 1 ? "s" : ""}${unprintedShopify.length > 0 ? ` · ${unprintedShopify.length} unprinted` : ""}`}
-              </p>
-              {unprintedShopify.length > 0 && (
-                <span className="flex items-center gap-1.5 text-xs font-semibold text-green-600">
-                  <span className="flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-green-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-                  </span>
-                  {unprintedShopify.length} new order{unprintedShopify.length !== 1 ? "s" : ""} to print
-                </span>
-              )}
-            </div>
-
-            {shopifyLoading ? (
-              <div className="text-center py-16 text-gray-400">
-                <svg className="w-8 h-8 mx-auto mb-2 spinner" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                <p className="text-sm">Loading Shopify orders…</p>
-              </div>
-            ) : shopifyOrders.length === 0 ? (
-              <div className="text-center py-16 text-gray-400">
-                <p className="text-sm font-medium mb-1">No Shopify orders yet</p>
-                <p className="text-xs">Orders will appear here automatically when received via Zapier.</p>
-              </div>
-            ) : (
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-200 text-left bg-gray-50">
-                        <th className="px-4 py-3 font-semibold text-black whitespace-nowrap">Order No.</th>
-                        <th className="px-4 py-3 font-semibold text-black">Customer</th>
-                        <th className="px-4 py-3 font-semibold text-black">Items</th>
-                        <th className="px-4 py-3 font-semibold text-black whitespace-nowrap">Total</th>
-                        <th className="px-4 py-3 font-semibold text-black whitespace-nowrap">Shipping</th>
-                        <th className="px-4 py-3 font-semibold text-black whitespace-nowrap">Created At</th>
-                        <th className="px-4 py-3 font-semibold text-black text-right">Label</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {(shopifyOrders ?? []).map((p) => {
-                        const customerName =
-                          [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
-                        const created = new Date(p.created_at).toLocaleDateString("en-AU", {
-                          day: "2-digit", month: "short", year: "numeric",
-                        });
-                        const isUnprinted = !p.label_printed;
-
-                        return (
-                          <tr
-                            key={p.id}
-                            onClick={() => setSelectedPacket(p)}
-                            className={`cursor-pointer transition-colors ${isUnprinted ? "bg-green-50 hover:bg-green-100" : "hover:bg-gray-50"}`}
-                          >
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2">
-                                {isUnprinted && (
-                                  <span className="flex h-2 w-2 flex-shrink-0">
-                                    <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-green-400 opacity-75" />
-                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-                                  </span>
-                                )}
-                                <div>
-                                  <div className="font-mono text-xs font-bold text-black">{p.order_number ?? "—"}</div>
-                                  <div className="font-mono text-xs text-gray-400">{p.reference_number}</div>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="font-medium text-black">{customerName}</div>
-                              <div className="text-xs text-gray-400">{p.customer_email ?? p.customer_phone ?? ""}</div>
-                            </td>
-                            <td className="px-4 py-3 max-w-[240px]">
-                              <p className="text-xs text-gray-700 whitespace-pre-line line-clamp-3">
-                                {p.articles ?? p.items_ordered ?? "—"}
-                              </p>
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap font-semibold text-black">
-                              {formatCurrency(p.total_charges)}
-                            </td>
-                            <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
-                              {p.shipping_method ?? "—"}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
-                              {created}
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); printLabel(p); }}
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-black text-white px-3 py-1.5 text-xs font-semibold hover:bg-[#222222] transition-colors whitespace-nowrap"
-                              >
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.056 48.056 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
-                                </svg>
-                                Print Label
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </>
-        )}
       </main>
     </>
   );
