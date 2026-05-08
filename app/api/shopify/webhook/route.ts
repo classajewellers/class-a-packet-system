@@ -101,14 +101,17 @@ function parseLineItems(raw: any): string {
     const qty = qtyMatch?.[1] || "1";
 
     // Extract customAttributes — exec loop (matchAll spread needs downlevelIteration)
+    // Covers personalisation fields across all product types.
+    // Values are trimmed of all surrounding whitespace including newlines
+    // (Zapier can send values like '\n\n Yellow Gold\n\n').
     const meaningfulKeys = [
       "metal", "stone", "size", "colour", "color",
       "engraving", "personalisation", "chain", "initial",
-      "birthstone", "pendant",
+      "birthstone", "pendant", "number", "font", "text", "confirmation",
     ];
 
     const attrMatches: RegExpExecArray[] = [];
-    const attrRe = /'key':\s*'([^']+)',\s*'value':\s*'([^']+)'/g;
+    const attrRe = /'key':\s*'([^']+)',\s*'value':\s*'([^']*)'/g;
     let attrM: RegExpExecArray | null;
     while ((attrM = attrRe.exec(block)) !== null) attrMatches.push(attrM);
 
@@ -116,6 +119,8 @@ function parseLineItems(raw: any): string {
       .filter((m) => {
         const key = m[1].toLowerCase().trim();
         const val = m[2].trim().toLowerCase();
+        // Skip empty values
+        if (!val) return false;
         // Skip internal / tracking keys
         if (key.startsWith("_") || key.startsWith("cl_")) return false;
         // Skip bare Yes / No flags (engraving: Yes means "has engraving" not useful text)

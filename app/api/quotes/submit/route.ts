@@ -9,6 +9,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // ── 1. Confirm route is being reached ─────────────────────────────────────
   console.log("Quote submit hit");
 
+  // Env check — tells us immediately if SUPABASE_SERVICE_ROLE_KEY is missing in Vercel
+  console.log("[quotes/submit] Env check:", {
+    hasUrl:           !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+    hasServiceKey:    !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    serviceKeyLength: process.env.SUPABASE_SERVICE_ROLE_KEY?.length ?? 0,
+  });
+
   // ── 2. Parse body ──────────────────────────────────────────────────────────
   let body: { formData: QuoteFormData };
   try {
@@ -34,7 +41,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // ── 4. Build insert payload ────────────────────────────────────────────────
-  const lineItems = formData.line_items ?? [];
+  // Filter out blank line item rows (the form defaults 3 empty rows)
+  const lineItems = (formData.line_items ?? []).filter(
+    (item) => item.design?.trim() || item.stone?.trim() || item.price?.trim()
+  );
   const now = new Date().toISOString();
 
   const insertData = {

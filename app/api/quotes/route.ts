@@ -6,13 +6,29 @@ import { Quote } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<NextResponse> {
-  const supabase = createServerSupabaseClient();
+  // Env check — log whether the service role key is actually present in this environment
+  console.log("[quotes] Env check:", {
+    hasUrl:            !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+    hasServiceKey:     !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    serviceKeyLength:  process.env.SUPABASE_SERVICE_ROLE_KEY?.length ?? 0,
+  });
+
+  let supabase: ReturnType<typeof createServerSupabaseClient>;
+  try {
+    supabase = createServerSupabaseClient();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[quotes] Failed to create Supabase client:", msg);
+    return NextResponse.json({ error: msg, quotes: [] }, { status: 500 });
+  }
 
   const { data, error } = await supabase
     .from("quotes")
     .select("*")
     .order("created_at", { ascending: false })
     .limit(500);
+
+  console.log("[quotes] Query result:", data?.length, error);
 
   if (error) {
     console.error("[quotes] Supabase fetch failed:", {
@@ -21,7 +37,7 @@ export async function GET(): Promise<NextResponse> {
       details: error.details,
       hint:    error.hint,
     });
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message, quotes: [] }, { status: 500 });
   }
 
   console.log("[quotes] Fetched", (data ?? []).length, "quotes");
