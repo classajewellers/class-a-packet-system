@@ -31,91 +31,50 @@ interface ZapierFlatOrder {
 
 // ── Line items → formatted articles string ────────────────────────────────────
 
-const MEANINGFUL_ATTR_KEYS = [
-  "metal", "stone", "size", "colour", "color", "engraving", "pendant",
-  "birthstone", "initial", "personalisation", "personalization", "chain",
-  "finish", "font", "number of pendants", "estimated dispatch",
-];
+function parseLineItems(raw: any): string {
+  if (!raw || typeof raw !== "string") return "";
 
-function parseLineItems(lineItems: any): string {
-  if (!lineItems) return "";
+  // Split into item blocks by blank line
+  const blocks = raw.split(/\n\n+/);
+  const results: string[] = [];
 
-  // ── Case 1: already an array of objects ───────────────────────────────────
-  if (Array.isArray(lineItems)) {
-    return lineItems
-      .filter((item: any) => {
-        const price = parseFloat(
-          item.price ??
-          item.originalUnitPriceSet?.shopMoney?.amount ??
-          "0"
-        );
-        const title: string = item.title ?? item.name ?? "";
-        return price > 0 && !title.toLowerCase().includes("free gift");
-      })
-      .map((item: any) => {
-        const qty: number   = item.quantity ?? 1;
-        const title: string = item.title ?? item.name ?? "";
-        const attrs: any[]  = item.customAttributes ?? item.properties ?? [];
+  for (const block of blocks) {
+    // Extract name
+    const nameMatch = block.match(/^name:\s*(.+)$/m);
+    if (!nameMatch) continue;
+    const name = nameMatch[1].trim();
 
-        const attrLines = attrs
-          .filter((a: any) => {
-            const key: string = (a.key ?? a.name ?? "").toLowerCase();
-            return MEANINGFUL_ATTR_KEYS.some((k) => key.includes(k));
-          })
-          .map((a: any) => `  ${a.key ?? a.name}: ${a.value}`)
-          .join("\n");
+    // Skip free gifts
+    if (name.toLowerCase().includes("free gift")) continue;
 
-        return `${qty}x ${title}${attrLines ? "\n" + attrLines : ""}`;
-      })
+    // Extract price from discountedTotalSet amount
+    const priceMatch = block.match(/discountedTotalSet:.*?'amount':\s*'([\d.]+)'/);
+    const price = parseFloat(priceMatch?.[1] || "0");
+    if (price === 0) continue;
+
+    // Extract quantity
+    const qtyMatch = block.match(/^quantity:\s*(\d+)$/m);
+    const qty = qtyMatch?.[1] || "1";
+
+    // Extract customAttributes — use exec loop (matchAll spread fails on older TS targets)
+    const meaningfulKeys = [
+      "metal", "stone", "size", "colour", "color", "engraving", "pendant",
+      "birthstone", "initial", "personalisation", "chain", "number of pendants",
+    ];
+    const attrMatches: RegExpExecArray[] = [];
+    const attrRe = /'key':\s*'([^']+)',\s*'value':\s*'([^']+)'/g;
+    let attrM: RegExpExecArray | null;
+    while ((attrM = attrRe.exec(block)) !== null) attrMatches.push(attrM);
+
+    const attrs = attrMatches
+      .filter((m) => meaningfulKeys.some((k) => m[1].toLowerCase().includes(k)))
+      .map((m) => `  ${m[1]}: ${m[2].trim()}`)
       .join("\n");
+
+    results.push(`${qty}x ${name}${attrs ? "\n" + attrs : ""}`);
   }
 
-  // ── Case 2: string — try JSON first ───────────────────────────────────────
-  if (typeof lineItems === "string") {
-    const s = lineItems.trim();
-    if (!s) return "";
-
-    try {
-      const parsed = JSON.parse(s);
-      if (Array.isArray(parsed)) return parseLineItems(parsed);
-    } catch { /* fall through to text parsing */ }
-
-    // ── Case 3: raw text blob — extract title/quantity via regex ─────────────
-    const items: string[] = [];
-
-    // Collect all title and quantity matches using exec loops (no matchAll)
-    const titleMatches: string[] = [];
-    const qtyMatches: string[] = [];
-    const nameMatches: string[] = [];
-
-    let m: RegExpExecArray | null;
-    const rTitle = /title:\s*([^\n]+)/gi;
-    while ((m = rTitle.exec(s)) !== null) titleMatches.push(m[1].trim());
-    const rQty = /quantity:\s*(\d+)/gi;
-    while ((m = rQty.exec(s)) !== null) qtyMatches.push(m[1]);
-    const rName = /name:\s*([^\n]+)/gi;
-    while ((m = rName.exec(s)) !== null) nameMatches.push(m[1].trim());
-
-    for (let i = 0; i < titleMatches.length; i++) {
-      const title = titleMatches[i];
-      if (title.toLowerCase().includes("free gift")) continue;
-      const qty = qtyMatches[i] ?? "1";
-      items.push(`${qty}x ${title}`);
-    }
-
-    // Fallback: if title matching found nothing, try name
-    if (items.length === 0) {
-      for (const name of nameMatches) {
-        if (!name.toLowerCase().includes("free gift")) {
-          items.push(`1x ${name}`);
-        }
-      }
-    }
-
-    return items.join("\n");
-  }
-
-  return "";
+  return results.join("\n");
 }
 
 // ── Shipping method extraction ────────────────────────────────────────────────
@@ -139,55 +98,25 @@ function extractShippingMethod(raw: unknown): string | null {
   return null;
 }
 
-// ── Dispatch date extraction and parsing ──────────────────────────────────────
+// ── Dispatch date extraction ──────────────────────────────────────────────────
 
-const MONTH_MAP: Record<string, number> = {
-  january: 0, february: 1, march: 2,  april: 3,  may: 4,      june: 5,
-  july: 6,    august: 7,   september: 8, october: 9, november: 10, december: 11,
-};
+function extractDispatchDate(raw: any): string | null {
+  if (!raw || typeof raw !== "string") return null;
 
-function parseDispatchDate(text: string | null | undefined): string | null {
-  if (!text) return null;
-  const match = text.match(/([A-Za-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?/);
+  const match = raw.match(/'key':\s*'Estimated Dispatch',\s*'value':\s*'([^']+)'/);
   if (!match) return null;
-  const month = MONTH_MAP[match[1].toLowerCase()];
-  if (month === undefined) return null;
-  const day = parseInt(match[2]);
-  if (isNaN(day) || day < 1 || day > 31) return null;
-  const now = new Date();
-  let year = now.getFullYear();
-  if (new Date(year, month, day) < now) year += 1;
-  return new Date(year, month, day).toISOString().split("T")[0];
-}
 
-/** Scan raw lineItems (array or text) for an "Estimated Dispatch" attribute. */
-function extractDispatchDate(lineItems: unknown): string | null {
-  if (!lineItems) return null;
-
-  if (Array.isArray(lineItems)) {
-    for (const item of lineItems as any[]) {
-      const attrs: any[] = item.customAttributes ?? item.properties ?? [];
-      for (const attr of attrs) {
-        const key = String(attr.key ?? attr.name ?? "").toLowerCase();
-        if (key.includes("estimated dispatch") || key.includes("dispatch")) {
-          const date = parseDispatchDate(String(attr.value ?? ""));
-          if (date) return date;
-        }
-      }
-    }
+  try {
+    const dateStr = match[1].trim(); // e.g. "Wednesday, May 13th"
+    const cleaned = dateStr.replace(/(\d+)(st|nd|rd|th)/, "$1");
+    const year = new Date().getFullYear();
+    const parsed = new Date(`${cleaned} ${year}`);
+    if (isNaN(parsed.getTime())) return null;
+    if (parsed < new Date()) parsed.setFullYear(year + 1);
+    return parsed.toISOString().split("T")[0];
+  } catch {
     return null;
   }
-
-  if (typeof lineItems === "string") {
-    try {
-      const parsed = JSON.parse(lineItems);
-      return extractDispatchDate(parsed);
-    } catch { /* fall through */ }
-    const match = lineItems.match(/[Ee]stimated\s+[Dd]ispatch[^:]*:\s*([^\n]+)/);
-    if (match) return parseDispatchDate(match[1].trim());
-  }
-
-  return null;
 }
 
 // ── Handler ────────────────────────────────────────────────────────────────────
