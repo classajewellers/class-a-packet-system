@@ -58,7 +58,7 @@ export default function AdminPage() {
   const [quotesLoading, setQuotesLoading] = useState(false);
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
   const [quoteView, setQuoteView]         = useState<"board" | "list">("board");
-  const [showConverted, setShowConverted] = useState(false);
+  const [showConverted, setShowConverted] = useState(true);
   const [quoteListFilter, setQuoteListFilter] = useState<"active" | "all" | "converted">("active");
   const [selectedQuoteIds, setSelectedQuoteIds] = useState<Set<string>>(new Set());
 

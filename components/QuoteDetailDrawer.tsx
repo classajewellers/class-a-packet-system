@@ -185,6 +185,23 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
 
         <div className="flex-1 px-5 py-4 space-y-5">
 
+          {/* ── Converted banner ── */}
+          {isConverted && (
+            <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 flex items-center gap-3">
+              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
+                <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-emerald-800">Converted to Order</p>
+                {local.packet_reference && (
+                  <p className="text-xs text-emerald-600 font-mono mt-0.5">{local.packet_reference}</p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* ── Print action ── */}
           <button
             onClick={handleReprintQuote}
@@ -196,7 +213,7 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
             Open Quote / Save PDF
           </button>
 
-          {/* ── Convert to Order (prominent when Job Won) ── */}
+          {/* ── Convert to Order (prominent when Job Won, not yet converted) ── */}
           {stage === "job_won" && !isConverted && (
             <button
               onClick={handleConvert}
@@ -206,6 +223,21 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
               </svg>
               Convert to Order
+            </button>
+          )}
+
+          {/* ── View Order link (once converted) ── */}
+          {isConverted && local.packet_reference && (
+            <button
+              onClick={() => {
+                window.location.href = `/admin?tab=orders`;
+              }}
+              className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white text-sm font-semibold py-3 rounded-xl hover:bg-blue-700 active:scale-[0.98] transition-all"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+              </svg>
+              View Order {local.packet_reference}
             </button>
           )}
 

@@ -43,7 +43,7 @@ function sortCards(cards: Quote[]): Quote[] {
   });
 }
 
-export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate, showConverted = false }: Props) {
+export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate, showConverted = true }: Props) {
   // Local copy for optimistic updates during drag
   const [localQuotes, setLocalQuotes] = useState<Quote[]>(quotes ?? []);
   // Track whether we currently have a pending PATCH (prevents parent sync overwriting optimistic state)
@@ -187,7 +187,7 @@ export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate, sho
                               dragSnapshot.isDragging
                                 ? "shadow-2xl ring-2 ring-black/10 rotate-1 scale-[1.02]"
                                 : ""
-                            } ${q.status === "converted" ? "opacity-40 grayscale" : ""}`}
+                            } ${q.status === "converted" ? "opacity-60" : ""}`}
                           >
                             <QuoteCard
                               quote={q}

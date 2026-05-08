@@ -40,8 +40,8 @@ export default function QuoteCard({ quote, onClick }: Props) {
       <div className="flex items-start justify-between gap-1 mb-1">
         <p className="font-semibold text-sm text-black leading-tight">{customerName}</p>
         {isConverted && (
-          <span className="flex-shrink-0 text-xs bg-blue-100 text-blue-700 rounded-full px-1.5 py-0.5 font-medium">
-            Converted
+          <span className="flex-shrink-0 text-xs bg-blue-100 text-blue-700 rounded-full px-1.5 py-0.5 font-medium leading-tight text-right">
+            ✓ {quote.packet_reference ?? "Converted"}
           </span>
         )}
       </div>
