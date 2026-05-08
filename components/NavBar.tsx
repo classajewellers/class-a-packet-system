@@ -8,6 +8,7 @@ const NAV_LINKS = [
   { href: "/", label: "New Order" },
   { href: "/quote", label: "New Quote" },
   { href: "/admin", label: "Admin" },
+  { href: "/revenue", label: "Revenue" },
 ];
 
 export default function NavBar() {

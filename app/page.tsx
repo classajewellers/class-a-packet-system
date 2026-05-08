@@ -22,8 +22,6 @@ import DatesSection from "@/components/DatesSection";
 import ReferralStaffSection from "@/components/ReferralStaffSection";
 import RepairFields from "@/components/RepairFields";
 import CustomOrderFields from "@/components/CustomOrderFields";
-import LaybyFields from "@/components/LaybyFields";
-import ClientIntakeFields from "@/components/ClientIntakeFields";
 import OnlineOrderFields from "@/components/OnlineOrderFields";
 import LabelPreview from "@/components/LabelPreview";
 import SubmissionOverlay from "@/components/SubmissionOverlay";
@@ -42,16 +40,9 @@ function validate(data: PacketFormData): Partial<Record<keyof PacketFormData, st
     if (!data.articles.trim()) errors.articles = "Required";
     if (!data.instructions.trim()) errors.instructions = "Required";
   }
-  if (!data.due_date && data.packet_type !== "client_intake")
+  if (!data.due_date && data.packet_type !== "online_order")
     errors.due_date = "Required";
   if (!data.staff_member) errors.staff_member = "Required";
-  if (data.packet_type === "layby") {
-    if (!data.layby_schedule) errors.layby_schedule = "Select a schedule";
-    if (!data.number_of_payments || parseInt(data.number_of_payments) < 1)
-      errors.number_of_payments = "Enter number of payments";
-    if (!data.terms_accepted)
-      errors.terms_accepted = "Customer must accept layby terms";
-  }
   if (data.packet_type === "online_order") {
     if (!data.order_number.trim()) errors.order_number = "Required";
   }
@@ -374,23 +365,46 @@ function PacketFormPageInner() {
                   </Card>
                 )}
 
-                {formData.packet_type === "layby" && (
-                  <Card title="Layby Details">
-                    <LaybyFields
-                      data={formData}
-                      onChange={(f, v) => handleChange(f, v as string | boolean)}
-                      errors={errors}
-                    />
-                  </Card>
-                )}
-
-                {formData.packet_type === "client_intake" && (
-                  <Card title="Client Intake Details">
-                    <ClientIntakeFields
-                      data={formData}
-                      onChange={(f, v) => handleChange(f, v as string | string[] | boolean)}
-                      errors={errors}
-                    />
+                {(formData.packet_type === "repair" || formData.packet_type === "custom_order") && (
+                  <Card title="Gift & Delivery">
+                    <div className="space-y-4">
+                      {/* Gift Wrapping toggle */}
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Gift Wrapping</p>
+                        <div className="flex gap-3">
+                          {[{ val: true, label: "Yes" }, { val: false, label: "No" }].map(({ val, label }) => (
+                            <button
+                              key={label}
+                              type="button"
+                              onClick={() => handleChange("gift_wrapping", val)}
+                              className={`px-5 py-2 rounded-lg text-sm font-semibold border-2 transition-colors ${
+                                formData.gift_wrapping === val
+                                  ? "bg-black text-white border-black"
+                                  : "bg-white text-black border-gray-300 hover:border-black"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Delivery method dropdown */}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                          Delivery Method
+                        </label>
+                        <select
+                          value={formData.delivery_method}
+                          onChange={(e) => handleChange("delivery_method", e.target.value)}
+                          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black"
+                        >
+                          <option value="Pickup">Pickup</option>
+                          <option value="Standard Post">Standard Post</option>
+                          <option value="Express Post">Express Post</option>
+                          <option value="Courier">Courier</option>
+                        </select>
+                      </div>
+                    </div>
                   </Card>
                 )}
 

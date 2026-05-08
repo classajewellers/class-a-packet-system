@@ -91,6 +91,12 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
     packet_data:         Object.keys(packetData).length ? packetData : null,
   };
 
+  // Gift & Delivery (repair / custom_order)
+  if (formData.packet_type === "repair" || formData.packet_type === "custom_order") {
+    insertData.gift_wrapping  = formData.gift_wrapping;
+    insertData.delivery_method = formData.delivery_method || "Pickup";
+  }
+
   // Online order-specific columns
   if (formData.packet_type === "online_order") {
     insertData.order_number          = formData.order_number          || null;

@@ -1,5 +1,6 @@
 import { Quote, LineItem } from "./types";
 import { BLACK_LOGO_DATA_URI } from "./logoDataURIs";
+import { staffEmail } from "./staffEmails";
 
 function esc(s: string | null | undefined): string {
   if (!s) return "";
@@ -15,18 +16,6 @@ function formatDateAU(iso: string | null | undefined): string {
   const [y, m, d] = iso.split("T")[0].split("-");
   if (!y || !m || !d) return iso;
   return `${d}/${m}/${y}`;
-}
-
-function staffEmail(staffMember: string | null | undefined): string {
-  if (!staffMember) return "jewellery@classa.com.au";
-  const lower = staffMember.toLowerCase().trim();
-  const map: Record<string, string> = {
-    "josh mucklow": "josh@classa.com.au",
-    "brad mucklow": "brad@classa.com.au",
-    "ben mucklow": "ben@classa.com.au",
-    "sam mucklow": "sam@classa.com.au",
-  };
-  return map[lower] ?? "jewellery@classa.com.au";
 }
 
 export function generateQuoteHTML(quote: Quote): string {

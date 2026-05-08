@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Packet, PacketType, Quote } from "@/lib/types";
 import { STAGE_CONFIG, quoteStage, isOverdue } from "@/lib/pipeline";
 import { getSupabaseClient } from "@/lib/supabase";
+import { STAFF_EMAIL_MAP } from "@/lib/staffEmails";
 import dynamic from "next/dynamic";
 import AdminTable from "@/components/AdminTable";
 import PacketDetailDrawer from "@/components/PacketDetailDrawer";
@@ -61,6 +62,7 @@ export default function AdminPage() {
   const [showConverted, setShowConverted] = useState(true);
   const [quoteListFilter, setQuoteListFilter] = useState<"active" | "all" | "converted">("active");
   const [selectedQuoteIds, setSelectedQuoteIds] = useState<Set<string>>(new Set());
+  const [quoteStaffFilter, setQuoteStaffFilter] = useState<string>("all");
 
   // Ref for polling so silent refresh always uses latest search params
   const fetchParamsRef = useRef({ search, from, to });
@@ -299,12 +301,20 @@ export default function AdminPage() {
     [packets]
   );
 
-  // Quotes list view — filtered by active/converted/all
+  // Staff-filtered quotes — applies to both board and list views
+  const staffFilteredQuotes = useMemo(() => {
+    if (quoteStaffFilter === "all") return quotes ?? [];
+    return (quotes ?? []).filter((q) =>
+      (q.assigned_to ?? "").toLowerCase().trim() === quoteStaffFilter.toLowerCase().trim()
+    );
+  }, [quotes, quoteStaffFilter]);
+
+  // Quotes list view — filtered by active/converted/all (applied on top of staff filter)
   const filteredListQuotes = useMemo(() => {
-    if (quoteListFilter === "active")    return (quotes ?? []).filter((q) => q.status !== "converted");
-    if (quoteListFilter === "converted") return (quotes ?? []).filter((q) => q.status === "converted");
-    return quotes ?? [];
-  }, [quotes, quoteListFilter]);
+    if (quoteListFilter === "active")    return staffFilteredQuotes.filter((q) => q.status !== "converted");
+    if (quoteListFilter === "converted") return staffFilteredQuotes.filter((q) => q.status === "converted");
+    return staffFilteredQuotes;
+  }, [staffFilteredQuotes, quoteListFilter]);
 
   const inputClass =
     "rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-black";
@@ -532,12 +542,41 @@ export default function AdminPage() {
           <>
             {!quotesLoading && quotes.length > 0 && <QuoteStatsBar quotes={quotes} />}
 
+            {/* Staff filter */}
+            {!quotesLoading && quotes.length > 0 && (
+              <div className="mb-4 flex items-center gap-3">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
+                  Filter by Staff
+                </label>
+                <select
+                  value={quoteStaffFilter}
+                  onChange={(e) => setQuoteStaffFilter(e.target.value)}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black capitalize"
+                >
+                  <option value="all">All Staff</option>
+                  {Object.keys(STAFF_EMAIL_MAP).map((name) => (
+                    <option key={name} value={name} className="capitalize">
+                      {name.replace(/\b\w/g, (c) => c.toUpperCase())}
+                    </option>
+                  ))}
+                </select>
+                {quoteStaffFilter !== "all" && (
+                  <button
+                    onClick={() => setQuoteStaffFilter("all")}
+                    className="text-xs text-gray-400 hover:text-gray-700 underline"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            )}
+
             <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
               <div className="flex items-center gap-3 flex-wrap">
                 <p className="text-sm text-gray-500">
                   {quotesLoading
                     ? "Loading…"
-                    : `${(quotes ?? []).filter((q) => q.status !== "converted").length} active quote${(quotes ?? []).filter((q) => q.status !== "converted").length !== 1 ? "s" : ""}`}
+                    : `${staffFilteredQuotes.filter((q) => q.status !== "converted").length} active quote${staffFilteredQuotes.filter((q) => q.status !== "converted").length !== 1 ? "s" : ""}`}
                 </p>
                 {/* Board: show-converted toggle */}
                 {quoteView === "board" && !quotesLoading && (
@@ -597,7 +636,7 @@ export default function AdminPage() {
                 <p className="text-sm">No quotes yet</p>
               </div>
             ) : quoteView === "board" ? (
-              <QuotePipelineBoard quotes={quotes} onQuoteClick={setSelectedQuote} onUpdate={handleUpdateQuote} showConverted={showConverted} />
+              <QuotePipelineBoard quotes={staffFilteredQuotes} onQuoteClick={setSelectedQuote} onUpdate={handleUpdateQuote} showConverted={showConverted} />
             ) : (
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 {/* Bulk delete bar */}

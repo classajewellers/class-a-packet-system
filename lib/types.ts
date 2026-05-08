@@ -70,6 +70,10 @@ export interface PacketFormData {
   order_notes: string;
   tracking_number: string;
   order_source: string;
+
+  // Gift & Delivery (repair / custom_order)
+  gift_wrapping: boolean;
+  delivery_method: string;
 }
 
 export const defaultFormData: PacketFormData = {
@@ -113,6 +117,8 @@ export const defaultFormData: PacketFormData = {
   order_notes: "",
   tracking_number: "",
   order_source: "",
+  gift_wrapping: false,
+  delivery_method: "Pickup",
 };
 
 // ─────────────────────────────────────────────
@@ -181,6 +187,10 @@ export interface Packet {
 
   // Staff notes — internal only, not printed on labels
   internal_notes: string | null;
+
+  // Gift & Delivery
+  gift_wrapping: boolean | null;
+  delivery_method: string | null;
 }
 
 // ─────────────────────────────────────────────

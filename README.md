@@ -3,7 +3,7 @@
 Internal iPad-facing staff tool for Class A Jewellers that digitises paper repair/order packets.
 
 **Store:** Class A Jewellers, 40 North East Road, Walkerville SA 5081  
-**Contact:** +61 8 8344 7722 | jewellery@classa.com.au  
+**Contact:** +61 8 8344 7722 | customercare@classa.com.au  
 **Stack:** Next.js 14 · TypeScript · Tailwind CSS · Supabase · Vercel
 
 ---

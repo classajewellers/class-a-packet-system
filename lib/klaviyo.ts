@@ -184,7 +184,7 @@ export async function sendKlaviyoConfirmationEmail(packet: Packet): Promise<void
           staff_member: packet.staff_member,
           store_name: "Class A Jewellers",
           store_phone: "+61 8 8344 7722",
-          store_email: "jewellery@classa.com.au",
+          store_email: "customercare@classa.com.au",
           store_address: "40 North East Road, Walkerville SA 5081",
           disclaimer:
             "This confirmation records the details of your item(s) as provided at time of drop-off. Please contact us within 24 hours if any details are incorrect. This store is not responsible for articles left over 30 days. No article can be picked up without your receipt.",
