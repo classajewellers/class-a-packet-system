@@ -69,6 +69,13 @@ export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate, sho
     (q) => showConverted || q.status !== "converted"
   );
 
+  // Debug: log what the board receives so Vercel / browser console shows the count
+  console.log(
+    "[QuotePipelineBoard] total:", localQuotes.length,
+    "| visible:", visibleQuotes.length,
+    "| statuses:", Array.from(new Set(localQuotes.map((q) => q.status))).join(", ") || "none"
+  );
+
   async function handleDragEnd(result: DropResult) {
     const { source, destination, draggableId } = result;
     if (!destination) return;

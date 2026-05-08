@@ -22,13 +22,15 @@ export async function GET(): Promise<NextResponse> {
     return NextResponse.json({ error: msg, quotes: [] }, { status: 500 });
   }
 
+  console.log("[quotes] Running: SELECT * FROM quotes ORDER BY created_at DESC LIMIT 500");
+
   const { data, error } = await supabase
     .from("quotes")
     .select("*")
     .order("created_at", { ascending: false })
     .limit(500);
 
-  console.log("[quotes] Query result:", data?.length, error);
+  console.log("[quotes] Query result:", data?.length ?? "null", "| error:", error?.message ?? "none");
 
   if (error) {
     console.error("[quotes] Supabase fetch failed:", {

@@ -97,10 +97,16 @@ export default function AdminPage() {
     setQuotesLoading(true);
     try {
       const res = await fetch("/api/quotes", { cache: "no-store" });
-      if (!res.ok) throw new Error("Failed to fetch quotes");
       const json = await res.json();
+      console.log("Quotes fetched:", json.quotes?.length, "| ok:", res.ok, "| error:", json.error ?? null);
+      if (!res.ok) {
+        console.error("[admin] fetchQuotes API error:", json.error, json.details ?? "");
+        setQuotes([]);
+        return;
+      }
       setQuotes(json.quotes ?? []);
-    } catch {
+    } catch (err) {
+      console.error("[admin] fetchQuotes network/parse error:", err);
       setQuotes([]);
     } finally {
       setQuotesLoading(false);
@@ -125,10 +131,16 @@ export default function AdminPage() {
   const silentRefreshQuotes = useCallback(async () => {
     try {
       const res = await fetch("/api/quotes", { cache: "no-store" });
-      if (!res.ok) return;
       const json = await res.json();
+      if (!res.ok) {
+        console.error("[admin] silentRefreshQuotes error:", json.error);
+        return;
+      }
+      console.log("Quotes fetched:", json.quotes?.length);
       if (json.quotes) setQuotes(json.quotes);
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.error("[admin] silentRefreshQuotes network error:", err);
+    }
   }, []);
 
   // ── Initial load — debounced on search/date changes ──────────────────────
