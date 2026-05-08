@@ -14,39 +14,18 @@ interface ZapierFlatOrder {
   createdAt?: string;
   orderNumber?: string;
   customerEmail?: string;
+  customerPhone?: string;
   totalPrice?: number | string;
-  shippingFirstName?: string;
-  shippingLastName?: string;
+  shippingFirstName?: string;  // full name — split on first space for first/last
   shippingAddress1?: string;
   shippingCity?: string;
-  shippingProvinceCode?: string;
+  shippingProvinceCode?: string;  // full province name e.g. "South Australia"
   shippingPostalCode?: string;
   shippingPhone?: string;
   lineItems?: string;       // raw text blob
   shippingLines?: string;   // raw text blob
-  note?: string;
+  orderNote?: string;
   [key: string]: unknown;   // allow extra fields without TS errors
-}
-
-// ── Name splitting ────────────────────────────────────────────────────────────
-// Sometimes Zapier puts the full name in shippingFirstName with nothing in Last.
-
-function splitName(
-  first: string | undefined,
-  last: string | undefined
-): { firstName: string | null; lastName: string | null } {
-  const f = (first ?? "").trim();
-  const l = (last ?? "").trim();
-
-  if (f && l) return { firstName: f, lastName: l };
-
-  // Only one field has data — split on first space
-  const full = f || l;
-  if (!full) return { firstName: null, lastName: null };
-
-  const idx = full.indexOf(" ");
-  if (idx === -1) return { firstName: full, lastName: null };
-  return { firstName: full.slice(0, idx), lastName: full.slice(idx + 1) };
 }
 
 // ── Custom attribute helpers ──────────────────────────────────────────────────
@@ -274,21 +253,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // ── 4. Build name fields ──────────────────────────────────────────────────
-  const { firstName, lastName } = splitName(
-    body.shippingFirstName,
-    body.shippingLastName
-  );
+  // ── 4. Map fields ────────────────────────────────────────────────────────
+  // shippingFirstName holds the full name — split on the first space
+  const firstName = (body.shippingFirstName ?? "").split(" ")[0] || null;
+  const lastName  = (body.shippingFirstName ?? "").split(" ").slice(1).join(" ") || null;
 
-  const totalCharges =
-    typeof body.totalPrice === "number"
-      ? body.totalPrice
-      : parseFloat(String(body.totalPrice ?? "0"));
+  const email       = body.customerEmail ?? null;
+  const phone       = body.shippingPhone ?? body.customerPhone ?? null;
+  const street      = body.shippingAddress1 ?? null;
+  const suburb      = body.shippingCity ?? null;
+  const state       = body.shippingProvinceCode ?? null;
+  const postcode    = body.shippingPostalCode ?? null;
+  const orderNum    = body.orderNumber ?? null;
+  const total       = parseFloat(String(body.totalPrice ?? "0")) || 0;
+  const note        = body.orderNote || null;
 
   console.log("[shopify/webhook] Parsed:", {
-    orderNumber:    body.orderNumber,
-    customerEmail:  body.customerEmail,
-    totalCharges,
+    orderNumber:    orderNum,
+    customerEmail:  email,
+    firstName,
+    lastName,
+    total,
     lineItemCount:  lineItems.length,
     shippingMethod,
     dispatchDate,
@@ -300,22 +285,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     packet_type:         "online_order",
     customer_first_name: firstName,
     customer_last_name:  lastName,
-    customer_email:      body.customerEmail      ?? null,
-    customer_phone:      body.shippingPhone      ?? null,
-    customer_street:     body.shippingAddress1   ?? null,
-    customer_suburb:     body.shippingCity       ?? null,
-    customer_state:      body.shippingProvinceCode ?? null,
-    customer_postcode:   body.shippingPostalCode ?? null,
-    articles:            articles                || null,
-    items_ordered:       articles                || null,
-    instructions:        body.note               || null,
-    total_charges:       isNaN(totalCharges)     ? null : totalCharges,
+    customer_email:      email,
+    customer_phone:      phone,
+    customer_street:     street,
+    customer_suburb:     suburb,
+    customer_state:      state,
+    customer_postcode:   postcode,
+    articles:            articles  || null,
+    items_ordered:       articles  || null,
+    instructions:        note,
+    total_charges:       total     || null,
     deposit:             null,
     balance:             null,
     in_date:             todayISO(),
     due_date:            dispatchDate,
     staff_member:        "Online Store",
-    order_number:        body.orderNumber         ?? null,
+    order_number:        orderNum,
     shipping_method:     shippingMethod,
     shipping_address_same: true,
     shipping_street:     null,
