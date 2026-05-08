@@ -162,19 +162,21 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
 
         <div className="flex-1 px-5 py-4 space-y-6">
 
-          {/* ── DUE DATE — prominent hero field ── */}
-          <div className="rounded-2xl bg-black p-4">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Due Date</p>
-            <input
-              type="date"
-              value={local.due_date ?? ""}
-              onChange={(e) => {
-                set("due_date", e.target.value || null);
-                patch({ due_date: e.target.value || null });
-              }}
-              className="w-full rounded-xl border-0 bg-white px-4 py-3 text-lg font-bold text-black focus:outline-none focus:ring-2 focus:ring-white"
-            />
-          </div>
+          {/* ── DISPATCH DATE (online orders) — top hero, black border ── */}
+          {isOnline && (
+            <div className="rounded-2xl border-2 border-black bg-white p-4">
+              <p className="text-xs font-bold text-black uppercase tracking-widest mb-2">📦 Dispatch Date</p>
+              <input
+                type="date"
+                value={local.due_date ?? ""}
+                onChange={(e) => {
+                  set("due_date", e.target.value || null);
+                  patch({ due_date: e.target.value || null });
+                }}
+                className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-lg font-bold text-black focus:outline-none focus:ring-2 focus:ring-black"
+              />
+            </div>
+          )}
 
           {/* ── Reprint Label ── */}
           <button
@@ -186,6 +188,22 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
             </svg>
             Reprint Label
           </button>
+
+          {/* ── DUE DATE (non-online orders) — black hero ── */}
+          {!isOnline && (
+            <div className="rounded-2xl bg-black p-4">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Due Date</p>
+              <input
+                type="date"
+                value={local.due_date ?? ""}
+                onChange={(e) => {
+                  set("due_date", e.target.value || null);
+                  patch({ due_date: e.target.value || null });
+                }}
+                className="w-full rounded-xl border-0 bg-white px-4 py-3 text-lg font-bold text-black focus:outline-none focus:ring-2 focus:ring-white"
+              />
+            </div>
+          )}
 
           {/* ── Internal Notes ── */}
           <Section title="Internal Notes">

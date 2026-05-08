@@ -88,6 +88,16 @@ function parseLineItems(raw: any): string {
     if (!nameMatch) continue;
     const name = nameMatch[1].trim();
 
+    // Extract variantTitle — append if meaningful (not "Default Title" / "None")
+    const variantMatch = block.match(/^variantTitle:\s*(.+)$/m);
+    const variantRaw   = variantMatch?.[1]?.trim() ?? "";
+    const isDefaultVariant =
+      !variantRaw ||
+      variantRaw.toLowerCase() === "default title" ||
+      variantRaw.toLowerCase() === "none" ||
+      variantRaw.toLowerCase() === "null";
+    const displayName = isDefaultVariant ? name : `${name} - ${variantRaw}`;
+
     // Skip free gifts and product add-ons (zero-price add-ons)
     if (name.toLowerCase().includes("free gift")) continue;
 
@@ -105,9 +115,11 @@ function parseLineItems(raw: any): string {
     // Values are trimmed of all surrounding whitespace including newlines
     // (Zapier can send values like '\n\n Yellow Gold\n\n').
     const meaningfulKeys = [
-      "metal", "stone", "size", "colour", "color",
-      "engraving", "personalisation", "chain", "initial",
-      "birthstone", "pendant", "number", "font", "text", "confirmation",
+      "metal", "carat", "karat", "gold", "colour", "color",
+      "stone", "size", "engraving", "personalisation", "chain",
+      "initial", "birthstone", "pendant", "number", "font", "text",
+      "finish", "width", "length", "weight", "alloy", "plating",
+      "rhodium", "confirmation",
     ];
 
     const attrMatches: RegExpExecArray[] = [];
@@ -131,7 +143,7 @@ function parseLineItems(raw: any): string {
       .map((m) => `  ${m[1]}: ${m[2].trim()}`)
       .join("\n");
 
-    results.push(`${qty}x ${name}${attrs ? "\n" + attrs : ""}`);
+    results.push(`${qty}x ${displayName}${attrs ? "\n" + attrs : ""}`);
   }
 
   return results.join("\n");
