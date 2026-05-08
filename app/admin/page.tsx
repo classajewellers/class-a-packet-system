@@ -222,6 +222,11 @@ export default function AdminPage() {
     setSelectedQuote(updated);
   }
 
+  function handleUpdatePacket(updated: Packet) {
+    setPackets((prev) => prev.map((p) => p.id === updated.id ? updated : p));
+    setSelectedPacket(updated);
+  }
+
   function handleDeletePacket(id: string) {
     setPackets((prev) => prev.filter((p) => p.id !== id));
     setSelectedPacketIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
@@ -311,6 +316,7 @@ export default function AdminPage() {
           packet={selectedPacket}
           onClose={() => setSelectedPacket(null)}
           onDelete={handleDeletePacket}
+          onUpdate={handleUpdatePacket}
           onRetry={handleRetry}
         />
       )}
