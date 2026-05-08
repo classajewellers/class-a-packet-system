@@ -46,8 +46,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const { data, error, count } = await dbQuery;
 
   if (error) {
+    console.error("[admin/packets] Supabase error:", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  console.log(
+    `[admin/packets] Returned ${(data ?? []).length} record(s) | type=${query.type ?? "all"} search=${query.search ?? ""}`
+  );
 
   return NextResponse.json({ packets: (data ?? []) as Packet[], count });
 }

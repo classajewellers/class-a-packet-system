@@ -124,7 +124,8 @@ export default function AdminPage() {
       if (!res.ok) throw new Error("Failed to fetch Shopify orders");
       const json = await res.json();
       const all: Packet[] = json.packets ?? [];
-      setShopifyOrders(all.filter((p) => p.order_source === "Shopify"));
+      console.log("[admin] fetchShopifyOrders: API returned", all.length, "online_order packets");
+      setShopifyOrders(all);
     } catch {
       setShopifyOrders([]);
     } finally {
@@ -162,7 +163,7 @@ export default function AdminPage() {
       if (!res.ok) return;
       const json = await res.json();
       const all: Packet[] = json.packets ?? [];
-      setShopifyOrders(all.filter((p) => p.order_source === "Shopify"));
+      setShopifyOrders(all);
     } catch { /* ignore */ }
   }, []);
 
@@ -213,7 +214,7 @@ export default function AdminPage() {
         (payload) => {
           const row = payload.new as Packet;
           setPackets((prev) => prev.some((p) => p.id === row.id) ? prev : [row, ...prev]);
-          if (row.packet_type === "online_order" && row.order_source === "Shopify") {
+          if (row.packet_type === "online_order") {
             setShopifyOrders((prev) => prev.some((p) => p.id === row.id) ? prev : [row, ...prev]);
           }
         }
