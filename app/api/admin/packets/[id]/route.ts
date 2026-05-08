@@ -1,23 +1,38 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic'
 
-export async function DELETE(
-  _req: NextRequest,
-  { params }: { params: { id: string } }
-): Promise<NextResponse> {
-  const { id } = params;
-  if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const body = await request.json()
+    const supabase = createServerSupabaseClient()
 
-  const supabase = createServerSupabaseClient();
-  const { error } = await supabase.from("packets").delete().eq("id", id);
+    const { data, error } = await supabase
+      .from('packets')
+      .update(body)
+      .eq('id', params.id)
+      .select()
+      .single()
 
-  if (error) {
-    console.error("[packets/delete] Supabase error:", error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      console.error('Packet update error:', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ packet: data })
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
   }
+}
 
-  console.log("[packets/delete] Deleted packet:", id);
-  return NextResponse.json({ ok: true });
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const supabase = createServerSupabaseClient()
+    const { error } = await supabase.from('packets').delete().eq('id', params.id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
 }

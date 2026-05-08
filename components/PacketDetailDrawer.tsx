@@ -38,10 +38,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function FieldLabel({ label, className = "" }: { label: string; className?: string }) {
+function Label({ children, bold }: { children: React.ReactNode; bold?: boolean }) {
   return (
-    <label className={`block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1 ${className}`}>
-      {label}
+    <label className={`block text-xs uppercase tracking-wide mb-1 ${bold ? "font-bold text-black" : "font-semibold text-gray-400"}`}>
+      {children}
     </label>
   );
 }
@@ -53,44 +53,41 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isOnline = local.packet_type === "online_order";
-  const internalNotes = (local.packet_data?.internal_notes as string | undefined) ?? "";
 
-  // ── Patch helper ─────────────────────────────────────────────────────────
+  // ── PATCH /api/admin/packets/[id] ────────────────────────────────────────
   const patch = useCallback(async (updates: Partial<Packet>) => {
     setSaveState("saving");
     try {
-      const res = await fetch("/api/admin/packets", {
+      const res = await fetch(`/api/admin/packets/${local.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: local.id, updates }),
+        body: JSON.stringify(updates),
       });
-      if (!res.ok) throw new Error("Failed");
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error ?? "Request failed");
+      }
       const json = await res.json() as { packet: Packet };
       setLocal(json.packet);
       onUpdate(json.packet);
       setSaveState("saved");
       if (savedTimer.current) clearTimeout(savedTimer.current);
       savedTimer.current = setTimeout(() => setSaveState("idle"), 2000);
-    } catch {
+    } catch (err) {
+      console.error("[PacketDetailDrawer] patch failed:", err);
       setSaveState("error");
       if (savedTimer.current) clearTimeout(savedTimer.current);
       savedTimer.current = setTimeout(() => setSaveState("idle"), 3000);
     }
   }, [local.id, onUpdate]);
 
-  // ── Field change helpers ──────────────────────────────────────────────────
+  // Local update + blur save
   function set<K extends keyof Packet>(key: K, value: Packet[K]) {
     setLocal((prev) => ({ ...prev, [key]: value }));
   }
 
-  function onBlur<K extends keyof Packet>(key: K, value: Packet[K]) {
+  function saveOnBlur<K extends keyof Packet>(key: K, value: Packet[K]) {
     patch({ [key]: value });
-  }
-
-  function handleInternalNotesBlur(value: string) {
-    const updated = { ...(local.packet_data ?? {}), internal_notes: value };
-    setLocal((prev) => ({ ...prev, packet_data: updated }));
-    patch({ packet_data: updated });
   }
 
   // ── Delete ────────────────────────────────────────────────────────────────
@@ -124,10 +121,10 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
     setTimeout(() => win.print(), 400);
   }
 
-  // Compute balance locally for display
-  const balance = ((local.total_charges ?? 0) - (local.deposit ?? 0));
+  // Compute displayed balance
+  const balance = (local.total_charges ?? 0) - (local.deposit ?? 0);
 
-  const inputClass =
+  const field =
     "w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-black focus:bg-white transition-colors";
 
   const saveIndicator =
@@ -155,10 +152,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
           </div>
           <div className="flex items-center gap-3">
             {saveIndicator}
-            <button
-              onClick={onClose}
-              className="rounded-full p-2 hover:bg-gray-100 transition-colors"
-            >
+            <button onClick={onClose} className="rounded-full p-2 hover:bg-gray-100 transition-colors">
               <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -168,10 +162,24 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
 
         <div className="flex-1 px-5 py-4 space-y-6">
 
+          {/* ── DUE DATE — prominent hero field ── */}
+          <div className="rounded-2xl bg-black p-4">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Due Date</p>
+            <input
+              type="date"
+              value={local.due_date ?? ""}
+              onChange={(e) => {
+                set("due_date", e.target.value || null);
+                patch({ due_date: e.target.value || null });
+              }}
+              className="w-full rounded-xl border-0 bg-white px-4 py-3 text-lg font-bold text-black focus:outline-none focus:ring-2 focus:ring-white"
+            />
+          </div>
+
           {/* ── Reprint Label ── */}
           <button
             onClick={handleReprintLabel}
-            className="w-full flex items-center justify-center gap-2 bg-black text-white text-sm font-semibold py-3 rounded-xl hover:bg-[#222222] active:scale-[0.98] transition-all"
+            className="w-full flex items-center justify-center gap-2 bg-gray-100 text-black text-sm font-semibold py-3 rounded-xl hover:bg-gray-200 active:scale-[0.98] transition-all"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.056 48.056 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
@@ -183,10 +191,11 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
           <Section title="Internal Notes">
             <textarea
               rows={3}
-              placeholder="Add internal notes visible only to staff…"
-              defaultValue={internalNotes}
-              onBlur={(e) => handleInternalNotesBlur(e.target.value)}
-              className={`${inputClass} resize-none`}
+              placeholder="Staff notes — not printed on labels…"
+              value={local.internal_notes ?? ""}
+              onChange={(e) => set("internal_notes", e.target.value)}
+              onBlur={(e) => saveOnBlur("internal_notes", e.target.value || null)}
+              className={`${field} resize-none`}
             />
           </Section>
 
@@ -194,167 +203,108 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
           <Section title="Customer">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <FieldLabel label="First Name" />
+                <Label>First Name</Label>
                 <input
                   type="text"
                   value={local.customer_first_name ?? ""}
                   onChange={(e) => set("customer_first_name", e.target.value)}
-                  onBlur={(e) => onBlur("customer_first_name", e.target.value)}
-                  className={inputClass}
+                  onBlur={(e) => saveOnBlur("customer_first_name", e.target.value || null)}
+                  className={field}
                 />
               </div>
               <div>
-                <FieldLabel label="Last Name" />
+                <Label>Last Name</Label>
                 <input
                   type="text"
                   value={local.customer_last_name ?? ""}
                   onChange={(e) => set("customer_last_name", e.target.value)}
-                  onBlur={(e) => onBlur("customer_last_name", e.target.value)}
-                  className={inputClass}
+                  onBlur={(e) => saveOnBlur("customer_last_name", e.target.value || null)}
+                  className={field}
                 />
               </div>
               <div>
-                <FieldLabel label="Phone" />
+                <Label>Phone</Label>
                 <input
                   type="text"
                   value={local.customer_phone ?? ""}
                   onChange={(e) => set("customer_phone", e.target.value)}
-                  onBlur={(e) => onBlur("customer_phone", e.target.value)}
-                  className={inputClass}
+                  onBlur={(e) => saveOnBlur("customer_phone", e.target.value || null)}
+                  className={field}
                 />
               </div>
               <div>
-                <FieldLabel label="Email" />
+                <Label>Email</Label>
                 <input
                   type="email"
                   value={local.customer_email ?? ""}
                   onChange={(e) => set("customer_email", e.target.value)}
-                  onBlur={(e) => onBlur("customer_email", e.target.value)}
-                  className={inputClass}
+                  onBlur={(e) => saveOnBlur("customer_email", e.target.value || null)}
+                  className={field}
                 />
               </div>
               <div className="col-span-2">
-                <FieldLabel label="Street" />
+                <Label>Street</Label>
                 <input
                   type="text"
                   value={local.customer_street ?? ""}
                   onChange={(e) => set("customer_street", e.target.value)}
-                  onBlur={(e) => onBlur("customer_street", e.target.value)}
-                  className={inputClass}
+                  onBlur={(e) => saveOnBlur("customer_street", e.target.value || null)}
+                  className={field}
                 />
               </div>
               <div>
-                <FieldLabel label="Suburb" />
+                <Label>Suburb</Label>
                 <input
                   type="text"
                   value={local.customer_suburb ?? ""}
                   onChange={(e) => set("customer_suburb", e.target.value)}
-                  onBlur={(e) => onBlur("customer_suburb", e.target.value)}
-                  className={inputClass}
+                  onBlur={(e) => saveOnBlur("customer_suburb", e.target.value || null)}
+                  className={field}
                 />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <FieldLabel label="State" />
+                  <Label>State</Label>
                   <input
                     type="text"
                     value={local.customer_state ?? ""}
                     onChange={(e) => set("customer_state", e.target.value)}
-                    onBlur={(e) => onBlur("customer_state", e.target.value)}
-                    className={inputClass}
+                    onBlur={(e) => saveOnBlur("customer_state", e.target.value || null)}
+                    className={field}
                   />
                 </div>
                 <div>
-                  <FieldLabel label="Postcode" />
+                  <Label>Postcode</Label>
                   <input
                     type="text"
                     value={local.customer_postcode ?? ""}
                     onChange={(e) => set("customer_postcode", e.target.value)}
-                    onBlur={(e) => onBlur("customer_postcode", e.target.value)}
-                    className={inputClass}
+                    onBlur={(e) => saveOnBlur("customer_postcode", e.target.value || null)}
+                    className={field}
                   />
                 </div>
               </div>
-              {local.customer_number && (
+              {(local.customer_number !== null && local.customer_number !== undefined) && (
                 <div>
-                  <FieldLabel label="Customer #" />
+                  <Label>Customer #</Label>
                   <input
                     type="text"
                     value={local.customer_number ?? ""}
                     onChange={(e) => set("customer_number", e.target.value)}
-                    onBlur={(e) => onBlur("customer_number", e.target.value)}
-                    className={inputClass}
+                    onBlur={(e) => saveOnBlur("customer_number", e.target.value || null)}
+                    className={field}
                   />
                 </div>
               )}
-              {local.stock_number && (
+              {(local.stock_number !== null && local.stock_number !== undefined) && (
                 <div>
-                  <FieldLabel label="Stock #" />
+                  <Label>Stock #</Label>
                   <input
                     type="text"
                     value={local.stock_number ?? ""}
                     onChange={(e) => set("stock_number", e.target.value)}
-                    onBlur={(e) => onBlur("stock_number", e.target.value)}
-                    className={inputClass}
-                  />
-                </div>
-              )}
-            </div>
-          </Section>
-
-          {/* ── Dates ── */}
-          <Section title="Dates">
-            <div className="grid grid-cols-2 gap-3">
-              {/* Due date prominent */}
-              <div className="col-span-2">
-                <FieldLabel label="Due Date" className="text-black font-bold" />
-                <input
-                  type="date"
-                  value={local.due_date ?? ""}
-                  onChange={(e) => {
-                    set("due_date", e.target.value || null);
-                    patch({ due_date: e.target.value || null });
-                  }}
-                  className={`${inputClass} border-black ring-0 font-semibold`}
-                />
-              </div>
-              <div>
-                <FieldLabel label="In Date" />
-                <input
-                  type="date"
-                  value={local.in_date ?? ""}
-                  onChange={(e) => {
-                    set("in_date", e.target.value || null);
-                    patch({ in_date: e.target.value || null });
-                  }}
-                  className={inputClass}
-                />
-              </div>
-              {local.from_date !== undefined && (
-                <div>
-                  <FieldLabel label="From Date" />
-                  <input
-                    type="date"
-                    value={local.from_date ?? ""}
-                    onChange={(e) => {
-                      set("from_date", e.target.value || null);
-                      patch({ from_date: e.target.value || null });
-                    }}
-                    className={inputClass}
-                  />
-                </div>
-              )}
-              {local.collected_date !== undefined && (
-                <div>
-                  <FieldLabel label="Collected" />
-                  <input
-                    type="date"
-                    value={local.collected_date ?? ""}
-                    onChange={(e) => {
-                      set("collected_date", e.target.value || null);
-                      patch({ collected_date: e.target.value || null });
-                    }}
-                    className={inputClass}
+                    onBlur={(e) => saveOnBlur("stock_number", e.target.value || null)}
+                    className={field}
                   />
                 </div>
               )}
@@ -365,23 +315,65 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
           <Section title="Articles & Instructions">
             <div className="space-y-3">
               <div>
-                <FieldLabel label="Articles" />
+                <Label>Articles</Label>
                 <textarea
                   rows={2}
                   value={local.articles ?? ""}
                   onChange={(e) => set("articles", e.target.value)}
-                  onBlur={(e) => onBlur("articles", e.target.value)}
-                  className={`${inputClass} resize-none`}
+                  onBlur={(e) => saveOnBlur("articles", e.target.value || null)}
+                  className={`${field} resize-none`}
                 />
               </div>
               <div>
-                <FieldLabel label="Instructions" />
+                <Label>Instructions</Label>
                 <textarea
                   rows={3}
                   value={local.instructions ?? ""}
                   onChange={(e) => set("instructions", e.target.value)}
-                  onBlur={(e) => onBlur("instructions", e.target.value)}
-                  className={`${inputClass} resize-none`}
+                  onBlur={(e) => saveOnBlur("instructions", e.target.value || null)}
+                  className={`${field} resize-none`}
+                />
+              </div>
+            </div>
+          </Section>
+
+          {/* ── Other Dates ── */}
+          <Section title="Other Dates">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>In Date</Label>
+                <input
+                  type="date"
+                  value={local.in_date ?? ""}
+                  onChange={(e) => {
+                    set("in_date", e.target.value || null);
+                    patch({ in_date: e.target.value || null });
+                  }}
+                  className={field}
+                />
+              </div>
+              <div>
+                <Label>From Date</Label>
+                <input
+                  type="date"
+                  value={local.from_date ?? ""}
+                  onChange={(e) => {
+                    set("from_date", e.target.value || null);
+                    patch({ from_date: e.target.value || null });
+                  }}
+                  className={field}
+                />
+              </div>
+              <div>
+                <Label>Collected</Label>
+                <input
+                  type="date"
+                  value={local.collected_date ?? ""}
+                  onChange={(e) => {
+                    set("collected_date", e.target.value || null);
+                    patch({ collected_date: e.target.value || null });
+                  }}
+                  className={field}
                 />
               </div>
             </div>
@@ -391,33 +383,35 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
           <Section title="Pricing">
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <FieldLabel label="Total" />
+                <Label>Total ($)</Label>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
                   value={local.total_charges ?? ""}
                   onChange={(e) => set("total_charges", e.target.value === "" ? null : parseFloat(e.target.value))}
-                  onBlur={(e) => onBlur("total_charges", e.target.value === "" ? null : parseFloat(e.target.value))}
-                  className={inputClass}
+                  onBlur={(e) => saveOnBlur("total_charges", e.target.value === "" ? null : parseFloat(e.target.value))}
+                  className={field}
                 />
               </div>
               <div>
-                <FieldLabel label="Deposit" />
+                <Label>Deposit ($)</Label>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
                   value={local.deposit ?? ""}
                   onChange={(e) => set("deposit", e.target.value === "" ? null : parseFloat(e.target.value))}
-                  onBlur={(e) => onBlur("deposit", e.target.value === "" ? null : parseFloat(e.target.value))}
-                  className={inputClass}
+                  onBlur={(e) => saveOnBlur("deposit", e.target.value === "" ? null : parseFloat(e.target.value))}
+                  className={field}
                 />
               </div>
               <div>
-                <FieldLabel label="Balance" />
-                <div className={`${inputClass} bg-gray-100 text-gray-500 cursor-not-allowed`}>
-                  {balance > 0 ? `$${balance.toFixed(2)}` : balance < 0 ? `-$${Math.abs(balance).toFixed(2)}` : "—"}
+                <Label>Balance</Label>
+                <div className="w-full rounded-lg border border-gray-100 bg-gray-100 px-3 py-2 text-sm text-gray-500 select-none">
+                  {(local.total_charges || local.deposit)
+                    ? `$${balance.toFixed(2)}`
+                    : "—"}
                 </div>
               </div>
             </div>
@@ -426,15 +420,15 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
           {/* ── Staff & Referral ── */}
           <Section title="Staff & Referral">
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <FieldLabel label="Staff Member" />
+              <div className="col-span-2">
+                <Label>Staff Member</Label>
                 <select
                   value={local.staff_member ?? ""}
                   onChange={(e) => {
                     set("staff_member", e.target.value || null);
                     patch({ staff_member: e.target.value || null });
                   }}
-                  className={inputClass}
+                  className={field}
                 >
                   <option value="">— Unassigned —</option>
                   {STAFF_MEMBERS.map((s) => (
@@ -443,155 +437,153 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                 </select>
               </div>
               <div>
-                <FieldLabel label="Referral Source" />
+                <Label>Referral Source</Label>
                 <input
                   type="text"
                   value={local.referral_source ?? ""}
                   onChange={(e) => set("referral_source", e.target.value)}
-                  onBlur={(e) => onBlur("referral_source", e.target.value || null)}
-                  className={inputClass}
+                  onBlur={(e) => saveOnBlur("referral_source", e.target.value || null)}
+                  className={field}
                 />
               </div>
               <div>
-                <FieldLabel label="Occasion" />
+                <Label>Occasion</Label>
                 <input
                   type="text"
                   value={local.occasion ?? ""}
                   onChange={(e) => set("occasion", e.target.value)}
-                  onBlur={(e) => onBlur("occasion", e.target.value || null)}
-                  className={inputClass}
+                  onBlur={(e) => saveOnBlur("occasion", e.target.value || null)}
+                  className={field}
                 />
               </div>
-              {local.repair_tracker_number !== undefined && (
-                <div>
-                  <FieldLabel label="Repair Tracker #" />
-                  <input
-                    type="text"
-                    value={local.repair_tracker_number ?? ""}
-                    onChange={(e) => set("repair_tracker_number", e.target.value)}
-                    onBlur={(e) => onBlur("repair_tracker_number", e.target.value || null)}
-                    className={inputClass}
-                  />
-                </div>
-              )}
               <div>
-                <FieldLabel label="Signed By" />
+                <Label>Repair Tracker #</Label>
+                <input
+                  type="text"
+                  value={local.repair_tracker_number ?? ""}
+                  onChange={(e) => set("repair_tracker_number", e.target.value)}
+                  onBlur={(e) => saveOnBlur("repair_tracker_number", e.target.value || null)}
+                  className={field}
+                />
+              </div>
+              <div>
+                <Label>Signed By</Label>
                 <input
                   type="text"
                   value={local.signed_by ?? ""}
                   onChange={(e) => set("signed_by", e.target.value)}
-                  onBlur={(e) => onBlur("signed_by", e.target.value || null)}
-                  className={inputClass}
+                  onBlur={(e) => saveOnBlur("signed_by", e.target.value || null)}
+                  className={field}
                 />
               </div>
             </div>
           </Section>
 
-          {/* ── Online Order fields ── */}
+          {/* ── Online Order ── */}
           {isOnline && (
             <Section title="Online Order">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <FieldLabel label="Order #" />
+                  <Label>Order #</Label>
                   <input
                     type="text"
                     value={local.order_number ?? ""}
                     onChange={(e) => set("order_number", e.target.value)}
-                    onBlur={(e) => onBlur("order_number", e.target.value || null)}
-                    className={inputClass}
+                    onBlur={(e) => saveOnBlur("order_number", e.target.value || null)}
+                    className={field}
                   />
                 </div>
                 <div>
-                  <FieldLabel label="Order Source" />
+                  <Label>Order Source</Label>
                   <input
                     type="text"
                     value={local.order_source ?? ""}
                     onChange={(e) => set("order_source", e.target.value)}
-                    onBlur={(e) => onBlur("order_source", e.target.value || null)}
-                    className={inputClass}
+                    onBlur={(e) => saveOnBlur("order_source", e.target.value || null)}
+                    className={field}
                   />
                 </div>
                 <div>
-                  <FieldLabel label="Shipping Method" />
+                  <Label>Shipping Method</Label>
                   <input
                     type="text"
                     value={local.shipping_method ?? ""}
                     onChange={(e) => set("shipping_method", e.target.value)}
-                    onBlur={(e) => onBlur("shipping_method", e.target.value || null)}
-                    className={inputClass}
+                    onBlur={(e) => saveOnBlur("shipping_method", e.target.value || null)}
+                    className={field}
                   />
                 </div>
                 <div>
-                  <FieldLabel label="Tracking #" />
+                  <Label>Tracking #</Label>
                   <input
                     type="text"
                     value={local.tracking_number ?? ""}
                     onChange={(e) => set("tracking_number", e.target.value)}
-                    onBlur={(e) => onBlur("tracking_number", e.target.value || null)}
-                    className={inputClass}
+                    onBlur={(e) => saveOnBlur("tracking_number", e.target.value || null)}
+                    className={field}
                   />
                 </div>
                 <div className="col-span-2">
-                  <FieldLabel label="Items Ordered" />
+                  <Label>Items Ordered</Label>
                   <textarea
                     rows={2}
                     value={local.items_ordered ?? ""}
                     onChange={(e) => set("items_ordered", e.target.value)}
-                    onBlur={(e) => onBlur("items_ordered", e.target.value || null)}
-                    className={`${inputClass} resize-none`}
+                    onBlur={(e) => saveOnBlur("items_ordered", e.target.value || null)}
+                    className={`${field} resize-none`}
                   />
                 </div>
                 <div className="col-span-2">
-                  <FieldLabel label="Order Notes" />
+                  <Label>Order Notes</Label>
                   <textarea
                     rows={2}
                     value={local.order_notes ?? ""}
                     onChange={(e) => set("order_notes", e.target.value)}
-                    onBlur={(e) => onBlur("order_notes", e.target.value || null)}
-                    className={`${inputClass} resize-none`}
+                    onBlur={(e) => saveOnBlur("order_notes", e.target.value || null)}
+                    className={`${field} resize-none`}
                   />
                 </div>
                 {!local.shipping_address_same && (
                   <>
                     <div className="col-span-2">
-                      <FieldLabel label="Shipping Street" />
+                      <Label>Shipping Street</Label>
                       <input
                         type="text"
                         value={local.shipping_street ?? ""}
                         onChange={(e) => set("shipping_street", e.target.value)}
-                        onBlur={(e) => onBlur("shipping_street", e.target.value || null)}
-                        className={inputClass}
+                        onBlur={(e) => saveOnBlur("shipping_street", e.target.value || null)}
+                        className={field}
                       />
                     </div>
                     <div>
-                      <FieldLabel label="Shipping Suburb" />
+                      <Label>Shipping Suburb</Label>
                       <input
                         type="text"
                         value={local.shipping_suburb ?? ""}
                         onChange={(e) => set("shipping_suburb", e.target.value)}
-                        onBlur={(e) => onBlur("shipping_suburb", e.target.value || null)}
-                        className={inputClass}
+                        onBlur={(e) => saveOnBlur("shipping_suburb", e.target.value || null)}
+                        className={field}
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <FieldLabel label="State" />
+                        <Label>State</Label>
                         <input
                           type="text"
                           value={local.shipping_state ?? ""}
                           onChange={(e) => set("shipping_state", e.target.value)}
-                          onBlur={(e) => onBlur("shipping_state", e.target.value || null)}
-                          className={inputClass}
+                          onBlur={(e) => saveOnBlur("shipping_state", e.target.value || null)}
+                          className={field}
                         />
                       </div>
                       <div>
-                        <FieldLabel label="Postcode" />
+                        <Label>Postcode</Label>
                         <input
                           type="text"
                           value={local.shipping_postcode ?? ""}
                           onChange={(e) => set("shipping_postcode", e.target.value)}
-                          onBlur={(e) => onBlur("shipping_postcode", e.target.value || null)}
-                          className={inputClass}
+                          onBlur={(e) => saveOnBlur("shipping_postcode", e.target.value || null)}
+                          className={field}
                         />
                       </div>
                     </div>
@@ -601,22 +593,20 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
             </Section>
           )}
 
-          {/* ── Additional packet_data fields (read-only, non-internal_notes) ── */}
-          {local.packet_data && Object.keys(local.packet_data).filter(k => k !== "internal_notes").length > 0 && (
+          {/* ── Additional packet_data (read-only) ── */}
+          {local.packet_data && Object.keys(local.packet_data).length > 0 && (
             <Section title="Additional Details">
               <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
-                {Object.entries(local.packet_data)
-                  .filter(([k]) => k !== "internal_notes")
-                  .map(([k, v]) => (
-                    <div key={k}>
-                      <dt className="text-xs text-gray-400 uppercase tracking-wide font-semibold">
-                        {k.replace(/_/g, " ")}
-                      </dt>
-                      <dd className="text-sm text-black mt-0.5">
-                        {Array.isArray(v) ? v.join(", ") : typeof v === "boolean" ? (v ? "Yes" : "No") : String(v ?? "")}
-                      </dd>
-                    </div>
-                  ))}
+                {Object.entries(local.packet_data).map(([k, v]) => (
+                  <div key={k}>
+                    <dt className="text-xs text-gray-400 uppercase tracking-wide font-semibold">
+                      {k.replace(/_/g, " ")}
+                    </dt>
+                    <dd className="text-sm text-black mt-0.5">
+                      {Array.isArray(v) ? v.join(", ") : typeof v === "boolean" ? (v ? "Yes" : "No") : String(v ?? "")}
+                    </dd>
+                  </div>
+                ))}
               </dl>
             </Section>
           )}

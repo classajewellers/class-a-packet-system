@@ -178,6 +178,9 @@ export interface Packet {
   order_source: string | null;
 
   packet_data: Record<string, unknown> | null;
+
+  // Staff notes — internal only, not printed on labels
+  internal_notes: string | null;
 }
 
 // ─────────────────────────────────────────────
