@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { generateReferenceNumber } from "@/lib/referenceNumber";
@@ -16,197 +17,177 @@ interface ZapierFlatOrder {
   customerEmail?: string;
   customerPhone?: string;
   totalPrice?: number | string;
-  shippingFirstName?: string;  // full name — split on first space for first/last
+  shippingFirstName?: string;      // full name — split on first space
   shippingAddress1?: string;
   shippingCity?: string;
-  shippingProvinceCode?: string;  // full province name e.g. "South Australia"
+  shippingProvinceCode?: string;   // full province name e.g. "South Australia"
   shippingPostalCode?: string;
   shippingPhone?: string;
-  lineItems?: string;       // raw text blob
-  shippingLines?: string;   // raw text blob
+  lineItems?: unknown;             // array OR raw text blob
+  shippingLines?: unknown;         // array OR raw text blob
   orderNote?: string;
-  [key: string]: unknown;   // allow extra fields without TS errors
+  [key: string]: unknown;
 }
 
-// ── Custom attribute helpers ──────────────────────────────────────────────────
-
-type AttrMap = Record<string, string>;
-
-/**
- * Parse Shopify customAttributes / properties from various formats:
- *   - JSON array: [{"key":"Metal","value":"Gold"}, ...]
- *   - JSON array: [{"name":"Metal","value":"Gold"}, ...]  (Shopify properties)
- *   - Text pairs: "Metal: Gold, Personalisation: John"
- */
-function parseAttrs(raw: string | null | undefined): AttrMap {
-  if (!raw) return {};
-  const s = raw.trim();
-  if (!s) return {};
-
-  // Try JSON array
-  try {
-    const arr = JSON.parse(s);
-    if (Array.isArray(arr)) {
-      return Object.fromEntries(
-        arr
-          .filter((a) => (a.key || a.name) && a.value != null)
-          .map((a) => [String(a.key ?? a.name).trim(), String(a.value).trim()])
-      );
-    }
-  } catch { /* fall through */ }
-
-  // Text: "Key: Value, Key2: Value2" or "Key: Value\nKey2: Value2"
-  const map: AttrMap = {};
-  const regex = /([^:,\n]+):\s*([^,\n]+)/g;
-  let m: RegExpExecArray | null;
-  while ((m = regex.exec(s)) !== null) {
-    map[m[1].trim()] = m[2].trim();
-  }
-  return map;
-}
-
-// ── Line item parsing ─────────────────────────────────────────────────────────
-
-interface ParsedLineItem {
-  title: string;
-  quantity: number;
-  price: number;
-  attrs: AttrMap;
-}
-
-/**
- * Parse the lineItems text blob Zapier sends.
- * Attempts JSON first, then falls back to line-by-line key:value parsing.
- * Shopify line items have either `customAttributes` or `properties` for extras.
- */
-function parseLineItems(raw: string | undefined): ParsedLineItem[] {
-  if (!raw) return [];
-  const s = raw.trim();
-  if (!s) return [];
-
-  // ── JSON array ──
-  try {
-    const arr = JSON.parse(s);
-    if (Array.isArray(arr)) {
-      return arr.map((item) => ({
-        title:    String(item.title ?? "").trim(),
-        quantity: Number(item.quantity ?? 1),
-        price:    parseFloat(String(item.price ?? "0")),
-        attrs:    parseAttrs(
-          item.customAttributes
-            ? JSON.stringify(item.customAttributes)
-            : item.properties
-            ? JSON.stringify(item.properties)
-            : null
-        ),
-      }));
-    }
-  } catch { /* fall through */ }
-
-  // ── Text block parsing ──
-  // Split blocks on blank lines or "---" separators
-  const blocks = s.split(/\n\s*\n|---+/).filter((b) => b.trim());
-
-  return blocks.map((block) => {
-    const get = (key: string) =>
-      block.match(new RegExp(`${key}:\\s*(.+)`, "i"))?.[1]?.trim() ?? "";
-
-    const title    = get("title");
-    const quantity = parseInt(get("quantity") || "1") || 1;
-    const price    = parseFloat(get("price") || "0") || 0;
-
-    // Look for customAttributes or properties line
-    const attrsRaw =
-      block.match(/customAttributes:\s*(.+)/i)?.[1] ??
-      block.match(/properties:\s*(.+)/i)?.[1] ??
-      null;
-
-    return { title, quantity, price, attrs: parseAttrs(attrsRaw) };
-  }).filter((i) => i.title);
-}
-
-// ── Format articles string for the label/admin ────────────────────────────────
+// ── Line items → formatted articles string ────────────────────────────────────
 
 const MEANINGFUL_ATTR_KEYS = [
-  "metal", "stone", "size", "colour", "color", "engraving", "personalisation",
-  "personalization", "number of pendants", "font", "chain length", "finish",
+  "metal", "stone", "size", "colour", "color", "engraving", "pendant",
+  "birthstone", "initial", "personalisation", "personalization", "chain",
+  "finish", "font", "number of pendants", "estimated dispatch",
 ];
 
-function formatArticles(items: ParsedLineItem[]): string {
-  const lines: string[] = [];
+function parseLineItems(lineItems: any): string {
+  if (!lineItems) return "";
 
-  for (const item of items) {
-    // Skip free gifts and zero-price items
-    if (
-      item.title.toLowerCase().includes("free gift") ||
-      item.price === 0
-    ) continue;
+  // ── Case 1: already an array of objects ───────────────────────────────────
+  if (Array.isArray(lineItems)) {
+    return lineItems
+      .filter((item: any) => {
+        const price = parseFloat(
+          item.price ??
+          item.originalUnitPriceSet?.shopMoney?.amount ??
+          "0"
+        );
+        const title: string = item.title ?? item.name ?? "";
+        return price > 0 && !title.toLowerCase().includes("free gift");
+      })
+      .map((item: any) => {
+        const qty: number   = item.quantity ?? 1;
+        const title: string = item.title ?? item.name ?? "";
+        const attrs: any[]  = item.customAttributes ?? item.properties ?? [];
 
-    lines.push(`${item.quantity}x ${item.title}`);
+        const attrLines = attrs
+          .filter((a: any) => {
+            const key: string = (a.key ?? a.name ?? "").toLowerCase();
+            return MEANINGFUL_ATTR_KEYS.some((k) => key.includes(k));
+          })
+          .map((a: any) => `  ${a.key ?? a.name}: ${a.value}`)
+          .join("\n");
 
-    // Append meaningful custom attributes indented below
-    for (const [key, value] of Object.entries(item.attrs)) {
-      if (!value || key.toLowerCase() === "estimated dispatch") continue;
-      const keyLower = key.toLowerCase();
-      if (MEANINGFUL_ATTR_KEYS.some((k) => keyLower.includes(k))) {
-        lines.push(`  ${key}: ${value}`);
-      }
-    }
+        return `${qty}x ${title}${attrLines ? "\n" + attrLines : ""}`;
+      })
+      .join("\n");
   }
 
-  return lines.join("\n");
+  // ── Case 2: string — try JSON first ───────────────────────────────────────
+  if (typeof lineItems === "string") {
+    const s = lineItems.trim();
+    if (!s) return "";
+
+    try {
+      const parsed = JSON.parse(s);
+      if (Array.isArray(parsed)) return parseLineItems(parsed);
+    } catch { /* fall through to text parsing */ }
+
+    // ── Case 3: raw text blob — extract title/quantity via regex ─────────────
+    const items: string[] = [];
+
+    // Collect all title and quantity matches using exec loops (no matchAll)
+    const titleMatches: string[] = [];
+    const qtyMatches: string[] = [];
+    const nameMatches: string[] = [];
+
+    let m: RegExpExecArray | null;
+    const rTitle = /title:\s*([^\n]+)/gi;
+    while ((m = rTitle.exec(s)) !== null) titleMatches.push(m[1].trim());
+    const rQty = /quantity:\s*(\d+)/gi;
+    while ((m = rQty.exec(s)) !== null) qtyMatches.push(m[1]);
+    const rName = /name:\s*([^\n]+)/gi;
+    while ((m = rName.exec(s)) !== null) nameMatches.push(m[1].trim());
+
+    for (let i = 0; i < titleMatches.length; i++) {
+      const title = titleMatches[i];
+      if (title.toLowerCase().includes("free gift")) continue;
+      const qty = qtyMatches[i] ?? "1";
+      items.push(`${qty}x ${title}`);
+    }
+
+    // Fallback: if title matching found nothing, try name
+    if (items.length === 0) {
+      for (const name of nameMatches) {
+        if (!name.toLowerCase().includes("free gift")) {
+          items.push(`1x ${name}`);
+        }
+      }
+    }
+
+    return items.join("\n");
+  }
+
+  return "";
 }
 
 // ── Shipping method extraction ────────────────────────────────────────────────
 
-function extractShippingMethod(raw: string | undefined): string | null {
+function extractShippingMethod(raw: unknown): string | null {
   if (!raw) return null;
-  const s = raw.trim();
 
-  // Try JSON array first
-  try {
-    const arr = JSON.parse(s);
-    if (Array.isArray(arr) && arr.length > 0) return arr[0]?.title ?? null;
-    if (arr?.title) return String(arr.title);
-  } catch { /* fall through */ }
+  if (Array.isArray(raw) && raw.length > 0) return raw[0]?.title ?? null;
 
-  // Look for "title: ..." in text
-  const match = s.match(/title:\s*(.+?)(?:\n|$)/i);
-  return match?.[1]?.trim() ?? (s.length < 120 ? s : null);
+  if (typeof raw === "string") {
+    const s = raw.trim();
+    try {
+      const parsed = JSON.parse(s);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed[0]?.title ?? null;
+      if (parsed?.title) return String(parsed.title);
+    } catch { /* fall through */ }
+    const match = s.match(/title:\s*(.+?)(?:\n|$)/i);
+    return match?.[1]?.trim() ?? (s.length < 120 ? s : null);
+  }
+
+  return null;
 }
 
-// ── Dispatch date parsing ─────────────────────────────────────────────────────
+// ── Dispatch date extraction and parsing ──────────────────────────────────────
 
 const MONTH_MAP: Record<string, number> = {
-  january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
-  july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
+  january: 0, february: 1, march: 2,  april: 3,  may: 4,      june: 5,
+  july: 6,    august: 7,   september: 8, october: 9, november: 10, december: 11,
 };
 
-/**
- * Parse "Wednesday, May 13th" or "May 13" into YYYY-MM-DD.
- * Infers the current year; advances to next year if the date has already passed.
- */
 function parseDispatchDate(text: string | null | undefined): string | null {
   if (!text) return null;
-
   const match = text.match(/([A-Za-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?/);
   if (!match) return null;
-
   const month = MONTH_MAP[match[1].toLowerCase()];
   if (month === undefined) return null;
-
   const day = parseInt(match[2]);
   if (isNaN(day) || day < 1 || day > 31) return null;
-
   const now = new Date();
   let year = now.getFullYear();
-  const candidate = new Date(year, month, day);
+  if (new Date(year, month, day) < now) year += 1;
+  return new Date(year, month, day).toISOString().split("T")[0];
+}
 
-  // If the date is in the past, assume next year
-  if (candidate < now) year += 1;
+/** Scan raw lineItems (array or text) for an "Estimated Dispatch" attribute. */
+function extractDispatchDate(lineItems: unknown): string | null {
+  if (!lineItems) return null;
 
-  const d = new Date(year, month, day);
-  return d.toISOString().split("T")[0];
+  if (Array.isArray(lineItems)) {
+    for (const item of lineItems as any[]) {
+      const attrs: any[] = item.customAttributes ?? item.properties ?? [];
+      for (const attr of attrs) {
+        const key = String(attr.key ?? attr.name ?? "").toLowerCase();
+        if (key.includes("estimated dispatch") || key.includes("dispatch")) {
+          const date = parseDispatchDate(String(attr.value ?? ""));
+          if (date) return date;
+        }
+      }
+    }
+    return null;
+  }
+
+  if (typeof lineItems === "string") {
+    try {
+      const parsed = JSON.parse(lineItems);
+      return extractDispatchDate(parsed);
+    } catch { /* fall through */ }
+    const match = lineItems.match(/[Ee]stimated\s+[Dd]ispatch[^:]*:\s*([^\n]+)/);
+    if (match) return parseDispatchDate(match[1].trim());
+  }
+
+  return null;
 }
 
 // ── Handler ────────────────────────────────────────────────────────────────────
@@ -222,6 +203,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   console.log("Shopify webhook received:", JSON.stringify(body));
+  console.log("lineItems raw:", JSON.stringify(body.lineItems));
+  console.log("lineItems type:", typeof body.lineItems);
 
   // ── 2. Generate ON-YYYYMMDD-XXXX reference number ────────────────────────
   let referenceNumber: string;
@@ -234,81 +217,65 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Reference generation failed" });
   }
 
-  // ── 3. Parse line items ───────────────────────────────────────────────────
-  const lineItems     = parseLineItems(body.lineItems);
-  const articles      = formatArticles(lineItems);
+  // ── 3. Parse line items and shipping ─────────────────────────────────────
+  const articles       = parseLineItems(body.lineItems);
   const shippingMethod = extractShippingMethod(body.shippingLines);
+  const dispatchDate   = extractDispatchDate(body.lineItems);
 
-  // Extract Estimated Dispatch from any line item's customAttributes
-  let dispatchDate: string | null = null;
-  for (const item of lineItems) {
-    const dispatch =
-      item.attrs["Estimated Dispatch"] ??
-      item.attrs["estimated dispatch"] ??
-      item.attrs["Estimated dispatch"] ??
-      null;
-    if (dispatch) {
-      dispatchDate = parseDispatchDate(dispatch);
-      if (dispatchDate) break;
-    }
-  }
+  console.log("[shopify/webhook] articles:", articles);
+  console.log("[shopify/webhook] shippingMethod:", shippingMethod);
+  console.log("[shopify/webhook] dispatchDate:", dispatchDate);
 
-  // ── 4. Map fields ────────────────────────────────────────────────────────
-  // shippingFirstName holds the full name — split on the first space
+  // ── 4. Map fields ─────────────────────────────────────────────────────────
   const firstName = (body.shippingFirstName ?? "").split(" ")[0] || null;
   const lastName  = (body.shippingFirstName ?? "").split(" ").slice(1).join(" ") || null;
-
-  const email       = body.customerEmail ?? null;
-  const phone       = body.shippingPhone ?? body.customerPhone ?? null;
-  const street      = body.shippingAddress1 ?? null;
-  const suburb      = body.shippingCity ?? null;
-  const state       = body.shippingProvinceCode ?? null;
-  const postcode    = body.shippingPostalCode ?? null;
-  const orderNum    = body.orderNumber ?? null;
-  const total       = parseFloat(String(body.totalPrice ?? "0")) || 0;
-  const note        = body.orderNote || null;
+  const email     = body.customerEmail   ?? null;
+  const phone     = body.shippingPhone   ?? body.customerPhone ?? null;
+  const street    = body.shippingAddress1   ?? null;
+  const suburb    = body.shippingCity       ?? null;
+  const state     = body.shippingProvinceCode ?? null;
+  const postcode  = body.shippingPostalCode ?? null;
+  const orderNum  = body.orderNumber    ?? null;
+  const total     = parseFloat(String(body.totalPrice ?? "0")) || 0;
+  const note      = body.orderNote      || null;
 
   console.log("[shopify/webhook] Parsed:", {
-    orderNumber:    orderNum,
-    customerEmail:  email,
-    firstName,
-    lastName,
-    total,
-    lineItemCount:  lineItems.length,
-    shippingMethod,
-    dispatchDate,
+    orderNumber: orderNum, customerEmail: email,
+    firstName, lastName, total,
+    articlesLength: articles.length,
+    shippingMethod, dispatchDate,
   });
 
   // ── 5. Build insert payload ───────────────────────────────────────────────
   const insertData = {
-    reference_number:    referenceNumber,
-    packet_type:         "online_order",
-    customer_first_name: firstName,
-    customer_last_name:  lastName,
-    customer_email:      email,
-    customer_phone:      phone,
-    customer_street:     street,
-    customer_suburb:     suburb,
-    customer_state:      state,
-    customer_postcode:   postcode,
-    articles:            articles  || null,
-    items_ordered:       articles  || null,
-    instructions:        note,
-    total_charges:       total     || null,
-    deposit:             null,
-    balance:             null,
-    in_date:             todayISO(),
-    due_date:            dispatchDate,
-    staff_member:        "Online Store",
-    order_number:        orderNum,
-    shipping_method:     shippingMethod,
+    reference_number:      referenceNumber,
+    packet_type:           "online_order",
+    customer_first_name:   firstName,
+    customer_last_name:    lastName,
+    customer_email:        email,
+    customer_phone:        phone,
+    customer_street:       street,
+    customer_suburb:       suburb,
+    customer_state:        state,
+    customer_postcode:     postcode,
+    articles:              articles || null,
+    items_ordered:         articles || null,
+    instructions:          note,
+    total_charges:         total    || null,
+    deposit:               null,
+    balance:               null,
+    in_date:               todayISO(),
+    due_date:              dispatchDate,
+    staff_member:          "Online Store",
+    order_number:          orderNum,
+    shipping_method:       shippingMethod,
     shipping_address_same: true,
-    shipping_street:     null,
-    shipping_suburb:     null,
-    shipping_state:      null,
-    shipping_postcode:   null,
-    order_source:        "Shopify",
-    packet_data:         body as unknown as Record<string, unknown>,
+    shipping_street:       null,
+    shipping_suburb:       null,
+    shipping_state:        null,
+    shipping_postcode:     null,
+    order_source:          "Shopify",
+    packet_data:           body as unknown as Record<string, unknown>,
   };
 
   // ── 6. Insert into Supabase ───────────────────────────────────────────────
