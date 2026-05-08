@@ -6,12 +6,19 @@ import { STAGE_CONFIG, quoteStage, isOverdue } from "@/lib/pipeline";
 import { getSupabaseClient } from "@/lib/supabase";
 import { generatePrintHTML } from "@/lib/labelGenerator";
 import { formatCurrency } from "@/lib/formatters";
+import dynamic from "next/dynamic";
 import AdminTable from "@/components/AdminTable";
 import PacketDetailDrawer from "@/components/PacketDetailDrawer";
 import QuoteDetailDrawer from "@/components/QuoteDetailDrawer";
-import QuotePipelineBoard from "@/components/QuotePipelineBoard";
 import QuoteStatsBar from "@/components/QuoteStatsBar";
 import NavBar from "@/components/NavBar";
+
+// Lazy-load the drag-and-drop board with ssr:false to avoid hydration
+// mismatches from @hello-pangea/dnd accessing browser APIs during SSR.
+const QuotePipelineBoard = dynamic(
+  () => import("@/components/QuotePipelineBoard"),
+  { ssr: false }
+);
 
 // ── Note for deployment ───────────────────────────────────────────────────────
 // Real-time subscriptions require Supabase replication enabled on both tables.
@@ -176,7 +183,13 @@ export default function AdminPage() {
   // ── Supabase real-time subscriptions ─────────────────────────────────────
 
   useEffect(() => {
-    const supabase = getSupabaseClient();
+    let supabase: ReturnType<typeof getSupabaseClient>;
+    try {
+      supabase = getSupabaseClient();
+    } catch (err) {
+      console.warn("[admin] Supabase client unavailable, real-time disabled:", err);
+      return;
+    }
 
     const channel = supabase
       .channel("admin-realtime")
@@ -260,7 +273,7 @@ export default function AdminPage() {
 
   // ── Derived values ────────────────────────────────────────────────────────
 
-  const unprintedShopify = shopifyOrders.filter((p) => !p.label_printed);
+  const unprintedShopify = (shopifyOrders ?? []).filter((p) => !p.label_printed);
 
   const inputClass =
     "rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-black";
@@ -407,7 +420,7 @@ export default function AdminPage() {
               <p className="text-sm text-gray-500">
                 {quotesLoading
                   ? "Loading…"
-                  : `${quotes.filter((q) => q.status !== "converted").length} active quote${quotes.filter((q) => q.status !== "converted").length !== 1 ? "s" : ""}`}
+                  : `${(quotes ?? []).filter((q) => q.status !== "converted").length} active quote${(quotes ?? []).filter((q) => q.status !== "converted").length !== 1 ? "s" : ""}`}
               </p>
               <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm font-semibold">
                 <button
@@ -448,7 +461,7 @@ export default function AdminPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {quotes.map((q) => {
+                      {(quotes ?? []).map((q) => {
                         const customerName = [q.customer_first_name, q.customer_last_name].filter(Boolean).join(" ") || "—";
                         const created = new Date(q.created_at).toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" });
                         const stage = quoteStage(q.status);
@@ -533,7 +546,7 @@ export default function AdminPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {shopifyOrders.map((p) => {
+                      {(shopifyOrders ?? []).map((p) => {
                         const customerName =
                           [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
                         const created = new Date(p.created_at).toLocaleDateString("en-AU", {

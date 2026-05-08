@@ -12,7 +12,7 @@ export default function QuoteStatsBar({ quotes }: Props) {
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
   // Pipeline quotes only (exclude converted — they've moved on)
-  const pipelineQuotes = quotes.filter((q) => q.status !== "converted");
+  const pipelineQuotes = (quotes ?? []).filter((q) => q.status !== "converted");
 
   // Total quotes created this month
   const monthTotal = pipelineQuotes.filter(

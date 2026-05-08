@@ -44,7 +44,7 @@ function sortCards(cards: Quote[]): Quote[] {
 
 export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate }: Props) {
   // Local copy for optimistic updates during drag
-  const [localQuotes, setLocalQuotes] = useState<Quote[]>(quotes);
+  const [localQuotes, setLocalQuotes] = useState<Quote[]>(quotes ?? []);
   // Track whether we currently have a pending PATCH (prevents parent sync overwriting optimistic state)
   const pendingIds = useRef<Set<string>>(new Set());
 
@@ -52,7 +52,7 @@ export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate }: P
   useEffect(() => {
     setLocalQuotes((prev) => {
       // Merge: take server data for all quotes without pending updates
-      const merged = quotes.map((q) => {
+      const merged = (quotes ?? []).map((q) => {
         if (pendingIds.current.has(q.id)) {
           // Keep our optimistic version
           return prev.find((p) => p.id === q.id) ?? q;
@@ -94,11 +94,11 @@ export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate }: P
         onUpdate(json.quote);
       } else {
         // Revert on server error
-        setLocalQuotes(quotes);
+        setLocalQuotes(quotes ?? []);
       }
     } catch {
       // Revert on network error
-      setLocalQuotes(quotes);
+      setLocalQuotes(quotes ?? []);
     } finally {
       pendingIds.current.delete(draggableId);
     }

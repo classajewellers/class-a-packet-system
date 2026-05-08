@@ -17,7 +17,8 @@ const TYPE_BADGE: Record<PacketType, string> = {
 };
 
 export default function AdminTable({ packets, onRowClick }: Props) {
-  if (packets.length === 0) {
+  const safePackets = packets ?? [];
+  if (safePackets.length === 0) {
     return (
       <div className="text-center py-16 text-gray-400">
         <svg className="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" strokeWidth={1} viewBox="0 0 24 24">
@@ -42,7 +43,7 @@ export default function AdminTable({ packets, onRowClick }: Props) {
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {packets.map((p) => {
+          {safePackets.map((p) => {
             const customerName = [p.customer_first_name, p.customer_last_name]
               .filter(Boolean)
               .join(" ") || "—";
