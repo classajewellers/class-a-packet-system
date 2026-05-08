@@ -51,6 +51,7 @@ export default function AdminPage() {
   const [search, setSearch]                 = useState("");
   const [from, setFrom]                     = useState("");
   const [to, setTo]                         = useState("");
+  const [selectedPacketIds, setSelectedPacketIds] = useState<Set<string>>(new Set());
 
   // ── Quotes tab ────────────────────────────────────────────────────────────
   const [quotes, setQuotes]               = useState<Quote[]>([]);
@@ -59,6 +60,7 @@ export default function AdminPage() {
   const [quoteView, setQuoteView]         = useState<"board" | "list">("board");
   const [showConverted, setShowConverted] = useState(false);
   const [quoteListFilter, setQuoteListFilter] = useState<"active" | "all" | "converted">("active");
+  const [selectedQuoteIds, setSelectedQuoteIds] = useState<Set<string>>(new Set());
 
   // Ref for polling so silent refresh always uses latest search params
   const fetchParamsRef = useRef({ search, from, to });
@@ -143,6 +145,10 @@ export default function AdminPage() {
     }
   }, []);
 
+  // ── Clear selection when filter/tab changes ───────────────────────────────
+  useEffect(() => { setSelectedPacketIds(new Set()); }, [orderFilter]);
+  useEffect(() => { setSelectedQuoteIds(new Set()); }, [quoteListFilter]);
+
   // ── Initial load — debounced on search/date changes ──────────────────────
   useEffect(() => {
     const timer = setTimeout(() => fetchOrders({ search, from, to }), 300);
@@ -216,6 +222,40 @@ export default function AdminPage() {
     setSelectedQuote(updated);
   }
 
+  function handleDeletePacket(id: string) {
+    setPackets((prev) => prev.filter((p) => p.id !== id));
+    setSelectedPacketIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
+    setSelectedPacket(null);
+  }
+
+  function handleDeleteQuote(id: string) {
+    setQuotes((prev) => prev.filter((q) => q.id !== id));
+    setSelectedQuoteIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
+    setSelectedQuote(null);
+  }
+
+  async function handleBulkDeletePackets() {
+    if (selectedPacketIds.size === 0) return;
+    if (!window.confirm(
+      `Are you sure you want to delete ${selectedPacketIds.size} order${selectedPacketIds.size !== 1 ? "s" : ""}? This cannot be undone.`
+    )) return;
+    const ids = Array.from(selectedPacketIds);
+    await Promise.all(ids.map((id) => fetch(`/api/admin/packets/${id}`, { method: "DELETE" })));
+    setPackets((prev) => prev.filter((p) => !selectedPacketIds.has(p.id)));
+    setSelectedPacketIds(new Set());
+  }
+
+  async function handleBulkDeleteQuotes() {
+    if (selectedQuoteIds.size === 0) return;
+    if (!window.confirm(
+      `Are you sure you want to delete ${selectedQuoteIds.size} quote${selectedQuoteIds.size !== 1 ? "s" : ""}? This cannot be undone.`
+    )) return;
+    const ids = Array.from(selectedQuoteIds);
+    await Promise.all(ids.map((id) => fetch(`/api/quotes/${id}`, { method: "DELETE" })));
+    setQuotes((prev) => prev.filter((q) => !selectedQuoteIds.has(q.id)));
+    setSelectedQuoteIds(new Set());
+  }
+
   function handleExport() {
     const p = new URLSearchParams();
     if (search) p.set("search", search);
@@ -270,6 +310,7 @@ export default function AdminPage() {
         <PacketDetailDrawer
           packet={selectedPacket}
           onClose={() => setSelectedPacket(null)}
+          onDelete={handleDeletePacket}
           onRetry={handleRetry}
         />
       )}
@@ -278,6 +319,7 @@ export default function AdminPage() {
           quote={selectedQuote}
           onClose={() => setSelectedQuote(null)}
           onUpdate={handleUpdateQuote}
+          onDelete={handleDeleteQuote}
         />
       )}
 
@@ -432,6 +474,31 @@ export default function AdminPage() {
                   <span>Label · Klaviyo · Email · SMS · Sheets</span>
                 </div>
               </div>
+              {/* Bulk delete bar — appears when rows are selected */}
+              {selectedPacketIds.size > 0 && (
+                <div className="px-5 py-2.5 bg-red-50 border-b border-red-100 flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium text-red-700">
+                    {selectedPacketIds.size} order{selectedPacketIds.size !== 1 ? "s" : ""} selected
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setSelectedPacketIds(new Set())}
+                      className="text-xs font-semibold text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200 bg-white"
+                    >
+                      Clear
+                    </button>
+                    <button
+                      onClick={handleBulkDeletePackets}
+                      className="flex items-center gap-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                      </svg>
+                      Delete selected ({selectedPacketIds.size})
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="px-5 py-4">
                 {loading ? (
                   <div className="text-center py-12 text-gray-400">
@@ -442,7 +509,12 @@ export default function AdminPage() {
                     <p className="text-sm">Loading orders…</p>
                   </div>
                 ) : (
-                  <AdminTable packets={filteredPackets} onRowClick={setSelectedPacket} />
+                  <AdminTable
+                    packets={filteredPackets}
+                    onRowClick={setSelectedPacket}
+                    selectedIds={selectedPacketIds}
+                    onSelectionChange={setSelectedPacketIds}
+                  />
                 )}
               </div>
             </div>
@@ -522,10 +594,49 @@ export default function AdminPage() {
               <QuotePipelineBoard quotes={quotes} onQuoteClick={setSelectedQuote} onUpdate={handleUpdateQuote} showConverted={showConverted} />
             ) : (
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                {/* Bulk delete bar */}
+                {selectedQuoteIds.size > 0 && (
+                  <div className="px-4 py-2.5 bg-red-50 border-b border-red-100 flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium text-red-700">
+                      {selectedQuoteIds.size} quote{selectedQuoteIds.size !== 1 ? "s" : ""} selected
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setSelectedQuoteIds(new Set())}
+                        className="text-xs font-semibold text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200 bg-white"
+                      >
+                        Clear
+                      </button>
+                      <button
+                        onClick={handleBulkDeleteQuotes}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg transition-colors"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                        </svg>
+                        Delete selected ({selectedQuoteIds.size})
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-gray-200 text-left bg-gray-50">
+                        <th className="px-4 py-3 w-8">
+                          <input
+                            type="checkbox"
+                            checked={filteredListQuotes.length > 0 && filteredListQuotes.every((q) => selectedQuoteIds.has(q.id))}
+                            ref={(el) => {
+                              if (el) el.indeterminate = filteredListQuotes.some((q) => selectedQuoteIds.has(q.id)) && !filteredListQuotes.every((q) => selectedQuoteIds.has(q.id));
+                            }}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedQuoteIds(new Set(filteredListQuotes.map((q) => q.id)));
+                              else setSelectedQuoteIds(new Set());
+                            }}
+                            className="h-4 w-4 rounded border-gray-300 accent-black cursor-pointer"
+                          />
+                        </th>
                         <th className="px-4 py-3 font-semibold text-black whitespace-nowrap">Reference No.</th>
                         <th className="px-4 py-3 font-semibold text-black">Customer</th>
                         <th className="px-4 py-3 font-semibold text-black">Assigned To</th>
@@ -540,11 +651,12 @@ export default function AdminPage() {
                     <tbody className="divide-y divide-gray-100">
                       {filteredListQuotes.length === 0 ? (
                         <tr>
-                          <td colSpan={quoteListFilter === "converted" ? 7 : 6} className="px-4 py-12 text-center text-sm text-gray-400">
+                          <td colSpan={quoteListFilter === "converted" ? 8 : 7} className="px-4 py-12 text-center text-sm text-gray-400">
                             {quoteListFilter === "converted" ? "No converted quotes" : "No quotes found"}
                           </td>
                         </tr>
                       ) : filteredListQuotes.map((q) => {
+                        const isSelected = selectedQuoteIds.has(q.id);
                         const isConverted = q.status === "converted";
                         const customerName = [q.customer_first_name, q.customer_last_name].filter(Boolean).join(" ") || "—";
                         const created = new Date(q.created_at).toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" });
@@ -556,8 +668,21 @@ export default function AdminPage() {
                           <tr
                             key={q.id}
                             onClick={() => setSelectedQuote(q)}
-                            className={`cursor-pointer transition-colors ${isConverted ? "bg-gray-50 text-gray-400 hover:bg-gray-100" : "hover:bg-gray-50"}`}
+                            className={`cursor-pointer transition-colors ${isSelected ? "bg-red-50" : isConverted ? "bg-gray-50 hover:bg-gray-100" : "hover:bg-gray-50"}`}
                           >
+                            <td className="px-4 py-3" onClick={(e) => {
+                              e.stopPropagation();
+                              const next = new Set(selectedQuoteIds);
+                              if (next.has(q.id)) next.delete(q.id); else next.add(q.id);
+                              setSelectedQuoteIds(next);
+                            }}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {}}
+                                className="h-4 w-4 rounded border-gray-300 accent-black cursor-pointer"
+                              />
+                            </td>
                             <td className="px-4 py-3">
                               <span className={`font-mono text-xs font-semibold ${isConverted ? "text-gray-400" : "text-black"}`}>{q.reference_number}</span>
                             </td>
@@ -568,9 +693,7 @@ export default function AdminPage() {
                             <td className="px-4 py-3 text-gray-400 text-xs">{q.assigned_to ?? "—"}</td>
                             <td className="px-4 py-3">
                               {isConverted ? (
-                                <span className="inline-block rounded-full px-2 py-0.5 text-xs font-semibold bg-gray-100 text-gray-500">
-                                  Converted
-                                </span>
+                                <span className="inline-block rounded-full px-2 py-0.5 text-xs font-semibold bg-gray-100 text-gray-500">Converted</span>
                               ) : stageConf ? (
                                 <span className="inline-block rounded-full px-2 py-0.5 text-xs font-semibold text-white" style={{ backgroundColor: stageConf.color }}>
                                   {stageConf.label}
@@ -586,9 +709,7 @@ export default function AdminPage() {
                             {quoteListFilter === "converted" && (
                               <td className="px-4 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                                 {q.packet_reference ? (
-                                  <span className="font-mono text-xs font-semibold text-black bg-gray-100 rounded px-1.5 py-0.5">
-                                    {q.packet_reference}
-                                  </span>
+                                  <span className="font-mono text-xs font-semibold text-black bg-gray-100 rounded px-1.5 py-0.5">{q.packet_reference}</span>
                                 ) : (
                                   <span className="text-xs text-gray-400">—</span>
                                 )}

@@ -6,6 +6,8 @@ import { formatDateAU, packetTypeLabel } from "@/lib/formatters";
 interface Props {
   packets: Packet[];
   onRowClick: (packet: Packet) => void;
+  selectedIds?: Set<string>;
+  onSelectionChange?: (ids: Set<string>) => void;
 }
 
 const TYPE_BADGE: Record<PacketType, string> = {
@@ -16,8 +18,28 @@ const TYPE_BADGE: Record<PacketType, string> = {
   online_order: "bg-gray-900 text-white",
 };
 
-export default function AdminTable({ packets, onRowClick }: Props) {
+export default function AdminTable({ packets, onRowClick, selectedIds, onSelectionChange }: Props) {
   const safePackets = packets ?? [];
+  const selectable = !!onSelectionChange;
+  const allSelected = selectable && safePackets.length > 0 && safePackets.every((p) => selectedIds?.has(p.id));
+  const someSelected = selectable && safePackets.some((p) => selectedIds?.has(p.id));
+
+  function toggleAll() {
+    if (!onSelectionChange) return;
+    if (allSelected) {
+      onSelectionChange(new Set());
+    } else {
+      onSelectionChange(new Set(safePackets.map((p) => p.id)));
+    }
+  }
+
+  function toggleOne(id: string) {
+    if (!onSelectionChange || !selectedIds) return;
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    onSelectionChange(next);
+  }
+
   if (safePackets.length === 0) {
     return (
       <div className="text-center py-16 text-gray-400">
@@ -34,6 +56,17 @@ export default function AdminTable({ packets, onRowClick }: Props) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-200 text-left">
+            {selectable && (
+              <th className="pb-3 pr-3 w-8">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                  onChange={toggleAll}
+                  className="h-4 w-4 rounded border-gray-300 accent-black cursor-pointer"
+                />
+              </th>
+            )}
             <th className="pb-3 pr-4 font-semibold text-black whitespace-nowrap">Reference No.</th>
             <th className="pb-3 pr-4 font-semibold text-black">Type</th>
             <th className="pb-3 pr-4 font-semibold text-black">Customer Name</th>
@@ -44,33 +77,35 @@ export default function AdminTable({ packets, onRowClick }: Props) {
         </thead>
         <tbody className="divide-y divide-gray-100">
           {safePackets.map((p) => {
+            const isSelected = selectedIds?.has(p.id) ?? false;
             const customerName = [p.customer_first_name, p.customer_last_name]
-              .filter(Boolean)
-              .join(" ") || "—";
+              .filter(Boolean).join(" ") || "—";
             const created = new Date(p.created_at).toLocaleDateString("en-AU", {
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
+              day: "2-digit", month: "short", year: "numeric",
             });
 
             return (
               <tr
                 key={p.id}
                 onClick={() => onRowClick(p)}
-                className="hover:bg-gray-50 cursor-pointer transition-colors"
+                className={`hover:bg-gray-50 cursor-pointer transition-colors ${isSelected ? "bg-red-50" : ""}`}
               >
+                {selectable && (
+                  <td className="py-3 pr-3" onClick={(e) => { e.stopPropagation(); toggleOne(p.id); }}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleOne(p.id)}
+                      className="h-4 w-4 rounded border-gray-300 accent-black cursor-pointer"
+                    />
+                  </td>
+                )}
                 <td className="py-3 pr-4">
-                  <span className="font-mono text-xs font-semibold text-black">
-                    {p.reference_number}
-                  </span>
+                  <span className="font-mono text-xs font-semibold text-black">{p.reference_number}</span>
                 </td>
                 <td className="py-3 pr-4">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span
-                      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                        TYPE_BADGE[p.packet_type] ?? "bg-gray-100 text-gray-700"
-                      }`}
-                    >
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${TYPE_BADGE[p.packet_type] ?? "bg-gray-100 text-gray-700"}`}>
                       {packetTypeLabel(p.packet_type)}
                     </span>
                     {p.packet_type === "online_order" && (
