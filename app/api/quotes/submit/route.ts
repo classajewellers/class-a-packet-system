@@ -6,9 +6,10 @@ import { QuoteFormData, Quote } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  console.log("Quote submit route hit");
+  // ── 1. Confirm route is being reached ─────────────────────────────────────
+  console.log("Quote submit hit");
 
-  // ── 1. Parse body ──────────────────────────────────────────────────────────
+  // ── 2. Parse body ──────────────────────────────────────────────────────────
   let body: { formData: QuoteFormData };
   try {
     body = await req.json();
@@ -17,22 +18,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  console.log("Form data received:", JSON.stringify(body));
+  console.log("Quote body:", JSON.stringify(body));
 
   const { formData } = body;
 
-  // ── 2. Generate QT- reference number (with timestamp fallback) ─────────────
+  // ── 3. Generate QT- reference number (with timestamp fallback) ─────────────
   let referenceNumber: string;
   try {
     referenceNumber = await generateQuoteReferenceNumber();
     console.log("[quotes/submit] Generated reference:", referenceNumber);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
-    console.error("[quotes/submit] Reference generation threw:", msg);
+    console.error("[quotes/submit] Reference generation failed:", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 
-  // ── 3. Build insert payload ────────────────────────────────────────────────
+  // ── 4. Build insert payload ────────────────────────────────────────────────
   const lineItems = formData.line_items ?? [];
   const now = new Date().toISOString();
 
@@ -56,26 +57,60 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   console.log("[quotes/submit] Insert payload:", JSON.stringify(insertData));
 
-  // ── 4. Insert into Supabase ────────────────────────────────────────────────
-  const supabase = createServerSupabaseClient();
+  // ── 5. Create Supabase server client (service role — bypasses RLS) ─────────
+  let supabase: ReturnType<typeof createServerSupabaseClient>;
+  try {
+    supabase = createServerSupabaseClient();
+    console.log("[quotes/submit] Supabase server client created (service role)");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[quotes/submit] Failed to create Supabase client:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 
+  // ── 6. Insert into Supabase ────────────────────────────────────────────────
   const { data, error } = await supabase
     .from("quotes")
     .insert(insertData)
     .select()
     .single();
 
-  console.log("Supabase response:", JSON.stringify({ data, error }));
+  console.log("Supabase result:", JSON.stringify({ data, error }));
 
-  if (error || !data) {
+  if (error) {
+    // Detect RLS / permission errors — if you see this, check that either:
+    //   a) RLS is disabled on the quotes table in Supabase dashboard, OR
+    //   b) SUPABASE_SERVICE_ROLE_KEY is set correctly in .env.local
+    //   The service role key should bypass RLS entirely. If it's not, the key
+    //   may be wrong (anon key used instead of service role key).
+    const isPermissionError =
+      error.code === "42501" ||
+      error.message?.toLowerCase().includes("permission denied") ||
+      error.message?.toLowerCase().includes("rls") ||
+      error.message?.toLowerCase().includes("row-level security") ||
+      error.message?.toLowerCase().includes("new row violates");
+
+    if (isPermissionError) {
+      console.error(
+        "[quotes/submit] ⚠️  RLS / PERMISSIONS ERROR — " +
+        "Check that RLS is disabled on the quotes table OR that SUPABASE_SERVICE_ROLE_KEY is set correctly. " +
+        "The service role key bypasses RLS; if you are seeing this the wrong key is probably being used.",
+        { code: error.code, message: error.message }
+      );
+    }
+
     console.error("[quotes/submit] Insert FAILED:", JSON.stringify(error));
     return NextResponse.json(
-      { error: error?.message ?? "Insert failed", details: error },
+      { error: error.message, details: error },
       { status: 500 }
     );
   }
 
-  console.log("[quotes/submit] Quote saved successfully:", data.id, data.reference_number);
+  if (!data) {
+    console.error("[quotes/submit] Insert returned no data (unknown failure)");
+    return NextResponse.json({ error: "Insert returned no data" }, { status: 500 });
+  }
 
+  console.log("[quotes/submit] Quote saved successfully:", data.id, data.reference_number);
   return NextResponse.json({ quote: data as Quote });
 }
