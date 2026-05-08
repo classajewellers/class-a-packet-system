@@ -31,7 +31,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   if (query.type && query.type !== "all") {
+    // Explicit type filter selected — show only that type
     dbQuery = dbQuery.eq("packet_type", query.type);
+  } else {
+    // Default: exclude online_order — those belong in the Shopify Orders tab
+    dbQuery = dbQuery.neq("packet_type", "online_order");
   }
 
   if (query.from) {

@@ -34,7 +34,7 @@ const TYPE_OPTIONS: { value: "all" | PacketType; label: string }[] = [
   { value: "custom_order",  label: "Custom Order" },
   { value: "layby",         label: "Layby" },
   { value: "client_intake", label: "Client Intake" },
-  { value: "online_order",  label: "Online Order" },
+  // online_order intentionally omitted — those appear in the Shopify Orders tab
 ];
 
 // ── Print helper (mirrors PacketDetailDrawer) ─────────────────────────────────
@@ -219,9 +219,11 @@ export default function AdminPage() {
         { event: "INSERT", schema: "public", table: "packets" },
         (payload) => {
           const row = payload.new as Packet;
-          setPackets((prev) => prev.some((p) => p.id === row.id) ? prev : [row, ...prev]);
           if (row.packet_type === "online_order") {
+            // Online orders belong in the Shopify tab only
             setShopifyOrders((prev) => prev.some((p) => p.id === row.id) ? prev : [row, ...prev]);
+          } else {
+            setPackets((prev) => prev.some((p) => p.id === row.id) ? prev : [row, ...prev]);
           }
         }
       )

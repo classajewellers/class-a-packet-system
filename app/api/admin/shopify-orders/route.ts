@@ -21,7 +21,6 @@ export async function GET(): Promise<NextResponse> {
     .from("packets")
     .select("*")
     .eq("packet_type", "online_order")
-    .eq("order_source", "Shopify")
     .order("created_at", { ascending: false });
 
   if (error) {
