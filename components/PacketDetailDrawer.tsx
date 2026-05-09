@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Packet } from "@/lib/types";
-import { packetTypeLabel } from "@/lib/formatters";
+import { packetTypeLabel, formatDateAU } from "@/lib/formatters";
 import { generatePrintHTML } from "@/lib/labelGenerator";
 
 const STAFF_MEMBERS = [
@@ -26,6 +26,24 @@ interface Props {
 }
 
 type SaveState = "idle" | "saving" | "saved" | "error";
+type NotifStep = "select" | "preview";
+type Template  = "order_confirmation" | "ready_for_pickup";
+
+interface Toast { type: "success" | "error"; message: string; }
+
+// ── SMS message builders ───────────────────────────────────────────────────
+function buildMessage(template: Template, p: Packet): string {
+  const firstName   = p.customer_first_name ?? "there";
+  const orderType   = packetTypeLabel(p.packet_type);
+  const ref         = p.reference_number;
+  const articles    = p.articles ?? "";
+  const due         = formatDateAU(p.due_date) || "TBD";
+
+  if (template === "order_confirmation") {
+    return `Hi ${firstName}, thanks for visiting Class A Jewellers! Your ${orderType} ref is ${ref}. We'll have it ready by ${due}. Any questions call us on 08 8344 7722. - Class A Team`;
+  }
+  return `Hi ${firstName}, great news! Your ${orderType} (${articles}) is ready for collection at Class A Jewellers, 40 North East Road Walkerville. Ref: ${ref}. See you soon! - Class A Team`;
+}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -52,7 +70,25 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
   const [deleting, setDeleting] = useState(false);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const isOnline = local.packet_type === "online_order";
+  // ── Notification modal state ───────────────────────────────────────────────
+  const [notifOpen, setNotifOpen]         = useState(false);
+  const [notifStep, setNotifStep]         = useState<NotifStep>("select");
+  const [notifTemplate, setNotifTemplate] = useState<Template | null>(null);
+  const [notifSending, setNotifSending]   = useState(false);
+  const [toast, setToast]                 = useState<Toast | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Auto-dismiss toast after 4 s
+  useEffect(() => {
+    if (!toast) return;
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 4000);
+    return () => { if (toastTimer.current) clearTimeout(toastTimer.current); };
+  }, [toast]);
+
+  const isOnline  = local.packet_type === "online_order";
+  const isShopify = isOnline && (local.order_source ?? "").toLowerCase() === "shopify";
+  const showNotifButton = !isShopify; // hide for Shopify online orders
 
   // ── PATCH /api/admin/packets/[id] ────────────────────────────────────────
   const patch = useCallback(async (updates: Partial<Packet>) => {
@@ -108,6 +144,50 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
       alert("Network error — could not delete order.");
     } finally {
       setDeleting(false);
+    }
+  }
+
+  // ── Notification handlers ─────────────────────────────────────────────────
+  function openNotifModal() {
+    setNotifStep("select");
+    setNotifTemplate(null);
+    setNotifOpen(true);
+  }
+
+  function closeNotifModal() {
+    setNotifOpen(false);
+    setNotifTemplate(null);
+    setNotifStep("select");
+  }
+
+  function selectTemplate(t: Template) {
+    setNotifTemplate(t);
+    setNotifStep("preview");
+  }
+
+  async function handleSendSMS() {
+    if (!notifTemplate) return;
+    setNotifSending(true);
+    try {
+      const res = await fetch("/api/notifications/send", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ packet_id: local.id, template: notifTemplate }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Send failed");
+      // Update local sms_sent flag
+      const updated = { ...local, sms_sent: true };
+      setLocal(updated);
+      onUpdate(updated);
+      closeNotifModal();
+      const name = [local.customer_first_name, local.customer_last_name].filter(Boolean).join(" ") || "customer";
+      setToast({ type: "success", message: `SMS sent to ${name}` });
+    } catch (err) {
+      closeNotifModal();
+      setToast({ type: "error", message: err instanceof Error ? err.message : "Failed to send SMS" });
+    } finally {
+      setNotifSending(false);
     }
   }
 
@@ -178,16 +258,30 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
             </div>
           )}
 
-          {/* ── Reprint Label ── */}
-          <button
-            onClick={handleReprintLabel}
-            className="w-full flex items-center justify-center gap-2 bg-gray-100 text-black text-sm font-semibold py-3 rounded-xl hover:bg-gray-200 active:scale-[0.98] transition-all"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.056 48.056 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
-            </svg>
-            Reprint Label
-          </button>
+          {/* ── Action buttons: Reprint + Send Notification ── */}
+          <div className={`grid gap-2 ${showNotifButton ? "grid-cols-2" : "grid-cols-1"}`}>
+            <button
+              onClick={handleReprintLabel}
+              className="flex items-center justify-center gap-2 bg-gray-100 text-black text-sm font-semibold py-3 rounded-xl hover:bg-gray-200 active:scale-[0.98] transition-all"
+            >
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.056 48.056 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
+              </svg>
+              Reprint Label
+            </button>
+
+            {showNotifButton && (
+              <button
+                onClick={openNotifModal}
+                className="flex items-center justify-center gap-2 bg-black text-white text-sm font-semibold py-3 rounded-xl hover:bg-[#222] active:scale-[0.98] transition-all"
+              >
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                </svg>
+                Send Notification
+              </button>
+            )}
+          </div>
 
           {/* ── DUE DATE (non-online orders) — black hero ── */}
           {!isOnline && (
@@ -649,6 +743,115 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
 
         </div>
       </div>
+
+      {/* ── Notification modal ── */}
+      {notifOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/50" onClick={closeNotifModal} />
+
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-auto p-6 space-y-5">
+
+            {/* Header */}
+            <div>
+              <h2 className="text-lg font-bold text-black">Send Customer Notification</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                <span className="font-semibold text-black">
+                  {[local.customer_first_name, local.customer_last_name].filter(Boolean).join(" ") || "Unknown"}
+                </span>
+                {local.customer_phone && (
+                  <span className="ml-2 text-gray-400">{local.customer_phone}</span>
+                )}
+              </p>
+            </div>
+
+            {notifStep === "select" && (
+              <>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+                  Choose a template
+                </p>
+
+                {/* Template buttons */}
+                <div className="space-y-3">
+                  {(["order_confirmation", "ready_for_pickup"] as Template[]).map((t) => {
+                    const label   = t === "order_confirmation" ? "Order Confirmation" : "Ready for Pickup";
+                    const preview = buildMessage(t, local);
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => selectTemplate(t)}
+                        className="w-full text-left rounded-xl border-2 border-gray-200 hover:border-black p-4 transition-colors"
+                      >
+                        <p className="text-sm font-bold text-black mb-1">{label}</p>
+                        <p className="text-xs text-gray-500 leading-relaxed line-clamp-3">{preview}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={closeNotifModal}
+                  className="w-full text-sm font-semibold text-gray-500 hover:text-black py-2 transition-colors"
+                >
+                  Cancel
+                </button>
+              </>
+            )}
+
+            {notifStep === "preview" && notifTemplate && (
+              <>
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
+                    SMS Preview
+                  </p>
+                  <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3">
+                    <p className="text-sm text-black leading-relaxed">
+                      {buildMessage(notifTemplate, local)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={closeNotifModal}
+                    className="flex-1 rounded-xl border border-gray-300 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSendSMS}
+                    disabled={notifSending}
+                    className="flex-1 rounded-xl bg-black py-3 text-sm font-bold text-white hover:bg-[#222] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {notifSending ? "Sending…" : "Send SMS"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Toast ── */}
+      {toast && (
+        <div
+          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-2 rounded-xl px-5 py-3 shadow-xl text-sm font-semibold text-white transition-all ${
+            toast.type === "success" ? "bg-emerald-600" : "bg-red-600"
+          }`}
+        >
+          {toast.type === "success" ? (
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          )}
+          {toast.message}
+        </div>
+      )}
     </div>
   );
 }
