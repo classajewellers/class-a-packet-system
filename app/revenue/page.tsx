@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   BarChart,
   Bar,
@@ -11,6 +12,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import NavBar from "@/components/NavBar";
+import { useUser } from "@/context/UserContext";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -93,6 +95,16 @@ const PACKET_TYPE_LABELS: Record<string, string> = {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function RevenuePage() {
+  const { user } = useUser();
+  const router = useRouter();
+
+  // Staff role cannot access revenue — redirect to admin
+  useEffect(() => {
+    if (user && user.role === "staff") {
+      router.replace("/admin");
+    }
+  }, [user, router]);
+
   const [from, setFrom]     = useState(startOfMonthISO());
   const [to, setTo]         = useState(todayISO());
   const [type, setType]     = useState("all");

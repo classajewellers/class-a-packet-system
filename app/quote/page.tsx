@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { QuoteFormData, QuoteType, LineItem, Quote } from "@/lib/types";
 import { defaultFollowUpDate } from "@/lib/pipeline";
+import { useUser } from "@/context/UserContext";
 import NavBar from "@/components/NavBar";
 import QuoteTypeSelector from "@/components/QuoteTypeSelector";
 import QuoteCustomerSection from "@/components/QuoteCustomerSection";
@@ -16,7 +17,7 @@ const DEFAULT_LINE_ITEMS: LineItem[] = [
   { design: "", stone: "", price: "" },
 ];
 
-function makeDefaultFormData(): QuoteFormData {
+function makeDefaultFormData(staffName?: string): QuoteFormData {
   return {
     quote_type:          "",
     customer_first_name: "",
@@ -25,7 +26,8 @@ function makeDefaultFormData(): QuoteFormData {
     customer_phone:      "",
     line_items:          [...DEFAULT_LINE_ITEMS],
     notes:               "",
-    staff_member:        "",
+    staff_member:        staffName ?? "",
+    assigned_to:         staffName ?? "",
     follow_up_date:      defaultFollowUpDate(),
   };
 }
@@ -51,7 +53,8 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 }
 
 export default function QuoteFormPage() {
-  const [formData, setFormData]       = useState<QuoteFormData>(makeDefaultFormData());
+  const { user } = useUser();
+  const [formData, setFormData]       = useState<QuoteFormData>(makeDefaultFormData(user?.name));
   const [errors, setErrors]           = useState<Partial<Record<keyof QuoteFormData, string>>>({});
   const [submitting, setSubmitting]   = useState(false);
   const [submittedQuote, setSubmittedQuote] = useState<Quote | null>(null);
@@ -110,7 +113,7 @@ export default function QuoteFormPage() {
   }
 
   function handleNew() {
-    setFormData(makeDefaultFormData());
+    setFormData(makeDefaultFormData(user?.name));
     setErrors({});
     setSubmittedQuote(null);
     setSubmitting(false);

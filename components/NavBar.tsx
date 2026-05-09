@@ -3,16 +3,26 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useUser } from "@/context/UserContext";
+import UserBadge from "@/components/UserBadge";
 
 const NAV_LINKS = [
-  { href: "/", label: "New Order" },
-  { href: "/quote", label: "New Quote" },
-  { href: "/admin", label: "Admin" },
-  { href: "/revenue", label: "Revenue" },
-];
+  { href: "/",        label: "New Order",  minRole: null },
+  { href: "/quote",   label: "New Quote",  minRole: null },
+  { href: "/admin",   label: "Admin",      minRole: null },
+  { href: "/revenue", label: "Revenue",    minRole: "manager" }, // hidden for staff
+] as const;
 
 export default function NavBar() {
   const pathname = usePathname();
+  const { user } = useUser();
+
+  const visibleLinks = NAV_LINKS.filter((link) => {
+    if (!link.minRole) return true;
+    if (!user) return false;
+    if (link.minRole === "manager") return user.role === "admin" || user.role === "manager";
+    return true;
+  });
 
   return (
     <header className="sticky top-0 z-30 bg-[#A3B2A4] shadow-md">
@@ -28,7 +38,7 @@ export default function NavBar() {
             />
           </Link>
           <nav className="flex items-center gap-1">
-            {NAV_LINKS.map((link) => {
+            {visibleLinks.map((link) => {
               const isActive = pathname === link.href;
               return (
                 <Link
@@ -44,6 +54,9 @@ export default function NavBar() {
             })}
           </nav>
         </div>
+
+        {/* Logged-in user */}
+        <UserBadge />
       </div>
     </header>
   );

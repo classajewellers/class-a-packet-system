@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import "./globals.css";
+import { ClientProviders } from "@/components/ClientProviders";
 
 export const metadata: Metadata = {
   title: "Class A Order System",
@@ -22,7 +23,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-white text-black antialiased">
-        {children}
+        <ClientProviders>{children}</ClientProviders>
       </body>
       {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY && (
         <Script

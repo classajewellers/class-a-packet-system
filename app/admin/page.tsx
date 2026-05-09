@@ -5,6 +5,7 @@ import { Packet, PacketType, Quote } from "@/lib/types";
 import { STAGE_CONFIG, quoteStage, isOverdue } from "@/lib/pipeline";
 import { getSupabaseClient } from "@/lib/supabase";
 import { STAFF_EMAIL_MAP } from "@/lib/staffEmails";
+import { useUser } from "@/context/UserContext";
 import dynamic from "next/dynamic";
 import AdminTable from "@/components/AdminTable";
 import PacketDetailDrawer from "@/components/PacketDetailDrawer";
@@ -42,6 +43,8 @@ const ORDER_FILTERS: { value: OrderFilter; label: string }[] = [
 ];
 
 export default function AdminPage() {
+  const { user } = useUser();
+  const canDelete = user?.role !== "staff";
   const [activeTab, setActiveTab] = useState<ActiveTab>("orders");
 
   // ── All packets — all types loaded, filtered client-side ─────────────────
@@ -490,8 +493,8 @@ export default function AdminPage() {
                   <span>Label · Klaviyo · Email · SMS · Sheets</span>
                 </div>
               </div>
-              {/* Bulk delete bar — appears when rows are selected */}
-              {selectedPacketIds.size > 0 && (
+              {/* Bulk delete bar — appears when rows are selected (admin/manager only) */}
+              {selectedPacketIds.size > 0 && canDelete && (
                 <div className="px-5 py-2.5 bg-red-50 border-b border-red-100 flex items-center justify-between gap-3">
                   <span className="text-sm font-medium text-red-700">
                     {selectedPacketIds.size} order{selectedPacketIds.size !== 1 ? "s" : ""} selected
@@ -639,8 +642,8 @@ export default function AdminPage() {
               <QuotePipelineBoard quotes={staffFilteredQuotes} onQuoteClick={setSelectedQuote} onUpdate={handleUpdateQuote} showConverted={showConverted} />
             ) : (
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                {/* Bulk delete bar */}
-                {selectedQuoteIds.size > 0 && (
+                {/* Bulk delete bar — admin/manager only */}
+                {selectedQuoteIds.size > 0 && canDelete && (
                   <div className="px-4 py-2.5 bg-red-50 border-b border-red-100 flex items-center justify-between gap-3">
                     <span className="text-sm font-medium text-red-700">
                       {selectedQuoteIds.size} quote{selectedQuoteIds.size !== 1 ? "s" : ""} selected

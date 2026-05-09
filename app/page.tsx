@@ -12,6 +12,7 @@ import {
 } from "@/lib/types";
 import { todayISO } from "@/lib/formatters";
 import { printLabel } from "@/lib/dymo";
+import { useUser } from "@/context/UserContext";
 import NavBar from "@/components/NavBar";
 import PacketTypeSelector from "@/components/PacketTypeSelector";
 import CustomerSection from "@/components/CustomerSection";
@@ -64,10 +65,12 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 
 function PacketFormPageInner() {
   const searchParams = useSearchParams();
+  const { user } = useUser();
   const [formData, setFormData] = useState<PacketFormData>({
     ...defaultFormData,
     in_date: todayISO(),
     from_date: todayISO(),
+    staff_member: user?.name ?? "",
   });
   const [errors, setErrors] = useState<Partial<Record<keyof PacketFormData, string>>>({});
   const [showPreview, setShowPreview] = useState(false);
@@ -244,7 +247,7 @@ function PacketFormPageInner() {
   }
 
   function handleNewPacket() {
-    setFormData({ ...defaultFormData, in_date: todayISO(), from_date: todayISO() });
+    setFormData({ ...defaultFormData, in_date: todayISO(), from_date: todayISO(), staff_member: user?.name ?? "" });
     setErrors({});
     setSubmittedPacket(null);
     setShowSuccess(false);
