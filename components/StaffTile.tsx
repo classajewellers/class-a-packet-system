@@ -8,7 +8,6 @@ interface Props {
 }
 
 const ROLE_BADGE_STYLES: Record<string, string> = {
-  admin:   "bg-black text-white",
   manager: "bg-[#A3B2A4] text-white",
   staff:   "bg-gray-200 text-gray-700",
 };

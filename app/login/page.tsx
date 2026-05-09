@@ -6,10 +6,9 @@ import { LoggedInUser, UserRole } from "@/lib/userTypes";
 import { useUser } from "@/context/UserContext";
 import StaffTile from "@/components/StaffTile";
 
-const ROLE_SECTION_ORDER: UserRole[] = ["admin", "manager", "staff"];
+const ROLE_SECTION_ORDER: UserRole[] = ["manager", "staff"];
 
 const ROLE_SECTION_LABELS: Record<UserRole, string> = {
-  admin:   "Admins",
   manager: "Managers",
   staff:   "Staff",
 };

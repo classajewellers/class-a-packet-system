@@ -20,7 +20,7 @@ export default function NavBar() {
   const visibleLinks = NAV_LINKS.filter((link) => {
     if (!link.minRole) return true;
     if (!user) return false;
-    if (link.minRole === "manager") return user.role === "admin" || user.role === "manager";
+    if (link.minRole === "manager") return user.role === "manager";
     return true;
   });
 

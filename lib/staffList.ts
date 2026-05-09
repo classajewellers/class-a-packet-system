@@ -10,24 +10,26 @@ export interface StaffMember {
 
 // Role assignments — names must match keys in STAFF_EMAIL_MAP (lowercase)
 const ROLE_MAP: Record<string, UserRole> = {
-  "brad mucklow":      "admin",
-  "josh mucklow":      "admin",
-  "ben mucklow":       "admin",
-  "sam mucklow":       "admin",
-  "bridget moore":     "manager",
-  "charlotte beavis":  "manager",
-  "daniel beecken":    "manager",
-  "david johnson":     "manager",
-  "donna cordes":      "manager",
-  "jack mullan":       "manager",
-  "jess d'alfonso":    "manager",
-  "joseph onorato":    "manager",
-  "keeley mucklow":    "manager",
-  "leah newton":       "manager",
-  "aisha scott":       "staff",
+  // Managers — full access (create, edit, delete, revenue)
   "arissa michos":     "manager",
+  "ben mucklow":       "manager",
+  "brad mucklow":      "manager",
+  "josh mucklow":      "manager",
+  "sam mucklow":       "manager",
+  // Staff — create orders/quotes, view admin, no delete, no revenue
+  "aisha scott":       "staff",
+  "bridget moore":     "staff",
+  "charlotte beavis":  "staff",
+  "daniel beecken":    "staff",
+  "david johnson":     "staff",
   "dior munro":        "staff",
+  "donna cordes":      "staff",
   "ivy wood":          "staff",
+  "jack mullan":       "staff",
+  "jess d'alfonso":    "staff",
+  "joseph onorato":    "staff",
+  "keeley mucklow":    "staff",
+  "leah newton":       "staff",
   "melody abram":      "staff",
   "monica magshoodi":  "staff",
   "shahrzad givi":     "staff",
@@ -48,8 +50,8 @@ function getInitials(name: string): string {
     .slice(0, 2);
 }
 
-// Build list sorted by role priority then name
-const ROLE_ORDER: UserRole[] = ["admin", "manager", "staff"];
+// Build list: managers first, then staff, each group alphabetical
+const ROLE_ORDER: UserRole[] = ["manager", "staff"];
 
 export const STAFF_LIST: StaffMember[] = Object.entries(ROLE_MAP)
   .sort((a, b) => {
@@ -68,7 +70,6 @@ export const STAFF_LIST: StaffMember[] = Object.entries(ROLE_MAP)
   });
 
 export const ROLE_LABELS: Record<UserRole, string> = {
-  admin:   "Admin",
   manager: "Manager",
   staff:   "Staff",
 };
