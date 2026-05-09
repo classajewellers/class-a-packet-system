@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { generateReferenceNumber, generateRepairTrackerNumber } from "@/lib/referenceNumber";
-import { parseCurrency } from "@/lib/formatters";
+import { parseCurrency, packetTypeLabel, formatDateAU } from "@/lib/formatters";
 import { PacketFormData, Packet, SubmitResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -147,7 +147,36 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
   console.log("[submit] Insert successful:", insertedPacket.id, insertedPacket.reference_number);
   const packet = insertedPacket as Packet;
 
-  // ── 5. Mark quote as converted (if this order was created from a quote) ─────
+  // ── 5. Auto-send Order Confirmation SMS for repair / custom_order ──────────
+  const isAutoSendType   = packet.packet_type === "repair" || packet.packet_type === "custom_order";
+  const hasPhone         = !!packet.customer_phone;
+  const isNotShopify     = (packet.order_source ?? "").toLowerCase() !== "shopify";
+  const confirmWebhook   = process.env.ZAPIER_ORDER_CONFIRMATION_WEBHOOK;
+
+  if (isAutoSendType && hasPhone && isNotShopify && confirmWebhook) {
+    const customerName = [packet.customer_first_name, packet.customer_last_name]
+      .filter(Boolean).join(" ");
+    const autoPayload = {
+      order_source:     "In-Store",
+      customer_name:    customerName,
+      customer_phone:   packet.customer_phone  ?? "",
+      customer_email:   packet.customer_email  ?? "",
+      order_type:       packetTypeLabel(packet.packet_type),
+      articles:         packet.articles        ?? "",
+      instructions:     packet.instructions    ?? "",
+      reference_number: packet.reference_number,
+      due_date:         formatDateAU(packet.due_date),
+      total_charges:    "",
+    };
+    // Fire-and-forget — do not block submission response
+    fetch(confirmWebhook, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify(autoPayload),
+    }).catch((err) => console.warn("[submit] Auto-send SMS failed:", err));
+  }
+
+  // ── 7. Mark quote as converted (if this order was created from a quote) ─────
   if (formData.from_quote_id) {
     console.log("[submit] Marking quote as converted:", formData.from_quote_id);
     const { error: quoteErr } = await supabase
@@ -164,7 +193,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
     }
   }
 
-  // ── 6. Return success ──────────────────────────────────────────────────────
+  // ── 8. Return success ──────────────────────────────────────────────────────
   return NextResponse.json({
     packet,
     results: { supabase: "success" },

@@ -31,18 +31,19 @@ type Template  = "order_confirmation" | "ready_for_pickup";
 
 interface Toast { type: "success" | "error"; message: string; }
 
-// ── SMS message builders ───────────────────────────────────────────────────
+// ── SMS / Email message builders ──────────────────────────────────────────
 function buildMessage(template: Template, p: Packet): string {
-  const firstName   = p.customer_first_name ?? "there";
-  const orderType   = packetTypeLabel(p.packet_type);
-  const ref         = p.reference_number;
-  const articles    = p.articles ?? "";
-  const due         = formatDateAU(p.due_date) || "TBD";
+  const firstName    = p.customer_first_name ?? "there";
+  const orderType    = packetTypeLabel(p.packet_type);
+  const ref          = p.reference_number;
+  const articles     = p.articles ?? "";
+  const instructions = p.instructions ?? "";
+  const due          = formatDateAU(p.due_date) || "TBD";
 
   if (template === "order_confirmation") {
-    return `Hi ${firstName}, thanks for visiting Class A Jewellers! Your ${orderType} ref is ${ref}. We'll have it ready by ${due}. Any questions call us on 08 8344 7722. - Class A Team`;
+    return `Hi ${firstName}, thanks for visiting Class A Jewellers! Your ${orderType} ref is ${ref}. Items: ${articles}. Instructions: ${instructions}. Est. ready by ${due}. Any questions call 08 8344 7722. - Class A Team`;
   }
-  return `Hi ${firstName}, great news! Your ${orderType} (${articles}) is ready for collection at Class A Jewellers, 40 North East Road Walkerville. Ref: ${ref}. See you soon! - Class A Team`;
+  return `Hi ${firstName}, great news! Your ${orderType} is ready for collection at Class A Jewellers, 40 North East Road Walkerville. Items: ${articles}. Ref: ${ref}. See you soon! - Class A Team`;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -165,27 +166,29 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
     setNotifStep("preview");
   }
 
-  async function handleSendSMS() {
+  async function handleSend(channel: "sms" | "email") {
     if (!notifTemplate) return;
     setNotifSending(true);
     try {
       const res = await fetch("/api/notifications/send", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ packet_id: local.id, template: notifTemplate }),
+        body:    JSON.stringify({ packet_id: local.id, template: notifTemplate, channel }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Send failed");
-      // Update local sms_sent flag
-      const updated = { ...local, sms_sent: true };
-      setLocal(updated);
-      onUpdate(updated);
+      // Update local sms_sent flag for SMS sends
+      if (channel === "sms") {
+        const updated = { ...local, sms_sent: true };
+        setLocal(updated);
+        onUpdate(updated);
+      }
       closeNotifModal();
-      const name = [local.customer_first_name, local.customer_last_name].filter(Boolean).join(" ") || "customer";
-      setToast({ type: "success", message: `SMS sent to ${name}` });
+      const dest = channel === "sms" ? (local.customer_phone ?? "customer") : (local.customer_email ?? "customer");
+      setToast({ type: "success", message: `${channel === "sms" ? "SMS" : "Email"} sent to ${dest}` });
     } catch (err) {
       closeNotifModal();
-      setToast({ type: "error", message: err instanceof Error ? err.message : "Failed to send SMS" });
+      setToast({ type: "error", message: err instanceof Error ? err.message : `Failed to send ${channel === "sms" ? "SMS" : "email"}` });
     } finally {
       setNotifSending(false);
     }
@@ -803,7 +806,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
               <>
                 <div>
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
-                    SMS Preview
+                    Message Preview
                   </p>
                   <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3">
                     <p className="text-sm text-black leading-relaxed">
@@ -812,19 +815,38 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   </div>
                 </div>
 
-                <div className="flex gap-3">
+                {/* Send SMS */}
+                <div className="space-y-2">
+                  <button
+                    onClick={() => handleSend("sms")}
+                    disabled={notifSending || !local.customer_phone}
+                    title={!local.customer_phone ? "No phone number on file" : undefined}
+                    className="w-full flex flex-col items-center justify-center rounded-xl bg-black py-3 text-sm font-bold text-white hover:bg-[#222] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <span>{notifSending ? "Sending…" : "Send SMS"}</span>
+                    {local.customer_phone && (
+                      <span className="text-xs font-normal text-white/70 mt-0.5">{local.customer_phone}</span>
+                    )}
+                  </button>
+
+                  {/* Send Email */}
+                  <button
+                    onClick={() => handleSend("email")}
+                    disabled={notifSending || !local.customer_email}
+                    title={!local.customer_email ? "No email address on file" : undefined}
+                    className="w-full flex flex-col items-center justify-center rounded-xl border-2 border-black py-3 text-sm font-bold text-black hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <span>{notifSending ? "Sending…" : "Send Email"}</span>
+                    {local.customer_email && (
+                      <span className="text-xs font-normal text-gray-500 mt-0.5">{local.customer_email}</span>
+                    )}
+                  </button>
+
                   <button
                     onClick={closeNotifModal}
-                    className="flex-1 rounded-xl border border-gray-300 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                    className="w-full rounded-xl border border-gray-200 py-2.5 text-sm font-semibold text-gray-500 hover:text-black hover:bg-gray-50 transition-colors"
                   >
                     Cancel
-                  </button>
-                  <button
-                    onClick={handleSendSMS}
-                    disabled={notifSending}
-                    className="flex-1 rounded-xl bg-black py-3 text-sm font-bold text-white hover:bg-[#222] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {notifSending ? "Sending…" : "Send SMS"}
                   </button>
                 </div>
               </>

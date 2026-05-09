@@ -5,31 +5,34 @@ import { packetTypeLabel, formatDateAU } from "@/lib/formatters";
 export const dynamic = "force-dynamic";
 
 type Template = "order_confirmation" | "ready_for_pickup";
+type Channel  = "sms" | "email";
 
 function formatCurrency(n: number | null | undefined): string {
   if (n == null) return "";
   return n.toLocaleString("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 2 });
 }
 
-function webhookUrl(template: Template): string | null {
-  if (template === "order_confirmation") {
-    return process.env.ZAPIER_ORDER_CONFIRMATION_WEBHOOK ?? null;
+function webhookUrl(template: Template, channel: Channel): string | null {
+  if (channel === "sms") {
+    if (template === "order_confirmation") return process.env.ZAPIER_ORDER_CONFIRMATION_WEBHOOK ?? null;
+    if (template === "ready_for_pickup")   return process.env.ZAPIER_READY_FOR_PICKUP_WEBHOOK   ?? null;
   }
-  if (template === "ready_for_pickup") {
-    return process.env.ZAPIER_READY_FOR_PICKUP_WEBHOOK ?? null;
+  if (channel === "email") {
+    if (template === "order_confirmation") return process.env.ZAPIER_ORDER_CONFIRMATION_EMAIL_WEBHOOK ?? null;
+    if (template === "ready_for_pickup")   return process.env.ZAPIER_READY_FOR_PICKUP_EMAIL_WEBHOOK   ?? null;
   }
   return null;
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  let body: { packet_id: string; template: Template };
+  let body: { packet_id: string; template: Template; channel?: Channel };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { packet_id, template } = body;
+  const { packet_id, template, channel = "sms" } = body;
 
   if (!packet_id || !template) {
     return NextResponse.json({ error: "Missing packet_id or template" }, { status: 400 });
@@ -48,10 +51,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // ── Resolve webhook URL ─────────────────────────────────────────────────────
-  const url = webhookUrl(template);
+  const url = webhookUrl(template, channel);
   if (!url) {
     return NextResponse.json(
-      { error: `Zapier webhook URL not configured for template: ${template}` },
+      { error: `Zapier webhook URL not configured for template: ${template}, channel: ${channel}` },
       { status: 500 }
     );
   }
@@ -64,9 +67,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const payload = {
     order_source:     packet.order_source ?? "In-Store",
     customer_name:    customerName,
-    customer_phone:   packet.customer_phone ?? "",
+    customer_phone:   packet.customer_phone  ?? "",
+    customer_email:   packet.customer_email  ?? "",
     order_type:       packetTypeLabel(packet.packet_type),
-    articles:         packet.articles ?? "",
+    articles:         packet.articles        ?? "",
+    instructions:     packet.instructions    ?? "",
     reference_number: packet.reference_number,
     due_date:         formatDateAU(packet.due_date),
     total_charges:    formatCurrency(packet.total_charges),
@@ -95,16 +100,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // ── Update packet: sms_sent = true, log timestamp in packet_data ────────────
+  // ── Update packet: track send in packet_data ────────────────────────────────
   const nowISO = new Date().toISOString();
   const existingData = (packet.packet_data as Record<string, unknown>) ?? {};
-  await supabase
-    .from("packets")
-    .update({
-      sms_sent:    true,
-      packet_data: { ...existingData, last_sms_sent: nowISO },
-    })
-    .eq("id", packet_id);
+  const dataUpdate: Record<string, unknown> = { ...existingData };
 
-  return NextResponse.json({ success: true, template, sent_at: nowISO });
+  if (channel === "sms") {
+    dataUpdate.last_sms_sent = nowISO;
+    await supabase
+      .from("packets")
+      .update({ sms_sent: true, packet_data: dataUpdate })
+      .eq("id", packet_id);
+  } else {
+    dataUpdate.last_email_sent = nowISO;
+    await supabase
+      .from("packets")
+      .update({ packet_data: dataUpdate })
+      .eq("id", packet_id);
+  }
+
+  return NextResponse.json({ success: true, template, channel, sent_at: nowISO });
 }
