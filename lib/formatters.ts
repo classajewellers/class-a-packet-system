@@ -46,8 +46,21 @@ export function todayISO(): string {
   return new Date().toISOString().split("T")[0];
 }
 
-// Format phone for display
+// Format phone for display (adds spaces)
 export function formatPhone(phone: string | null | undefined): string {
   if (!phone) return "";
   return phone.replace(/(\+61)(\d{1})(\d{4})(\d{4})/, "$1 $2 $3 $4");
+}
+
+// Normalise an Australian phone number to E.164 (+61XXXXXXXXX) for SMS APIs
+export function formatAustralianPhone(phone: string | null | undefined): string {
+  if (!phone) return "";
+  // Remove all spaces, dashes, brackets
+  const cleaned = phone.replace(/[\s\-\(\)]/g, "");
+  // 04XXXXXXXX → +614XXXXXXXX
+  if (cleaned.startsWith("0")) return "+61" + cleaned.slice(1);
+  // 614XXXXXXXX → +614XXXXXXXX
+  if (cleaned.startsWith("61")) return "+" + cleaned;
+  // Already +61… or other international format
+  return cleaned;
 }

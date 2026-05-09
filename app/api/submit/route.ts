@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { generateReferenceNumber, generateRepairTrackerNumber } from "@/lib/referenceNumber";
-import { parseCurrency, packetTypeLabel, formatDateAU } from "@/lib/formatters";
+import { parseCurrency, packetTypeLabel, formatDateAU, formatAustralianPhone } from "@/lib/formatters";
 import { PacketFormData, Packet, SubmitResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -149,17 +149,26 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
 
   // ── 5. Auto-send Order Confirmation SMS for repair / custom_order ──────────
   const isAutoSendType   = packet.packet_type === "repair" || packet.packet_type === "custom_order";
+  const isNotOnlineOrder = packet.packet_type !== "online_order";
   const hasPhone         = !!packet.customer_phone;
   const isNotShopify     = (packet.order_source ?? "").toLowerCase() !== "shopify";
+  const shouldAutoSend   = isAutoSendType && isNotOnlineOrder && hasPhone && isNotShopify;
   const confirmWebhook   = process.env.ZAPIER_ORDER_CONFIRMATION_WEBHOOK;
 
-  if (isAutoSendType && hasPhone && isNotShopify && confirmWebhook) {
+  console.log("[submit] Auto-send SMS:", {
+    packet_type:  packet.packet_type,
+    order_source: packet.order_source ?? null,
+    hasPhone,
+    willSend:     shouldAutoSend && !!confirmWebhook,
+  });
+
+  if (shouldAutoSend && confirmWebhook) {
     const customerName = [packet.customer_first_name, packet.customer_last_name]
       .filter(Boolean).join(" ");
     const autoPayload = {
       order_source:     "In-Store",
       customer_name:    customerName,
-      customer_phone:   packet.customer_phone  ?? "",
+      customer_phone:   formatAustralianPhone(packet.customer_phone),
       customer_email:   packet.customer_email  ?? "",
       order_type:       packetTypeLabel(packet.packet_type),
       articles:         packet.articles        ?? "",

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
-import { packetTypeLabel, formatDateAU } from "@/lib/formatters";
+import { packetTypeLabel, formatDateAU, formatAustralianPhone } from "@/lib/formatters";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +11,7 @@ function formatCurrency(n: number | null | undefined): string {
   if (n == null) return "";
   return n.toLocaleString("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 2 });
 }
+
 
 function webhookUrl(template: Template, channel: Channel): string | null {
   if (channel === "sms") {
@@ -67,7 +68,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const payload = {
     order_source:     packet.order_source ?? "In-Store",
     customer_name:    customerName,
-    customer_phone:   packet.customer_phone  ?? "",
+    customer_phone:   formatAustralianPhone(packet.customer_phone ?? ""),
     customer_email:   packet.customer_email  ?? "",
     order_type:       packetTypeLabel(packet.packet_type),
     articles:         packet.articles        ?? "",
