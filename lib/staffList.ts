@@ -25,7 +25,7 @@ const ROLE_MAP: Record<string, UserRole> = {
   "keeley mucklow":    "manager",
   "leah newton":       "manager",
   "aisha scott":       "staff",
-  "arissa michos":     "staff",
+  "arissa michos":     "manager",
   "dior munro":        "staff",
   "ivy wood":          "staff",
   "melody abram":      "staff",
