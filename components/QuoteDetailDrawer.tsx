@@ -55,6 +55,8 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
   const [local, setLocal] = useState<Quote>(quote);
   const [moving, setMoving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [converting, setConverting] = useState(false);
+  const [convertError, setConvertError] = useState<string | null>(null);
 
   const stage = quoteStage(local.status);
   const stageConfig = STAGE_CONFIG[stage];
@@ -109,7 +111,11 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
   }
 
   function handleConvert() {
-    router.push(`/?from_quote=${local.id}`);
+    setConvertError(null);
+    setConverting(true);
+    // Navigate to the new order form with the quote pre-filled.
+    // /orders/new reads ?from_quote= and populates all customer + job fields.
+    router.push(`/orders/new?from_quote=${local.id}`);
   }
 
   async function handleDelete() {
@@ -214,25 +220,43 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
             Open Quote / Save PDF
           </button>
 
+          {/* ── Convert error banner ── */}
+          {convertError && (
+            <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 font-medium">
+              {convertError}
+            </div>
+          )}
+
           {/* ── Convert to Order (prominent when Job Won, not yet converted) ── */}
           {stage === "job_won" && !isConverted && (
             <button
               onClick={handleConvert}
-              className="w-full flex items-center justify-center gap-2 bg-emerald-500 text-white text-sm font-bold py-3 rounded-xl hover:bg-emerald-600 active:scale-[0.98] transition-all"
+              disabled={converting}
+              className="w-full flex items-center justify-center gap-2 bg-emerald-500 text-white text-sm font-bold py-3 rounded-xl hover:bg-emerald-600 active:scale-[0.98] transition-all disabled:opacity-60"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-              Convert to Order
+              {converting ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Opening order form…
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                  Convert to Order
+                </>
+              )}
             </button>
           )}
 
           {/* ── View Order link (once converted) ── */}
           {isConverted && local.packet_reference && (
             <button
-              onClick={() => {
-                window.location.href = `/admin?tab=orders`;
-              }}
+              onClick={() => router.push("/orders")}
               className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white text-sm font-semibold py-3 rounded-xl hover:bg-blue-700 active:scale-[0.98] transition-all"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -295,13 +319,14 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
             </div>
           </Section>
 
-          {/* ── Convert to Order (secondary — for pending stage) ── */}
-          {stage === "pending" && !isConverted && (
+          {/* ── Convert to Order (secondary — all non-converted stages except job_won handled above) ── */}
+          {stage !== "job_won" && !isConverted && (
             <button
               onClick={handleConvert}
-              className="w-full flex items-center justify-center gap-2 bg-[#A3B2A4] text-white text-sm font-semibold py-3 rounded-xl hover:bg-[#8fa290] active:scale-[0.98] transition-all"
+              disabled={converting}
+              className="w-full flex items-center justify-center gap-2 bg-[#A3B2A4] text-white text-sm font-semibold py-3 rounded-xl hover:bg-[#8fa290] active:scale-[0.98] transition-all disabled:opacity-60"
             >
-              Convert to Order
+              {converting ? "Opening order form…" : "Convert to Order"}
             </button>
           )}
 
