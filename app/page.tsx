@@ -13,14 +13,16 @@ const TYPE_COLORS: Record<string, string> = {
   online_order: "bg-green-100 text-green-700",
 };
 
-function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+function StatCard({ label, value, sub, color, href }: { label: string; value: string | number; sub?: string; color?: string; href?: string }) {
+  const inner = (
+    <div className={`bg-white rounded-2xl border border-gray-200 shadow-sm p-5 ${href ? "cursor-pointer hover:border-[#A3B2A4] hover:shadow-md transition-all" : ""}`}>
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">{label}</p>
       <p className={`text-3xl font-bold ${color ?? "text-gray-900"}`}>{value}</p>
       {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
     </div>
   );
+  if (href) return <Link href={href}>{inner}</Link>;
+  return inner;
 }
 
 function SkeletonCard() {
@@ -117,29 +119,33 @@ export default function DashboardPage() {
           Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)
         ) : (
           <>
-            <StatCard label="Today's Orders" value={todaysOrders} sub="submitted today" />
+            <StatCard label="Today's Orders" value={todaysOrders} sub="submitted today" href="/orders?filter=today" />
             <StatCard
               label="Due Today"
               value={dueToday}
               sub="awaiting collection"
               color={dueToday > 0 ? "text-amber-600" : undefined}
+              href="/orders?filter=due_today"
             />
             <StatCard
               label="Overdue Repairs"
               value={overdueRepairs}
               sub="past due date"
               color={overdueRepairs > 0 ? "text-red-600" : undefined}
+              href="/orders?filter=overdue"
             />
             <StatCard
               label="Unprinted Online"
               value={unprintedOnline}
               sub="need labels"
               color={unprintedOnline > 0 ? "text-green-600" : undefined}
+              href="/online?filter=unprinted"
             />
             <StatCard
               label="Revenue This Month"
               value={revenueThisMonth != null ? formatCurrency(revenueThisMonth) : "—"}
               sub="month to date"
+              href="/revenue"
             />
           </>
         )}

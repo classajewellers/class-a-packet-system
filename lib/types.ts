@@ -289,6 +289,14 @@ export interface Quote {
 // ─────────────────────────────────────────────
 // Workshop
 // ─────────────────────────────────────────────
+export interface ComponentItem {
+  id: string;
+  name: string;
+  quantity: string;
+  status: "ordered" | "arrived" | "checked";
+  notes?: string;
+}
+
 export interface WorkshopJob {
   id: string;
   created_at: string;
@@ -310,6 +318,7 @@ export interface WorkshopJob {
   job_type: string;
   notes: string | null;
   stage_changed_at: string;
+  components: ComponentItem[];
 }
 
 export interface QuoteFormData {

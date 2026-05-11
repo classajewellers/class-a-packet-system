@@ -61,14 +61,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // ── Build payload ───────────────────────────────────────────────────────────
-  const customerName = [packet.customer_first_name, packet.customer_last_name]
+  const customerName  = [packet.customer_first_name, packet.customer_last_name]
     .filter(Boolean)
     .join(" ");
+  const formattedPhone = formatAustralianPhone(packet.customer_phone || "");
+  console.log("[notifications] Sending to phone:", formattedPhone, "| channel:", channel, "| template:", template);
 
   const payload = {
     order_source:     packet.order_source ?? "In-Store",
     customer_name:    customerName,
-    customer_phone:   formatAustralianPhone(packet.customer_phone ?? ""),
+    customer_phone:   formattedPhone,
     customer_email:   packet.customer_email  ?? "",
     order_type:       packetTypeLabel(packet.packet_type),
     articles:         packet.articles        ?? "",

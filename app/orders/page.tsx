@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { Packet, PacketType } from "@/lib/types";
 import { getSupabaseClient } from "@/lib/supabase";
 import { useUser } from "@/context/UserContext";
@@ -8,6 +9,7 @@ import AdminTable from "@/components/AdminTable";
 import PacketDetailDrawer from "@/components/PacketDetailDrawer";
 
 type OrderFilter = "all" | "shopify" | "in-store" | PacketType;
+type UrlFilter   = "today" | "due_today" | "overdue" | null;
 
 const ORDER_FILTERS: { value: OrderFilter; label: string }[] = [
   { value: "all",           label: "All Orders" },
@@ -19,17 +21,27 @@ const ORDER_FILTERS: { value: OrderFilter; label: string }[] = [
   { value: "client_intake", label: "Client Intake" },
 ];
 
-export default function OrdersPage() {
+function OrdersPageInner() {
   const { user } = useUser();
   const canDelete = user?.role !== "staff";
+  const searchParams = useSearchParams();
 
   const [packets, setPackets] = useState<Packet[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPacket, setSelectedPacket] = useState<Packet | null>(null);
   const [orderFilter, setOrderFilter] = useState<OrderFilter>("all");
+  const [urlFilter, setUrlFilter] = useState<UrlFilter>(null);
   const [search, setSearch] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+
+  // Apply filter from URL param on mount
+  useEffect(() => {
+    const f = searchParams.get("filter");
+    if (f === "today" || f === "due_today" || f === "overdue") {
+      setUrlFilter(f);
+    }
+  }, [searchParams]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const fetchOrders = useCallback(async (params: { search?: string; from?: string; to?: string }) => {
@@ -117,14 +129,28 @@ export default function OrdersPage() {
     window.open(`/api/admin/export?${p}`, "_blank");
   }
 
+  const todayStr = new Date().toISOString().split("T")[0];
+
   const filteredPackets = useMemo(() => {
     return packets.filter((p) => {
+      // URL-based filters take priority
+      if (urlFilter === "today") {
+        return (p.created_at ?? "").startsWith(todayStr);
+      }
+      if (urlFilter === "due_today") {
+        return p.due_date === todayStr && p.collected_date == null;
+      }
+      if (urlFilter === "overdue") {
+        return (p.packet_type === "repair" || p.packet_type === "custom_order") &&
+          p.due_date != null && p.due_date < todayStr && p.collected_date == null;
+      }
+      // Normal type filters
       if (orderFilter === "shopify")  return p.packet_type === "online_order";
       if (orderFilter === "in-store") return p.packet_type !== "online_order";
       if (orderFilter === "all")      return true;
       return p.packet_type === orderFilter;
     });
-  }, [packets, orderFilter]);
+  }, [packets, orderFilter, urlFilter, todayStr]);
 
   const unprintedShopify = useMemo(() =>
     packets.filter((p) => p.packet_type === "online_order" && !p.label_printed),
@@ -146,6 +172,23 @@ export default function OrdersPage() {
       )}
 
       <div className="max-w-7xl mx-auto space-y-4">
+        {/* URL filter banner */}
+        {urlFilter && (
+          <div className="flex items-center justify-between bg-[#A3B2A4]/20 border border-[#A3B2A4] rounded-xl px-4 py-2.5">
+            <p className="text-sm font-semibold text-gray-700">
+              {urlFilter === "today"     && "Showing: Orders created today"}
+              {urlFilter === "due_today" && "Showing: Orders due today"}
+              {urlFilter === "overdue"   && "Showing: Overdue repairs & custom orders"}
+            </p>
+            <button
+              onClick={() => setUrlFilter(null)}
+              className="text-xs font-semibold text-gray-500 hover:text-black transition-colors"
+            >
+              Clear filter ×
+            </button>
+          </div>
+        )}
+
         {/* Filters */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
           <div className="flex flex-wrap gap-1.5 mb-3">
@@ -259,5 +302,13 @@ export default function OrdersPage() {
         </div>
       </div>
     </>
+  );
+}
+
+export default function OrdersPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-gray-400">Loading orders…</div>}>
+      <OrdersPageInner />
+    </Suspense>
   );
 }

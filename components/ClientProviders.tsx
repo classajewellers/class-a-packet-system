@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { UserProvider, useUser } from "@/context/UserContext";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
+import AIAssistant from "@/components/AIAssistant";
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
 // Redirects unauthenticated users to /login, and logged-in users away from it.
@@ -14,6 +15,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const isLoginPage = pathname === "/login";
+  const [aiOpen, setAiOpen] = useState(false);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -36,13 +38,14 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   // Authenticated pages: sidebar + topbar layout
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar />
+      <Sidebar onOpenAI={() => setAiOpen(true)} />
       <div className="flex flex-col flex-1 overflow-hidden">
         <TopBar />
         <main className="flex-1 overflow-y-auto bg-gray-50 p-6">
           {children}
         </main>
       </div>
+      <AIAssistant open={aiOpen} onClose={() => setAiOpen(false)} />
     </div>
   );
 }

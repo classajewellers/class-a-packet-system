@@ -17,7 +17,11 @@ const NAV_ITEMS = [
   { href: "/settings",  label: "Settings",   icon: "⚙️", minRole: "manager" },
 ] as const;
 
-export default function Sidebar() {
+interface Props {
+  onOpenAI: () => void;
+}
+
+export default function Sidebar({ onOpenAI }: Props) {
   const pathname = usePathname();
   const { user } = useUser();
   const router = useRouter();
@@ -110,6 +114,20 @@ export default function Sidebar() {
           })}
         </ul>
       </nav>
+
+      {/* AI Assistant button */}
+      <div className="px-3 pt-2">
+        <button
+          onClick={onOpenAI}
+          className={`flex items-center gap-2 w-full rounded-lg py-2 text-white/70 hover:bg-white/5 hover:text-white transition-colors ${
+            collapsed ? "justify-center px-2" : "px-2"
+          }`}
+          title={collapsed ? "AI Assistant" : undefined}
+        >
+          <span className="text-base flex-shrink-0">🤖</span>
+          {!collapsed && <span className="text-sm font-medium">AI Assistant</span>}
+        </button>
+      </div>
 
       {/* + New button */}
       <div className="p-3 border-t border-white/10 relative">

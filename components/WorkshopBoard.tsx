@@ -4,6 +4,7 @@ import { useState } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { WorkshopJob } from "@/lib/types";
 import WorkshopJobCard from "@/components/WorkshopJobCard";
+import WorkshopJobDrawer from "@/components/WorkshopJobDrawer";
 
 const STAGES = [
   { id: "new",           label: "New",           color: "#6366f1" },
@@ -51,6 +52,7 @@ export default function WorkshopBoard({ jobs, onStageChange, onRefresh }: Props)
   const [addingToStage, setAddingToStage] = useState<string | null>(null);
   const [newJobForm, setNewJobForm] = useState<NewJobForm>(defaultForm);
   const [saving, setSaving] = useState(false);
+  const [selectedJob, setSelectedJob] = useState<WorkshopJob | null>(null);
 
   // Keep local in sync with prop changes
   if (jobs !== localJobs && JSON.stringify(jobs.map((j) => j.id)) !== JSON.stringify(localJobs.map((j) => j.id))) {
@@ -86,8 +88,28 @@ export default function WorkshopBoard({ jobs, onStageChange, onRefresh }: Props)
     }
   }
 
+  function handleJobUpdate(updated: WorkshopJob) {
+    setLocalJobs((prev) => prev.map((j) => j.id === updated.id ? updated : j));
+    setSelectedJob(updated);
+  }
+
+  function handleJobDelete(id: string) {
+    setLocalJobs((prev) => prev.filter((j) => j.id !== id));
+    setSelectedJob(null);
+  }
+
   return (
     <>
+      {/* Job detail drawer */}
+      {selectedJob && (
+        <WorkshopJobDrawer
+          job={selectedJob}
+          onClose={() => setSelectedJob(null)}
+          onUpdate={handleJobUpdate}
+          onDelete={handleJobDelete}
+        />
+      )}
+
       {/* Add Job Modal */}
       {addingToStage && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
@@ -222,7 +244,7 @@ export default function WorkshopBoard({ jobs, onStageChange, onRefresh }: Props)
                                 opacity: snap.isDragging ? 0.85 : 1,
                               }}
                             >
-                              <WorkshopJobCard job={job} />
+                              <WorkshopJobCard job={job} onClick={() => setSelectedJob(job)} />
                             </div>
                           )}
                         </Draggable>
