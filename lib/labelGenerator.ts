@@ -60,7 +60,7 @@ export function generateDymoXML(packet: Packet): string {
     <Variable Name="Balance">Bal: ${esc(formatCurrency(packet.balance))}</Variable>
     <Variable Name="Staff">Staff: ${esc(packet.staff_member)}</Variable>
     <Variable Name="OrderNumber">${isOnline ? esc(`Order#: ${packet.order_number ?? ""}`) : ""}</Variable>
-    <Variable Name="RepairTracker">${esc(packet.repair_tracker_number)}</Variable>
+    <Variable Name="RepairTracker">REPAIR TRACKER NO: _______________________</Variable>
     <Variable Name="Disclaimer">THIS STORE IS NOT RESPONSIBLE FOR ARTICLES LEFT OVER 30 DAYS. NO ARTICLE CAN BE PICKED UP WITHOUT THIS RECEIPT.</Variable>
   </Record>
   <Layout>
@@ -373,7 +373,7 @@ export function generateDymoXML(packet: Packet): string {
         <TextFitMode>ShrinkToFit</TextFitMode>
         <StyledText>
           <Element>
-            <String>^Staff | ^OrderNumber | RT: ^RepairTracker</String>
+            <String>^Staff | ^OrderNumber | ^RepairTracker</String>
             <Attributes><Font Family="Arial" Size="7" Bold="False" Italic="False" Underline="False" StrikeOut="False" /></Attributes>
           </Element>
         </StyledText>
@@ -627,7 +627,10 @@ export function generatePrintHTML(packet: Packet): string {
   <!-- 8. Staff -->
   <div class="bottom">
     <strong>Staff:</strong> ${esc(packet.staff_member ?? "—")}
-    ${packet.repair_tracker_number ? ` &bull; RT: ${esc(packet.repair_tracker_number)}` : ""}
+    <div style="margin-top:1.5mm;">
+      <strong>REPAIR TRACKER NO:</strong>
+      <span style="display:inline-block; width:48mm; border-bottom:0.75pt solid #000; vertical-align:bottom;">&nbsp;</span>
+    </div>
     <div class="collected-row">Collected: ___/___/___&nbsp;&nbsp;&nbsp;Signed: ____________________</div>
   </div>
 
