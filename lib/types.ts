@@ -286,6 +286,32 @@ export interface Quote {
   total?: number | null;
 }
 
+// ─────────────────────────────────────────────
+// Workshop
+// ─────────────────────────────────────────────
+export interface WorkshopJob {
+  id: string;
+  created_at: string;
+  packet_id: string | null;
+  reference_number: string | null;
+  customer_surname: string | null;
+  description: string | null;
+  category: string;
+  complexity: string;
+  stage: string;
+  assigned_jeweller: string | null;
+  due_date: string | null;
+  instructions: string | null;
+  is_subcontractor: boolean;
+  subcontractor_name: string | null;
+  subcontractor_due_date: string | null;
+  subcontractor_instructions: string | null;
+  subcontractor_status: string | null;
+  job_type: string;
+  notes: string | null;
+  stage_changed_at: string;
+}
+
 export interface QuoteFormData {
   quote_type: QuoteType | "";
   customer_first_name: string;

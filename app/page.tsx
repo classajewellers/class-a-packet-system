@@ -1,504 +1,265 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
-import {
-  PacketFormData,
-  PacketType,
-  defaultFormData,
-  SubmissionResults,
-  Packet,
-  Quote,
-} from "@/lib/types";
-import { todayISO } from "@/lib/formatters";
-import { printLabel } from "@/lib/dymo";
-import { useUser } from "@/context/UserContext";
-import NavBar from "@/components/NavBar";
-import PacketTypeSelector from "@/components/PacketTypeSelector";
-import CustomerSection from "@/components/CustomerSection";
-import ValueContactSection from "@/components/ValueContactSection";
-import ArticlesSection from "@/components/ArticlesSection";
-import PricingSection from "@/components/PricingSection";
-import DatesSection from "@/components/DatesSection";
-import ReferralStaffSection from "@/components/ReferralStaffSection";
-import RepairFields from "@/components/RepairFields";
-import CustomOrderFields from "@/components/CustomOrderFields";
-import OnlineOrderFields from "@/components/OnlineOrderFields";
-import LabelPreview from "@/components/LabelPreview";
-import SubmissionOverlay from "@/components/SubmissionOverlay";
-import SuccessScreen from "@/components/SuccessScreen";
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { Packet } from "@/lib/types";
+import { packetTypeLabel, formatDateAU, formatCurrency } from "@/lib/formatters";
 
-function validate(data: PacketFormData): Partial<Record<keyof PacketFormData, string>> {
-  const errors: Partial<Record<keyof PacketFormData, string>> = {};
-  if (!data.packet_type) errors.packet_type = "Select an order type";
-  if (!data.customer_first_name.trim()) errors.customer_first_name = "Required";
-  if (!data.customer_last_name.trim()) errors.customer_last_name = "Required";
-  if (!data.customer_phone.trim()) errors.customer_phone = "Required";
-  if (!data.customer_email.trim()) errors.customer_email = "Required";
-  if (!data.contact_preference.length)
-    errors.contact_preference = "Select at least one contact preference";
-  if (data.packet_type !== "online_order") {
-    if (!data.articles.trim()) errors.articles = "Required";
-    if (!data.instructions.trim()) errors.instructions = "Required";
-  }
-  if (!data.due_date && data.packet_type !== "online_order")
-    errors.due_date = "Required";
-  if (!data.staff_member) errors.staff_member = "Required";
-  if (data.packet_type === "online_order") {
-    if (!data.order_number.trim()) errors.order_number = "Required";
-  }
-  return errors;
-}
+const TYPE_COLORS: Record<string, string> = {
+  repair: "bg-orange-100 text-orange-700",
+  custom_order: "bg-purple-100 text-purple-700",
+  layby: "bg-blue-100 text-blue-700",
+  client_intake: "bg-teal-100 text-teal-700",
+  online_order: "bg-green-100 text-green-700",
+};
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="px-5 py-3 border-b border-gray-100 bg-[#A3B2A4]">
-        <h2 className="text-sm font-semibold tracking-wide text-white uppercase">
-          {title}
-        </h2>
-      </div>
-      <div className="px-5 py-5">{children}</div>
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">{label}</p>
+      <p className={`text-3xl font-bold ${color ?? "text-gray-900"}`}>{value}</p>
+      {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
     </div>
   );
 }
 
-function PacketFormPageInner() {
-  const searchParams = useSearchParams();
-  const { user } = useUser();
-  const [formData, setFormData] = useState<PacketFormData>({
-    ...defaultFormData,
-    in_date: todayISO(),
-    from_date: todayISO(),
-    staff_member: user?.name ?? "",
-  });
-  const [errors, setErrors] = useState<Partial<Record<keyof PacketFormData, string>>>({});
-  const [showPreview, setShowPreview] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [results, setResults] = useState<SubmissionResults>({
-    supabase: "pending",
-    label: "pending",
-    klaviyo: "pending",
-    email: "pending",
-    sms: "pending",
-    sheets: "pending",
-  });
-  const [submittedPacket, setSubmittedPacket] = useState<Packet | null>(null);
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [fromQuoteRef, setFromQuoteRef] = useState<string | null>(null);
-  const formRef = useRef<HTMLDivElement>(null);
-
-  // Pre-fill from quote if from_quote param is present
-  useEffect(() => {
-    const fromQuoteId = searchParams.get("from_quote");
-    if (!fromQuoteId) return;
-
-    fetch(`/api/quotes/${fromQuoteId}`)
-      .then((r) => r.json())
-      .then((json: { quote?: Quote }) => {
-        if (!json.quote) return;
-        const q = json.quote;
-
-        // Build articles from line items: "Design — Stone — Price"
-        const lineItemsText = (q.line_items ?? []).length > 0
-          ? (q.line_items ?? [])
-              .map((li) => {
-                // Handle both old (item) and new (design) field names
-                const label = (li as {design?: string; item?: string}).design ?? (li as {item?: string}).item ?? "";
-                return [label, li.stone, li.price].filter(Boolean).join(" — ");
-              })
-              .filter(Boolean)
-              .join("\n")
-          : "";
-        const articles = [q.item_description, lineItemsText].filter(Boolean).join("\n\n");
-
-        // Build instructions from notes and legacy fields
-        const instructions = [
-          q.repair_description,
-          q.design_brief,
-          q.metal_type  ? `Metal: ${q.metal_type}` : null,
-          q.stone_details ? `Stone: ${q.stone_details}` : null,
-          q.notes,
-        ].filter(Boolean).join("\n");
-
-        setFromQuoteRef(q.reference_number);
-        setFormData((prev) => ({
-          ...prev,
-          customer_first_name: q.customer_first_name ?? prev.customer_first_name,
-          customer_last_name: q.customer_last_name ?? prev.customer_last_name,
-          customer_email: q.customer_email ?? prev.customer_email,
-          customer_phone: q.customer_phone ?? prev.customer_phone,
-          articles: articles || prev.articles,
-          instructions: instructions || prev.instructions,
-          total_charges: q.total != null ? String(q.total) : prev.total_charges,
-          staff_member: q.assigned_to ?? prev.staff_member,
-          packet_type:
-            q.quote_type === "repair"
-              ? "repair"
-              : q.quote_type === "custom_order"
-              ? "custom_order"
-              : prev.packet_type,
-          from_quote_id: q.id,
-        }));
-      })
-      .catch(() => {/* ignore fetch errors */});
-  }, [searchParams]);
-
-  const handleChange = useCallback(
-    (field: keyof PacketFormData, value: string | boolean | string[]) => {
-      setFormData((prev) => ({ ...prev, [field]: value }));
-      setErrors((prev) => {
-        if (!prev[field]) return prev;
-        const next = { ...prev };
-        delete next[field];
-        return next;
-      });
-    },
-    []
-  );
-
-  function handleTypeChange(type: PacketType) {
-    setFormData((prev) => ({ ...prev, packet_type: type }));
-    setErrors((prev) => { const n = { ...prev }; delete n.packet_type; return n; });
-  }
-
-  async function handleSubmit() {
-    const validationErrors = validate(formData);
-    if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors);
-      setTimeout(() => {
-        formRef.current?.querySelector("[data-error]")?.scrollIntoView({ behavior: "smooth", block: "center" });
-      }, 50);
-      return;
-    }
-
-    setSubmitting(true);
-    setResults({ supabase: "pending", label: "pending", klaviyo: "pending", email: "pending", sms: "pending", sheets: "pending" });
-
-    try {
-      const res = await fetch("/api/submit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ formData }),
-      });
-      const json = await res.json();
-
-      if (!res.ok || !json.packet) {
-        const errMsg = Object.values(json.errors ?? {}).join(", ") || "Submission failed";
-        setResults((r) => ({ ...r, supabase: "failed", klaviyo: "failed", email: "failed", sms: "failed", sheets: "failed" }));
-        alert(`Error: ${errMsg}`);
-        setSubmitting(false);
-        return;
-      }
-
-      const packet: Packet = json.packet;
-      setSubmittedPacket(packet);
-      setResults((r) => ({
-        ...r,
-        supabase: "success",
-        klaviyo: json.results.klaviyo,
-        email: json.results.email,
-        sms: json.results.sms,
-        sheets: json.results.sheets,
-      }));
-
-      // Client-side Dymo print
-      setResults((r) => ({ ...r, label: "pending" }));
-      const printed = await printLabel(packet);
-      setResults((r) => ({ ...r, label: printed ? "success" : "failed" }));
-
-      if (printed) {
-        fetch("/api/admin/packets", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: packet.id, updates: { label_printed: true } }),
-        });
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      setShowSuccess(true);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      alert(`Unexpected error: ${msg}`);
-      setSubmitting(false);
-    }
-  }
-
-  async function handleRetry(output: "klaviyo" | "email" | "sms" | "sheets" | "label") {
-    if (!submittedPacket) return;
-    if (output === "label") {
-      const printed = await printLabel(submittedPacket);
-      if (printed) {
-        fetch("/api/retry", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ packetId: submittedPacket.id, output: "label" }),
-        });
-        setResults((r) => ({ ...r, label: "success" }));
-      }
-      return;
-    }
-    const res = await fetch("/api/retry", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ packetId: submittedPacket.id, output }),
-    });
-    if (res.ok) setResults((r) => ({ ...r, [output]: "success" }));
-  }
-
-  function handleNewPacket() {
-    setFormData({ ...defaultFormData, in_date: todayISO(), from_date: todayISO(), staff_member: user?.name ?? "" });
-    setErrors({});
-    setSubmittedPacket(null);
-    setShowSuccess(false);
-    setSubmitting(false);
-    setFromQuoteRef(null);
-    setResults({ supabase: "pending", label: "pending", klaviyo: "pending", email: "pending", sms: "pending", sheets: "pending" });
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  async function handlePrintAgain() {
-    if (submittedPacket) await printLabel(submittedPacket);
-  }
-
+function SkeletonCard() {
   return (
-    <>
-      {submitting && !showSuccess && <SubmissionOverlay results={results} />}
-      {showSuccess && submittedPacket && (
-        <SuccessScreen
-          packet={submittedPacket}
-          results={results}
-          onPrintAgain={handlePrintAgain}
-          onNewPacket={handleNewPacket}
-          onRetry={handleRetry}
-        />
-      )}
-
-      <NavBar />
-
-      <main className="max-w-5xl mx-auto px-4 py-6 pb-32">
-        {fromQuoteRef && (
-          <div className="mb-4 rounded-xl bg-emerald-50 border border-emerald-300 px-4 py-3 flex items-center gap-3">
-            <svg className="w-5 h-5 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <p className="text-sm font-semibold text-emerald-800">
-              Pre-filled from Quote {fromQuoteRef} — review and submit when ready
-            </p>
-          </div>
-        )}
-        <div className="lg:flex lg:gap-6">
-          {/* Form column */}
-          <div className="flex-1 min-w-0 space-y-4" ref={formRef}>
-            <Card title="Step 1 — Order Type">
-              <PacketTypeSelector value={formData.packet_type} onChange={handleTypeChange} />
-              {errors.packet_type && (
-                <p className="mt-2 text-xs text-red-600" data-error>{errors.packet_type}</p>
-              )}
-            </Card>
-
-            {formData.packet_type && (
-              <>
-                <Card title="Customer">
-                  <CustomerSection
-                    data={formData}
-                    onChange={(f, v) => handleChange(f, v as string)}
-                    errors={errors}
-                  />
-                </Card>
-
-                <Card title="Valuation & Contact">
-                  <ValueContactSection
-                    data={formData}
-                    onChange={(f, v) => handleChange(f, v as boolean | string[])}
-                    errors={errors}
-                  />
-                </Card>
-
-                {formData.packet_type !== "online_order" && (
-                  <Card title="Articles & Instructions">
-                    <ArticlesSection
-                      data={formData}
-                      onChange={(f, v) => handleChange(f, v as string)}
-                      errors={errors}
-                    />
-                  </Card>
-                )}
-
-                <Card title="Pricing">
-                  <PricingSection
-                    data={formData}
-                    onChange={(f, v) => handleChange(f, v as string)}
-                    errors={errors}
-                  />
-                </Card>
-
-                <Card title="Dates">
-                  <DatesSection
-                    data={formData}
-                    onChange={(f, v) => handleChange(f, v as string)}
-                    errors={errors}
-                  />
-                </Card>
-
-                <Card title="Referral & Staff">
-                  <ReferralStaffSection
-                    data={formData}
-                    onChange={(f, v) => handleChange(f, v as string)}
-                    errors={errors}
-                  />
-                </Card>
-
-                {formData.packet_type === "repair" && (
-                  <Card title="Repair Details">
-                    <RepairFields
-                      data={formData}
-                      onChange={(f, v) => handleChange(f, v as string)}
-                      repairTrackerNumber={submittedPacket?.repair_tracker_number ?? undefined}
-                    />
-                  </Card>
-                )}
-
-                {formData.packet_type === "custom_order" && (
-                  <Card title="Custom Order Details">
-                    <CustomOrderFields
-                      data={formData}
-                      onChange={(f, v) => handleChange(f, v as string)}
-                    />
-                  </Card>
-                )}
-
-                {(formData.packet_type === "repair" || formData.packet_type === "custom_order") && (
-                  <Card title="Gift & Delivery">
-                    <div className="space-y-4">
-                      {/* Gift Wrapping toggle */}
-                      <div>
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Gift Wrapping</p>
-                        <div className="flex gap-3">
-                          {[{ val: true, label: "Yes" }, { val: false, label: "No" }].map(({ val, label }) => (
-                            <button
-                              key={label}
-                              type="button"
-                              onClick={() => handleChange("gift_wrapping", val)}
-                              className={`px-5 py-2 rounded-lg text-sm font-semibold border-2 transition-colors ${
-                                formData.gift_wrapping === val
-                                  ? "bg-black text-white border-black"
-                                  : "bg-white text-black border-gray-300 hover:border-black"
-                              }`}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      {/* Delivery method dropdown */}
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Delivery Method
-                        </label>
-                        <select
-                          value={formData.delivery_method}
-                          onChange={(e) => handleChange("delivery_method", e.target.value)}
-                          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black"
-                        >
-                          <option value="Pickup">Pickup</option>
-                          <option value="Standard Post">Standard Post</option>
-                          <option value="Express Post">Express Post</option>
-                          <option value="Courier">Courier</option>
-                        </select>
-                      </div>
-                    </div>
-                  </Card>
-                )}
-
-                {formData.packet_type === "online_order" && (
-                  <Card title="Online Order Details">
-                    <OnlineOrderFields
-                      data={formData}
-                      onChange={(f, v) => handleChange(f, v as string | boolean)}
-                      errors={errors}
-                    />
-                  </Card>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* Sticky label preview — landscape iPad / desktop */}
-          {formData.packet_type && (
-            <div className="hidden lg:block w-72 flex-shrink-0">
-              <div className="sticky top-20">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
-                  Label Preview
-                </p>
-                <LabelPreview data={formData} />
-              </div>
-            </div>
-          )}
-        </div>
-      </main>
-
-      {/* Mobile preview toggle button */}
-      {formData.packet_type && (
-        <div className="lg:hidden fixed bottom-20 right-4 z-20">
-          <button
-            type="button"
-            onClick={() => setShowPreview((v) => !v)}
-            className="bg-[#A3B2A4] text-white rounded-full shadow-lg p-3"
-            title="Toggle label preview"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.964-7.178z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
-        </div>
-      )}
-
-      {/* Mobile preview sheet */}
-      {showPreview && formData.packet_type && (
-        <div
-          className="lg:hidden fixed inset-0 z-40 bg-black/60 flex items-end"
-          onClick={() => setShowPreview(false)}
-        >
-          <div
-            className="w-full bg-white rounded-t-2xl p-4 max-h-[80vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-semibold text-black">Label Preview</p>
-              <button onClick={() => setShowPreview(false)} className="text-gray-400">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <LabelPreview data={formData} />
-          </div>
-        </div>
-      )}
-
-      {/* Fixed submit bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-gray-200 shadow-lg px-4 py-3">
-        <div className="max-w-5xl mx-auto">
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitting || !formData.packet_type}
-            className="w-full rounded-xl bg-black py-4 text-base font-bold text-white shadow-md hover:bg-[#222222] active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {submitting ? "Submitting…" : "Submit & Print"}
-          </button>
-        </div>
-      </div>
-    </>
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 animate-pulse">
+      <div className="h-3 bg-gray-200 rounded w-24 mb-3" />
+      <div className="h-8 bg-gray-200 rounded w-16" />
+    </div>
   );
 }
 
-export default function PacketFormPage() {
+function todayISO() {
+  return new Date().toISOString().split("T")[0];
+}
+
+function startOfMonthISO() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+}
+
+export default function DashboardPage() {
+  const [packets, setPackets] = useState<Packet[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [revenueThisMonth, setRevenueThisMonth] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/packets?limit=200", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json) => {
+        setPackets(json.packets ?? []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+
+    // Fetch revenue
+    const monthStart = startOfMonthISO();
+    const today = todayISO();
+    fetch(`/api/revenue?from=${monthStart}&to=${today}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json) => {
+        if (typeof json.totalRevenue === "number") setRevenueThisMonth(json.totalRevenue);
+        else if (Array.isArray(json.data)) {
+          const total = json.data.reduce((sum: number, d: { revenue?: number }) => sum + (d.revenue ?? 0), 0);
+          setRevenueThisMonth(total);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const today = todayISO();
+
+  const todaysOrders = packets.filter((p) => (p.created_at ?? "").startsWith(today)).length;
+  const dueToday = packets.filter(
+    (p) => p.due_date === today && p.collected_date == null
+  ).length;
+  const overdueRepairs = packets.filter(
+    (p) =>
+      p.packet_type === "repair" &&
+      p.due_date != null &&
+      p.due_date < today &&
+      p.collected_date == null
+  ).length;
+  const unprintedOnline = packets.filter(
+    (p) => p.packet_type === "online_order" && !p.label_printed
+  ).length;
+
+  // Recent 10 orders
+  const recentOrders = [...packets].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  ).slice(0, 10);
+
+  // Upcoming due: next 7 days (non-collected)
+  const in7Days = new Date();
+  in7Days.setDate(in7Days.getDate() + 7);
+  const in7DaysISO = in7Days.toISOString().split("T")[0];
+  const upcoming = packets
+    .filter(
+      (p) =>
+        p.due_date != null &&
+        p.due_date >= today &&
+        p.due_date <= in7DaysISO &&
+        p.collected_date == null
+    )
+    .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""));
+  const overdue = packets.filter(
+    (p) => p.due_date != null && p.due_date < today && p.collected_date == null
+  ).sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""));
+
   return (
-    <Suspense>
-      <PacketFormPageInner />
-    </Suspense>
+    <div className="max-w-7xl mx-auto space-y-6">
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        {loading ? (
+          Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)
+        ) : (
+          <>
+            <StatCard label="Today's Orders" value={todaysOrders} sub="submitted today" />
+            <StatCard
+              label="Due Today"
+              value={dueToday}
+              sub="awaiting collection"
+              color={dueToday > 0 ? "text-amber-600" : undefined}
+            />
+            <StatCard
+              label="Overdue Repairs"
+              value={overdueRepairs}
+              sub="past due date"
+              color={overdueRepairs > 0 ? "text-red-600" : undefined}
+            />
+            <StatCard
+              label="Unprinted Online"
+              value={unprintedOnline}
+              sub="need labels"
+              color={unprintedOnline > 0 ? "text-green-600" : undefined}
+            />
+            <StatCard
+              label="Revenue This Month"
+              value={revenueThisMonth != null ? formatCurrency(revenueThisMonth) : "—"}
+              sub="month to date"
+            />
+          </>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Recent Orders */}
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-black">Recent Orders</h2>
+            <Link href="/orders" className="text-xs text-[#A3B2A4] font-semibold hover:underline">
+              View all
+            </Link>
+          </div>
+          <div className="overflow-x-auto">
+            {loading ? (
+              <div className="px-5 py-8 text-center text-gray-400 text-sm">Loading…</div>
+            ) : recentOrders.length === 0 ? (
+              <div className="px-5 py-8 text-center text-gray-400 text-sm">No orders yet</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left border-b border-gray-100 bg-gray-50">
+                    <th className="px-4 py-2.5 text-xs font-semibold text-gray-500">Ref</th>
+                    <th className="px-4 py-2.5 text-xs font-semibold text-gray-500">Type</th>
+                    <th className="px-4 py-2.5 text-xs font-semibold text-gray-500">Customer</th>
+                    <th className="px-4 py-2.5 text-xs font-semibold text-gray-500">Due</th>
+                    <th className="px-4 py-2.5 text-xs font-semibold text-gray-500">Created</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {recentOrders.map((p) => {
+                    const customerName = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
+                    return (
+                      <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-2.5 font-mono text-xs text-gray-500">{p.reference_number}</td>
+                        <td className="px-4 py-2.5">
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${TYPE_COLORS[p.packet_type] ?? "bg-gray-100 text-gray-600"}`}>
+                            {packetTypeLabel(p.packet_type)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 font-medium text-gray-800">{customerName}</td>
+                        <td className="px-4 py-2.5 text-gray-500">{formatDateAU(p.due_date) || "—"}</td>
+                        <td className="px-4 py-2.5 text-gray-400 text-xs">{formatDateAU(p.created_at?.split("T")[0]) || "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+
+        {/* Upcoming + Overdue */}
+        <div className="space-y-4">
+          {/* Overdue */}
+          {!loading && overdue.length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-2xl overflow-hidden">
+              <div className="px-5 py-3 border-b border-red-200">
+                <h2 className="text-sm font-semibold text-red-700">Overdue ({overdue.length})</h2>
+              </div>
+              <ul className="divide-y divide-red-100">
+                {overdue.slice(0, 5).map((p) => {
+                  const name = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
+                  return (
+                    <li key={p.id} className="px-5 py-2.5">
+                      <p className="text-sm font-medium text-red-800">{name}</p>
+                      <p className="text-xs text-red-600">{packetTypeLabel(p.packet_type)} · Due {formatDateAU(p.due_date)}</p>
+                    </li>
+                  );
+                })}
+                {overdue.length > 5 && (
+                  <li className="px-5 py-2.5 text-xs text-red-400">+{overdue.length - 5} more overdue</li>
+                )}
+              </ul>
+            </div>
+          )}
+
+          {/* Upcoming */}
+          <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100">
+              <h2 className="text-sm font-semibold text-black">Due This Week</h2>
+            </div>
+            {loading ? (
+              <div className="px-5 py-6 text-center text-gray-400 text-sm">Loading…</div>
+            ) : upcoming.length === 0 ? (
+              <div className="px-5 py-6 text-center text-gray-400 text-sm">Nothing due this week</div>
+            ) : (
+              <ul className="divide-y divide-gray-50">
+                {upcoming.map((p) => {
+                  const name = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
+                  return (
+                    <li key={p.id} className="px-5 py-2.5">
+                      <p className="text-sm font-medium text-gray-800">{name}</p>
+                      <p className="text-xs text-gray-500">{packetTypeLabel(p.packet_type)} · Due {formatDateAU(p.due_date)}</p>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          {/* Quick links */}
+          <div className="bg-white border border-gray-200 rounded-2xl p-4 space-y-2">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Quick Actions</p>
+            <Link
+              href="/orders/new"
+              className="flex items-center gap-2 w-full bg-black text-white rounded-xl py-2.5 px-4 text-sm font-semibold hover:bg-[#222222] transition-colors"
+            >
+              <span>📦</span> New Order
+            </Link>
+            <Link
+              href="/quote"
+              className="flex items-center gap-2 w-full bg-[#A3B2A4] text-white rounded-xl py-2.5 px-4 text-sm font-semibold hover:bg-[#8fa090] transition-colors"
+            >
+              <span>💬</span> New Quote
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

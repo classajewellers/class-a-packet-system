@@ -3,6 +3,8 @@
 import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { UserProvider, useUser } from "@/context/UserContext";
+import Sidebar from "@/components/Sidebar";
+import TopBar from "@/components/TopBar";
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
 // Redirects unauthenticated users to /login, and logged-in users away from it.
@@ -28,7 +30,21 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   if (!user && !isLoginPage) return null;
   if (user && isLoginPage) return null;
 
-  return <>{children}</>;
+  // Login page: no sidebar/topbar
+  if (isLoginPage) return <>{children}</>;
+
+  // Authenticated pages: sidebar + topbar layout
+  return (
+    <div className="flex h-screen overflow-hidden">
+      <Sidebar />
+      <div className="flex flex-col flex-1 overflow-hidden">
+        <TopBar />
+        <main className="flex-1 overflow-y-auto bg-gray-50 p-6">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
 }
 
 // ── Public export ─────────────────────────────────────────────────────────────

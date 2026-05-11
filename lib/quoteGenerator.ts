@@ -63,7 +63,7 @@ export function generateQuoteHTML(quote: Quote): string {
 <title>Quote_${esc(quote.reference_number)}_${esc(lastName)}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  @page { size: A4 portrait; margin: 15mm 15mm 15mm 15mm; }
+  @page { size: 148mm 210mm portrait; margin: 10mm 10mm 10mm 10mm; }
 
   /* ── Screen-only PDF save bar (hidden when printing) ── */
   @media screen {
@@ -105,7 +105,7 @@ export function generateQuoteHTML(quote: Quote): string {
   }
   body {
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 10pt;
+    font-size: 9pt;
     color: #000;
     background: #fff;
   }
