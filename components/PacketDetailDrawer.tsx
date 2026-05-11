@@ -223,15 +223,23 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
   }
 
   async function handleApproveValuation(specs: ItemSpecifications, erv: number) {
+    console.log("[PacketDetailDrawer] handleApproveValuation called", { packetId: local.id, erv });
     const res = await fetch("/api/workshop/valuation", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ packet_id: local.id, item_specifications: specs, estimated_replacement_value: erv }),
     });
-    const json = await res.json() as { packet: typeof local };
+    const json = await res.json() as { packet: typeof local; error?: string };
+    if (!res.ok) {
+      const errMsg = json.error ?? `Server error ${res.status}`;
+      console.error("[PacketDetailDrawer] Approve valuation failed:", errMsg);
+      setToast({ type: "error", message: `Approval failed: ${errMsg}` });
+      throw new Error(errMsg); // propagates to ItemSpecificationsForm's catch block
+    }
     if (json.packet) {
       setLocal(json.packet);
       onUpdate(json.packet);
+      setToast({ type: "success", message: "✓ Valuation approved — opening certificate…" });
       generateValuationCertificate(json.packet);
     }
   }

@@ -61,6 +61,7 @@ export default function ItemSpecificationsForm({ packetId: _packetId, specs: ini
   const [submitted, setSubmitted] = useState(false);
   const [erv, setErv] = useState<string>("");
   const [approving, setApproving] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
 
   const field = "w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:bg-white transition-colors";
 
@@ -129,10 +130,16 @@ export default function ItemSpecificationsForm({ packetId: _packetId, specs: ini
   }
 
   async function handleApprove() {
+    console.log("[ItemSpecificationsForm] Approve clicked", { hasOnApprove: !!onApprove, erv });
     if (!onApprove || !erv) return;
     setApproving(true);
+    setApproveError(null);
     try {
       await onApprove(specs, parseFloat(erv));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Approval failed — check console for details";
+      console.error("[ItemSpecificationsForm] handleApprove error:", msg);
+      setApproveError(msg);
     } finally {
       setApproving(false);
     }
@@ -365,7 +372,13 @@ export default function ItemSpecificationsForm({ packetId: _packetId, specs: ini
                   placeholder="8500.00"
                 />
               </div>
+              {approveError && (
+                <div className="text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  ✗ {approveError}
+                </div>
+              )}
               <button
+                type="button"
                 onClick={handleApprove}
                 disabled={approving || !erv}
                 className="w-full bg-emerald-600 text-white font-semibold py-3 rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-40"
