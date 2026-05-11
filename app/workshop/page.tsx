@@ -9,6 +9,7 @@ import dynamic from "next/dynamic";
 
 // Lazy-load DnD to avoid SSR issues
 const WorkshopBoard = dynamic(() => import("@/components/WorkshopBoard"), { ssr: false });
+const ValuationReviewQueue = dynamic(() => import("@/components/ValuationReviewQueue"), { ssr: false });
 
 export default function WorkshopPage() {
   const { user } = useUser();
@@ -26,6 +27,7 @@ export default function WorkshopPage() {
   const [view, setView] = useState<"board" | "list">("board");
   const [jobTypeFilter, setJobTypeFilter] = useState<"all" | "major" | "minor" | "overdue">("all");
   const [jewellerFilter, setJewellerFilter] = useState<string>("all");
+  const [tab, setTab] = useState<"workshop" | "valuations">("workshop");
 
   const fetchJobs = useCallback(async () => {
     try {
@@ -70,6 +72,23 @@ export default function WorkshopPage() {
 
   return (
     <div className="space-y-6">
+      {/* Tab bar */}
+      <div className="flex border-b border-gray-200 gap-0">
+        <button
+          onClick={() => setTab("workshop")}
+          className={`px-5 py-2.5 text-sm font-semibold border-b-2 transition-colors ${tab === "workshop" ? "border-black text-black" : "border-transparent text-gray-400 hover:text-gray-700"}`}
+        >
+          Workshop
+        </button>
+        <button
+          onClick={() => setTab("valuations")}
+          className={`px-5 py-2.5 text-sm font-semibold border-b-2 transition-colors ${tab === "valuations" ? "border-black text-black" : "border-transparent text-gray-400 hover:text-gray-700"}`}
+        >
+          Valuations
+        </button>
+      </div>
+
+      {tab === "workshop" && (<>
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex gap-1">
@@ -195,6 +214,9 @@ export default function WorkshopPage() {
           </div>
         </div>
       )}
+      </>)}
+
+      {tab === "valuations" && <ValuationReviewQueue />}
     </div>
   );
 }

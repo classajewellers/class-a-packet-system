@@ -262,6 +262,8 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
                       <th className="px-5 py-3 text-xs font-semibold text-gray-500">Due</th>
                       <th className="px-5 py-3 text-xs font-semibold text-gray-500">Total</th>
                       <th className="px-5 py-3 text-xs font-semibold text-gray-500">Status</th>
+                      <th className="px-5 py-3 text-xs font-semibold text-gray-500">Specs</th>
+                      <th className="px-5 py-3 text-xs font-semibold text-gray-500">Certificate</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -297,6 +299,28 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
                             }`}>
                               {status}
                             </span>
+                          </td>
+                          <td className="px-5 py-3">
+                            {p.item_specifications && Object.keys(p.item_specifications as Record<string, unknown>).length > 0 && (
+                              <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                                Specs
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3">
+                            {p.valuation_status === "approved" && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  import("@/lib/valuationCertificateGenerator").then(({ generateValuationCertificate }) => {
+                                    generateValuationCertificate(p);
+                                  });
+                                }}
+                                className="inline-flex px-2 py-1 rounded-lg text-xs font-semibold bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors"
+                              >
+                                View Certificate
+                              </button>
+                            )}
                           </td>
                         </tr>
                       );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import Link from "next/link";
 import { WorkshopJob, ComponentItem } from "@/lib/types";
 
 const JEWELLERS = ["Ben Mucklow", "Viv Valladares", "Joseph Onorato", "David Johnson", "Jack Mullan"];
@@ -161,6 +162,18 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
             </button>
           </div>
         </div>
+
+        {local.packet_id && (
+          <div className="px-5 py-2 border-b border-gray-100 bg-gray-50">
+            <Link
+              href={`/orders?open_packet=${local.packet_id}`}
+              className="text-xs font-semibold text-[#A3B2A4] hover:text-black transition-colors"
+              onClick={onClose}
+            >
+              View Order & Specs →
+            </Link>
+          </div>
+        )}
 
         <div className="flex-1 px-5 py-4 space-y-6">
 

@@ -2,10 +2,12 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
-import { Packet } from "@/lib/types";
+import { Packet, ItemSpecifications } from "@/lib/types";
 import { packetTypeLabel, formatDateAU } from "@/lib/formatters";
 import { generatePrintHTML } from "@/lib/labelGenerator";
 import { printOrderConfirmation } from "@/lib/orderConfirmationGenerator";
+import ItemSpecificationsForm from "./ItemSpecificationsForm";
+import { generateValuationCertificate } from "@/lib/valuationCertificateGenerator";
 
 const STAFF_MEMBERS = [
   "Aisha Scott", "Arissa Michos", "Ben Mucklow", "Brad Mucklow",
@@ -206,6 +208,34 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
     setTimeout(() => win.print(), 400);
   }
 
+  // ── Valuation handlers ────────────────────────────────────────────────────
+  async function handleSaveSpecs(specs: ItemSpecifications) {
+    await patch({ item_specifications: specs as unknown as Record<string, unknown> });
+  }
+
+  async function handleSubmitForReview(specs: ItemSpecifications) {
+    await fetch("/api/workshop/valuation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ packet_id: local.id, item_specifications: specs }),
+    });
+    setLocal((prev) => ({ ...prev, valuation_status: "pending_review", item_specifications: specs as unknown as Record<string, unknown> }));
+  }
+
+  async function handleApproveValuation(specs: ItemSpecifications, erv: number) {
+    const res = await fetch("/api/workshop/valuation", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ packet_id: local.id, item_specifications: specs, estimated_replacement_value: erv }),
+    });
+    const json = await res.json() as { packet: typeof local };
+    if (json.packet) {
+      setLocal(json.packet);
+      onUpdate(json.packet);
+      generateValuationCertificate(json.packet);
+    }
+  }
+
   // Compute displayed balance
   const balance = (local.total_charges ?? 0) - (local.deposit ?? 0);
 
@@ -298,6 +328,18 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
             </svg>
             Print Confirmation
           </button>
+
+          {local.valuation_status === "approved" && (
+            <button
+              onClick={() => generateValuationCertificate(local)}
+              className="flex items-center justify-center gap-2 w-full border border-[#A3B2A4] text-[#A3B2A4] text-sm font-semibold py-2.5 rounded-xl hover:bg-[#A3B2A4]/10 hover:border-[#A3B2A4] active:scale-[0.98] transition-all"
+            >
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75l3 3m0 0l3-3m-3 3v-7.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Print Valuation Certificate
+            </button>
+          )}
 
           {/* ── DUE DATE (non-online orders) — black hero ── */}
           {!isOnline && (
@@ -617,6 +659,19 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
               </div>
             </div>
           </Section>
+
+          {/* ── Specifications & Valuation (repair / custom_order only) ── */}
+          {(local.packet_type === "repair" || local.packet_type === "custom_order") && (
+            <ItemSpecificationsForm
+              packetId={local.id}
+              specs={local.item_specifications as ItemSpecifications | null}
+              valuationStatus={local.valuation_status ?? null}
+              onSave={handleSaveSpecs}
+              onSubmitForReview={handleSubmitForReview}
+              onApprove={handleApproveValuation}
+              isSam={true}
+            />
+          )}
 
           {/* ── Online Order ── */}
           {isOnline && (

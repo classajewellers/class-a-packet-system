@@ -191,6 +191,14 @@ export interface Packet {
   // Gift & Delivery
   gift_wrapping: boolean | null;
   delivery_method: string | null;
+
+  // Valuation
+  item_specifications: Record<string, unknown> | null;
+  valuation_status: string | null;
+  valuation_approved_at: string | null;
+  valuation_approved_by: string | null;
+  estimated_replacement_value: number | null;
+  valuation_certificate_number: string | null;
 }
 
 // ─────────────────────────────────────────────
@@ -319,6 +327,39 @@ export interface WorkshopJob {
   notes: string | null;
   stage_changed_at: string;
   components: ComponentItem[];
+}
+
+// ─────────────────────────────────────────────
+// Valuation
+// ─────────────────────────────────────────────
+export interface StoneSpec {
+  id: string;
+  stone_type: string;
+  certificate_lab: string;
+  certificate_number: string;
+  shape: string;
+  carat_weight: string;
+  colour_grade: string;
+  clarity_grade: string;
+  cut_grade: string;
+  polish: string;
+  symmetry: string;
+  fluorescence: string;
+  measurements: string;
+  setting_type: string;
+}
+
+export interface ItemSpecifications {
+  metal_type: string;
+  metal_weight: string;
+  hallmark: string;
+  finish: string;
+  stones: StoneSpec[];
+  accent_description: string;
+  accent_carat_weight: string;
+  item_type: string;
+  ring_size: string;
+  item_description: string;
 }
 
 export interface QuoteFormData {
