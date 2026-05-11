@@ -30,6 +30,18 @@ const EMPTY_SPECS: ItemSpecifications = {
 
 function newStoneId() { return Math.random().toString(36).slice(2, 10); }
 
+/** Merge raw DB value (may be {}, null, or a full spec) with EMPTY_SPECS defaults.
+ *  This guards against the DB column default `'{}'` producing an object with no `stones` array. */
+function normalizeSpecs(raw: ItemSpecifications | Record<string, unknown> | null | undefined): ItemSpecifications {
+  if (!raw || Object.keys(raw).length === 0) return { ...EMPTY_SPECS, stones: [] };
+  const r = raw as Partial<ItemSpecifications>;
+  return {
+    ...EMPTY_SPECS,
+    ...r,
+    stones: Array.isArray(r.stones) ? r.stones : [],
+  };
+}
+
 interface Props {
   packetId: string;
   specs: ItemSpecifications | null;
@@ -43,7 +55,7 @@ interface Props {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export default function ItemSpecificationsForm({ packetId: _packetId, specs: initialSpecs, valuationStatus, onSave, onSubmitForReview, onApprove, isSam }: Props) {
   const [open, setOpen] = useState(false);
-  const [specs, setSpecs] = useState<ItemSpecifications>(initialSpecs ?? EMPTY_SPECS);
+  const [specs, setSpecs] = useState<ItemSpecifications>(() => normalizeSpecs(initialSpecs));
   const [generatingDesc, setGeneratingDesc] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -59,16 +71,16 @@ export default function ItemSpecificationsForm({ packetId: _packetId, specs: ini
   function updateStone(id: string, key: keyof StoneSpec, value: string) {
     setSpecs((prev) => ({
       ...prev,
-      stones: prev.stones.map((s) => s.id === id ? { ...s, [key]: value } : s),
+      stones: (prev.stones ?? []).map((s) => s.id === id ? { ...s, [key]: value } : s),
     }));
   }
 
   function addStone() {
-    setSpecs((prev) => ({ ...prev, stones: [...prev.stones, { ...EMPTY_STONE, id: newStoneId() }] }));
+    setSpecs((prev) => ({ ...prev, stones: [...(prev.stones ?? []), { ...EMPTY_STONE, id: newStoneId() }] }));
   }
 
   function removeStone(id: string) {
-    setSpecs((prev) => ({ ...prev, stones: prev.stones.filter((s) => s.id !== id) }));
+    setSpecs((prev) => ({ ...prev, stones: (prev.stones ?? []).filter((s) => s.id !== id) }));
   }
 
   function handleBlur() {
@@ -78,7 +90,7 @@ export default function ItemSpecificationsForm({ packetId: _packetId, specs: ini
   async function generateDescription() {
     setGeneratingDesc(true);
     try {
-      const mainStone = specs.stones[0];
+      const mainStone = (specs.stones ?? [])[0];
       const prompt = [
         `Item type: ${specs.item_type}`,
         `Metal: ${specs.metal_weight}g ${specs.metal_type}, hallmarked ${specs.hallmark}, ${specs.finish} finish`,
@@ -126,7 +138,7 @@ export default function ItemSpecificationsForm({ packetId: _packetId, specs: ini
     }
   }
 
-  const hasSpecs = specs.metal_type || specs.stones.length > 0 || specs.item_description;
+  const hasSpecs = specs.metal_type || (specs.stones ?? []).length > 0 || specs.item_description;
 
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
@@ -197,10 +209,10 @@ export default function ItemSpecificationsForm({ packetId: _packetId, specs: ini
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Main Stones</p>
               <button onClick={addStone} className="text-xs font-semibold text-[#A3B2A4] hover:text-black transition-colors">+ Add Stone</button>
             </div>
-            {specs.stones.length === 0 && (
+            {(specs.stones ?? []).length === 0 && (
               <p className="text-sm text-gray-400 italic">No stones added — click + Add Stone</p>
             )}
-            {specs.stones.map((stone, idx) => (
+            {(specs.stones ?? []).map((stone, idx) => (
               <div key={stone.id} className="bg-gray-50 rounded-xl border border-gray-200 p-3 mb-3 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-gray-700">Stone {idx + 1}</span>
