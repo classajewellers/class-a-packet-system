@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Quote } from "@/lib/types";
 import { generateQuoteHTML } from "@/lib/quoteGenerator";
@@ -311,6 +312,16 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
               <Field label="Phone" value={local.customer_phone} />
               <Field label="Email" value={local.customer_email} />
             </dl>
+            {local.customer_email && (
+              <div className="mt-3">
+                <Link
+                  href={`/customers/${encodeURIComponent(local.customer_email)}`}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-[#A3B2A4] hover:text-black transition-colors"
+                >
+                  View customer profile →
+                </Link>
+              </div>
+            )}
           </Section>
 
           {/* ── Notes ── */}

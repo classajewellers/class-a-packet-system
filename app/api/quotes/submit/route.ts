@@ -122,5 +122,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   console.log("[quotes/submit] Quote saved successfully:", data.id, data.reference_number);
+
+  // ── Upsert customer record (fire-and-forget) ──────────────────────────────
+  if (insertData.customer_email) {
+    void (async () => {
+      try {
+        await supabase.from("customers").upsert(
+          {
+            email:           (insertData.customer_email as string).toLowerCase().trim(),
+            phone:           insertData.customer_phone    || null,
+            first_name:      insertData.customer_first_name || null,
+            last_name:       insertData.customer_last_name  || null,
+            last_visit_date: new Date().toISOString().split("T")[0],
+          },
+          { onConflict: "email" }
+        );
+      } catch { /* ignore */ }
+    })();
+  }
+
   return NextResponse.json({ quote: data as Quote });
 }

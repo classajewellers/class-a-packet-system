@@ -185,7 +185,25 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
     }).catch((err) => console.warn("[submit] Auto-send SMS failed:", err));
   }
 
-  // ── 7. Auto-create workshop job for repair/custom_order ──────────────────────
+  // ── 7. Upsert customer record ─────────────────────────────────────────────────
+  if (packet.customer_email) {
+    void (async () => {
+      try {
+        await supabase.from("customers").upsert(
+          {
+            email:           packet.customer_email!.toLowerCase().trim(),
+            phone:           packet.customer_phone    || null,
+            first_name:      packet.customer_first_name || null,
+            last_name:       packet.customer_last_name  || null,
+            last_visit_date: new Date().toISOString().split("T")[0],
+          },
+          { onConflict: "email" }
+        );
+      } catch { /* ignore */ }
+    })();
+  }
+
+  // ── 8. Auto-create workshop job for repair/custom_order ──────────────────────
   if (packet.packet_type === "repair" || packet.packet_type === "custom_order") {
     const initialStage = packet.packet_type === "repair" ? "precheck" : "new";
     const jobType = packet.packet_type === "repair" ? "minor" : "major";
@@ -207,7 +225,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
     }
   }
 
-  // ── 8. Mark quote as converted (if this order was created from a quote) ─────
+  // ── 9. Mark quote as converted (if this order was created from a quote) ─────
   if (formData.from_quote_id) {
     console.log("[submit] Marking quote as converted:", formData.from_quote_id);
     const { error: quoteErr } = await supabase

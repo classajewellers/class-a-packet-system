@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import Link from "next/link";
 import { Packet } from "@/lib/types";
 import { packetTypeLabel, formatDateAU } from "@/lib/formatters";
 import { generatePrintHTML } from "@/lib/labelGenerator";
@@ -360,7 +361,18 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                 />
               </div>
               <div>
-                <Label>Email</Label>
+                <div className="flex items-center justify-between mb-1">
+                  <Label>Email</Label>
+                  {local.customer_email && (
+                    <Link
+                      href={`/customers/${encodeURIComponent(local.customer_email)}`}
+                      className="text-xs text-[#A3B2A4] font-semibold hover:text-black transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      View Customer →
+                    </Link>
+                  )}
+                </div>
                 <input
                   type="email"
                   value={local.customer_email ?? ""}
