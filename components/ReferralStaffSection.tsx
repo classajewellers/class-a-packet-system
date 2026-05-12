@@ -1,32 +1,7 @@
 "use client";
 
 import { PacketFormData } from "@/lib/types";
-
-const STAFF_MEMBERS = [
-  "Aisha Scott",
-  "Arissa Michos",
-  "Ben Mucklow",
-  "Brad Mucklow",
-  "Bridget Moore",
-  "Charlotte Beavis",
-  "Daniel Beecken",
-  "David Johnson",
-  "Dior Munro",
-  "Donna Cordes",
-  "Ivy Wood",
-  "Jack Mullan",
-  "Jess D'Alfonso",
-  "Joseph Onorato",
-  "Josh Mucklow",
-  "Keeley Mucklow",
-  "Leah Newton",
-  "Melody Abram",
-  "Monica Magshoodi",
-  "Sam Mucklow",
-  "Shahrzad Givi",
-  "Sinziana Peters",
-  "Viv Valladares",
-];
+import { STAFF_NAMES } from "@/lib/staffList";
 
 const REFERRAL_SOURCES = [
   { value: "instagram", label: "Instagram" },
@@ -97,7 +72,7 @@ export default function ReferralStaffSection({ data, onChange, errors }: Props) 
           `}
         >
           <option value="">— Select —</option>
-          {STAFF_MEMBERS.map((s) => (
+          {STAFF_NAMES.map((s) => (
             <option key={s} value={s}>
               {s}
             </option>

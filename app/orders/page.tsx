@@ -157,8 +157,6 @@ function OrdersPageInner() {
     [packets]
   );
 
-  const inputClass = "rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black";
-
   return (
     <>
       {selectedPacket && (
@@ -171,73 +169,18 @@ function OrdersPageInner() {
         />
       )}
 
-      <div className="max-w-7xl mx-auto space-y-4">
-        {/* URL filter banner */}
-        {urlFilter && (
-          <div className="flex items-center justify-between bg-[#A3B2A4]/20 border border-[#A3B2A4] rounded-xl px-4 py-2.5">
-            <p className="text-sm font-semibold text-gray-700">
-              {urlFilter === "today"     && "Showing: Orders created today"}
-              {urlFilter === "due_today" && "Showing: Orders due today"}
-              {urlFilter === "overdue"   && "Showing: Overdue repairs & custom orders"}
+      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+        {/* Page header */}
+        <div className="ds-page-h">
+          <div>
+            <h1>Orders</h1>
+            <p>
+              {loading ? "Loading…" : `${filteredPackets.length} order${filteredPackets.length !== 1 ? "s" : ""}`}
             </p>
-            <button
-              onClick={() => setUrlFilter(null)}
-              className="text-xs font-semibold text-gray-500 hover:text-black transition-colors"
-            >
-              Clear filter ×
-            </button>
           </div>
-        )}
-
-        {/* Filters */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
-          <div className="flex flex-wrap gap-1.5 mb-3">
-            {ORDER_FILTERS.map((f) => {
-              const isActive  = orderFilter === f.value;
-              const isShopify = f.value === "shopify";
-              const hasBadge  = isShopify && unprintedShopify.length > 0;
-              return (
-                <button
-                  key={f.value}
-                  onClick={() => setOrderFilter(f.value)}
-                  className={`relative px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                    isActive ? "bg-black text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                >
-                  {f.label}
-                  {hasBadge && (
-                    <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <div className="flex-1 min-w-[200px] relative">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-              </svg>
-              <input
-                type="text"
-                placeholder="Search by name, email, reference…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className={`w-full pl-9 pr-3 ${inputClass}`}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputClass} title="From date" />
-              <span className="text-gray-400 text-sm">to</span>
-              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputClass} title="To date" />
-            </div>
-            <button
-              onClick={handleExport}
-              className="flex items-center gap-1.5 rounded-lg bg-black px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#222222] transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <div className="ds-page-h-actions">
+            <button onClick={handleExport} className="ds-btn ds-btn-secondary">
+              <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
               </svg>
               Export CSV
@@ -245,60 +188,125 @@ function OrdersPageInner() {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
-          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <h2 className="text-sm font-semibold text-black">
-                {loading ? "Loading…" : `${filteredPackets.length} order${filteredPackets.length !== 1 ? "s" : ""}`}
-              </h2>
-              {orderFilter === "shopify" && unprintedShopify.length > 0 && (
-                <span className="flex items-center gap-1.5 text-xs font-semibold text-green-600">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-                  </span>
-                  {unprintedShopify.length} to print
-                </span>
-              )}
+        {/* URL filter banner */}
+        {urlFilter && (
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            background: "rgba(124,106,254,0.08)", border: "1px solid rgba(124,106,254,0.25)",
+            borderRadius: 10, padding: "10px 16px", marginBottom: 16,
+          }}>
+            <p style={{ fontSize: 13, fontWeight: 500, color: "var(--text-2)", margin: 0 }}>
+              {urlFilter === "today"     && "Showing: Orders created today"}
+              {urlFilter === "due_today" && "Showing: Orders due today"}
+              {urlFilter === "overdue"   && "Showing: Overdue repairs & custom orders"}
+            </p>
+            <button onClick={() => setUrlFilter(null)} className="ds-btn ds-btn-ghost ds-btn-sm">
+              Clear ×
+            </button>
+          </div>
+        )}
+
+        {/* Table wrap */}
+        <div className="ds-table-wrap">
+          {/* Filters toolbar */}
+          <div className="ds-table-header" style={{ flexWrap: "wrap", gap: 12 }}>
+            <div className="ds-filters">
+              {ORDER_FILTERS.map((f) => {
+                const isActive  = orderFilter === f.value;
+                const isShopify = f.value === "shopify";
+                const hasBadge  = isShopify && unprintedShopify.length > 0;
+                return (
+                  <button
+                    key={f.value}
+                    onClick={() => setOrderFilter(f.value)}
+                    className={`ds-chip${isActive ? " active" : ""}`}
+                    style={{ position: "relative" }}
+                  >
+                    {f.label}
+                    {hasBadge && (
+                      <span style={{
+                        position: "absolute", top: -3, right: -3,
+                        width: 8, height: 8, borderRadius: "50%",
+                        background: "var(--success)",
+                        boxShadow: "0 0 6px var(--success)",
+                        display: "inline-block",
+                      }} />
+                    )}
+                  </button>
+                );
+              })}
             </div>
-            <div className="text-xs text-gray-400 flex items-center gap-2">
-              <span>Label · Klaviyo · Email · SMS · Sheets</span>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {/* Search */}
+              <div style={{ position: "relative" }}>
+                <svg style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-dim)" }} width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search orders…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="ds-input"
+                  style={{ paddingLeft: 32, width: 220, height: 32, fontSize: 13 }}
+                />
+              </div>
+              {/* Date range */}
+              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="ds-input" style={{ width: 140, height: 32, fontSize: 13 }} title="From date" />
+              <span style={{ color: "var(--text-dim)", fontSize: 13 }}>–</span>
+              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="ds-input" style={{ width: 140, height: 32, fontSize: 13 }} title="To date" />
             </div>
           </div>
 
+          {/* Bulk delete bar */}
           {selectedIds.size > 0 && canDelete && (
-            <div className="px-5 py-2.5 bg-red-50 border-b border-red-100 flex items-center justify-between gap-3">
-              <span className="text-sm font-medium text-red-700">{selectedIds.size} order{selectedIds.size !== 1 ? "s" : ""} selected</span>
-              <div className="flex gap-2">
-                <button onClick={() => setSelectedIds(new Set())} className="text-xs font-semibold text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200 bg-white">
-                  Clear
-                </button>
-                <button onClick={handleBulkDelete} className="flex items-center gap-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg transition-colors">
-                  Delete selected ({selectedIds.size})
+            <div style={{
+              padding: "10px 16px",
+              borderBottom: "1px solid rgba(239,68,68,0.2)",
+              background: "rgba(239,68,68,0.06)",
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+            }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: "#FCA5A5" }}>
+                {selectedIds.size} order{selectedIds.size !== 1 ? "s" : ""} selected
+              </span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => setSelectedIds(new Set())} className="ds-btn ds-btn-ghost ds-btn-sm">Clear</button>
+                <button onClick={handleBulkDelete} className="ds-btn ds-btn-danger ds-btn-sm">
+                  Delete {selectedIds.size} selected
                 </button>
               </div>
             </div>
           )}
 
-          <div className="px-5 py-4">
-            {loading ? (
-              <div className="text-center py-12 text-gray-400">
-                <svg className="w-8 h-8 mx-auto mb-2 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                <p className="text-sm">Loading orders…</p>
-              </div>
-            ) : (
-              <AdminTable
-                packets={filteredPackets}
-                onRowClick={setSelectedPacket}
-                selectedIds={selectedIds}
-                onSelectionChange={setSelectedIds}
-              />
-            )}
-          </div>
+          {/* Shopify unprinted banner */}
+          {orderFilter === "shopify" && unprintedShopify.length > 0 && (
+            <div style={{
+              padding: "8px 16px", borderBottom: "1px solid var(--border-subtle)",
+              display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--success)",
+            }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--success)", boxShadow: "0 0 6px var(--success)", display: "inline-block" }} />
+              {unprintedShopify.length} orders need labels printed
+            </div>
+          )}
+
+          {/* Table */}
+          {loading ? (
+            <div style={{ textAlign: "center", padding: "48px 0", color: "var(--text-muted)" }}>
+              <svg className="w-8 h-8 mx-auto mb-2 spinner" fill="none" viewBox="0 0 24 24">
+                <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <p style={{ fontSize: 13 }}>Loading orders…</p>
+            </div>
+          ) : (
+            <AdminTable
+              packets={filteredPackets}
+              onRowClick={setSelectedPacket}
+              selectedIds={selectedIds}
+              onSelectionChange={setSelectedIds}
+            />
+          )}
         </div>
       </div>
     </>
@@ -307,7 +315,7 @@ function OrdersPageInner() {
 
 export default function OrdersPage() {
   return (
-    <Suspense fallback={<div className="p-8 text-gray-400">Loading orders…</div>}>
+    <Suspense fallback={<div style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>Loading orders…</div>}>
       <OrdersPageInner />
     </Suspense>
   );

@@ -37,11 +37,11 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
   // Authenticated pages: sidebar + topbar layout
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="app-shell">
       <Sidebar onOpenAI={() => setAiOpen(true)} />
-      <div className="flex flex-col flex-1 overflow-hidden">
+      <div className="app-main">
         <TopBar />
-        <main className="flex-1 overflow-y-auto bg-gray-50 p-6">
+        <main className="app-content">
           {children}
         </main>
       </div>

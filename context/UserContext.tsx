@@ -9,11 +9,8 @@ import {
 } from "react";
 import { LoggedInUser } from "@/lib/userTypes";
 
-// ── Context shape ─────────────────────────────────────────────────────────────
-
 interface UserContextType {
   user: LoggedInUser | null;
-  /** true once localStorage has been read — guards against SSR mismatches */
   hydrated: boolean;
   login: (user: LoggedInUser) => void;
   logout: () => void;
@@ -27,20 +24,25 @@ const UserContext = createContext<UserContextType>({
 });
 
 const STORAGE_KEY = "classa_logged_in_user";
-
-// ── Provider ──────────────────────────────────────────────────────────────────
+const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000; // 12 hours
 
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<LoggedInUser | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
-  // Read stored session once on mount
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed: LoggedInUser = JSON.parse(stored);
-        setUser(parsed);
+        // Check session age
+        const age = Date.now() - new Date(parsed.loggedInAt).getTime();
+        if (age < SESSION_MAX_AGE_MS) {
+          setUser(parsed);
+        } else {
+          // Session expired — clear it
+          localStorage.removeItem(STORAGE_KEY);
+        }
       }
     } catch {
       /* ignore parse errors — treat as logged out */
@@ -68,8 +70,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
     </UserContext.Provider>
   );
 }
-
-// ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useUser() {
   return useContext(UserContext);

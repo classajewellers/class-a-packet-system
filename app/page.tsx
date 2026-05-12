@@ -5,32 +5,58 @@ import Link from "next/link";
 import { Packet } from "@/lib/types";
 import { packetTypeLabel, formatDateAU, formatCurrency } from "@/lib/formatters";
 
-const TYPE_COLORS: Record<string, string> = {
-  repair: "bg-orange-100 text-orange-700",
-  custom_order: "bg-purple-100 text-purple-700",
-  layby: "bg-blue-100 text-blue-700",
-  client_intake: "bg-teal-100 text-teal-700",
-  online_order: "bg-green-100 text-green-700",
+const TYPE_BADGE: Record<string, string> = {
+  repair:        "ds-badge ds-badge-orange",
+  custom_order:  "ds-badge ds-badge-violet",
+  layby:         "ds-badge ds-badge-amber",
+  client_intake: "ds-badge ds-badge-teal",
+  online_order:  "ds-badge ds-badge-green",
 };
 
-function StatCard({ label, value, sub, color, href }: { label: string; value: string | number; sub?: string; color?: string; href?: string }) {
+function StatCard({
+  label, value, sub, href, accentColor, accentGlow,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  href?: string;
+  accentColor?: string;
+  accentGlow?: string;
+}) {
   const inner = (
-    <div className={`bg-white rounded-2xl border border-gray-200 shadow-sm p-5 ${href ? "cursor-pointer hover:border-[#A3B2A4] hover:shadow-md transition-all" : ""}`}>
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">{label}</p>
-      <p className={`text-3xl font-bold ${color ?? "text-gray-900"}`}>{value}</p>
-      {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+    <div
+      className="ds-card"
+      style={{
+        padding: "18px 18px 16px",
+        position: "relative",
+        overflow: "hidden",
+        transition: "transform .15s ease, border-color .15s",
+        cursor: href ? "pointer" : "default",
+      }}
+      onMouseEnter={href ? (e) => { (e.currentTarget as HTMLDivElement).style.transform = "translateY(-1px)"; } : undefined}
+      onMouseLeave={href ? (e) => { (e.currentTarget as HTMLDivElement).style.transform = "none"; } : undefined}
+    >
+      {/* Accent bar */}
+      <div style={{
+        position: "absolute", inset: "0 0 auto 0", height: 2,
+        background: accentColor ?? "var(--violet)",
+        boxShadow: `0 0 12px ${accentGlow ?? "var(--violet-glow)"}`,
+      }} />
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600, marginBottom: 10 }}>
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: accentColor ?? "var(--violet)", boxShadow: `0 0 8px ${accentColor ?? "var(--violet)"}`, display: "inline-block" }} />
+        {label}
+      </div>
+      <div style={{ fontSize: 28, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--text)" }}>{value}</div>
+      {sub && <div style={{ marginTop: 6, fontSize: 12, color: "var(--text-muted)" }}>{sub}</div>}
     </div>
   );
-  if (href) return <Link href={href}>{inner}</Link>;
+  if (href) return <Link href={href} style={{ textDecoration: "none" }}>{inner}</Link>;
   return inner;
 }
 
 function SkeletonCard() {
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 animate-pulse">
-      <div className="h-3 bg-gray-200 rounded w-24 mb-3" />
-      <div className="h-8 bg-gray-200 rounded w-16" />
-    </div>
+    <div className="ds-skeleton" style={{ height: 96, borderRadius: 12 }} />
   );
 }
 
@@ -57,7 +83,6 @@ export default function DashboardPage() {
       })
       .catch(() => setLoading(false));
 
-    // Fetch revenue
     const monthStart = startOfMonthISO();
     const today = todayISO();
     fetch(`/api/revenue?from=${monthStart}&to=${today}`, { cache: "no-store" })
@@ -73,174 +98,160 @@ export default function DashboardPage() {
   }, []);
 
   const today = todayISO();
-
   const todaysOrders = packets.filter((p) => (p.created_at ?? "").startsWith(today)).length;
-  const dueToday = packets.filter(
-    (p) => p.due_date === today && p.collected_date == null
-  ).length;
+  const dueToday = packets.filter((p) => p.due_date === today && p.collected_date == null).length;
   const overdueRepairs = packets.filter(
-    (p) =>
-      p.packet_type === "repair" &&
-      p.due_date != null &&
-      p.due_date < today &&
-      p.collected_date == null
+    (p) => p.packet_type === "repair" && p.due_date != null && p.due_date < today && p.collected_date == null
   ).length;
-  const unprintedOnline = packets.filter(
-    (p) => p.packet_type === "online_order" && !p.label_printed
-  ).length;
+  const unprintedOnline = packets.filter((p) => p.packet_type === "online_order" && !p.label_printed).length;
 
-  // Recent 10 orders
-  const recentOrders = [...packets].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  ).slice(0, 10);
+  const recentOrders = [...packets]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 10);
 
-  // Upcoming due: next 7 days (non-collected)
   const in7Days = new Date();
   in7Days.setDate(in7Days.getDate() + 7);
   const in7DaysISO = in7Days.toISOString().split("T")[0];
   const upcoming = packets
-    .filter(
-      (p) =>
-        p.due_date != null &&
-        p.due_date >= today &&
-        p.due_date <= in7DaysISO &&
-        p.collected_date == null
-    )
+    .filter((p) => p.due_date != null && p.due_date >= today && p.due_date <= in7DaysISO && p.collected_date == null)
     .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""));
-  const overdue = packets.filter(
-    (p) => p.due_date != null && p.due_date < today && p.collected_date == null
-  ).sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""));
+  const overdue = packets
+    .filter((p) => p.due_date != null && p.due_date < today && p.collected_date == null)
+    .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""));
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+      {/* Page header */}
+      <div className="ds-page-h">
+        <div>
+          <h1>Dashboard</h1>
+          <p>Welcome back — here&apos;s what&apos;s happening today</p>
+        </div>
+        <div className="ds-page-h-actions">
+          <Link href="/orders/new" className="ds-btn ds-btn-primary" style={{ textDecoration: "none" }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            New Order
+          </Link>
+        </div>
+      </div>
+
       {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0,1fr))", gap: 14, marginBottom: 24 }}>
         {loading ? (
           Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)
         ) : (
           <>
-            <StatCard label="Today's Orders" value={todaysOrders} sub="submitted today" href="/orders?filter=today" />
-            <StatCard
-              label="Due Today"
-              value={dueToday}
-              sub="awaiting collection"
-              color={dueToday > 0 ? "text-amber-600" : undefined}
-              href="/orders?filter=due_today"
-            />
-            <StatCard
-              label="Overdue Repairs"
-              value={overdueRepairs}
-              sub="past due date"
-              color={overdueRepairs > 0 ? "text-red-600" : undefined}
-              href="/orders?filter=overdue"
-            />
-            <StatCard
-              label="Unprinted Online"
-              value={unprintedOnline}
-              sub="need labels"
-              color={unprintedOnline > 0 ? "text-green-600" : undefined}
-              href="/online?filter=unprinted"
-            />
-            <StatCard
-              label="Revenue This Month"
-              value={revenueThisMonth != null ? formatCurrency(revenueThisMonth) : "—"}
-              sub="month to date"
-              href="/revenue"
-            />
+            <StatCard label="Today's Orders" value={todaysOrders} sub="submitted today" href="/orders?filter=today"
+              accentColor="var(--violet)" accentGlow="var(--violet-glow)" />
+            <StatCard label="Due Today" value={dueToday} sub="awaiting collection" href="/orders?filter=due_today"
+              accentColor={dueToday > 0 ? "var(--warning)" : "var(--text-dim)"}
+              accentGlow={dueToday > 0 ? "rgba(245,158,11,0.3)" : "transparent"} />
+            <StatCard label="Overdue" value={overdueRepairs} sub="past due date" href="/orders?filter=overdue"
+              accentColor={overdueRepairs > 0 ? "var(--danger)" : "var(--text-dim)"}
+              accentGlow={overdueRepairs > 0 ? "rgba(239,68,68,0.3)" : "transparent"} />
+            <StatCard label="Unprinted Online" value={unprintedOnline} sub="need labels" href="/online?filter=unprinted"
+              accentColor="var(--teal)" accentGlow="rgba(20,184,166,0.3)" />
+            <StatCard label="Revenue MTD" value={revenueThisMonth != null ? formatCurrency(revenueThisMonth) : "—"} sub="month to date" href="/revenue"
+              accentColor="var(--success)" accentGlow="rgba(34,197,94,0.3)" />
           </>
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Main content */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 20 }}>
         {/* Recent Orders */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-black">Recent Orders</h2>
-            <Link href="/orders" className="text-xs text-[#A3B2A4] font-semibold hover:underline">
-              View all
+        <div className="ds-table-wrap">
+          <div className="ds-card-h">
+            <h3 style={{ margin: 0 }}>Recent Orders</h3>
+            <Link href="/orders" className="ds-btn ds-btn-ghost ds-btn-sm" style={{ textDecoration: "none" }}>
+              View all →
             </Link>
           </div>
-          <div className="overflow-x-auto">
-            {loading ? (
-              <div className="px-5 py-8 text-center text-gray-400 text-sm">Loading…</div>
-            ) : recentOrders.length === 0 ? (
-              <div className="px-5 py-8 text-center text-gray-400 text-sm">No orders yet</div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left border-b border-gray-100 bg-gray-50">
-                    <th className="px-4 py-2.5 text-xs font-semibold text-gray-500">Ref</th>
-                    <th className="px-4 py-2.5 text-xs font-semibold text-gray-500">Type</th>
-                    <th className="px-4 py-2.5 text-xs font-semibold text-gray-500">Customer</th>
-                    <th className="px-4 py-2.5 text-xs font-semibold text-gray-500">Due</th>
-                    <th className="px-4 py-2.5 text-xs font-semibold text-gray-500">Created</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {recentOrders.map((p) => {
-                    const customerName = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
-                    return (
-                      <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-2.5 font-mono text-xs text-gray-500">{p.reference_number}</td>
-                        <td className="px-4 py-2.5">
-                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${TYPE_COLORS[p.packet_type] ?? "bg-gray-100 text-gray-600"}`}>
-                            {packetTypeLabel(p.packet_type)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5 font-medium text-gray-800">{customerName}</td>
-                        <td className="px-4 py-2.5 text-gray-500">{formatDateAU(p.due_date) || "—"}</td>
-                        <td className="px-4 py-2.5 text-gray-400 text-xs">{formatDateAU(p.created_at?.split("T")[0]) || "—"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
+          {loading ? (
+            <div style={{ padding: "32px 0", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>Loading…</div>
+          ) : recentOrders.length === 0 ? (
+            <div style={{ padding: "32px 0", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>No orders yet</div>
+          ) : (
+            <table className="ds-t">
+              <thead>
+                <tr>
+                  <th>Ref</th>
+                  <th>Type</th>
+                  <th>Customer</th>
+                  <th>Due</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentOrders.map((p) => {
+                  const customerName = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
+                  return (
+                    <tr key={p.id} onClick={() => {}}>
+                      <td><span className="ds-mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.reference_number}</span></td>
+                      <td>
+                        <span className={TYPE_BADGE[p.packet_type] ?? "ds-badge ds-badge-muted"}>
+                          {packetTypeLabel(p.packet_type)}
+                        </span>
+                      </td>
+                      <td style={{ fontWeight: 500, color: "var(--text)" }}>{customerName}</td>
+                      <td style={{ color: "var(--text-2)" }}>{formatDateAU(p.due_date) || "—"}</td>
+                      <td style={{ fontSize: 12, color: "var(--text-muted)" }}>{formatDateAU(p.created_at?.split("T")[0]) || "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
 
-        {/* Upcoming + Overdue */}
-        <div className="space-y-4">
+        {/* Right column */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {/* Overdue */}
           {!loading && overdue.length > 0 && (
-            <div className="bg-red-50 border border-red-200 rounded-2xl overflow-hidden">
-              <div className="px-5 py-3 border-b border-red-200">
-                <h2 className="text-sm font-semibold text-red-700">Overdue ({overdue.length})</h2>
+            <div className="ds-card" style={{ overflow: "hidden", borderColor: "rgba(239,68,68,0.25)" }}>
+              <div className="ds-card-h" style={{ borderColor: "rgba(239,68,68,0.15)" }}>
+                <h3 style={{ color: "#FCA5A5", margin: 0 }}>Overdue ({overdue.length})</h3>
+                <span className="ds-badge ds-badge-red" style={{ marginLeft: "auto" }}>{overdue.length}</span>
               </div>
-              <ul className="divide-y divide-red-100">
+              <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
                 {overdue.slice(0, 5).map((p) => {
                   const name = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
                   return (
-                    <li key={p.id} className="px-5 py-2.5">
-                      <p className="text-sm font-medium text-red-800">{name}</p>
-                      <p className="text-xs text-red-600">{packetTypeLabel(p.packet_type)} · Due {formatDateAU(p.due_date)}</p>
+                    <li key={p.id} style={{ padding: "10px 16px", borderBottom: "1px solid rgba(239,68,68,0.08)" }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>{name}</div>
+                      <div style={{ fontSize: 11.5, color: "var(--danger)", marginTop: 2 }}>
+                        {packetTypeLabel(p.packet_type)} · Due {formatDateAU(p.due_date)}
+                      </div>
                     </li>
                   );
                 })}
                 {overdue.length > 5 && (
-                  <li className="px-5 py-2.5 text-xs text-red-400">+{overdue.length - 5} more overdue</li>
+                  <li style={{ padding: "8px 16px", fontSize: 12, color: "var(--text-muted)" }}>+{overdue.length - 5} more overdue</li>
                 )}
               </ul>
             </div>
           )}
 
-          {/* Upcoming */}
-          <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-            <div className="px-5 py-3 border-b border-gray-100">
-              <h2 className="text-sm font-semibold text-black">Due This Week</h2>
+          {/* Due this week */}
+          <div className="ds-card" style={{ overflow: "hidden" }}>
+            <div className="ds-card-h">
+              <h3 style={{ margin: 0 }}>Due This Week</h3>
+              {upcoming.length > 0 && <span className="ds-badge ds-badge-amber">{upcoming.length}</span>}
             </div>
             {loading ? (
-              <div className="px-5 py-6 text-center text-gray-400 text-sm">Loading…</div>
+              <div style={{ padding: "24px 0", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>Loading…</div>
             ) : upcoming.length === 0 ? (
-              <div className="px-5 py-6 text-center text-gray-400 text-sm">Nothing due this week</div>
+              <div style={{ padding: "24px 16px", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>Nothing due this week ✓</div>
             ) : (
-              <ul className="divide-y divide-gray-50">
+              <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
                 {upcoming.map((p) => {
                   const name = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
                   return (
-                    <li key={p.id} className="px-5 py-2.5">
-                      <p className="text-sm font-medium text-gray-800">{name}</p>
-                      <p className="text-xs text-gray-500">{packetTypeLabel(p.packet_type)} · Due {formatDateAU(p.due_date)}</p>
+                    <li key={p.id} style={{ padding: "10px 16px", borderBottom: "1px solid var(--border-subtle)" }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>{name}</div>
+                      <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>
+                        {packetTypeLabel(p.packet_type)} · Due {formatDateAU(p.due_date)}
+                      </div>
                     </li>
                   );
                 })}
@@ -248,21 +259,17 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Quick links */}
-          <div className="bg-white border border-gray-200 rounded-2xl p-4 space-y-2">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Quick Actions</p>
-            <Link
-              href="/orders/new"
-              className="flex items-center gap-2 w-full bg-black text-white rounded-xl py-2.5 px-4 text-sm font-semibold hover:bg-[#222222] transition-colors"
-            >
-              <span>📦</span> New Order
-            </Link>
-            <Link
-              href="/quote"
-              className="flex items-center gap-2 w-full bg-[#A3B2A4] text-white rounded-xl py-2.5 px-4 text-sm font-semibold hover:bg-[#8fa090] transition-colors"
-            >
-              <span>💬</span> New Quote
-            </Link>
+          {/* Quick actions */}
+          <div className="ds-card ds-card-pad">
+            <div style={{ fontSize: 10.5, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-dim)", fontWeight: 600, marginBottom: 12 }}>Quick Actions</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <Link href="/orders/new" className="ds-btn ds-btn-primary" style={{ textDecoration: "none", width: "100%", justifyContent: "center" }}>
+                New Order
+              </Link>
+              <Link href="/quote" className="ds-btn ds-btn-secondary" style={{ textDecoration: "none", width: "100%", justifyContent: "center" }}>
+                New Quote
+              </Link>
+            </div>
           </div>
         </div>
       </div>

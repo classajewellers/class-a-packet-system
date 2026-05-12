@@ -10,12 +10,12 @@ interface Props {
   onSelectionChange?: (ids: Set<string>) => void;
 }
 
-const TYPE_BADGE: Record<PacketType, string> = {
-  repair: "bg-blue-100 text-blue-800",
-  custom_order: "bg-purple-100 text-purple-800",
-  layby: "bg-amber-100 text-amber-800",
-  client_intake: "bg-teal-100 text-teal-800",
-  online_order: "bg-gray-900 text-white",
+const TYPE_BADGE: Record<PacketType, { cls: string; label?: string }> = {
+  repair:        { cls: "ds-badge ds-badge-orange" },
+  custom_order:  { cls: "ds-badge ds-badge-violet" },
+  layby:         { cls: "ds-badge ds-badge-amber" },
+  client_intake: { cls: "ds-badge ds-badge-teal" },
+  online_order:  { cls: "ds-badge ds-badge-green" },
 };
 
 export default function AdminTable({ packets, onRowClick, selectedIds, onSelectionChange }: Props) {
@@ -42,8 +42,8 @@ export default function AdminTable({ packets, onRowClick, selectedIds, onSelecti
 
   if (safePackets.length === 0) {
     return (
-      <div className="text-center py-16 text-gray-400">
-        <svg className="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" strokeWidth={1} viewBox="0 0 24 24">
+      <div className="text-center py-16" style={{ color: "var(--text-muted)" }}>
+        <svg className="w-12 h-12 mx-auto mb-3" style={{ opacity: 0.2 }} fill="none" stroke="currentColor" strokeWidth={1} viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
         </svg>
         <p className="text-sm">No orders found</p>
@@ -53,29 +53,30 @@ export default function AdminTable({ packets, onRowClick, selectedIds, onSelecti
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="ds-t w-full">
         <thead>
-          <tr className="border-b border-gray-200 text-left">
+          <tr>
             {selectable && (
-              <th className="pb-3 pr-3 w-8">
+              <th style={{ width: 32 }}>
                 <input
                   type="checkbox"
                   checked={allSelected}
                   ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
                   onChange={toggleAll}
-                  className="h-4 w-4 rounded border-gray-300 accent-black cursor-pointer"
+                  className="h-4 w-4 rounded cursor-pointer"
+                  style={{ accentColor: "var(--violet)" }}
                 />
               </th>
             )}
-            <th className="pb-3 pr-4 font-semibold text-black whitespace-nowrap">Reference No.</th>
-            <th className="pb-3 pr-4 font-semibold text-black">Type</th>
-            <th className="pb-3 pr-4 font-semibold text-black">Customer Name</th>
-            <th className="pb-3 pr-4 font-semibold text-black whitespace-nowrap">Due Date</th>
-            <th className="pb-3 pr-4 font-semibold text-black">Staff Member</th>
-            <th className="pb-3 font-semibold text-black whitespace-nowrap">Created At</th>
+            <th>Reference</th>
+            <th>Type</th>
+            <th>Customer</th>
+            <th>Due Date</th>
+            <th>Staff</th>
+            <th>Created</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody>
           {safePackets.map((p) => {
             const isSelected = selectedIds?.has(p.id) ?? false;
             const customerName = [p.customer_first_name, p.customer_last_name]
@@ -83,47 +84,42 @@ export default function AdminTable({ packets, onRowClick, selectedIds, onSelecti
             const created = new Date(p.created_at).toLocaleDateString("en-AU", {
               day: "2-digit", month: "short", year: "numeric",
             });
+            const badge = TYPE_BADGE[p.packet_type] ?? { cls: "ds-badge ds-badge-muted" };
 
             return (
               <tr
                 key={p.id}
                 onClick={() => onRowClick(p)}
-                className={`hover:bg-gray-50 cursor-pointer transition-colors ${isSelected ? "bg-red-50" : ""}`}
+                style={isSelected ? { background: "rgba(124,106,254,0.08)" } : {}}
               >
                 {selectable && (
-                  <td className="py-3 pr-3" onClick={(e) => { e.stopPropagation(); toggleOne(p.id); }}>
+                  <td onClick={(e) => { e.stopPropagation(); toggleOne(p.id); }}>
                     <input
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => toggleOne(p.id)}
-                      className="h-4 w-4 rounded border-gray-300 accent-black cursor-pointer"
+                      className="h-4 w-4 rounded cursor-pointer"
+                      style={{ accentColor: "var(--violet)" }}
                     />
                   </td>
                 )}
-                <td className="py-3 pr-4">
-                  <span className="font-mono text-xs font-semibold text-black">{p.reference_number}</span>
+                <td>
+                  <span className="ds-mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                    {p.reference_number}
+                  </span>
                 </td>
-                <td className="py-3 pr-4">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${TYPE_BADGE[p.packet_type] ?? "bg-gray-100 text-gray-700"}`}>
-                      {packetTypeLabel(p.packet_type)}
-                    </span>
-                    {p.packet_type === "online_order" && (
-                      <span className="inline-block rounded-full px-2 py-0.5 text-xs font-semibold bg-teal-100 text-teal-700 border border-teal-200">
-                        Shopify
-                      </span>
-                    )}
-                  </div>
+                <td>
+                  <span className={badge.cls}>{packetTypeLabel(p.packet_type)}</span>
                 </td>
-                <td className="py-3 pr-4">
-                  <div className="font-medium text-black">{customerName}</div>
-                  <div className="text-xs text-gray-400">{p.customer_phone ?? ""}</div>
+                <td>
+                  <div style={{ fontWeight: 500, color: "var(--text)" }}>{customerName}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{p.customer_phone ?? ""}</div>
                 </td>
-                <td className="py-3 pr-4 whitespace-nowrap text-gray-700">
+                <td style={{ color: "var(--text-2)" }}>
                   {p.due_date ? formatDateAU(p.due_date) : "—"}
                 </td>
-                <td className="py-3 pr-4 text-gray-700">{p.staff_member ?? "—"}</td>
-                <td className="py-3 whitespace-nowrap text-gray-500 text-xs">{created}</td>
+                <td style={{ color: "var(--text-2)" }}>{p.staff_member ?? "—"}</td>
+                <td style={{ fontSize: 12, color: "var(--text-muted)" }}>{created}</td>
               </tr>
             );
           })}
