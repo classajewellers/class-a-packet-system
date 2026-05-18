@@ -467,6 +467,7 @@ export function generateDymoXML(packet: Packet): string {
 
 // ─── HTML label fallback (A6 print) — B&W only ───────────────────────────────
 export function generatePrintHTML(packet: Packet): string {
+  console.log("[label] Articles in label:", packet.articles);
   console.log("Gift wrapping value:", packet.gift_wrapping, typeof packet.gift_wrapping);
 
   const customerName = [packet.customer_first_name, packet.customer_last_name]

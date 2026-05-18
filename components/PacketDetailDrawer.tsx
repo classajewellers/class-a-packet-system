@@ -213,30 +213,51 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
   }
 
   async function handleReprintLabel() {
-    // Always fetch fresh data from Supabase before printing so any edits
-    // (due date, gift wrapping, articles, components etc.) are reflected.
     setReprintLoading(true);
-    console.log("[reprint] Fetching fresh data for packet:", packet.id);
     try {
-      const res = await fetch(`/api/admin/packets/${local.id}`, {
-        cache: "no-store",
-        headers: { "Cache-Control": "no-store" },
+      // ── Step 1: Flush current local state to Supabase BEFORE fetching ──────
+      // This guarantees any unsaved edits (articles typed but not yet blurred,
+      // due date changes, gift wrapping toggle etc.) are persisted first.
+      console.log("[save] Saving articles:", local.articles);
+      await fetch(`/api/admin/packets/${local.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          articles:         local.articles,
+          instructions:     local.instructions,
+          due_date:         local.due_date,
+          gift_wrapping:    local.gift_wrapping,
+          delivery_method:  (local as unknown as { delivery_method?: string | null }).delivery_method,
+        }),
       });
+
+      // ── Step 2: Fetch completely fresh data (timestamp busts any CDN/edge cache) ──
+      const res = await fetch(
+        `/api/admin/packets/${local.id}?t=${Date.now()}`,
+        { cache: "no-store", headers: { "Cache-Control": "no-cache", "Pragma": "no-cache" } }
+      );
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
       const json = await res.json();
-      const freshPacket = json.packet || json;
-      console.log("[reprint] Fresh articles:", freshPacket.articles);
-      console.log("[reprint] Using stale articles:", packet.articles);
+      const freshPacket = json.packet;
+
+      if (!freshPacket) {
+        alert("Could not load order data. Please try again.");
+        return;
+      }
+
+      console.log("[fetch] Fresh articles from DB:", freshPacket.articles);
+
+      // ── Step 3: Generate and print from fresh data ──────────────────────────
       const html = generatePrintHTML(freshPacket);
       const win = window.open("", "_blank");
       if (win) {
         win.document.write(html);
         win.document.close();
-        setTimeout(() => win.print(), 400);
+        setTimeout(() => win.print(), 500);
       }
     } catch (err) {
-      console.error("Reprint error:", err);
-      alert("Failed to load latest order data. Please try again.");
+      console.error("[reprint] Error:", err);
+      alert("Reprint failed: " + String(err));
     } finally {
       setReprintLoading(false);
     }
@@ -543,7 +564,10 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                 <textarea
                   rows={2}
                   value={local.articles ?? ""}
-                  onChange={(e) => set("articles", e.target.value)}
+                  onChange={(e) => {
+                    console.log("[textarea] onChange:", e.target.value);
+                    set("articles", e.target.value);
+                  }}
                   onBlur={(e) => handleFieldUpdate("articles", e.target.value || null)}
                   className={`${field} resize-none`}
                 />
