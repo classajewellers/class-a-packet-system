@@ -110,16 +110,27 @@ function parseLineItems(raw: any): string {
     const qtyMatch = block.match(/^quantity:\s*(\d+)$/m);
     const qty = qtyMatch?.[1] || "1";
 
-    // Extract ALL customAttributes — exec loop (matchAll spread needs downlevelIteration)
-    // Covers personalisation fields across all product types.
-    // Values are trimmed of all surrounding whitespace including newlines
+    // Extract customAttributes — exec loop covers all personalisation fields.
+    // Use [^']* (not [^']+) so keys/values with unusual spacing still match.
+    // Values trimmed of surrounding whitespace including newlines
     // (Zapier can send values like '\n\n Yellow Gold\n\n').
+    const meaningfulKeys = [
+      "metal", "carat", "karat", "gold", "colour", "color",
+      "stone", "gem", "diamond", "sapphire", "ruby", "emerald",
+      "size", "ring size", "engraving", "personalisation", "personalization",
+      "chain", "initial", "birthstone",
+      "pendant", "pendant 1", "pendant 2", "pendant 3", "pendant 4", "pendant 5", "pendant 6",
+      "number", "font", "text", "message", "name",
+      "finish", "width", "length", "weight", "alloy", "plating",
+      "rhodium", "confirmation", "style", "design",
+    ];
+
     const attrMatches: RegExpExecArray[] = [];
-    const attrRe = /'key':\s*'([^']+)',\s*'value':\s*'([^']*)'/g;
+    const attrRe = /'key':\s*'([^']*)',\s*'value':\s*'([^']*)'/g;
     let attrM: RegExpExecArray | null;
     while ((attrM = attrRe.exec(block)) !== null) attrMatches.push(attrM);
 
-    console.log('Total customAttributes found:', attrMatches.length);
+    console.log('[webhook] customAttributes found:', attrMatches.length);
 
     const attrs = attrMatches
       .filter((m) => {
@@ -127,9 +138,10 @@ function parseLineItems(raw: any): string {
         const val = m[2].trim();
         // Skip empty values
         if (!val) return false;
-        // Skip internal / tracking keys
+        // Skip internal / tracking keys (Shopify internal fields start with _)
         if (key.startsWith("_") || key.startsWith("cl_")) return false;
-        return true;
+        // Must match a meaningful product attribute key (case-insensitive)
+        return meaningfulKeys.some((k) => key.includes(k.toLowerCase()));
       })
       .map((m) => `  ${m[1]}: ${m[2].trim()}`)
       .join("\n");
@@ -179,7 +191,14 @@ function extractDispatchDate(raw: any): string | null {
 
   const dateStr = match[1].trim(); // e.g. "Wednesday, May 13th" or "Same Day Dispatch"
 
-  // Require both a month name AND a day number — rejects "Same Day Dispatch" etc.
+  // Explicit same-day check — set due_date to null so label shows "SET DUE DATE"
+  // prompting staff to set the correct date after packing.
+  if (/same.?day/i.test(dateStr)) {
+    console.log(`[shopify/webhook] extractDispatchDate: "${dateStr}" is same-day — returning null`);
+    return null;
+  }
+
+  // Require both a month name AND a day number — rejects non-date strings.
   const hasMonth = MONTH_NAMES.some((m) => dateStr.toLowerCase().includes(m));
   const hasDay   = /\d{1,2}/.test(dateStr);
   if (!hasMonth || !hasDay) {

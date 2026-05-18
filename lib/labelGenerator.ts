@@ -22,24 +22,26 @@ function resolveGiftWrap(raw: unknown): "YES" | "NO" {
 
 /**
  * Resolve the due date display string.
- * Returns "CONTACT STORE" when null/empty so staff know to set it.
+ * Returns "SET DUE DATE" when null/empty — prompts staff to set it before dispatch.
  */
 function resolveDueDate(due_date: string | null | undefined): string {
-  if (!due_date) return "CONTACT STORE";
+  if (!due_date) return "SET DUE DATE";
   const formatted = formatDateAU(due_date);
-  return formatted || "CONTACT STORE";
+  return formatted || "SET DUE DATE";
 }
 
 /**
- * Resolve delivery display — checks delivery_method and shipping_method.
+ * Resolve delivery display — checks delivery_method, shipping_method, then
+ * packet_data.shippingMethod as a last resort.
  */
 function resolveDelivery(packet: Packet): string {
-  const isOnline = packet.packet_type === "online_order";
-  if (isOnline) {
-    return packet.shipping_method || "Pickup";
-  }
   const dm = (packet as { delivery_method?: string | null }).delivery_method;
-  return dm || "Pickup";
+  return (
+    dm ||
+    packet.shipping_method ||
+    (packet.packet_data as { shippingMethod?: string } | null)?.shippingMethod ||
+    "Pickup"
+  );
 }
 
 /**
@@ -485,8 +487,8 @@ export function generatePrintHTML(packet: Packet): string {
   const dueDateDisplay = resolveDueDate(packet.due_date);
   const componentsText = resolveComponents(packet);
 
-  // Due date box: red-flag "CONTACT STORE" in a distinct way
-  const isContactStore = dueDateDisplay === "CONTACT STORE";
+  // Due date box: red "SET DUE DATE" when no date is set
+  const isDueDateMissing = dueDateDisplay === "SET DUE DATE";
 
   return `<!DOCTYPE html>
 <html>
@@ -564,22 +566,20 @@ export function generatePrintHTML(packet: Packet): string {
     margin-top: 0.5mm;
   }
 
-  /* Due date box — bold black border, BLACK text, most prominent */
+  /* Due date box — thick black border, dominant element */
   .due-box {
-    border: 2px solid #000000;
+    border: 3px solid #000000;
     background: #ffffff;
     color: #000000;
-    font-size: 11pt;
+    font-size: 18pt;
     font-weight: 900;
     padding: 1.5mm 2.5mm;
     text-align: center;
     line-height: 1.2;
     min-width: 28mm;
   }
-  .due-box.contact-store {
-    border-color: #000;
-    color: #000;
-    font-size: 9pt;
+  .due-box.missing {
+    border-color: #cc0000;
   }
   .due-label {
     font-size: 5.5pt;
@@ -647,9 +647,9 @@ export function generatePrintHTML(packet: Packet): string {
       <div class="ref-num">${esc(packet.reference_number)}</div>
       <div class="barcode-placeholder">||||| ${esc(packet.reference_number)} |||||</div>
     </div>
-    <div class="due-box${isContactStore ? " contact-store" : ""}">
+    <div class="due-box${isDueDateMissing ? " missing" : ""}">
       <span class="due-label">DUE DATE</span>
-      <span style="font-weight:900;color:#000000;font-size:${isContactStore ? "8pt" : "11pt"};">${esc(dueDateDisplay)}</span>
+      <span style="font-weight:900;font-size:${isDueDateMissing ? "9pt" : "18pt"};color:${isDueDateMissing ? "#cc0000" : "#000000"};">${esc(dueDateDisplay)}</span>
     </div>
   </div>
 

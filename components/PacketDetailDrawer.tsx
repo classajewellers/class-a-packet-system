@@ -64,6 +64,7 @@ function Label({ children, bold }: { children: React.ReactNode; bold?: boolean }
 export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate }: Props) {
   const [local, setLocal] = useState<Packet>(packet);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [reprintLoading, setReprintLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -191,28 +192,26 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
   }
 
   async function handleReprintLabel() {
-    // Always fetch the latest packet from Supabase so any edits (due date,
-    // gift wrapping, articles, components etc.) are reflected on the reprint.
-    setSaveState("saving");
+    // Always fetch fresh data from Supabase before printing so any edits
+    // (due date, gift wrapping, articles, components etc.) are reflected.
+    setReprintLoading(true);
     try {
-      const res = await fetch(`/api/admin/packets/${local.id}`, { cache: "no-store" });
-      const json = await res.json() as { packet: Packet };
-      const fresh = json.packet ?? local;
-      console.log("[Reprint] gift_wrapping:", fresh.gift_wrapping, typeof fresh.gift_wrapping);
-      const html = generatePrintHTML(fresh);
+      const res = await fetch(`/api/admin/packets/${local.id}`);
+      const json = await res.json();
+      const freshPacket = json.packet || json;
+      console.log("[Reprint] gift_wrapping:", freshPacket.gift_wrapping, typeof freshPacket.gift_wrapping);
+      const html = generatePrintHTML(freshPacket);
       const win = window.open("", "_blank");
-      if (!win) { setSaveState("idle"); return; }
-      win.document.write(html);
-      win.document.close();
-      win.focus();
-      setTimeout(() => win.print(), 400);
+      if (win) {
+        win.document.write(html);
+        win.document.close();
+        setTimeout(() => win.print(), 400);
+      }
     } catch (err) {
-      console.error("[Reprint] fetch failed, falling back to local state:", err);
-      const html = generatePrintHTML(local);
-      const win = window.open("", "_blank");
-      if (win) { win.document.write(html); win.document.close(); win.focus(); setTimeout(() => win.print(), 400); }
+      console.error("Reprint error:", err);
+      alert("Failed to load latest order data. Please try again.");
     } finally {
-      setSaveState("idle");
+      setReprintLoading(false);
     }
   }
 
@@ -313,12 +312,13 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
           <div className={`grid gap-2 ${showNotifButton ? "grid-cols-2" : "grid-cols-1"}`}>
             <button
               onClick={handleReprintLabel}
-              className="flex items-center justify-center gap-2 bg-gray-100 text-black text-sm font-semibold py-3 rounded-xl hover:bg-gray-200 active:scale-[0.98] transition-all"
+              disabled={reprintLoading}
+              className="flex items-center justify-center gap-2 bg-gray-100 text-black text-sm font-semibold py-3 rounded-xl hover:bg-gray-200 active:scale-[0.98] transition-all disabled:opacity-60"
             >
               <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.056 48.056 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
               </svg>
-              Reprint Label
+              {reprintLoading ? "Loading…" : "Reprint Label"}
             </button>
 
             {showNotifButton && (
@@ -517,7 +517,10 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   rows={2}
                   value={local.articles ?? ""}
                   onChange={(e) => set("articles", e.target.value)}
-                  onBlur={(e) => saveOnBlur("articles", e.target.value || null)}
+                  onBlur={(e) => {
+                    console.log("[drawer] Saving articles:", e.target.value);
+                    saveOnBlur("articles", e.target.value || null);
+                  }}
                   className={`${field} resize-none`}
                 />
               </div>
@@ -530,6 +533,24 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   onBlur={(e) => saveOnBlur("instructions", e.target.value || null)}
                   className={`${field} resize-none`}
                 />
+              </div>
+              <div>
+                <Label>Gift Wrapping</Label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !(local.gift_wrapping === true || local.gift_wrapping === (true as unknown as boolean));
+                    set("gift_wrapping", next);
+                    patch({ gift_wrapping: next });
+                  }}
+                  className={`w-full rounded-lg border px-3 py-2 text-sm font-semibold text-left transition-colors ${
+                    (local.gift_wrapping === true || (local.gift_wrapping as unknown) === "true")
+                      ? "border-black bg-black text-white"
+                      : "border-gray-200 bg-gray-50 text-gray-500"
+                  }`}
+                >
+                  {(local.gift_wrapping === true || (local.gift_wrapping as unknown) === "true") ? "✓ YES — Gift Wrap" : "NO — No Gift Wrap"}
+                </button>
               </div>
             </div>
           </Section>
