@@ -190,14 +190,30 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
     }
   }
 
-  function handleReprintLabel() {
-    const html = generatePrintHTML(local);
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    setTimeout(() => win.print(), 400);
+  async function handleReprintLabel() {
+    // Always fetch the latest packet from Supabase so any edits (due date,
+    // gift wrapping, articles, components etc.) are reflected on the reprint.
+    setSaveState("saving");
+    try {
+      const res = await fetch(`/api/admin/packets/${local.id}`, { cache: "no-store" });
+      const json = await res.json() as { packet: Packet };
+      const fresh = json.packet ?? local;
+      console.log("[Reprint] gift_wrapping:", fresh.gift_wrapping, typeof fresh.gift_wrapping);
+      const html = generatePrintHTML(fresh);
+      const win = window.open("", "_blank");
+      if (!win) { setSaveState("idle"); return; }
+      win.document.write(html);
+      win.document.close();
+      win.focus();
+      setTimeout(() => win.print(), 400);
+    } catch (err) {
+      console.error("[Reprint] fetch failed, falling back to local state:", err);
+      const html = generatePrintHTML(local);
+      const win = window.open("", "_blank");
+      if (win) { win.document.write(html); win.document.close(); win.focus(); setTimeout(() => win.print(), 400); }
+    } finally {
+      setSaveState("idle");
+    }
   }
 
   // ── Valuation handlers ────────────────────────────────────────────────────

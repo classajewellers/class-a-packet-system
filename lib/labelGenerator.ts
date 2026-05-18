@@ -1,8 +1,7 @@
 import { Packet } from "./types";
 import { formatDateAU, formatCurrency } from "./formatters";
 
-// ─── Dymo Label XML ───────────────────────────────────────────────────────────
-// Target: LabelWriter 5XL — 104mm × 159mm label stock
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function esc(s: string | null | undefined): string {
   if (!s) return "";
@@ -13,7 +12,64 @@ function esc(s: string | null | undefined): string {
     .replace(/"/g, "&quot;");
 }
 
+/**
+ * Resolve gift wrapping value — handles boolean true/false OR string "true"/"false".
+ */
+function resolveGiftWrap(raw: unknown): "YES" | "NO" {
+  if (raw === true || raw === "true") return "YES";
+  return "NO";
+}
+
+/**
+ * Resolve the due date display string.
+ * Returns "CONTACT STORE" when null/empty so staff know to set it.
+ */
+function resolveDueDate(due_date: string | null | undefined): string {
+  if (!due_date) return "CONTACT STORE";
+  const formatted = formatDateAU(due_date);
+  return formatted || "CONTACT STORE";
+}
+
+/**
+ * Resolve delivery display — checks delivery_method and shipping_method.
+ */
+function resolveDelivery(packet: Packet): string {
+  const isOnline = packet.packet_type === "online_order";
+  if (isOnline) {
+    return packet.shipping_method || "Pickup";
+  }
+  const dm = (packet as { delivery_method?: string | null }).delivery_method;
+  return dm || "Pickup";
+}
+
+/**
+ * Build a components block string for printing.
+ * Checks packet.components first, then packet.packet_data.components.
+ */
+function resolveComponents(packet: Packet): string | null {
+  type ComponentItem = { name?: string; quantity?: number; qty?: number; status?: string };
+  const components: ComponentItem[] | null | undefined =
+    (packet as { components?: ComponentItem[] }).components?.length
+      ? (packet as { components?: ComponentItem[] }).components
+      : (packet.packet_data as { components?: ComponentItem[] } | null)?.components;
+
+  if (!components || components.length === 0) return null;
+
+  const lines = components.map((c) => {
+    const qty = c.quantity ?? c.qty ?? 1;
+    const name = c.name ?? "Item";
+    const status = c.status ? ` — ${c.status}` : "";
+    return `${qty}x ${name}${status}`;
+  });
+  return lines.join("\n");
+}
+
+// ─── Dymo Label XML ───────────────────────────────────────────────────────────
+// Target: LabelWriter 5XL — 104mm × 159mm label stock
+
 export function generateDymoXML(packet: Packet): string {
+  console.log("Gift wrapping value:", packet.gift_wrapping, typeof packet.gift_wrapping);
+
   const customerName = [packet.customer_first_name, packet.customer_last_name]
     .filter(Boolean)
     .join(" ");
@@ -29,10 +85,10 @@ export function generateDymoXML(packet: Packet): string {
 
   const contactPref = (packet.contact_preference ?? []).join(", ");
   const isOnline = packet.packet_type === "online_order";
-  const deliveryDisplay = isOnline
-    ? (packet.shipping_method || "Pickup")
-    : ((packet as {delivery_method?: string | null}).delivery_method || "Pickup");
-  const giftWrap = (packet as {gift_wrapping?: boolean | null}).gift_wrapping ? "YES" : "NO";
+  const deliveryDisplay = resolveDelivery(packet);
+  const giftWrap = resolveGiftWrap(packet.gift_wrapping);
+  const dueDateDisplay = resolveDueDate(packet.due_date);
+  const componentsText = resolveComponents(packet);
 
   return `<?xml version="1.0" encoding="utf-8"?>
 <DimoLabel Version="2">
@@ -41,7 +97,7 @@ export function generateDymoXML(packet: Packet): string {
     <Variable Name="StoreAddress">${esc("40 North East Road, Walkerville SA 5081")}</Variable>
     <Variable Name="PacketTypeDisplay">${isOnline ? esc("ONLINE ORDER") : ""}</Variable>
     <Variable Name="RefNumber">${esc(packet.reference_number)}</Variable>
-    <Variable Name="DueDate">DUE: ${esc(formatDateAU(packet.due_date))}</Variable>
+    <Variable Name="DueDate">DUE: ${esc(dueDateDisplay)}</Variable>
     <Variable Name="CustomerName">${esc(customerName)}</Variable>
     <Variable Name="Address">${esc(addressLine)}</Variable>
     <Variable Name="Phone">${esc(packet.customer_phone)}</Variable>
@@ -53,7 +109,7 @@ export function generateDymoXML(packet: Packet): string {
     <Variable Name="Contact">Contact: ${esc(contactPref)}</Variable>
     <Variable Name="GiftWrap">Gift Wrap: ${giftWrap}</Variable>
     <Variable Name="Delivery">Delivery: ${esc(deliveryDisplay)}</Variable>
-    <Variable Name="Articles">${esc(packet.articles ?? packet.items_ordered)}</Variable>
+    <Variable Name="Articles">${esc(packet.articles ?? packet.items_ordered)}${componentsText ? "\n\nCOMPONENTS:\n" + esc(componentsText) : ""}</Variable>
     <Variable Name="Instructions">${esc(packet.instructions ?? packet.order_notes)}</Variable>
     <Variable Name="TotalCharges">Total: ${esc(formatCurrency(packet.total_charges))}</Variable>
     <Variable Name="Deposit">Dep: ${esc(formatCurrency(packet.deposit))}</Variable>
@@ -165,11 +221,11 @@ export function generateDymoXML(packet: Packet): string {
         <Bounds X="57" Y="1300" Width="2400" Height="480" />
       </BarcodeObject>
 
-      <!-- Due Date Box (black) -->
+      <!-- Due Date Box — bold black, most prominent element -->
       <TextObject>
         <Name>DueDate</Name>
-        <ForeColor Alpha="255" Red="255" Green="255" Blue="255" />
-        <BackColor Alpha="255" Red="0" Green="0" Blue="0" />
+        <ForeColor Alpha="255" Red="0" Green="0" Blue="0" />
+        <BackColor Alpha="255" Red="255" Green="255" Blue="255" />
         <LinkedObjectName>DueDate</LinkedObjectName>
         <Rotation>Rotation0</Rotation>
         <IsVariable>True</IsVariable>
@@ -180,8 +236,8 @@ export function generateDymoXML(packet: Packet): string {
           <Element>
             <String>^DueDate</String>
             <Attributes>
-              <Font Family="Arial" Size="14" Bold="True" Italic="False" Underline="False" StrikeOut="False" />
-              <ForeColor Alpha="255" Red="255" Green="255" Blue="255" />
+              <Font Family="Arial" Size="16" Bold="True" Italic="False" Underline="False" StrikeOut="False" />
+              <ForeColor Alpha="255" Red="0" Green="0" Blue="0" />
             </Attributes>
           </Element>
         </StyledText>
@@ -299,7 +355,7 @@ export function generateDymoXML(packet: Packet): string {
         <Bounds X="57" Y="2360" Width="3980" Height="300" />
       </TextObject>
 
-      <!-- Articles -->
+      <!-- Articles (includes Components if present) -->
       <TextObject>
         <Name>Articles</Name>
         <LinkedObjectName>Articles</LinkedObjectName>
@@ -380,7 +436,7 @@ export function generateDymoXML(packet: Packet): string {
         <Bounds X="57" Y="3240" Width="3980" Height="160" />
       </TextObject>
 
-      <!-- Disclaimer (black, not red) -->
+      <!-- Disclaimer (black) -->
       <TextObject>
         <Name>Disclaimer</Name>
         <ForeColor Alpha="255" Red="0" Green="0" Blue="0" />
@@ -409,6 +465,8 @@ export function generateDymoXML(packet: Packet): string {
 
 // ─── HTML label fallback (A6 print) — B&W only ───────────────────────────────
 export function generatePrintHTML(packet: Packet): string {
+  console.log("Gift wrapping value:", packet.gift_wrapping, typeof packet.gift_wrapping);
+
   const customerName = [packet.customer_first_name, packet.customer_last_name]
     .filter(Boolean)
     .join(" ");
@@ -422,10 +480,13 @@ export function generatePrintHTML(packet: Packet): string {
     .join(", ");
 
   const isOnline = packet.packet_type === "online_order";
-  const giftWrap = (packet as {gift_wrapping?: boolean | null}).gift_wrapping ? "YES" : "NO";
-  const deliveryDisplay = isOnline
-    ? (packet.shipping_method || "Pickup")
-    : ((packet as {delivery_method?: string | null}).delivery_method || "Pickup");
+  const giftWrap = resolveGiftWrap(packet.gift_wrapping);
+  const deliveryDisplay = resolveDelivery(packet);
+  const dueDateDisplay = resolveDueDate(packet.due_date);
+  const componentsText = resolveComponents(packet);
+
+  // Due date box: red-flag "CONTACT STORE" in a distinct way
+  const isContactStore = dueDateDisplay === "CONTACT STORE";
 
   return `<!DOCTYPE html>
 <html>
@@ -502,17 +563,33 @@ export function generatePrintHTML(packet: Packet): string {
     letter-spacing: 3px;
     margin-top: 0.5mm;
   }
+
+  /* Due date box — bold black border, BLACK text, most prominent */
   .due-box {
-    background: #000;
-    color: #fff;
-    font-size: 10pt;
-    font-weight: bold;
+    border: 2px solid #000000;
+    background: #ffffff;
+    color: #000000;
+    font-size: 11pt;
+    font-weight: 900;
     padding: 1.5mm 2.5mm;
     text-align: center;
     line-height: 1.2;
-    min-width: 22mm;
+    min-width: 28mm;
   }
-  .due-label { font-size: 5.5pt; display: block; font-weight: normal; letter-spacing: 1px; }
+  .due-box.contact-store {
+    border-color: #000;
+    color: #000;
+    font-size: 9pt;
+  }
+  .due-label {
+    font-size: 5.5pt;
+    display: block;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #000;
+    text-transform: uppercase;
+    margin-bottom: 1mm;
+  }
 
   /* Grid for details */
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8mm 2mm; margin-bottom: 2mm; }
@@ -520,6 +597,7 @@ export function generatePrintHTML(packet: Packet): string {
   .field-label { font-weight: 700; font-size: 6pt; color: #555; text-transform: uppercase; letter-spacing: 0.3px; }
   .full-width { grid-column: 1 / -1; }
   .articles-text { font-size: 8pt; font-weight: 600; white-space: pre-wrap; }
+  .components-text { font-size: 7.5pt; font-weight: 600; white-space: pre-wrap; color: #000; }
   .instructions-text { font-size: 7pt; color: #222; white-space: pre-wrap; }
 
   /* Separator */
@@ -569,9 +647,9 @@ export function generatePrintHTML(packet: Packet): string {
       <div class="ref-num">${esc(packet.reference_number)}</div>
       <div class="barcode-placeholder">||||| ${esc(packet.reference_number)} |||||</div>
     </div>
-    <div class="due-box">
+    <div class="due-box${isContactStore ? " contact-store" : ""}">
       <span class="due-label">DUE DATE</span>
-      ${esc(formatDateAU(packet.due_date)) || "—"}
+      <span style="font-weight:900;color:#000000;font-size:${isContactStore ? "8pt" : "11pt"};">${esc(dueDateDisplay)}</span>
     </div>
   </div>
 
@@ -594,7 +672,7 @@ export function generatePrintHTML(packet: Packet): string {
   <!-- 5. Gift wrapping + delivery method -->
   <div class="grid" style="margin-bottom:1.5mm;">
     <div class="field"><div class="field-label">Gift Wrapping</div><strong>${giftWrap}</strong></div>
-    <div class="field"><div class="field-label">${isOnline ? "Shipping" : "Delivery"}</div>${esc(deliveryDisplay)}</div>
+    <div class="field"><div class="field-label">${isOnline ? "Shipping" : "Delivery"}</div><strong>${esc(deliveryDisplay)}</strong></div>
     ${isOnline && packet.order_number ? `<div class="field"><div class="field-label">Order #</div>${esc(packet.order_number)}</div>` : ""}
     ${packet.customer_number ? `<div class="field"><div class="field-label">Cust #</div>${esc(packet.customer_number)}</div>` : ""}
   </div>
@@ -606,6 +684,13 @@ export function generatePrintHTML(packet: Packet): string {
   <div style="margin-bottom:1.5mm;">
     <div class="field-label">${isOnline ? "Items Ordered" : "Articles"}</div>
     <div class="articles-text">${esc(isOnline ? packet.items_ordered : packet.articles)}</div>
+  </div>` : ""}
+
+  <!-- 6b. Components -->
+  ${componentsText ? `
+  <div style="margin-bottom:1.5mm;">
+    <div class="field-label">Components</div>
+    <div class="components-text">${esc(componentsText)}</div>
   </div>` : ""}
 
   <!-- 7. Pricing -->

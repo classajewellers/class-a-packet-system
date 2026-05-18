@@ -36,3 +36,19 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }
+
+export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const supabase = createServerSupabaseClient()
+    const { data, error } = await supabase
+      .from('packets')
+      .select('*')
+      .eq('id', params.id)
+      .single()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    return NextResponse.json({ packet: data })
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}
