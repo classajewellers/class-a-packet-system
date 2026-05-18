@@ -272,6 +272,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const total    = parseFloat(String(body.totalPrice ?? "0")) || 0;
   const note     = body.orderNote          || null;
 
+  console.log("[webhook] Order note:", body.orderNote);
   console.log("[shopify/webhook] Resolved name:", { firstName, lastName });
   console.log("[shopify/webhook] Mapped fields:", {
     orderNumber: orderNum, email, phone, firstName, lastName,

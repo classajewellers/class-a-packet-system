@@ -111,8 +111,8 @@ export function generateDymoXML(packet: Packet): string {
     <Variable Name="Contact">Contact: ${esc(contactPref)}</Variable>
     <Variable Name="GiftWrap">Gift Wrap: ${giftWrap}</Variable>
     <Variable Name="Delivery">Delivery: ${esc(deliveryDisplay)}</Variable>
-    <Variable Name="Articles">${esc(packet.articles ?? packet.items_ordered)}${componentsText ? "\n\nCOMPONENTS:\n" + esc(componentsText) : ""}</Variable>
-    <Variable Name="Instructions">${esc(packet.instructions ?? packet.order_notes)}</Variable>
+    <Variable Name="Articles">${esc(packet.articles || packet.items_ordered)}${componentsText ? "\n\nCOMPONENTS:\n" + esc(componentsText) : ""}</Variable>
+    <Variable Name="Instructions">${esc(packet.instructions)}</Variable>
     <Variable Name="TotalCharges">Total: ${esc(formatCurrency(packet.total_charges))}</Variable>
     <Variable Name="Deposit">Dep: ${esc(formatCurrency(packet.deposit))}</Variable>
     <Variable Name="Balance">Bal: ${esc(formatCurrency(packet.balance))}</Variable>
@@ -639,7 +639,7 @@ export function generatePrintHTML(packet: Packet): string {
   <div class="store-name">CLASS A JEWELLERS</div>
   <div class="store-addr">40 North East Road, Walkerville SA 5081 &bull; (08) 8344 7722</div>
 
-  <!-- 1. Customer name — largest and first -->
+  <!-- 1. Customer name -->
   <div class="customer-name">${esc(customerName) || "&nbsp;"}</div>
 
   <!-- 2. Reference + due date -->
@@ -663,35 +663,34 @@ export function generatePrintHTML(packet: Packet): string {
 
   <hr class="sep">
 
-  <!-- 4. Order notes / instructions -->
-  ${(isOnline ? packet.order_notes : packet.instructions) ? `
-  <div class="field full-width" style="margin-bottom:1.5mm;">
-    <div class="field-label">${isOnline ? "Order Notes" : "Instructions"}</div>
-    <div class="instructions-text">${esc(isOnline ? packet.order_notes : packet.instructions)}</div>
-  </div>` : ""}
-
-  <!-- 5. Gift wrapping + delivery method -->
+  <!-- 4. Gift wrapping | Delivery + Order number -->
   <div class="grid" style="margin-bottom:1.5mm;">
     <div class="field"><div class="field-label">Gift Wrapping</div><strong>${giftWrap}</strong></div>
     <div class="field"><div class="field-label">${isOnline ? "Shipping" : "Delivery"}</div><strong>${esc(deliveryDisplay)}</strong></div>
-    ${isOnline && packet.order_number ? `<div class="field"><div class="field-label">Order #</div>${esc(packet.order_number)}</div>` : ""}
-    ${packet.customer_number ? `<div class="field"><div class="field-label">Cust #</div>${esc(packet.customer_number)}</div>` : ""}
+    ${isOnline && packet.order_number ? `<div class="field full-width"><div class="field-label">Order #</div>${esc(packet.order_number)}</div>` : ""}
   </div>
 
   <hr class="sep">
 
-  <!-- 6. Articles -->
-  ${(isOnline ? packet.items_ordered : packet.articles) ? `
+  <!-- 5. ITEMS / DESCRIPTION — packet.articles is primary; fall back to items_ordered -->
+  ${(packet.articles || packet.items_ordered) ? `
   <div style="margin-bottom:1.5mm;">
-    <div class="field-label">${isOnline ? "Items Ordered" : "Articles"}</div>
-    <div class="articles-text">${esc(isOnline ? packet.items_ordered : packet.articles)}</div>
+    <div class="field-label">Items / Description</div>
+    <div class="articles-text">${esc(packet.articles || packet.items_ordered)}</div>
   </div>` : ""}
 
-  <!-- 6b. Components -->
+  <!-- 5b. Components (if any) -->
   ${componentsText ? `
   <div style="margin-bottom:1.5mm;">
     <div class="field-label">Components</div>
     <div class="components-text">${esc(componentsText)}</div>
+  </div>` : ""}
+
+  <!-- 6. INSTRUCTIONS / ORDER NOTES — packet.instructions for ALL order types -->
+  ${packet.instructions ? `
+  <div style="margin-bottom:1.5mm;">
+    <div class="field-label">Instructions / Order Notes</div>
+    <div class="instructions-text">${esc(packet.instructions)}</div>
   </div>` : ""}
 
   <!-- 7. Pricing -->
@@ -710,7 +709,7 @@ export function generatePrintHTML(packet: Packet): string {
     </div>
   </div>
 
-  <!-- 8. Staff -->
+  <!-- 8. Staff / repair tracker / collected -->
   <div class="bottom">
     <strong>Staff:</strong> ${esc(packet.staff_member ?? "—")}
     <div style="margin-top:1.5mm;">
