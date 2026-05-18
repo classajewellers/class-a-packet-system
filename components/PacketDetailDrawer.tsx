@@ -359,7 +359,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
           {/* ── Action buttons: Reprint + Send Notification ── */}
           <div className={`grid gap-2 ${showNotifButton ? "grid-cols-2" : "grid-cols-1"}`}>
             <button
-              onClick={handleReprintLabel}
+              onClick={async () => { console.log('REPRINT BUTTON CLICKED'); await handleReprintLabel(); }}
               disabled={reprintLoading}
               className="flex items-center justify-center gap-2 bg-gray-100 text-black text-sm font-semibold py-3 rounded-xl hover:bg-gray-200 active:scale-[0.98] transition-all disabled:opacity-60"
             >
