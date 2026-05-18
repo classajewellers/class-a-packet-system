@@ -124,6 +124,27 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
     patch({ [key]: value });
   }
 
+  // Dedicated field update — saves to Supabase, updates local state from the
+  // server response, and logs confirmation. Use this for fields that must be
+  // persisted before a reprint (articles, instructions, etc.).
+  async function handleFieldUpdate(field: string, value: unknown) {
+    try {
+      const res = await fetch(`/api/admin/packets/${local.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      });
+      const json = await res.json() as { packet?: Packet };
+      if (json.packet) {
+        setLocal(json.packet);
+        onUpdate(json.packet);
+        console.log("[drawer] Saved", field, ":", value);
+      }
+    } catch (err) {
+      console.error("[drawer] handleFieldUpdate failed for", field, err);
+    }
+  }
+
   // ── Delete ────────────────────────────────────────────────────────────────
   async function handleDelete() {
     if (!window.confirm(
@@ -195,11 +216,17 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
     // Always fetch fresh data from Supabase before printing so any edits
     // (due date, gift wrapping, articles, components etc.) are reflected.
     setReprintLoading(true);
+    console.log("[reprint] Fetching fresh data for packet:", packet.id);
     try {
-      const res = await fetch(`/api/admin/packets/${local.id}`);
+      const res = await fetch(`/api/admin/packets/${local.id}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-store" },
+      });
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
       const json = await res.json();
       const freshPacket = json.packet || json;
-      console.log("[Reprint] gift_wrapping:", freshPacket.gift_wrapping, typeof freshPacket.gift_wrapping);
+      console.log("[reprint] Fresh articles:", freshPacket.articles);
+      console.log("[reprint] Using stale articles:", packet.articles);
       const html = generatePrintHTML(freshPacket);
       const win = window.open("", "_blank");
       if (win) {
@@ -517,10 +544,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   rows={2}
                   value={local.articles ?? ""}
                   onChange={(e) => set("articles", e.target.value)}
-                  onBlur={(e) => {
-                    console.log("[drawer] Saving articles:", e.target.value);
-                    saveOnBlur("articles", e.target.value || null);
-                  }}
+                  onBlur={(e) => handleFieldUpdate("articles", e.target.value || null)}
                   className={`${field} resize-none`}
                 />
               </div>

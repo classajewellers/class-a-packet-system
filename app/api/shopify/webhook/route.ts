@@ -88,7 +88,9 @@ function parseLineItems(raw: any): string {
     if (!nameMatch) continue;
     const name = nameMatch[1].trim();
 
-    // Extract variantTitle — append if meaningful (not "Default Title" / "None")
+    // Extract variantTitle — append only if meaningful and not already in the name.
+    // Prevents "Ring - 18ct Gold / Pair - 18ct Gold / Pair" duplication when Shopify
+    // returns the variant as part of the product name AND as variantTitle.
     const variantMatch = block.match(/^variantTitle:\s*(.+)$/m);
     const variantRaw   = variantMatch?.[1]?.trim() ?? "";
     const isDefaultVariant =
@@ -96,7 +98,9 @@ function parseLineItems(raw: any): string {
       variantRaw.toLowerCase() === "default title" ||
       variantRaw.toLowerCase() === "none" ||
       variantRaw.toLowerCase() === "null";
-    const displayName = isDefaultVariant ? name : `${name} - ${variantRaw}`;
+    const variantAlreadyInName = name.toLowerCase().includes(variantRaw.toLowerCase());
+    const shouldAppendVariant  = !isDefaultVariant && !variantAlreadyInName;
+    const displayName = shouldAppendVariant ? `${name} - ${variantRaw}` : name;
 
     // Skip free gifts and product add-ons (zero-price add-ons)
     if (name.toLowerCase().includes("free gift")) continue;

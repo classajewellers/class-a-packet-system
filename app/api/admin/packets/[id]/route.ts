@@ -47,7 +47,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       .single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    return NextResponse.json({ packet: data })
+    return NextResponse.json({ packet: data }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
