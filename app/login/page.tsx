@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect, useCallback } from "react";
 import { STAFF_LIST, StaffMember, ROLE_LABELS } from "@/lib/staffList";
 import { LoggedInUser, UserRole } from "@/lib/userTypes";

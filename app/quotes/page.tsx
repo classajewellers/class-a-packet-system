@@ -1,15 +1,17 @@
 "use client";
 
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Quote } from "@/lib/types";
 import { getSupabaseClient } from "@/lib/supabase";
 import { STAFF_EMAIL_MAP } from "@/lib/staffEmails";
 import { formatDateAU } from "@/lib/formatters";
-import dynamic from "next/dynamic";
+import nextDynamic from "next/dynamic";
 import QuoteDetailDrawer from "@/components/QuoteDetailDrawer";
 import QuoteStatsBar from "@/components/QuoteStatsBar";
 
-const QuotePipelineBoard = dynamic(
+const QuotePipelineBoard = nextDynamic(
   () => import("@/components/QuotePipelineBoard"),
   { ssr: false }
 );

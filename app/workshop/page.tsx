@@ -1,15 +1,17 @@
 "use client";
 
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { WorkshopJob } from "@/lib/types";
 import { formatDateAU } from "@/lib/formatters";
-import dynamic from "next/dynamic";
+import nextDynamic from "next/dynamic";
 
 // Lazy-load DnD to avoid SSR issues
-const WorkshopBoard = dynamic(() => import("@/components/WorkshopBoard"), { ssr: false });
-const ValuationReviewQueue = dynamic(() => import("@/components/ValuationReviewQueue"), { ssr: false });
+const WorkshopBoard = nextDynamic(() => import("@/components/WorkshopBoard"), { ssr: false });
+const ValuationReviewQueue = nextDynamic(() => import("@/components/ValuationReviewQueue"), { ssr: false });
 
 export default function WorkshopPage() {
   const { user } = useUser();

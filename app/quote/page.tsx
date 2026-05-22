@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = 'force-dynamic';
+
 import { useState, useCallback } from "react";
 import { QuoteFormData, QuoteType, LineItem, Quote } from "@/lib/types";
 import { defaultFollowUpDate } from "@/lib/pipeline";

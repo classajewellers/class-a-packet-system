@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect, useCallback } from "react";
 import { Packet } from "@/lib/types";
 import { formatDateAU } from "@/lib/formatters";

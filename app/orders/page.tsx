@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Packet, PacketType } from "@/lib/types";
