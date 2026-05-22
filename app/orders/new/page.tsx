@@ -105,20 +105,42 @@ function NewOrderPageInner() {
         const qbd = q.quote_builder_data as Record<string, unknown> | null | undefined;
         if (qbd) {
           const designLine = typeof qbd.design === "string" && qbd.design ? qbd.design : "";
-          const ms = qbd.main_stone as Record<string, unknown> | undefined;
-          let stoneLine = "";
-          if (ms) {
-            const qty = ms.qty ?? 1;
-            const carat = ms.carat_weight != null ? `${ms.carat_weight}ct ` : "";
-            const parts = [ms.shape, ms.colour, ms.clarity, ms.origin]
-              .map(v => (v != null && String(v).trim() ? String(v) : null))
-              .filter(Boolean)
-              .join(", ");
-            stoneLine = `${qty}x ${carat}${parts}`.trim();
-          }
           const metal = qbd.metal as Record<string, unknown> | undefined;
           const metalLine = metal ? `Metal: ${metal.type ?? ""}${metal.weight ? `, ${metal.weight}g` : ""}` : "";
-          articles = [designLine, stoneLine, metalLine].filter(Boolean).join("\n");
+
+          // main_stone is now an array; fall back to wrapping legacy single object
+          const rawMs = qbd.main_stone;
+          const msArr: Array<Record<string, unknown>> = Array.isArray(rawMs)
+            ? (rawMs as Array<Record<string, unknown>>)
+            : rawMs != null
+            ? [rawMs as Record<string, unknown>]
+            : [];
+
+          if (msArr.length === 0) {
+            articles = [designLine, metalLine].filter(Boolean).join("\n");
+          } else if (msArr.length === 1) {
+            const s = msArr[0];
+            const carat = s.carat_weight != null ? `${s.carat_weight}ct ` : "";
+            const stonePart = `${carat}${[s.colour, s.clarity].filter(Boolean).join("/")} ${s.origin ?? ""} ${s.shape ?? ""}`.trim();
+            articles = [
+              designLine ? `${designLine} with ${stonePart}` : stonePart,
+              metalLine,
+            ].filter(Boolean).join("\n");
+          } else {
+            const stoneLines = msArr.map(s => {
+              const carat = s.carat_weight != null ? `${s.carat_weight}ct ` : "";
+              const parts = [s.colour, s.clarity, s.origin, s.shape]
+                .map(v => (v != null && String(v).trim() ? String(v) : null))
+                .filter(Boolean)
+                .join(" ");
+              return `  - ${carat}${parts}`.trim();
+            }).join("\n");
+            articles = [
+              designLine ? `${designLine} with ${msArr.length}x stones:` : `${msArr.length}x stones:`,
+              stoneLines,
+              metalLine,
+            ].filter(Boolean).join("\n");
+          }
         } else {
           // Fallback: build from line_items and item_description
           const lineItemsText = (q.line_items ?? []).length > 0

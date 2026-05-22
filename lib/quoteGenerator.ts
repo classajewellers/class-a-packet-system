@@ -35,15 +35,45 @@ export function generateQuoteHTML(quote: Quote): string {
     const designText = typeof qbd.design === "string" ? esc(qbd.design) : "&nbsp;";
 
     let stoneText = "&nbsp;";
-    const ms = qbd.main_stone as Record<string, unknown> | undefined;
-    if (ms) {
-      const qty = ms.qty ?? 1;
-      const carat = ms.carat_weight != null ? `${ms.carat_weight}ct ` : "";
-      const parts = [ms.shape, ms.colour, ms.clarity, ms.origin]
-        .map(v => (v != null && v !== "" ? String(v) : null))
-        .filter(Boolean)
-        .join(", ");
-      stoneText = esc(`${qty}x ${carat}${parts}`);
+
+    // main_stone is an array in the new format; fall back to wrapping legacy single object
+    const rawMs = qbd.main_stone;
+    const msArr: Array<Record<string, unknown>> = Array.isArray(rawMs)
+      ? (rawMs as Array<Record<string, unknown>>)
+      : rawMs != null
+      ? [rawMs as Record<string, unknown>]
+      : [];
+
+    if (msArr.length > 0) {
+      // Check if all stones have identical specs
+      const first = msArr[0];
+      const allSame = msArr.length === 1 || msArr.every(s =>
+        s.carat_weight === first.carat_weight &&
+        s.shape === first.shape &&
+        s.colour === first.colour &&
+        s.clarity === first.clarity &&
+        s.origin === first.origin
+      );
+
+      if (allSame) {
+        const qty = msArr.length;
+        const carat = first.carat_weight != null ? `${first.carat_weight}ct ` : "";
+        const parts = [first.colour, first.clarity, first.origin, first.shape]
+          .map(v => (v != null && v !== "" ? String(v) : null))
+          .filter(Boolean)
+          .join(" ");
+        stoneText = esc(`${qty > 1 ? `${qty}x ` : ""}${carat}${parts}`);
+      } else {
+        // Different specs — one line per stone
+        stoneText = msArr.map((s, i) => {
+          const carat = s.carat_weight != null ? `${s.carat_weight}ct ` : "";
+          const parts = [s.colour, s.clarity, s.origin, s.shape]
+            .map(v => (v != null && v !== "" ? String(v) : null))
+            .filter(Boolean)
+            .join(" ");
+          return esc(`Stone ${i + 1}: ${carat}${parts}`);
+        }).join("<br>");
+      }
     }
 
     const priceNum = quote.quoted_price ?? quote.total ?? null;
@@ -51,7 +81,7 @@ export function generateQuoteHTML(quote: Quote): string {
       ? `$${Number(priceNum).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       : "&nbsp;";
 
-    const showStoneRow = ms != null;
+    const showStoneRow = msArr.length > 0;
     const priceRowBg = showStoneRow ? "#ffffff" : "#f0f0f0";
 
     itemsSection = `

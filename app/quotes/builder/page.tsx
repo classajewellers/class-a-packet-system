@@ -13,6 +13,20 @@ interface FixedCost { id: string; key: string; label: string; amount: number; }
 interface MarginBracket { id: string; cost_min: number; cost_max: number | null; multiplier: number; }
 interface QuoteTemplate { id: string; name: string; includes_labour: boolean; includes_main_stone_setting: boolean; includes_chain: boolean; includes_butterflies: boolean; default_metal: string | null; sort_order: number; }
 
+interface StoneEntry {
+  id: string;
+  caratWeight: string;
+  shape: string;
+  colour: string;
+  clarity: string;
+  origin: 'Lab Grown' | 'Natural';
+  cost: string; // manager only
+}
+
+function newStone(): StoneEntry {
+  return { id: Math.random().toString(36).slice(2), caratWeight: '', shape: '', colour: '', clarity: '', origin: 'Lab Grown', cost: '' };
+}
+
 const TEMPLATE_EMOJI: Record<string, string> = {
   'Engagement Ring': '💍',
   'Ring Resize / Repair': '🔧',
@@ -48,15 +62,9 @@ export default function QuoteBuilderPage() {
   // Design description
   const [design, setDesign] = useState('');
 
-  // Main stone (manual entry)
+  // Main stone (multi-entry)
   const [includeMainStone, setIncludeMainStone] = useState(false);
-  const [mainCaratWeight, setMainCaratWeight] = useState('');
-  const [mainShape, setMainShape] = useState('');
-  const [mainColour, setMainColour] = useState('');
-  const [mainClarity, setMainClarity] = useState('');
-  const [stoneOrigin, setStoneOrigin] = useState<'Lab Grown' | 'Natural'>('Lab Grown');
-  const [stoneQty, setStoneQty] = useState('1');
-  const [mainCostPrice, setMainCostPrice] = useState('');
+  const [stones, setStones] = useState<StoneEntry[]>([newStone()]);
 
   // Add-ons (labour always included; main stone setting is auto-calculated from stoneQty)
   const [smallSettings, setSmallSettings] = useState(false);
@@ -89,17 +97,17 @@ export default function QuoteBuilderPage() {
     const metalRate = metalRates.find(r => r.metal_type === metalType);
     const metalCost = metalRate ? (parseFloat(weight) || 0) * metalRate.price_per_gram : 0;
 
-    // Main stone cost: only managers can enter cost price; non-managers always 0
+    // Main stone cost: sum of all individual stone costs (manager only)
     const mainStoneCost = (includeMainStone && user?.role === 'manager')
-      ? (parseFloat(mainCostPrice) || 0)
+      ? stones.reduce((sum, s) => sum + (parseFloat(s.cost) || 0), 0)
       : 0;
 
     let addonsCost = 0;
     const costMap: Record<string, number> = {};
 
-    // Main stone setting cost: auto-calculated from stoneQty × rate (only when main stone is on)
+    // Main stone setting cost: stones.length × rate (only when main stone is on)
     const mainStoneSettingRate = fixedCosts.find(fc => fc.key === 'main_stone_setting')?.amount ?? 80;
-    const mainStoneSettingCost = includeMainStone ? (parseInt(stoneQty) || 1) * mainStoneSettingRate : 0;
+    const mainStoneSettingCost = includeMainStone ? stones.length * mainStoneSettingRate : 0;
     if (mainStoneSettingCost > 0) {
       addonsCost += mainStoneSettingCost;
       costMap.mainStoneSetting = mainStoneSettingCost;
@@ -129,7 +137,7 @@ export default function QuoteBuilderPage() {
     const quotedPrice = Math.ceil(rawPrice / 50) * 50;
 
     return { metalCost, mainStoneCost, mainStoneSettingCost, addonsCost, totalCost, bracket, rawPrice, quotedPrice, costMap, extraLabour };
-  }, [metalType, weight, metalRates, includeMainStone, mainCostPrice, user, fixedCosts, stoneQty, smallSettings, smallSettingsQty, butterflies, chain, additionalLabour, additionalLabourAmount, marginBrackets]);
+  }, [metalType, weight, metalRates, includeMainStone, stones, user, fixedCosts, smallSettings, smallSettingsQty, butterflies, chain, additionalLabour, additionalLabourAmount, marginBrackets]);
 
   function selectTemplate(t: QuoteTemplate) {
     setSelectedTemplate(t);
@@ -152,16 +160,15 @@ export default function QuoteBuilderPage() {
         design: design || null,
         template: selectedTemplate?.name ?? null,
         metal: { type: metalType, weight: parseFloat(weight) || 0, cost: pricing.metalCost },
-        main_stone: includeMainStone ? {
-          carat_weight: parseFloat(mainCaratWeight) || null,
-          shape: mainShape || null,
-          colour: mainColour || null,
-          clarity: mainClarity || null,
-          origin: stoneOrigin,
-          qty: parseInt(stoneQty) || 1,
-          cost: pricing.mainStoneCost,
-          setting_cost: pricing.mainStoneSettingCost,
-        } : null,
+        main_stone: includeMainStone ? stones.map(s => ({
+          carat_weight: parseFloat(s.caratWeight) || null,
+          shape: s.shape || null,
+          colour: s.colour || null,
+          clarity: s.clarity || null,
+          origin: s.origin,
+          cost: user?.role === 'manager' ? (parseFloat(s.cost) || 0) : 0,
+        })) : null,
+        setting_cost: pricing.mainStoneSettingCost,
         addons: {
           labour: fixedCosts.find(fc => fc.key === 'labour')?.amount ?? 300,
           small_settings_qty: smallSettings ? (parseInt(smallSettingsQty) || 0) : 0,
@@ -207,14 +214,13 @@ export default function QuoteBuilderPage() {
     // Build a partial qbd so the PDF uses the builder layout
     const pdfQbd: Record<string, unknown> = { design: design || null };
     if (includeMainStone) {
-      pdfQbd.main_stone = {
-        carat_weight: parseFloat(mainCaratWeight) || null,
-        shape: mainShape || null,
-        colour: mainColour || null,
-        clarity: mainClarity || null,
-        origin: stoneOrigin,
-        qty: parseInt(stoneQty) || 1,
-      };
+      pdfQbd.main_stone = stones.map(s => ({
+        carat_weight: parseFloat(s.caratWeight) || null,
+        shape: s.shape || null,
+        colour: s.colour || null,
+        clarity: s.clarity || null,
+        origin: s.origin,
+      }));
     }
     const quoteObj = {
       id: 'preview',
@@ -491,115 +497,127 @@ export default function QuoteBuilderPage() {
               <Toggle on={includeMainStone} onChange={setIncludeMainStone} label="Include Main Stone" />
             </div>
             {includeMainStone && (
-              <div style={{ marginTop: 12, paddingLeft: 12, borderLeft: '2px solid #E8E8F0' }}>
-
-                {/* Lab / Natural toggle */}
-                <div style={{ marginBottom: 14 }}>
-                  <label style={labelStyle}>Origin</label>
-                  <div style={{ display: 'flex', gap: 0, borderRadius: 8, overflow: 'hidden', border: '1px solid #E8E8F0', width: 'fit-content' }}>
-                    {(['Lab Grown', 'Natural'] as const).map(o => (
-                      <button
-                        key={o}
-                        onClick={() => setStoneOrigin(o)}
-                        style={{
-                          padding: '7px 20px', border: 'none', cursor: 'pointer',
-                          fontSize: 13, fontWeight: 500,
-                          background: stoneOrigin === o ? '#635BFF' : '#fff',
-                          color: stoneOrigin === o ? '#fff' : '#635BFF',
-                          transition: 'all .15s',
-                        }}
-                      >{o}</button>
-                    ))}
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                  <div>
-                    <label style={labelStyle}>Carat Weight</label>
-                    <input
-                      style={inputStyle}
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={mainCaratWeight}
-                      onChange={e => setMainCaratWeight(e.target.value)}
-                      onFocus={e => (e.target.style.borderColor = '#635BFF')}
-                      onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
-                      placeholder="0.00ct"
-                    />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Shape</label>
-                    <input
-                      style={inputStyle}
-                      type="text"
-                      value={mainShape}
-                      onChange={e => setMainShape(e.target.value)}
-                      onFocus={e => (e.target.style.borderColor = '#635BFF')}
-                      onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
-                      placeholder="e.g. Round Brilliant, Oval, Cushion"
-                    />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Colour</label>
-                    <input
-                      style={inputStyle}
-                      type="text"
-                      value={mainColour}
-                      onChange={e => setMainColour(e.target.value)}
-                      onFocus={e => (e.target.style.borderColor = '#635BFF')}
-                      onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
-                      placeholder="e.g. F, G, H"
-                    />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Clarity</label>
-                    <input
-                      style={inputStyle}
-                      type="text"
-                      value={mainClarity}
-                      onChange={e => setMainClarity(e.target.value)}
-                      onFocus={e => (e.target.style.borderColor = '#635BFF')}
-                      onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
-                      placeholder="e.g. VS1, VS2, SI1"
-                    />
-                  </div>
-                </div>
-
-                {/* Quantity */}
-                <div style={{ marginBottom: 12 }}>
-                  <label style={labelStyle}>Number of Stones</label>
-                  <input
-                    style={{ ...inputStyle, width: 100 }}
-                    type="number"
-                    min="1"
-                    value={stoneQty}
-                    onChange={e => setStoneQty(e.target.value)}
-                    onFocus={e => (e.target.style.borderColor = '#635BFF')}
-                    onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
-                  />
-                  <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>e.g. 3 for a trilogy ring</div>
-                </div>
-
-                {user?.role === 'manager' && (
-                  <div>
-                    <label style={labelStyle}>Cost Price ($)</label>
-                    <input
-                      style={inputStyle}
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={mainCostPrice}
-                      onChange={e => setMainCostPrice(e.target.value)}
-                      onFocus={e => (e.target.style.borderColor = '#635BFF')}
-                      onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
-                      placeholder="$0.00"
-                    />
-                    <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>
-                      Stone cost: ${pricing.mainStoneCost.toFixed(2)}
+              <div style={{ marginTop: 12 }}>
+                {stones.map((stone, idx) => (
+                  <div key={stone.id} style={{ marginBottom: 16, padding: '14px 14px 12px', borderRadius: 10, border: '1px solid #E8E8F0', background: '#FAFAFA', position: 'relative' }}>
+                    {/* Stone header row */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Stone {idx + 1}</span>
+                      {stones.length > 1 && (
+                        <button
+                          onClick={() => setStones(prev => prev.filter(s => s.id !== stone.id))}
+                          style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 18, color: '#9CA3AF', lineHeight: 1, padding: '0 2px' }}
+                          title="Remove stone"
+                        >×</button>
+                      )}
                     </div>
+
+                    {/* Specs grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                      <div>
+                        <label style={labelStyle}>Carat Weight</label>
+                        <input
+                          style={inputStyle}
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={stone.caratWeight}
+                          onChange={e => setStones(prev => prev.map(s => s.id === stone.id ? { ...s, caratWeight: e.target.value } : s))}
+                          onFocus={e => (e.target.style.borderColor = '#635BFF')}
+                          onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
+                          placeholder="0.00ct"
+                        />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Shape</label>
+                        <input
+                          style={inputStyle}
+                          type="text"
+                          value={stone.shape}
+                          onChange={e => setStones(prev => prev.map(s => s.id === stone.id ? { ...s, shape: e.target.value } : s))}
+                          onFocus={e => (e.target.style.borderColor = '#635BFF')}
+                          onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
+                          placeholder="e.g. Round Brilliant, Oval"
+                        />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Colour</label>
+                        <input
+                          style={inputStyle}
+                          type="text"
+                          value={stone.colour}
+                          onChange={e => setStones(prev => prev.map(s => s.id === stone.id ? { ...s, colour: e.target.value } : s))}
+                          onFocus={e => (e.target.style.borderColor = '#635BFF')}
+                          onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
+                          placeholder="e.g. F, G, H"
+                        />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Clarity</label>
+                        <input
+                          style={inputStyle}
+                          type="text"
+                          value={stone.clarity}
+                          onChange={e => setStones(prev => prev.map(s => s.id === stone.id ? { ...s, clarity: e.target.value } : s))}
+                          onFocus={e => (e.target.style.borderColor = '#635BFF')}
+                          onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
+                          placeholder="e.g. VS1, VS2, SI1"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Origin toggle */}
+                    <div style={{ display: 'flex', gap: 0, borderRadius: 8, overflow: 'hidden', border: '1px solid #E8E8F0', width: 'fit-content', marginBottom: user?.role === 'manager' ? 10 : 0 }}>
+                      {(['Lab Grown', 'Natural'] as const).map(o => (
+                        <button
+                          key={o}
+                          onClick={() => setStones(prev => prev.map(s => s.id === stone.id ? { ...s, origin: o } : s))}
+                          style={{
+                            padding: '6px 18px', border: 'none', cursor: 'pointer',
+                            fontSize: 13, fontWeight: 500,
+                            background: stone.origin === o ? '#635BFF' : '#fff',
+                            color: stone.origin === o ? '#fff' : '#635BFF',
+                            transition: 'all .15s',
+                          }}
+                        >{o}</button>
+                      ))}
+                    </div>
+
+                    {/* Manager: per-stone cost price */}
+                    {user?.role === 'manager' && (
+                      <div>
+                        <label style={labelStyle}>Cost Price ($)</label>
+                        <input
+                          style={{ ...inputStyle, width: 140 }}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={stone.cost}
+                          onChange={e => setStones(prev => prev.map(s => s.id === stone.id ? { ...s, cost: e.target.value } : s))}
+                          onFocus={e => (e.target.style.borderColor = '#635BFF')}
+                          onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
+                          placeholder="$0.00"
+                        />
+                      </div>
+                    )}
                   </div>
-                )}
+                ))}
+
+                {/* Add Stone button */}
+                <button
+                  onClick={() => setStones(prev => [...prev, newStone()])}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '8px 16px', borderRadius: 8,
+                    border: '1px dashed #635BFF', background: '#EEF2FF',
+                    color: '#635BFF', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                    transition: 'all .15s',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = '#E0E7FF')}
+                  onMouseLeave={e => (e.currentTarget.style.background = '#EEF2FF')}
+                >
+                  + Add Stone
+                </button>
               </div>
             )}
           </div>
@@ -616,12 +634,12 @@ export default function QuoteBuilderPage() {
                 )}
               </div>
 
-              {/* Main Stone Setting — auto-calculated from qty, read-only */}
+              {/* Main Stone Setting — auto-calculated from stone count */}
               {user?.role === 'manager' && includeMainStone && pricing.mainStoneSettingCost > 0 && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#F9FAFB', borderRadius: 8, border: '1px solid #E8E8F0' }}>
                   <span style={{ fontSize: 14, color: '#374151' }}>Stone Settings (auto)</span>
                   <span style={{ fontSize: 13, color: '#6B7280' }}>
-                    {stoneQty} × ${(fixedCosts.find(fc => fc.key === 'main_stone_setting')?.amount ?? 80).toFixed(2)} = ${pricing.mainStoneSettingCost.toFixed(2)}
+                    {stones.length} × ${(fixedCosts.find(fc => fc.key === 'main_stone_setting')?.amount ?? 80).toFixed(2)} = ${pricing.mainStoneSettingCost.toFixed(2)}
                   </span>
                 </div>
               )}
@@ -761,7 +779,7 @@ export default function QuoteBuilderPage() {
                     )}
                     {pricing.costMap.mainStoneSetting !== undefined && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <span style={{ color: '#6B7280' }}>Stone Settings ({stoneQty}×)</span>
+                        <span style={{ color: '#6B7280' }}>Stone Settings ({stones.length}×)</span>
                         <span style={{ fontWeight: 500 }}>${pricing.costMap.mainStoneSetting.toFixed(2)}</span>
                       </div>
                     )}
