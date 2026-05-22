@@ -100,16 +100,38 @@ function NewOrderPageInner() {
         if (!json.quote) return;
         const q = json.quote;
 
-        const lineItemsText = (q.line_items ?? []).length > 0
-          ? (q.line_items ?? [])
-              .map((li) => {
-                const label = (li as {design?: string; item?: string}).design ?? (li as {item?: string}).item ?? "";
-                return [label, li.stone, li.price].filter(Boolean).join(" — ");
-              })
+        // Build articles — prefer builder data if present
+        let articles = "";
+        const qbd = q.quote_builder_data as Record<string, unknown> | null | undefined;
+        if (qbd) {
+          const designLine = typeof qbd.design === "string" && qbd.design ? qbd.design : "";
+          const ms = qbd.main_stone as Record<string, unknown> | undefined;
+          let stoneLine = "";
+          if (ms) {
+            const qty = ms.qty ?? 1;
+            const carat = ms.carat_weight != null ? `${ms.carat_weight}ct ` : "";
+            const parts = [ms.shape, ms.colour, ms.clarity, ms.origin]
+              .map(v => (v != null && String(v).trim() ? String(v) : null))
               .filter(Boolean)
-              .join("\n")
-          : "";
-        const articles = [q.item_description, lineItemsText].filter(Boolean).join("\n\n");
+              .join(", ");
+            stoneLine = `${qty}x ${carat}${parts}`.trim();
+          }
+          const metal = qbd.metal as Record<string, unknown> | undefined;
+          const metalLine = metal ? `Metal: ${metal.type ?? ""}${metal.weight ? `, ${metal.weight}g` : ""}` : "";
+          articles = [designLine, stoneLine, metalLine].filter(Boolean).join("\n");
+        } else {
+          // Fallback: build from line_items and item_description
+          const lineItemsText = (q.line_items ?? []).length > 0
+            ? (q.line_items ?? [])
+                .map((li) => {
+                  const label = (li as {design?: string; item?: string}).design ?? (li as {item?: string}).item ?? "";
+                  return [label, li.stone, li.price].filter(Boolean).join(" — ");
+                })
+                .filter(Boolean)
+                .join("\n")
+            : "";
+          articles = [q.item_description, lineItemsText].filter(Boolean).join("\n\n");
+        }
 
         const instructions = [
           q.repair_description,
@@ -128,7 +150,7 @@ function NewOrderPageInner() {
           customer_phone: q.customer_phone ?? prev.customer_phone,
           articles: articles || prev.articles,
           instructions: instructions || prev.instructions,
-          total_charges: q.total != null ? String(q.total) : prev.total_charges,
+          total_charges: (q.quoted_price ?? q.total) != null ? String(q.quoted_price ?? q.total) : prev.total_charges,
           staff_member: q.assigned_to ?? prev.staff_member,
           packet_type:
             q.quote_type === "repair"

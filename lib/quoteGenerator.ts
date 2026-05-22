@@ -24,33 +24,103 @@ export function generateQuoteHTML(quote: Quote): string {
     .join(" ");
   const lastName = (quote.customer_last_name ?? "").trim().replace(/\s+/g, "_") || "Customer";
 
-  const lineItems: LineItem[] = quote.line_items ?? [];
+  // ── Detect builder quote ────────────────────────────────────────────────────
+  const builderData = quote.quote_builder_data as Record<string, unknown> | null | undefined;
+  const isBuilderQuote = builderData != null;
 
-  // Build table rows — minimum 8 rows (fill with empties)
-  type FilledItem = LineItem & { _empty?: boolean };
-  const MIN_ROWS = 8;
-  const filledItems: FilledItem[] = [...lineItems];
-  while (filledItems.length < MIN_ROWS) {
-    filledItems.push({ design: "", stone: "", price: "", _empty: true });
+  // ── Builder quote: three-line layout ───────────────────────────────────────
+  let itemsSection = "";
+  if (isBuilderQuote) {
+    const qbd = builderData!;
+    const designText = typeof qbd.design === "string" ? esc(qbd.design) : "&nbsp;";
+
+    let stoneText = "&nbsp;";
+    const ms = qbd.main_stone as Record<string, unknown> | undefined;
+    if (ms) {
+      const qty = ms.qty ?? 1;
+      const carat = ms.carat_weight != null ? `${ms.carat_weight}ct ` : "";
+      const parts = [ms.shape, ms.colour, ms.clarity, ms.origin]
+        .map(v => (v != null && v !== "" ? String(v) : null))
+        .filter(Boolean)
+        .join(", ");
+      stoneText = esc(`${qty}x ${carat}${parts}`);
+    }
+
+    const priceNum = quote.quoted_price ?? quote.total ?? null;
+    const priceText = priceNum != null
+      ? `$${Number(priceNum).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : "&nbsp;";
+
+    const showStoneRow = ms != null;
+    const priceRowBg = showStoneRow ? "#ffffff" : "#f0f0f0";
+
+    itemsSection = `
+  <table class="line-items">
+    <thead>
+      <tr>
+        <th style="width:110px;">Item</th>
+        <th>Details</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="background:#ffffff;">
+        <td style="padding:8px 12px;font-size:9pt;color:#555;border-right:1px solid #ddd;vertical-align:top;">Design</td>
+        <td style="padding:8px 12px;font-size:9pt;color:#333;">${designText}</td>
+      </tr>
+      ${showStoneRow ? `<tr style="background:#f0f0f0;">
+        <td style="padding:8px 12px;font-size:9pt;color:#555;border-right:1px solid #ddd;vertical-align:top;">Stone/s</td>
+        <td style="padding:8px 12px;font-size:9pt;color:#333;">${stoneText}</td>
+      </tr>` : ""}
+      <tr style="background:${priceRowBg};">
+        <td style="padding:8px 12px;font-size:9pt;color:#555;border-right:1px solid #ddd;vertical-align:top;">Price</td>
+        <td style="padding:10px 12px;font-size:14pt;font-weight:bold;color:#000;">${priceText}</td>
+      </tr>
+    </tbody>
+  </table>`;
+  } else {
+    // ── Regular quote: existing line items table ──────────────────────────────
+    const lineItems: LineItem[] = quote.line_items ?? [];
+
+    type FilledItem = LineItem & { _empty?: boolean };
+    const MIN_ROWS = 8;
+    const filledItems: FilledItem[] = [...lineItems];
+    while (filledItems.length < MIN_ROWS) {
+      filledItems.push({ design: "", stone: "", price: "", _empty: true });
+    }
+
+    const tableRows = filledItems
+      .map((li, i) => {
+        const isEven = i % 2 === 0;
+        const bg = isEven ? "#ffffff" : "#f0f0f0";
+        const isEmpty = li._empty;
+        const rowNum = isEmpty ? "" : String(i + 1);
+        const design = isEmpty ? "&nbsp;" : esc(li.design);
+        const stone  = isEmpty ? "&nbsp;" : esc(li.stone);
+        const price  = isEmpty ? "&nbsp;" : esc(li.price);
+        return `<tr style="background:${bg};">
+          <td style="padding:6px 10px;font-size:9pt;color:#333;border-right:1px solid #ddd;width:32px;text-align:center;">${rowNum}</td>
+          <td style="padding:6px 10px;font-size:9pt;color:#333;border-right:1px solid #ddd;">${design}</td>
+          <td style="padding:6px 10px;font-size:9pt;color:#333;border-right:1px solid #ddd;">${stone}</td>
+          <td style="padding:6px 10px;font-size:9pt;color:#333;text-align:right;white-space:nowrap;width:110px;">${price}</td>
+        </tr>`;
+      })
+      .join("");
+
+    itemsSection = `
+  <table class="line-items">
+    <thead>
+      <tr>
+        <th style="text-align:center;width:32px;">#</th>
+        <th>Design</th>
+        <th>Stone</th>
+        <th style="text-align:right;white-space:nowrap;">Price (incl. GST)</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${tableRows}
+    </tbody>
+  </table>`;
   }
-
-  const tableRows = filledItems
-    .map((li, i) => {
-      const isEven = i % 2 === 0;
-      const bg = isEven ? "#ffffff" : "#f0f0f0";
-      const isEmpty = li._empty;
-      const rowNum = isEmpty ? "" : String(i + 1);
-      const design = isEmpty ? "&nbsp;" : esc(li.design);
-      const stone  = isEmpty ? "&nbsp;" : esc(li.stone);
-      const price  = isEmpty ? "&nbsp;" : esc(li.price);
-      return `<tr style="background:${bg};">
-        <td style="padding:6px 10px;font-size:9pt;color:#333;border-right:1px solid #ddd;width:32px;text-align:center;">${rowNum}</td>
-        <td style="padding:6px 10px;font-size:9pt;color:#333;border-right:1px solid #ddd;">${design}</td>
-        <td style="padding:6px 10px;font-size:9pt;color:#333;border-right:1px solid #ddd;">${stone}</td>
-        <td style="padding:6px 10px;font-size:9pt;color:#333;text-align:right;white-space:nowrap;width:110px;">${price}</td>
-      </tr>`;
-    })
-    .join("");
 
   const createdDate = formatDateAU(quote.created_at) || formatDateAU(new Date().toISOString());
   const staffName = esc(quote.staff_member ?? "");
@@ -298,20 +368,8 @@ export function generateQuoteHTML(quote: Quote): string {
     </div>
   </div>
 
-  <!-- Line items table -->
-  <table class="line-items">
-    <thead>
-      <tr>
-        <th style="text-align:center;width:32px;">#</th>
-        <th>Design</th>
-        <th>Stone</th>
-        <th style="text-align:right;white-space:nowrap;">Price (incl. GST)</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${tableRows}
-    </tbody>
-  </table>
+  <!-- Line items / builder section -->
+  ${itemsSection}
 
   <hr class="table-divider">
 

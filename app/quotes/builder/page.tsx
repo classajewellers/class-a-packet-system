@@ -45,16 +45,20 @@ export default function QuoteBuilderPage() {
   const [metalType, setMetalType] = useState('');
   const [weight, setWeight] = useState('');
 
+  // Design description
+  const [design, setDesign] = useState('');
+
   // Main stone (manual entry)
   const [includeMainStone, setIncludeMainStone] = useState(false);
   const [mainCaratWeight, setMainCaratWeight] = useState('');
   const [mainShape, setMainShape] = useState('');
   const [mainColour, setMainColour] = useState('');
   const [mainClarity, setMainClarity] = useState('');
+  const [stoneOrigin, setStoneOrigin] = useState<'Lab Grown' | 'Natural'>('Lab Grown');
+  const [stoneQty, setStoneQty] = useState('1');
   const [mainCostPrice, setMainCostPrice] = useState('');
 
-  // Add-ons (labour is always included — no toggle)
-  const [mainStoneSetting, setMainStoneSetting] = useState(false);
+  // Add-ons (labour always included; main stone setting is auto-calculated from stoneQty)
   const [smallSettings, setSmallSettings] = useState(false);
   const [smallSettingsQty, setSmallSettingsQty] = useState('1');
   const [butterflies, setButterflies] = useState(false);
@@ -92,10 +96,18 @@ export default function QuoteBuilderPage() {
 
     let addonsCost = 0;
     const costMap: Record<string, number> = {};
+
+    // Main stone setting cost: auto-calculated from stoneQty × rate (only when main stone is on)
+    const mainStoneSettingRate = fixedCosts.find(fc => fc.key === 'main_stone_setting')?.amount ?? 80;
+    const mainStoneSettingCost = includeMainStone ? (parseInt(stoneQty) || 1) * mainStoneSettingRate : 0;
+    if (mainStoneSettingCost > 0) {
+      addonsCost += mainStoneSettingCost;
+      costMap.mainStoneSetting = mainStoneSettingCost;
+    }
+
     for (const fc of fixedCosts) {
       // Labour is always included
       if (fc.key === 'labour') { addonsCost += fc.amount; costMap.labour = fc.amount; }
-      if (fc.key === 'main_stone_setting' && mainStoneSetting) { addonsCost += fc.amount; costMap.mainStoneSetting = fc.amount; }
       if (fc.key === 'butterflies' && butterflies) { addonsCost += fc.amount; costMap.butterflies = fc.amount; }
       if (fc.key === 'chain' && chain) { addonsCost += fc.amount; costMap.chain = fc.amount; }
     }
@@ -116,13 +128,12 @@ export default function QuoteBuilderPage() {
     const rawPrice = bracket ? totalCost * bracket.multiplier : totalCost;
     const quotedPrice = Math.ceil(rawPrice / 50) * 50;
 
-    return { metalCost, mainStoneCost, addonsCost, totalCost, bracket, rawPrice, quotedPrice, costMap, extraLabour };
-  }, [metalType, weight, metalRates, includeMainStone, mainCostPrice, user, fixedCosts, mainStoneSetting, smallSettings, smallSettingsQty, butterflies, chain, additionalLabour, additionalLabourAmount, marginBrackets]);
+    return { metalCost, mainStoneCost, mainStoneSettingCost, addonsCost, totalCost, bracket, rawPrice, quotedPrice, costMap, extraLabour };
+  }, [metalType, weight, metalRates, includeMainStone, mainCostPrice, user, fixedCosts, stoneQty, smallSettings, smallSettingsQty, butterflies, chain, additionalLabour, additionalLabourAmount, marginBrackets]);
 
   function selectTemplate(t: QuoteTemplate) {
     setSelectedTemplate(t);
     if (t.default_metal) setMetalType(t.default_metal);
-    setMainStoneSetting(t.includes_main_stone_setting);
     setChain(t.includes_chain);
     setButterflies(t.includes_butterflies);
   }
@@ -138,20 +149,31 @@ export default function QuoteBuilderPage() {
     try {
       const quoteType = selectedTemplate?.name === 'Ring Resize / Repair' ? 'repair' : 'custom_order';
       const qbd = {
+        design: design || null,
         template: selectedTemplate?.name ?? null,
         metal: { type: metalType, weight: parseFloat(weight) || 0, cost: pricing.metalCost },
-        mainStone: includeMainStone ? {
-          caratWeight: parseFloat(mainCaratWeight) || null,
+        main_stone: includeMainStone ? {
+          carat_weight: parseFloat(mainCaratWeight) || null,
           shape: mainShape || null,
           colour: mainColour || null,
           clarity: mainClarity || null,
+          origin: stoneOrigin,
+          qty: parseInt(stoneQty) || 1,
           cost: pricing.mainStoneCost,
+          setting_cost: pricing.mainStoneSettingCost,
         } : null,
-        addons: { labour: true, mainStoneSetting, smallSettings, smallSettingsQty: parseInt(smallSettingsQty) || 0, butterflies, chain, additionalLabour, additionalLabourAmount: parseFloat(additionalLabourAmount) || 0 },
-        totalCost: pricing.totalCost,
+        addons: {
+          labour: fixedCosts.find(fc => fc.key === 'labour')?.amount ?? 300,
+          small_settings_qty: smallSettings ? (parseInt(smallSettingsQty) || 0) : 0,
+          small_settings_cost: pricing.costMap.smallSettings ?? 0,
+          butterflies: butterflies,
+          chain: chain,
+          additional_labour: parseFloat(additionalLabourAmount) || 0,
+        },
+        total_cost: pricing.totalCost,
         multiplier: pricing.bracket?.multiplier ?? null,
-        rawPrice: pricing.rawPrice,
-        quotedPrice: pricing.quotedPrice,
+        raw_price: pricing.rawPrice,
+        quoted_price: pricing.quotedPrice,
       };
       const res = await fetch('/api/quotes/builder', {
         method: 'POST',
@@ -182,6 +204,18 @@ export default function QuoteBuilderPage() {
 
   function handlePrintPDF() {
     const now = new Date().toISOString();
+    // Build a partial qbd so the PDF uses the builder layout
+    const pdfQbd: Record<string, unknown> = { design: design || null };
+    if (includeMainStone) {
+      pdfQbd.main_stone = {
+        carat_weight: parseFloat(mainCaratWeight) || null,
+        shape: mainShape || null,
+        colour: mainColour || null,
+        clarity: mainClarity || null,
+        origin: stoneOrigin,
+        qty: parseInt(stoneQty) || 1,
+      };
+    }
     const quoteObj = {
       id: 'preview',
       created_at: now,
@@ -192,11 +226,11 @@ export default function QuoteBuilderPage() {
       customer_last_name: lastName || null,
       customer_email: email || null,
       customer_phone: phone || null,
-      item_description: quoteDescription || null,
-      line_items: quoteDescription ? [{ design: quoteDescription, stone: '', price: `$${pricing.quotedPrice.toLocaleString('en-AU', { minimumFractionDigits: 2 })}` }] : [],
+      item_description: design || null,
+      line_items: [],
       notes: null,
       repair_description: null,
-      design_brief: quoteDescription || null,
+      design_brief: design || null,
       metal_type: metalType || null,
       stone_details: null,
       estimated_turnaround: null,
@@ -214,6 +248,8 @@ export default function QuoteBuilderPage() {
       job_won_at: null,
       job_lost_at: null,
       total: pricing.quotedPrice,
+      quote_builder_data: pdfQbd,
+      quoted_price: pricing.quotedPrice,
     };
     const html = generateQuoteHTML(quoteObj);
     const win = window.open('', '_blank');
@@ -387,6 +423,21 @@ export default function QuoteBuilderPage() {
             </div>
           </div>
 
+          {/* Design description */}
+          <div style={sectionCard}>
+            <div style={sectionHeading}>Design</div>
+            <label style={labelStyle}>Design Description</label>
+            <input
+              style={inputStyle}
+              type="text"
+              value={design}
+              onChange={e => setDesign(e.target.value)}
+              onFocus={e => (e.target.style.borderColor = '#635BFF')}
+              onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
+              placeholder="e.g. Stella Trilogy Engagement Ring, Florence Solitaire, Custom Pendant"
+            />
+          </div>
+
           {/* Metal */}
           <div style={sectionCard}>
             <div style={sectionHeading}>Metal</div>
@@ -441,6 +492,27 @@ export default function QuoteBuilderPage() {
             </div>
             {includeMainStone && (
               <div style={{ marginTop: 12, paddingLeft: 12, borderLeft: '2px solid #E8E8F0' }}>
+
+                {/* Lab / Natural toggle */}
+                <div style={{ marginBottom: 14 }}>
+                  <label style={labelStyle}>Origin</label>
+                  <div style={{ display: 'flex', gap: 0, borderRadius: 8, overflow: 'hidden', border: '1px solid #E8E8F0', width: 'fit-content' }}>
+                    {(['Lab Grown', 'Natural'] as const).map(o => (
+                      <button
+                        key={o}
+                        onClick={() => setStoneOrigin(o)}
+                        style={{
+                          padding: '7px 20px', border: 'none', cursor: 'pointer',
+                          fontSize: 13, fontWeight: 500,
+                          background: stoneOrigin === o ? '#635BFF' : '#fff',
+                          color: stoneOrigin === o ? '#fff' : '#635BFF',
+                          transition: 'all .15s',
+                        }}
+                      >{o}</button>
+                    ))}
+                  </div>
+                </div>
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
                   <div>
                     <label style={labelStyle}>Carat Weight</label>
@@ -493,6 +565,22 @@ export default function QuoteBuilderPage() {
                     />
                   </div>
                 </div>
+
+                {/* Quantity */}
+                <div style={{ marginBottom: 12 }}>
+                  <label style={labelStyle}>Number of Stones</label>
+                  <input
+                    style={{ ...inputStyle, width: 100 }}
+                    type="number"
+                    min="1"
+                    value={stoneQty}
+                    onChange={e => setStoneQty(e.target.value)}
+                    onFocus={e => (e.target.style.borderColor = '#635BFF')}
+                    onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
+                  />
+                  <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>e.g. 3 for a trilogy ring</div>
+                </div>
+
                 {user?.role === 'manager' && (
                   <div>
                     <label style={labelStyle}>Cost Price ($)</label>
@@ -528,21 +616,15 @@ export default function QuoteBuilderPage() {
                 )}
               </div>
 
-              {/* Main Stone Setting — checkbox, flat $80 */}
-              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <input
-                    type="checkbox"
-                    checked={mainStoneSetting}
-                    onChange={e => setMainStoneSetting(e.target.checked)}
-                    style={{ accentColor: '#635BFF', width: 16, height: 16, cursor: 'pointer' }}
-                  />
-                  <span style={{ fontSize: 14, color: '#374151' }}>Main Stone Setting</span>
+              {/* Main Stone Setting — auto-calculated from qty, read-only */}
+              {user?.role === 'manager' && includeMainStone && pricing.mainStoneSettingCost > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#F9FAFB', borderRadius: 8, border: '1px solid #E8E8F0' }}>
+                  <span style={{ fontSize: 14, color: '#374151' }}>Stone Settings (auto)</span>
+                  <span style={{ fontSize: 13, color: '#6B7280' }}>
+                    {stoneQty} × ${(fixedCosts.find(fc => fc.key === 'main_stone_setting')?.amount ?? 80).toFixed(2)} = ${pricing.mainStoneSettingCost.toFixed(2)}
+                  </span>
                 </div>
-                {user?.role === 'manager' && mainStoneSetting && (
-                  <span style={{ fontSize: 13, color: '#6B7280' }}>$80.00</span>
-                )}
-              </label>
+              )}
 
               <div>
                 <Toggle on={smallSettings} onChange={setSmallSettings} label="Small Stone Settings" />
@@ -679,7 +761,7 @@ export default function QuoteBuilderPage() {
                     )}
                     {pricing.costMap.mainStoneSetting !== undefined && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <span style={{ color: '#6B7280' }}>Main Stone Setting</span>
+                        <span style={{ color: '#6B7280' }}>Stone Settings ({stoneQty}×)</span>
                         <span style={{ fontWeight: 500 }}>${pricing.costMap.mainStoneSetting.toFixed(2)}</span>
                       </div>
                     )}

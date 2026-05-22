@@ -292,6 +292,9 @@ export interface Quote {
   job_lost_at: string | null;
   // legacy compat — may be null on new quotes
   total?: number | null;
+  // Quote builder fields
+  quote_builder_data?: Record<string, unknown> | null;
+  quoted_price?: number | null;
 }
 
 // ─────────────────────────────────────────────
