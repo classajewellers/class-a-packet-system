@@ -29,11 +29,17 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   try {
+    console.log('[delete] Deleting packet:', params.id)
     const supabase = createServerSupabaseClient()
     const { error } = await supabase.from('packets').delete().eq('id', params.id)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) {
+      console.error('[delete] Supabase error:', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    console.log('[delete] Success:', params.id)
     return NextResponse.json({ success: true })
   } catch (err) {
+    console.error('[delete] Caught error:', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }

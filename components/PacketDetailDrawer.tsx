@@ -153,10 +153,12 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
     setDeleting(true);
     try {
       const res = await fetch(`/api/admin/packets/${local.id}`, { method: "DELETE" });
-      if (res.ok) {
+      const json = await res.json().catch(() => ({}));
+      console.log("[delete] Response:", json);
+      if (json.success === true) {
+        // Only remove from local state after confirming Supabase deleted it
         onDelete(local.id);
       } else {
-        const json = await res.json().catch(() => ({}));
         alert(`Failed to delete: ${json.error ?? "Unknown error"}`);
       }
     } catch {

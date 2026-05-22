@@ -5,49 +5,52 @@ import Link from "next/link";
 import { Packet } from "@/lib/types";
 import { packetTypeLabel, formatDateAU, formatCurrency } from "@/lib/formatters";
 
-const TYPE_BADGE: Record<string, string> = {
-  repair:        "ds-badge ds-badge-orange",
-  custom_order:  "ds-badge ds-badge-violet",
-  layby:         "ds-badge ds-badge-amber",
-  client_intake: "ds-badge ds-badge-teal",
-  online_order:  "ds-badge ds-badge-green",
+// ── Vault badge styles by packet type ────────────────────────────────────────
+const TYPE_BADGE_STYLE: Record<string, React.CSSProperties> = {
+  online_order:  { background: "#DCFCE7", color: "#166534" },
+  repair:        { background: "#DBEAFE", color: "#1E40AF" },
+  repair_job:    { background: "#DBEAFE", color: "#1E40AF" },
+  custom_order:  { background: "#EEF2FF", color: "#635BFF" },
+  layby:         { background: "#FEF3C7", color: "#92400E" },
+  client_intake: { background: "#F3F4F6", color: "#374151" },
 };
 
+const BADGE_BASE: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "2px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 500,
+};
+
+// ── Stat card ────────────────────────────────────────────────────────────────
 function StatCard({
-  label, value, sub, href, accentColor, accentGlow,
+  label, value, sub, href,
 }: {
   label: string;
   value: string | number;
   sub?: string;
   href?: string;
-  accentColor?: string;
-  accentGlow?: string;
 }) {
   const inner = (
     <div
-      className="ds-card"
       style={{
-        padding: "18px 18px 16px",
-        position: "relative",
-        overflow: "hidden",
-        transition: "transform .15s ease, border-color .15s",
+        background: "#fff",
+        border: "1px solid #E8E8F0",
+        borderRadius: 12,
+        padding: 20,
+        transition: "box-shadow .15s",
         cursor: href ? "pointer" : "default",
       }}
-      onMouseEnter={href ? (e) => { (e.currentTarget as HTMLDivElement).style.transform = "translateY(-1px)"; } : undefined}
-      onMouseLeave={href ? (e) => { (e.currentTarget as HTMLDivElement).style.transform = "none"; } : undefined}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 2px 8px rgba(0,0,0,0.06)"; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = "none"; }}
     >
-      {/* Accent bar */}
-      <div style={{
-        position: "absolute", inset: "0 0 auto 0", height: 2,
-        background: accentColor ?? "var(--violet)",
-        boxShadow: `0 0 12px ${accentGlow ?? "var(--violet-glow)"}`,
-      }} />
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600, marginBottom: 10 }}>
-        <span style={{ width: 6, height: 6, borderRadius: "50%", background: accentColor ?? "var(--violet)", boxShadow: `0 0 8px ${accentColor ?? "var(--violet)"}`, display: "inline-block" }} />
+      <div style={{ fontSize: 12, fontWeight: 500, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
         {label}
       </div>
-      <div style={{ fontSize: 28, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--text)" }}>{value}</div>
-      {sub && <div style={{ marginTop: 6, fontSize: 12, color: "var(--text-muted)" }}>{sub}</div>}
+      <div style={{ fontSize: 32, fontWeight: 700, color: "#1A1A2E", lineHeight: 1 }}>{value}</div>
+      {sub && <div style={{ marginTop: 6, fontSize: 12, color: "#9CA3AF" }}>{sub}</div>}
     </div>
   );
   if (href) return <Link href={href} style={{ textDecoration: "none" }}>{inner}</Link>;
@@ -56,7 +59,7 @@ function StatCard({
 
 function SkeletonCard() {
   return (
-    <div className="ds-skeleton" style={{ height: 96, borderRadius: 12 }} />
+    <div style={{ height: 96, borderRadius: 12, background: "#F3F4F6", animation: "pulse 1.5s infinite" }} />
   );
 }
 
@@ -98,9 +101,9 @@ export default function DashboardPage() {
   }, []);
 
   const today = todayISO();
-  const todaysOrders = packets.filter((p) => (p.created_at ?? "").startsWith(today)).length;
-  const dueToday = packets.filter((p) => p.due_date === today && p.collected_date == null).length;
-  const overdueRepairs = packets.filter(
+  const todaysOrders    = packets.filter((p) => (p.created_at ?? "").startsWith(today)).length;
+  const dueToday        = packets.filter((p) => p.due_date === today && p.collected_date == null).length;
+  const overdueRepairs  = packets.filter(
     (p) => p.packet_type === "repair" && p.due_date != null && p.due_date < today && p.collected_date == null
   ).length;
   const unprintedOnline = packets.filter((p) => p.packet_type === "online_order" && !p.label_printed).length;
@@ -112,90 +115,108 @@ export default function DashboardPage() {
   const in7Days = new Date();
   in7Days.setDate(in7Days.getDate() + 7);
   const in7DaysISO = in7Days.toISOString().split("T")[0];
+
   const upcoming = packets
     .filter((p) => p.due_date != null && p.due_date >= today && p.due_date <= in7DaysISO && p.collected_date == null)
     .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""));
+
   const overdue = packets
     .filter((p) => p.due_date != null && p.due_date < today && p.collected_date == null)
     .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""));
 
-  return (
-    <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-      {/* Page header */}
-      <div className="ds-page-h">
-        <div>
-          <h1>Dashboard</h1>
-          <p>Welcome back — here&apos;s what&apos;s happening today</p>
-        </div>
-        <div className="ds-page-h-actions">
-          <Link href="/orders/new" className="ds-btn ds-btn-primary" style={{ textDecoration: "none" }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-            New Order
-          </Link>
-        </div>
-      </div>
+  // ── Shared styles ──────────────────────────────────────────────────────────
+  const card: React.CSSProperties = {
+    background: "#fff",
+    border: "1px solid #E8E8F0",
+    borderRadius: 12,
+    overflow: "hidden",
+  };
 
-      {/* Stat cards */}
+  const thStyle: React.CSSProperties = {
+    padding: "10px 16px",
+    fontSize: 12,
+    fontWeight: 500,
+    color: "#6B7280",
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
+    background: "#F9FAFB",
+    textAlign: "left",
+    borderBottom: "1px solid #E8E8F0",
+  };
+
+  const tdStyle: React.CSSProperties = {
+    padding: "12px 16px",
+    fontSize: 14,
+    color: "#1A1A2E",
+    borderBottom: "1px solid #E8E8F0",
+  };
+
+  return (
+    <div style={{ padding: 24, maxWidth: 1200, margin: "0 auto" }}>
+
+      {/* ── Stat cards ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0,1fr))", gap: 14, marginBottom: 24 }}>
         {loading ? (
           Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)
         ) : (
           <>
-            <StatCard label="Today's Orders" value={todaysOrders} sub="submitted today" href="/orders?filter=today"
-              accentColor="var(--violet)" accentGlow="var(--violet-glow)" />
-            <StatCard label="Due Today" value={dueToday} sub="awaiting collection" href="/orders?filter=due_today"
-              accentColor={dueToday > 0 ? "var(--warning)" : "var(--text-dim)"}
-              accentGlow={dueToday > 0 ? "rgba(245,158,11,0.3)" : "transparent"} />
-            <StatCard label="Overdue" value={overdueRepairs} sub="past due date" href="/orders?filter=overdue"
-              accentColor={overdueRepairs > 0 ? "var(--danger)" : "var(--text-dim)"}
-              accentGlow={overdueRepairs > 0 ? "rgba(239,68,68,0.3)" : "transparent"} />
-            <StatCard label="Unprinted Online" value={unprintedOnline} sub="need labels" href="/online?filter=unprinted"
-              accentColor="var(--teal)" accentGlow="rgba(20,184,166,0.3)" />
-            <StatCard label="Revenue MTD" value={revenueThisMonth != null ? formatCurrency(revenueThisMonth) : "—"} sub="month to date" href="/revenue"
-              accentColor="var(--success)" accentGlow="rgba(34,197,94,0.3)" />
+            <StatCard label="Today's Orders"   value={todaysOrders}    sub="submitted today"     href="/orders?filter=today" />
+            <StatCard label="Due Today"         value={dueToday}        sub="awaiting collection" href="/orders?filter=due_today" />
+            <StatCard label="Overdue"           value={overdueRepairs}  sub="past due date"       href="/orders?filter=overdue" />
+            <StatCard label="Unprinted Online"  value={unprintedOnline} sub="need labels"         href="/online?filter=unprinted" />
+            <StatCard
+              label="Revenue MTD"
+              value={revenueThisMonth != null ? formatCurrency(revenueThisMonth) : "—"}
+              sub="month to date"
+              href="/revenue"
+            />
           </>
         )}
       </div>
 
-      {/* Main content */}
+      {/* ── Main content ── */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 20 }}>
+
         {/* Recent Orders */}
-        <div className="ds-table-wrap">
-          <div className="ds-card-h">
-            <h3 style={{ margin: 0 }}>Recent Orders</h3>
-            <Link href="/orders" className="ds-btn ds-btn-ghost ds-btn-sm" style={{ textDecoration: "none" }}>
+        <div style={card}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid #E8E8F0" }}>
+            <span style={{ fontWeight: 600, fontSize: 15, color: "#1A1A2E" }}>Recent Orders</span>
+            <Link href="/orders" style={{ textDecoration: "none", color: "#635BFF", fontSize: 13, fontWeight: 500 }}>
               View all →
             </Link>
           </div>
           {loading ? (
-            <div style={{ padding: "32px 0", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>Loading…</div>
+            <div style={{ padding: "32px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Loading…</div>
           ) : recentOrders.length === 0 ? (
-            <div style={{ padding: "32px 0", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>No orders yet</div>
+            <div style={{ padding: "32px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>No orders yet</div>
           ) : (
-            <table className="ds-t">
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
-                  <th>Ref</th>
-                  <th>Type</th>
-                  <th>Customer</th>
-                  <th>Due</th>
-                  <th>Created</th>
+                  <th style={thStyle}>Ref</th>
+                  <th style={thStyle}>Type</th>
+                  <th style={thStyle}>Customer</th>
+                  <th style={thStyle}>Due</th>
+                  <th style={thStyle}>Created</th>
                 </tr>
               </thead>
               <tbody>
                 {recentOrders.map((p) => {
                   const customerName = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
+                  const badgeStyle = { ...BADGE_BASE, ...(TYPE_BADGE_STYLE[p.packet_type] ?? { background: "#F3F4F6", color: "#374151" }) };
                   return (
-                    <tr key={p.id} onClick={() => {}}>
-                      <td><span className="ds-mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.reference_number}</span></td>
-                      <td>
-                        <span className={TYPE_BADGE[p.packet_type] ?? "ds-badge ds-badge-muted"}>
-                          {packetTypeLabel(p.packet_type)}
-                        </span>
+                    <tr
+                      key={p.id}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = "#F9FAFB"; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = ""; }}
+                    >
+                      <td style={{ ...tdStyle, fontFamily: "monospace", fontSize: 12, color: "#6B7280" }}>{p.reference_number}</td>
+                      <td style={tdStyle}>
+                        <span style={badgeStyle}>{packetTypeLabel(p.packet_type)}</span>
                       </td>
-                      <td style={{ fontWeight: 500, color: "var(--text)" }}>{customerName}</td>
-                      <td style={{ color: "var(--text-2)" }}>{formatDateAU(p.due_date) || "—"}</td>
-                      <td style={{ fontSize: 12, color: "var(--text-muted)" }}>{formatDateAU(p.created_at?.split("T")[0]) || "—"}</td>
+                      <td style={{ ...tdStyle, fontWeight: 500 }}>{customerName}</td>
+                      <td style={{ ...tdStyle, color: "#6B7280" }}>{formatDateAU(p.due_date) || "—"}</td>
+                      <td style={{ ...tdStyle, fontSize: 12, color: "#9CA3AF" }}>{formatDateAU(p.created_at?.split("T")[0]) || "—"}</td>
                     </tr>
                   );
                 })}
@@ -206,51 +227,55 @@ export default function DashboardPage() {
 
         {/* Right column */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
           {/* Overdue */}
           {!loading && overdue.length > 0 && (
-            <div className="ds-card" style={{ overflow: "hidden", borderColor: "rgba(239,68,68,0.25)" }}>
-              <div className="ds-card-h" style={{ borderColor: "rgba(239,68,68,0.15)" }}>
-                <h3 style={{ color: "#FCA5A5", margin: 0 }}>Overdue ({overdue.length})</h3>
-                <span className="ds-badge ds-badge-red" style={{ marginLeft: "auto" }}>{overdue.length}</span>
+            <div style={{ ...card }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: "1px solid #FEE2E2" }}>
+                <span style={{ fontWeight: 600, fontSize: 14, color: "#1A1A2E" }}>Overdue</span>
+                <span style={{ ...BADGE_BASE, background: "#EF4444", color: "#fff" }}>{overdue.length}</span>
               </div>
               <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
                 {overdue.slice(0, 5).map((p) => {
                   const name = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
                   return (
-                    <li key={p.id} style={{ padding: "10px 16px", borderBottom: "1px solid rgba(239,68,68,0.08)" }}>
-                      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>{name}</div>
-                      <div style={{ fontSize: 11.5, color: "var(--danger)", marginTop: 2 }}>
+                    <li key={p.id} style={{ padding: "10px 16px", borderBottom: "1px solid #E8E8F0" }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1A1A2E" }}>{name}</div>
+                      <div style={{ fontSize: 12, color: "#EF4444", marginTop: 2 }}>
                         {packetTypeLabel(p.packet_type)} · Due {formatDateAU(p.due_date)}
                       </div>
                     </li>
                   );
                 })}
                 {overdue.length > 5 && (
-                  <li style={{ padding: "8px 16px", fontSize: 12, color: "var(--text-muted)" }}>+{overdue.length - 5} more overdue</li>
+                  <li style={{ padding: "8px 16px", fontSize: 12, color: "#9CA3AF" }}>+{overdue.length - 5} more overdue</li>
                 )}
               </ul>
             </div>
           )}
 
-          {/* Due this week */}
-          <div className="ds-card" style={{ overflow: "hidden" }}>
-            <div className="ds-card-h">
-              <h3 style={{ margin: 0 }}>Due This Week</h3>
-              {upcoming.length > 0 && <span className="ds-badge ds-badge-amber">{upcoming.length}</span>}
+          {/* Due This Week */}
+          <div style={card}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: "1px solid #E8E8F0" }}>
+              <span style={{ fontWeight: 600, fontSize: 14, color: "#1A1A2E" }}>Due This Week</span>
+              {upcoming.length > 0 && (
+                <span style={{ ...BADGE_BASE, background: "#FEF3C7", color: "#92400E" }}>{upcoming.length}</span>
+              )}
             </div>
             {loading ? (
-              <div style={{ padding: "24px 0", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>Loading…</div>
+              <div style={{ padding: "24px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Loading…</div>
             ) : upcoming.length === 0 ? (
-              <div style={{ padding: "24px 16px", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>Nothing due this week ✓</div>
+              <div style={{ padding: "24px 16px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Nothing due this week ✓</div>
             ) : (
               <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
                 {upcoming.map((p) => {
                   const name = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
                   return (
-                    <li key={p.id} style={{ padding: "10px 16px", borderBottom: "1px solid var(--border-subtle)" }}>
-                      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>{name}</div>
-                      <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>
-                        {packetTypeLabel(p.packet_type)} · Due {formatDateAU(p.due_date)}
+                    <li key={p.id} style={{ padding: "10px 16px", borderBottom: "1px solid #E8E8F0" }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1A1A2E" }}>{name}</div>
+                      <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>
+                        {packetTypeLabel(p.packet_type)} ·{" "}
+                        <span style={{ color: "#EF4444" }}>Due {formatDateAU(p.due_date)}</span>
                       </div>
                     </li>
                   );
@@ -259,18 +284,27 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Quick actions */}
-          <div className="ds-card ds-card-pad">
-            <div style={{ fontSize: 10.5, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-dim)", fontWeight: 600, marginBottom: 12 }}>Quick Actions</div>
+          {/* Quick Actions */}
+          <div style={{ ...card, padding: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 500, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>
+              Quick Actions
+            </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <Link href="/orders/new" className="ds-btn ds-btn-primary" style={{ textDecoration: "none", width: "100%", justifyContent: "center" }}>
+              <Link
+                href="/orders/new"
+                style={{ textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center", background: "#635BFF", color: "#fff", height: 36, borderRadius: 8, fontWeight: 500, fontSize: 14 }}
+              >
                 New Order
               </Link>
-              <Link href="/quote" className="ds-btn ds-btn-secondary" style={{ textDecoration: "none", width: "100%", justifyContent: "center" }}>
+              <Link
+                href="/quote"
+                style={{ textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center", background: "#EEF2FF", color: "#635BFF", height: 36, borderRadius: 8, fontWeight: 500, fontSize: 14 }}
+              >
                 New Quote
               </Link>
             </div>
           </div>
+
         </div>
       </div>
     </div>
