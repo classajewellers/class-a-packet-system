@@ -24,41 +24,40 @@ export default function QuoteCard({ quote, onClick }: Props) {
   const showOverdue = overdue && isActive;
 
   const typeLabel = quote.quote_type === "repair" ? "Repair" : "Custom Order";
-  const typeBg =
-    quote.quote_type === "repair"
-      ? "bg-blue-100 text-blue-800"
-      : "bg-purple-100 text-purple-800";
+  const typeBadge: React.CSSProperties = quote.quote_type === "repair"
+    ? { background: '#DBEAFE', color: '#1E40AF' }
+    : { background: '#EEF2FF', color: '#635BFF' };
 
   const isConverted = !!quote.converted_to_packet_id;
 
   return (
     <div
       onClick={onClick}
-      className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 cursor-pointer hover:shadow-md hover:border-gray-300 transition-all select-none"
+      style={{ background: '#FFFFFF', borderRadius: 10, border: '1px solid #E8E8F0', padding: 12, cursor: 'pointer', userSelect: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}
     >
       {/* Name + converted badge */}
-      <div className="flex items-start justify-between gap-1 mb-1">
-        <p className="font-semibold text-sm text-black leading-tight">{customerName}</p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 4, marginBottom: 4 }}>
+        <p style={{ fontWeight: 600, fontSize: 14, color: '#1A1A2E', lineHeight: 1.2, margin: 0 }}>{customerName}</p>
         {isConverted && (
-          <span className="flex-shrink-0 text-xs bg-blue-100 text-blue-700 rounded-full px-1.5 py-0.5 font-medium leading-tight text-right">
+          <span style={{ flexShrink: 0, fontSize: 11, background: '#DBEAFE', color: '#1E40AF', borderRadius: 999, padding: '2px 6px', fontWeight: 500, lineHeight: 1.4, textAlign: 'right' }}>
             ✓ {quote.packet_reference ?? "Converted"}
           </span>
         )}
       </div>
 
       {/* Reference */}
-      <p className="font-mono text-xs text-gray-400 mb-2">{quote.reference_number}</p>
+      <p style={{ fontFamily: 'monospace', fontSize: 11, color: '#9CA3AF', marginBottom: 8 }}>{quote.reference_number}</p>
 
       {/* Type badge */}
-      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${typeBg} mb-2`}>
+      <span style={{ display: 'inline-block', borderRadius: 999, padding: '2px 8px', fontSize: 11, fontWeight: 500, marginBottom: 8, ...typeBadge }}>
         {typeLabel}
       </span>
 
       {/* Follow-up date */}
       {quote.follow_up_date && (
-        <div className={`text-xs mb-1 flex items-center gap-1 ${showOverdue ? "text-red-600 font-semibold" : "text-gray-500"}`}>
+        <div style={{ fontSize: 12, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4, color: showOverdue ? '#EF4444' : '#6B7280', fontWeight: showOverdue ? 600 : 400 }}>
           {showOverdue && (
-            <svg className="w-3 h-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <svg style={{ width: 12, height: 12, flexShrink: 0 }} fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
             </svg>
           )}
@@ -74,11 +73,13 @@ export default function QuoteCard({ quote, onClick }: Props) {
 
       {/* Assigned to */}
       {quote.assigned_to && (
-        <p className="text-xs text-gray-500 mb-1 truncate">👤 {quote.assigned_to}</p>
+        <p style={{ fontSize: 12, color: '#6B7280', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {quote.assigned_to}
+        </p>
       )}
 
       {/* Created date */}
-      <p className="text-xs text-gray-400 mt-1">{created}</p>
+      <p style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>{created}</p>
     </div>
   );
 }

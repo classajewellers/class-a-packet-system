@@ -2,13 +2,13 @@
 
 import { WorkshopJob } from "@/lib/types";
 
-const CATEGORY_BADGES: Record<string, string> = {
-  eng_ring:     "bg-purple-100 text-purple-700",
-  wed_ring:     "bg-blue-100 text-blue-700",
-  custom_ring:  "bg-indigo-100 text-indigo-700",
-  repair:       "bg-orange-100 text-orange-700",
-  bracelet:     "bg-pink-100 text-pink-700",
-  other:        "bg-gray-100 text-gray-600",
+const CATEGORY_BADGE_STYLES: Record<string, React.CSSProperties> = {
+  eng_ring:     { background: '#EEF2FF', color: '#635BFF' },
+  wed_ring:     { background: '#DBEAFE', color: '#1E40AF' },
+  custom_ring:  { background: '#EDE9FE', color: '#6D28D9' },
+  repair:       { background: '#FEF3C7', color: '#92400E' },
+  bracelet:     { background: '#FCE7F3', color: '#9D174D' },
+  other:        { background: '#F3F4F6', color: '#374151' },
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -47,41 +47,36 @@ export default function WorkshopJobCard({ job, onClick }: Props) {
   const isOverdue = job.due_date != null && job.due_date < today;
   const isDueToday = job.due_date === today;
 
-  const dueDateColor = isOverdue
-    ? "text-red-600 font-semibold"
-    : isDueToday
-    ? "text-amber-600 font-semibold"
-    : "text-gray-400";
-
   const days = daysInStage(job.stage_changed_at);
+  const categoryStyle = CATEGORY_BADGE_STYLES[job.category] ?? CATEGORY_BADGE_STYLES.other;
 
   return (
     <div
       onClick={onClick}
-      className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 cursor-grab select-none hover:shadow-md transition-shadow"
+      style={{ background: '#FFFFFF', borderRadius: 10, border: '1px solid #E8E8F0', padding: 12, cursor: 'grab', userSelect: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}
     >
       {/* Customer surname */}
-      <p className="text-lg font-bold text-gray-900 leading-tight truncate">
+      <p style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>
         {job.customer_surname || "Unknown"}
       </p>
 
       {/* Description */}
       {job.description && (
-        <p className="text-sm text-gray-600 mt-0.5 truncate">{job.description}</p>
+        <p style={{ fontSize: 13, color: '#6B7280', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{job.description}</p>
       )}
 
       {/* Badges */}
-      <div className="flex flex-wrap gap-1 mt-2">
-        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${CATEGORY_BADGES[job.category] ?? CATEGORY_BADGES.other}`}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+        <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, ...categoryStyle }}>
           {CATEGORY_LABELS[job.category] ?? job.category}
         </span>
         {job.complexity === "complex" && (
-          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+          <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: '#FEE2E2', color: '#991B1B' }}>
             Complex
           </span>
         )}
         {job.job_type === "minor" && (
-          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">
+          <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: '#F3F4F6', color: '#6B7280' }}>
             Minor
           </span>
         )}
@@ -89,8 +84,8 @@ export default function WorkshopJobCard({ job, onClick }: Props) {
 
       {/* Assigned jeweller */}
       {job.assigned_jeweller && (
-        <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+        <p style={{ fontSize: 12, color: '#6B7280', marginTop: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <svg style={{ width: 12, height: 12, flexShrink: 0 }} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
           </svg>
           {job.assigned_jeweller}
@@ -98,15 +93,15 @@ export default function WorkshopJobCard({ job, onClick }: Props) {
       )}
 
       {/* Due date + ref */}
-      <div className="flex items-center justify-between mt-2">
-        <span className={`text-xs ${dueDateColor}`}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+        <span style={{ fontSize: 12, color: isOverdue ? '#EF4444' : isDueToday ? '#F59E0B' : '#9CA3AF', fontWeight: (isOverdue || isDueToday) ? 600 : 400 }}>
           {job.due_date ? formatDateAU(job.due_date) : "No due date"}
         </span>
-        <span className="font-mono text-xs text-gray-300">{job.reference_number || ""}</span>
+        <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#D1D5DB' }}>{job.reference_number || ""}</span>
       </div>
 
       {/* Days in stage */}
-      <p className="text-xs text-gray-300 mt-1">{days} day{days !== 1 ? "s" : ""} in stage</p>
+      <p style={{ fontSize: 11, color: '#D1D5DB', marginTop: 4 }}>{days} day{days !== 1 ? "s" : ""} in stage</p>
     </div>
   );
 }

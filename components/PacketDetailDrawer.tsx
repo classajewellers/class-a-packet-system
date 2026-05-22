@@ -45,7 +45,7 @@ function buildMessage(template: Template, p: Packet): string {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-100 pb-1">
+      <p style={{ fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12, borderBottom: '1px solid #E8E8F0', paddingBottom: 4 }}>
         {title}
       </p>
       {children}
@@ -55,7 +55,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function Label({ children, bold }: { children: React.ReactNode; bold?: boolean }) {
   return (
-    <label className={`block text-xs uppercase tracking-wide mb-1 ${bold ? "font-bold text-black" : "font-semibold text-gray-400"}`}>
+    <label style={{ display: 'block', fontSize: 12, fontWeight: bold ? 600 : 500, color: bold ? '#1A1A2E' : '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
       {children}
     </label>
   );
@@ -302,8 +302,11 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
   // Compute displayed balance
   const balance = (local.total_charges ?? 0) - (local.deposit ?? 0);
 
-  const field =
-    "w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-black focus:bg-white transition-colors";
+  const fieldStyle: React.CSSProperties = {
+    width: '100%', border: '1px solid #E8E8F0', borderRadius: 8,
+    background: '#fff', fontSize: 14, padding: '0 12px', color: '#1A1A2E',
+    outline: 'none', height: 40, fontFamily: 'inherit',
+  };
 
   const saveIndicator =
     saveState === "saving" ? (
@@ -317,39 +320,41 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
   return (
     <div className="fixed inset-0 z-50 flex">
       {/* Backdrop */}
-      <div className="flex-1 bg-black/40" onClick={onClose} />
+      <div className="flex-1" style={{ background: 'rgba(0,0,0,0.3)' }} onClick={onClose} />
 
       {/* Drawer */}
-      <div className="w-full max-w-md bg-white shadow-2xl overflow-y-auto flex flex-col">
+      <div style={{ width: 480, background: '#FFFFFF', borderLeft: '1px solid #E8E8F0', boxShadow: '-4px 0 24px rgba(0,0,0,0.08)' }} className="overflow-y-auto flex flex-col">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 sticky top-0 bg-white z-10">
+        <div style={{ background: '#FFFFFF', borderBottom: '1px solid #E8E8F0', padding: 20 }} className="flex items-center justify-between sticky top-0 z-10">
           <div>
-            <p className="text-xs text-gray-500">{packetTypeLabel(local.packet_type)}</p>
-            <h2 className="font-mono text-base font-bold text-black">{local.reference_number}</h2>
+            <p style={{ fontSize: 12, color: '#6B7280', marginBottom: 2 }}>{packetTypeLabel(local.packet_type)}</p>
+            <h2 style={{ fontFamily: 'monospace', fontSize: 16, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>{local.reference_number}</h2>
           </div>
           <div className="flex items-center gap-3">
             {saveIndicator}
-            <button onClick={onClose} className="rounded-full p-2 hover:bg-gray-100 transition-colors">
-              <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8, borderRadius: '50%' }}
+              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = '#F3F4F6'}
+              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = 'transparent'}>
+              <svg className="w-5 h-5" style={{ color: '#6B7280' }} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
         </div>
 
-        <div className="flex-1 px-5 py-4 space-y-6">
+        <div style={{ flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 24 }}>
 
-          {/* ── DISPATCH DATE (online orders) — top hero, black border ── */}
+          {/* ── DISPATCH DATE (online orders) — top hero, purple border ── */}
           {isOnline && (
-            <div className="rounded-2xl border-2 border-black bg-white p-4">
-              <p className="text-xs font-bold text-black uppercase tracking-widest mb-2">📦 Dispatch Date</p>
+            <div style={{ borderRadius: 12, border: '2px solid #635BFF', background: '#FFFFFF', padding: 16 }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: '#635BFF', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>📦 Dispatch Date</p>
               <input
                 type="date"
                 value={local.due_date ? local.due_date.split("T")[0] : ""}
                 onChange={(e) => set("due_date", e.target.value || null)}
                 onBlur={(e) => patch({ due_date: e.target.value || null })}
-                className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-lg font-bold text-black focus:outline-none focus:ring-2 focus:ring-black"
+                style={{ width: '100%', border: '1px solid #E8E8F0', borderRadius: 8, background: '#F9FAFB', padding: '12px 16px', fontSize: 18, fontWeight: 700, color: '#635BFF', outline: 'none' }}
               />
             </div>
           )}
@@ -359,7 +364,9 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
             <button
               onClick={async () => { console.log('REPRINT BUTTON CLICKED'); await handleReprintLabel(); }}
               disabled={reprintLoading}
-              className="flex items-center justify-center gap-2 bg-gray-100 text-black text-sm font-semibold py-3 rounded-xl hover:bg-gray-200 active:scale-[0.98] transition-all disabled:opacity-60"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#EEF2FF', color: '#635BFF', fontSize: 14, fontWeight: 600, padding: '12px', borderRadius: 12, border: 'none', cursor: reprintLoading ? 'not-allowed' : 'pointer', opacity: reprintLoading ? 0.6 : 1, transition: 'all .15s', width: '100%' }}
+              onMouseEnter={e => { if (!reprintLoading) (e.currentTarget as HTMLButtonElement).style.background = '#E0E7FF'; }}
+              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = '#EEF2FF'}
             >
               <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.056 48.056 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
@@ -370,7 +377,9 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
             {showNotifButton && (
               <button
                 onClick={openNotifModal}
-                className="flex items-center justify-center gap-2 bg-black text-white text-sm font-semibold py-3 rounded-xl hover:bg-[#222] active:scale-[0.98] transition-all"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#635BFF', color: '#fff', fontSize: 14, fontWeight: 600, padding: '12px', borderRadius: 12, border: 'none', cursor: 'pointer', transition: 'background .15s', width: '100%' }}
+                onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = '#4F46E5'}
+                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = '#635BFF'}
               >
                 <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
@@ -383,7 +392,9 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
           {/* ── Print Confirmation (full-width, outline style) ── */}
           <button
             onClick={() => printOrderConfirmation(local)}
-            className="flex items-center justify-center gap-2 w-full border border-gray-300 text-gray-700 text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-50 hover:border-gray-400 active:scale-[0.98] transition-all"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', border: '1px solid #E8E8F0', color: '#6B7280', fontSize: 14, fontWeight: 600, padding: '10px', borderRadius: 12, background: '#fff', cursor: 'pointer', transition: 'all .15s' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#F9FAFB'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#D1D5DB'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fff'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#E8E8F0'; }}
           >
             <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
@@ -394,7 +405,9 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
           {local.valuation_status === "approved" && (
             <button
               onClick={() => generateValuationCertificate(local)}
-              className="flex items-center justify-center gap-2 w-full border border-[#A3B2A4] text-[#A3B2A4] text-sm font-semibold py-2.5 rounded-xl hover:bg-[#A3B2A4]/10 hover:border-[#A3B2A4] active:scale-[0.98] transition-all"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', border: '1px solid #635BFF', color: '#635BFF', fontSize: 14, fontWeight: 600, padding: '10px', borderRadius: 12, background: '#fff', cursor: 'pointer', transition: 'all .15s' }}
+              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = '#EEF2FF'}
+              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = '#fff'}
             >
               <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75l3 3m0 0l3-3m-3 3v-7.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -403,16 +416,16 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
             </button>
           )}
 
-          {/* ── DUE DATE (non-online orders) — black hero ── */}
+          {/* ── DUE DATE (non-online orders) — purple hero ── */}
           {!isOnline && (
-            <div className="rounded-2xl bg-black p-4">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Due Date</p>
+            <div style={{ borderRadius: 12, background: '#635BFF', padding: 16 }}>
+              <p style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Due Date</p>
               <input
                 type="date"
                 value={local.due_date ? local.due_date.split("T")[0] : ""}
                 onChange={(e) => set("due_date", e.target.value || null)}
                 onBlur={(e) => patch({ due_date: e.target.value || null })}
-                className="w-full rounded-xl border-0 bg-white px-4 py-3 text-lg font-bold text-black focus:outline-none focus:ring-2 focus:ring-white"
+                style={{ width: '100%', border: 0, borderRadius: 8, background: '#FFFFFF', padding: '12px 16px', fontSize: 18, fontWeight: 700, color: '#1A1A2E', outline: 'none' }}
               />
             </div>
           )}
@@ -425,7 +438,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
               value={local.internal_notes ?? ""}
               onChange={(e) => set("internal_notes", e.target.value)}
               onBlur={(e) => saveOnBlur("internal_notes", e.target.value || null)}
-              className={`${field} resize-none`}
+              style={{ ...fieldStyle, height: 'auto', padding: '8px 12px', minHeight: 72, resize: 'vertical' as const }}
             />
           </Section>
 
@@ -439,7 +452,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   value={local.customer_first_name ?? ""}
                   onChange={(e) => set("customer_first_name", e.target.value)}
                   onBlur={(e) => saveOnBlur("customer_first_name", e.target.value || null)}
-                  className={field}
+                  style={fieldStyle}
                 />
               </div>
               <div>
@@ -449,7 +462,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   value={local.customer_last_name ?? ""}
                   onChange={(e) => set("customer_last_name", e.target.value)}
                   onBlur={(e) => saveOnBlur("customer_last_name", e.target.value || null)}
-                  className={field}
+                  style={fieldStyle}
                 />
               </div>
               <div>
@@ -459,7 +472,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   value={local.customer_phone ?? ""}
                   onChange={(e) => set("customer_phone", e.target.value)}
                   onBlur={(e) => saveOnBlur("customer_phone", e.target.value || null)}
-                  className={field}
+                  style={fieldStyle}
                 />
               </div>
               <div>
@@ -468,7 +481,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   {local.customer_email && (
                     <Link
                       href={`/customers/${encodeURIComponent(local.customer_email)}`}
-                      className="text-xs text-[#A3B2A4] font-semibold hover:text-black transition-colors"
+                      style={{ fontSize: 12, color: '#635BFF', fontWeight: 600, textDecoration: 'none' }}
                       onClick={(e) => e.stopPropagation()}
                     >
                       View Customer →
@@ -480,7 +493,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   value={local.customer_email ?? ""}
                   onChange={(e) => set("customer_email", e.target.value)}
                   onBlur={(e) => saveOnBlur("customer_email", e.target.value || null)}
-                  className={field}
+                  style={fieldStyle}
                 />
               </div>
               <div className="col-span-2">
@@ -490,7 +503,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   value={local.customer_street ?? ""}
                   onChange={(e) => set("customer_street", e.target.value)}
                   onBlur={(e) => saveOnBlur("customer_street", e.target.value || null)}
-                  className={field}
+                  style={fieldStyle}
                 />
               </div>
               <div>
@@ -500,7 +513,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   value={local.customer_suburb ?? ""}
                   onChange={(e) => set("customer_suburb", e.target.value)}
                   onBlur={(e) => saveOnBlur("customer_suburb", e.target.value || null)}
-                  className={field}
+                  style={fieldStyle}
                 />
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -511,7 +524,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                     value={local.customer_state ?? ""}
                     onChange={(e) => set("customer_state", e.target.value)}
                     onBlur={(e) => saveOnBlur("customer_state", e.target.value || null)}
-                    className={field}
+                    style={fieldStyle}
                   />
                 </div>
                 <div>
@@ -521,7 +534,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                     value={local.customer_postcode ?? ""}
                     onChange={(e) => set("customer_postcode", e.target.value)}
                     onBlur={(e) => saveOnBlur("customer_postcode", e.target.value || null)}
-                    className={field}
+                    style={fieldStyle}
                   />
                 </div>
               </div>
@@ -533,7 +546,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                     value={local.customer_number ?? ""}
                     onChange={(e) => set("customer_number", e.target.value)}
                     onBlur={(e) => saveOnBlur("customer_number", e.target.value || null)}
-                    className={field}
+                    style={fieldStyle}
                   />
                 </div>
               )}
@@ -545,7 +558,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                     value={local.stock_number ?? ""}
                     onChange={(e) => set("stock_number", e.target.value)}
                     onBlur={(e) => saveOnBlur("stock_number", e.target.value || null)}
-                    className={field}
+                    style={fieldStyle}
                   />
                 </div>
               )}
@@ -565,7 +578,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                     set("articles", e.target.value);
                   }}
                   onBlur={(e) => handleFieldUpdate("articles", e.target.value || null)}
-                  className={`${field} resize-none`}
+                  style={{ ...fieldStyle, height: 'auto', padding: '8px 12px', minHeight: 72, resize: 'vertical' as const }}
                 />
               </div>
               <div>
@@ -575,7 +588,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   value={local.instructions ?? ""}
                   onChange={(e) => set("instructions", e.target.value)}
                   onBlur={(e) => saveOnBlur("instructions", e.target.value || null)}
-                  className={`${field} resize-none`}
+                  style={{ ...fieldStyle, height: 'auto', padding: '8px 12px', minHeight: 72, resize: 'vertical' as const }}
                 />
               </div>
               <div>
@@ -587,11 +600,13 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                     set("gift_wrapping", next);
                     patch({ gift_wrapping: next });
                   }}
-                  className={`w-full rounded-lg border px-3 py-2 text-sm font-semibold text-left transition-colors ${
-                    (local.gift_wrapping === true || (local.gift_wrapping as unknown) === "true")
-                      ? "border-black bg-black text-white"
-                      : "border-gray-200 bg-gray-50 text-gray-500"
-                  }`}
+                  style={{
+                    width: '100%', borderRadius: 8, border: '1px solid',
+                    borderColor: (local.gift_wrapping === true || (local.gift_wrapping as unknown) === "true") ? '#635BFF' : '#E8E8F0',
+                    background: (local.gift_wrapping === true || (local.gift_wrapping as unknown) === "true") ? '#635BFF' : '#F9FAFB',
+                    color: (local.gift_wrapping === true || (local.gift_wrapping as unknown) === "true") ? '#fff' : '#6B7280',
+                    padding: '8px 12px', fontSize: 14, fontWeight: 600, textAlign: 'left', cursor: 'pointer', transition: 'all .15s',
+                  }}
                 >
                   {(local.gift_wrapping === true || (local.gift_wrapping as unknown) === "true") ? "✓ YES — Gift Wrap" : "NO — No Gift Wrap"}
                 </button>
@@ -611,7 +626,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                     set("in_date", e.target.value || null);
                     patch({ in_date: e.target.value || null });
                   }}
-                  className={field}
+                  style={fieldStyle}
                 />
               </div>
               <div>
@@ -623,7 +638,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                     set("from_date", e.target.value || null);
                     patch({ from_date: e.target.value || null });
                   }}
-                  className={field}
+                  style={fieldStyle}
                 />
               </div>
               <div>
@@ -635,7 +650,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                     set("collected_date", e.target.value || null);
                     patch({ collected_date: e.target.value || null });
                   }}
-                  className={field}
+                  style={fieldStyle}
                 />
               </div>
             </div>
@@ -653,7 +668,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   value={local.total_charges ?? ""}
                   onChange={(e) => set("total_charges", e.target.value === "" ? null : parseFloat(e.target.value))}
                   onBlur={(e) => saveOnBlur("total_charges", e.target.value === "" ? null : parseFloat(e.target.value))}
-                  className={field}
+                  style={fieldStyle}
                 />
               </div>
               <div>
@@ -665,12 +680,12 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   value={local.deposit ?? ""}
                   onChange={(e) => set("deposit", e.target.value === "" ? null : parseFloat(e.target.value))}
                   onBlur={(e) => saveOnBlur("deposit", e.target.value === "" ? null : parseFloat(e.target.value))}
-                  className={field}
+                  style={fieldStyle}
                 />
               </div>
               <div>
                 <Label>Balance</Label>
-                <div className="w-full rounded-lg border border-gray-100 bg-gray-100 px-3 py-2 text-sm text-gray-500 select-none">
+                <div style={{ width: '100%', borderRadius: 8, border: '1px solid #E8E8F0', background: '#F9FAFB', padding: '8px 12px', fontSize: 14, color: '#6B7280' }} className="select-none">
                   {(local.total_charges || local.deposit)
                     ? `$${balance.toFixed(2)}`
                     : "—"}
@@ -690,7 +705,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                     set("staff_member", e.target.value || null);
                     patch({ staff_member: e.target.value || null });
                   }}
-                  className={field}
+                  style={fieldStyle}
                 >
                   <option value="">— Unassigned —</option>
                   {STAFF_NAMES.map((s) => (
@@ -705,7 +720,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   value={local.referral_source ?? ""}
                   onChange={(e) => set("referral_source", e.target.value)}
                   onBlur={(e) => saveOnBlur("referral_source", e.target.value || null)}
-                  className={field}
+                  style={fieldStyle}
                 />
               </div>
               <div>
@@ -715,7 +730,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   value={local.occasion ?? ""}
                   onChange={(e) => set("occasion", e.target.value)}
                   onBlur={(e) => saveOnBlur("occasion", e.target.value || null)}
-                  className={field}
+                  style={fieldStyle}
                 />
               </div>
               <div>
@@ -725,7 +740,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   value={local.repair_tracker_number ?? ""}
                   onChange={(e) => set("repair_tracker_number", e.target.value)}
                   onBlur={(e) => saveOnBlur("repair_tracker_number", e.target.value || null)}
-                  className={field}
+                  style={fieldStyle}
                 />
               </div>
               <div>
@@ -735,7 +750,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   value={local.signed_by ?? ""}
                   onChange={(e) => set("signed_by", e.target.value)}
                   onBlur={(e) => saveOnBlur("signed_by", e.target.value || null)}
-                  className={field}
+                  style={fieldStyle}
                 />
               </div>
             </div>
@@ -765,7 +780,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                     value={local.order_number ?? ""}
                     onChange={(e) => set("order_number", e.target.value)}
                     onBlur={(e) => saveOnBlur("order_number", e.target.value || null)}
-                    className={field}
+                    style={fieldStyle}
                   />
                 </div>
                 <div>
@@ -775,7 +790,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                     value={local.order_source ?? ""}
                     onChange={(e) => set("order_source", e.target.value)}
                     onBlur={(e) => saveOnBlur("order_source", e.target.value || null)}
-                    className={field}
+                    style={fieldStyle}
                   />
                 </div>
                 <div>
@@ -785,7 +800,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                     value={local.shipping_method ?? ""}
                     onChange={(e) => set("shipping_method", e.target.value)}
                     onBlur={(e) => saveOnBlur("shipping_method", e.target.value || null)}
-                    className={field}
+                    style={fieldStyle}
                   />
                 </div>
                 <div>
@@ -795,7 +810,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                     value={local.tracking_number ?? ""}
                     onChange={(e) => set("tracking_number", e.target.value)}
                     onBlur={(e) => saveOnBlur("tracking_number", e.target.value || null)}
-                    className={field}
+                    style={fieldStyle}
                   />
                 </div>
                 <div className="col-span-2">
@@ -805,7 +820,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                     value={local.items_ordered ?? ""}
                     onChange={(e) => set("items_ordered", e.target.value)}
                     onBlur={(e) => saveOnBlur("items_ordered", e.target.value || null)}
-                    className={`${field} resize-none`}
+                    style={{ ...fieldStyle, height: 'auto', padding: '8px 12px', minHeight: 72, resize: 'vertical' as const }}
                   />
                 </div>
                 <div className="col-span-2">
@@ -815,7 +830,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                     value={local.order_notes ?? ""}
                     onChange={(e) => set("order_notes", e.target.value)}
                     onBlur={(e) => saveOnBlur("order_notes", e.target.value || null)}
-                    className={`${field} resize-none`}
+                    style={{ ...fieldStyle, height: 'auto', padding: '8px 12px', minHeight: 72, resize: 'vertical' as const }}
                   />
                 </div>
                 {!local.shipping_address_same && (
@@ -827,7 +842,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                         value={local.shipping_street ?? ""}
                         onChange={(e) => set("shipping_street", e.target.value)}
                         onBlur={(e) => saveOnBlur("shipping_street", e.target.value || null)}
-                        className={field}
+                        style={fieldStyle}
                       />
                     </div>
                     <div>
@@ -837,7 +852,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                         value={local.shipping_suburb ?? ""}
                         onChange={(e) => set("shipping_suburb", e.target.value)}
                         onBlur={(e) => saveOnBlur("shipping_suburb", e.target.value || null)}
-                        className={field}
+                        style={fieldStyle}
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
@@ -848,7 +863,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                           value={local.shipping_state ?? ""}
                           onChange={(e) => set("shipping_state", e.target.value)}
                           onBlur={(e) => saveOnBlur("shipping_state", e.target.value || null)}
-                          className={field}
+                          style={fieldStyle}
                         />
                       </div>
                       <div>
@@ -858,7 +873,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                           value={local.shipping_postcode ?? ""}
                           onChange={(e) => set("shipping_postcode", e.target.value)}
                           onBlur={(e) => saveOnBlur("shipping_postcode", e.target.value || null)}
-                          className={field}
+                          style={fieldStyle}
                         />
                       </div>
                     </div>
@@ -874,10 +889,10 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
               <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
                 {Object.entries(local.packet_data).map(([k, v]) => (
                   <div key={k}>
-                    <dt className="text-xs text-gray-400 uppercase tracking-wide font-semibold">
+                    <dt style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 500 }}>
                       {k.replace(/_/g, " ")}
                     </dt>
-                    <dd className="text-sm text-black mt-0.5">
+                    <dd style={{ fontSize: 14, color: '#1A1A2E', marginTop: 2 }}>
                       {Array.isArray(v) ? v.join(", ") : typeof v === "boolean" ? (v ? "Yes" : "No") : String(v ?? "")}
                     </dd>
                   </div>
@@ -886,7 +901,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
             </Section>
           )}
 
-          <p className="text-xs text-gray-400">
+          <p style={{ fontSize: 12, color: '#9CA3AF' }}>
             Created {new Date(local.created_at).toLocaleString("en-AU")}
           </p>
 
@@ -895,7 +910,9 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
             <button
               onClick={handleDelete}
               disabled={deleting}
-              className="w-full flex items-center justify-center gap-2 bg-red-600 text-white text-sm font-semibold py-3 rounded-xl hover:bg-red-700 active:scale-[0.98] transition-all disabled:opacity-50"
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, padding: '12px', borderRadius: 12, border: 'none', cursor: deleting ? 'not-allowed' : 'pointer', opacity: deleting ? 0.5 : 1, transition: 'background .15s' }}
+              onMouseEnter={e => { if (!deleting) (e.currentTarget as HTMLButtonElement).style.background = '#DC2626'; }}
+              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = '#EF4444'}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
@@ -911,26 +928,26 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
       {notifOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           {/* Backdrop */}
-          <div className="absolute inset-0 bg-black/50" onClick={closeNotifModal} />
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} onClick={closeNotifModal} />
 
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-auto p-6 space-y-5">
+          <div style={{ position: 'relative', background: '#FFFFFF', borderRadius: 16, boxShadow: '0 18px 40px rgba(0,0,0,0.12)', width: '100%', maxWidth: 360, margin: '0 auto', padding: 24 }} className="space-y-5">
 
             {/* Header */}
             <div>
-              <h2 className="text-lg font-bold text-black">Send Customer Notification</h2>
-              <p className="text-sm text-gray-500 mt-1">
-                <span className="font-semibold text-black">
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>Send Customer Notification</h2>
+              <p style={{ fontSize: 14, color: '#6B7280' }}>
+                <span style={{ fontWeight: 600, color: '#1A1A2E' }}>
                   {[local.customer_first_name, local.customer_last_name].filter(Boolean).join(" ") || "Unknown"}
                 </span>
                 {local.customer_phone && (
-                  <span className="ml-2 text-gray-400">{local.customer_phone}</span>
+                  <span style={{ marginLeft: 8, color: '#9CA3AF' }}>{local.customer_phone}</span>
                 )}
               </p>
             </div>
 
             {notifStep === "select" && (
               <>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+                <p style={{ fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Choose a template
                 </p>
 
@@ -944,10 +961,12 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                         key={t}
                         type="button"
                         onClick={() => selectTemplate(t)}
-                        className="w-full text-left rounded-xl border-2 border-gray-200 hover:border-black p-4 transition-colors"
+                        style={{ width: '100%', textAlign: 'left', borderRadius: 12, border: '2px solid #E8E8F0', padding: 16, background: '#fff', cursor: 'pointer', transition: 'border-color .15s' }}
+                        onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.borderColor = '#635BFF'}
+                        onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.borderColor = '#E8E8F0'}
                       >
-                        <p className="text-sm font-bold text-black mb-1">{label}</p>
-                        <p className="text-xs text-gray-500 leading-relaxed line-clamp-3">{preview}</p>
+                        <p style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>{label}</p>
+                        <p style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.5 }} className="line-clamp-3">{preview}</p>
                       </button>
                     );
                   })}
@@ -955,7 +974,9 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
 
                 <button
                   onClick={closeNotifModal}
-                  className="w-full text-sm font-semibold text-gray-500 hover:text-black py-2 transition-colors"
+                  style={{ width: '100%', fontSize: 14, fontWeight: 600, color: '#6B7280', padding: '8px', background: 'transparent', border: 'none', cursor: 'pointer', transition: 'color .15s' }}
+                  onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.color = '#1A1A2E'}
+                  onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.color = '#6B7280'}
                 >
                   Cancel
                 </button>
@@ -965,11 +986,11 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
             {notifStep === "preview" && notifTemplate && (
               <>
                 <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
+                  <p style={{ fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
                     Message Preview
                   </p>
-                  <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3">
-                    <p className="text-sm text-black leading-relaxed">
+                  <div style={{ borderRadius: 12, background: '#F9FAFB', border: '1px solid #E8E8F0', padding: '12px 16px' }}>
+                    <p style={{ fontSize: 14, color: '#1A1A2E', lineHeight: 1.5 }}>
                       {buildMessage(notifTemplate, local)}
                     </p>
                   </div>
@@ -981,11 +1002,13 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                     onClick={() => handleSend("sms")}
                     disabled={notifSending || !local.customer_phone}
                     title={!local.customer_phone ? "No phone number on file" : undefined}
-                    className="w-full flex flex-col items-center justify-center rounded-xl bg-black py-3 text-sm font-bold text-white hover:bg-[#222] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: 12, background: '#635BFF', padding: '12px', fontSize: 14, fontWeight: 700, color: '#fff', border: 'none', cursor: (!local.customer_phone || notifSending) ? 'not-allowed' : 'pointer', opacity: (!local.customer_phone || notifSending) ? 0.4 : 1, transition: 'background .15s' }}
+                    onMouseEnter={e => { if (local.customer_phone && !notifSending) (e.currentTarget as HTMLButtonElement).style.background = '#4F46E5'; }}
+                    onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = '#635BFF'}
                   >
                     <span>{notifSending ? "Sending…" : "Send SMS"}</span>
                     {local.customer_phone && (
-                      <span className="text-xs font-normal text-white/70 mt-0.5">{local.customer_phone}</span>
+                      <span style={{ fontSize: 12, fontWeight: 400, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>{local.customer_phone}</span>
                     )}
                   </button>
 
@@ -994,17 +1017,21 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                     onClick={() => handleSend("email")}
                     disabled={notifSending || !local.customer_email}
                     title={!local.customer_email ? "No email address on file" : undefined}
-                    className="w-full flex flex-col items-center justify-center rounded-xl border-2 border-black py-3 text-sm font-bold text-black hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: 12, border: '2px solid #635BFF', padding: '12px', fontSize: 14, fontWeight: 700, color: '#635BFF', background: '#fff', cursor: (!local.customer_email || notifSending) ? 'not-allowed' : 'pointer', opacity: (!local.customer_email || notifSending) ? 0.4 : 1, transition: 'all .15s' }}
+                    onMouseEnter={e => { if (local.customer_email && !notifSending) (e.currentTarget as HTMLButtonElement).style.background = '#EEF2FF'; }}
+                    onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = '#fff'}
                   >
                     <span>{notifSending ? "Sending…" : "Send Email"}</span>
                     {local.customer_email && (
-                      <span className="text-xs font-normal text-gray-500 mt-0.5">{local.customer_email}</span>
+                      <span style={{ fontSize: 12, fontWeight: 400, color: '#6B7280', marginTop: 2 }}>{local.customer_email}</span>
                     )}
                   </button>
 
                   <button
                     onClick={closeNotifModal}
-                    className="w-full rounded-xl border border-gray-200 py-2.5 text-sm font-semibold text-gray-500 hover:text-black hover:bg-gray-50 transition-colors"
+                    style={{ width: '100%', borderRadius: 12, border: '1px solid #E8E8F0', padding: '10px', fontSize: 14, fontWeight: 600, color: '#6B7280', background: '#fff', cursor: 'pointer', transition: 'all .15s' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#1A1A2E'; (e.currentTarget as HTMLButtonElement).style.background = '#F9FAFB'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#6B7280'; (e.currentTarget as HTMLButtonElement).style.background = '#fff'; }}
                   >
                     Cancel
                   </button>
@@ -1018,9 +1045,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
       {/* ── Toast ── */}
       {toast && (
         <div
-          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-2 rounded-xl px-5 py-3 shadow-xl text-sm font-semibold text-white transition-all ${
-            toast.type === "success" ? "bg-emerald-600" : "bg-red-600"
-          }`}
+          style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 70, display: 'flex', alignItems: 'center', gap: 8, borderRadius: 12, padding: '12px 20px', boxShadow: '0 8px 24px rgba(0,0,0,0.15)', fontSize: 14, fontWeight: 600, color: '#fff', background: toast.type === 'success' ? '#10B981' : '#EF4444' }}
         >
           {toast.type === "success" ? (
             <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">

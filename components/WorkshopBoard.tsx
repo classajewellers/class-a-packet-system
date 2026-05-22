@@ -7,17 +7,23 @@ import WorkshopJobCard from "@/components/WorkshopJobCard";
 import WorkshopJobDrawer from "@/components/WorkshopJobDrawer";
 
 const STAGES = [
-  { id: "new",           label: "New",           color: "#6366f1" },
-  { id: "cad",           label: "CAD",            color: "#8b5cf6" },
-  { id: "cadbox",        label: "CAD Box",        color: "#7c3aed" },
-  { id: "precheck",      label: "Pre-Check",      color: "#f59e0b" },
-  { id: "in_progress",   label: "In Progress",    color: "#3b82f6" },
-  { id: "collection",    label: "Collection",     color: "#06b6d4" },
-  { id: "manufacturing", label: "Manufacturing",  color: "#10b981" },
-  { id: "qc",            label: "QC",             color: "#f97316" },
-  { id: "ready",         label: "Ready",          color: "#22c55e" },
-  { id: "completed",     label: "Completed",      color: "#6b7280" },
+  { id: "new",           label: "New",           color: "#635BFF" },
+  { id: "cad",           label: "CAD",            color: "#8B5CF6" },
+  { id: "cadbox",        label: "CAD Box",        color: "#7C3AED" },
+  { id: "precheck",      label: "Pre-Check",      color: "#F59E0B" },
+  { id: "in_progress",   label: "In Progress",    color: "#3B82F6" },
+  { id: "collection",    label: "Collection",     color: "#06B6D4" },
+  { id: "manufacturing", label: "Manufacturing",  color: "#10B981" },
+  { id: "qc",            label: "QC",             color: "#F97316" },
+  { id: "ready",         label: "Ready",          color: "#22C55E" },
+  { id: "completed",     label: "Completed",      color: "#6B7280" },
 ];
+
+const fieldStyle: React.CSSProperties = {
+  width: '100%', border: '1px solid #E8E8F0', borderRadius: 8,
+  background: '#fff', fontSize: 14, padding: '0 12px', color: '#1A1A2E',
+  outline: 'none', height: 40, fontFamily: 'inherit',
+};
 
 interface NewJobForm {
   customer_surname: string;
@@ -112,29 +118,29 @@ export default function WorkshopBoard({ jobs, onStageChange, onRefresh }: Props)
 
       {/* Add Job Modal */}
       {addingToStage && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-            <h3 className="text-base font-bold text-gray-900 mb-4">
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: '#FFFFFF', borderRadius: 16, width: '100%', maxWidth: 480, padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1A1A2E', marginBottom: 16 }}>
               New Job — {STAGES.find((s) => s.id === addingToStage)?.label}
             </h3>
-            <div className="space-y-3">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <input
                 placeholder="Customer surname *"
                 value={newJobForm.customer_surname}
                 onChange={(e) => setNewJobForm((f) => ({ ...f, customer_surname: e.target.value }))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+                style={fieldStyle}
               />
               <input
                 placeholder="Description"
                 value={newJobForm.description}
                 onChange={(e) => setNewJobForm((f) => ({ ...f, description: e.target.value }))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+                style={fieldStyle}
               />
-              <div className="grid grid-cols-2 gap-3">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <select
                   value={newJobForm.category}
                   onChange={(e) => setNewJobForm((f) => ({ ...f, category: e.target.value }))}
-                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+                  style={fieldStyle}
                 >
                   <option value="eng_ring">Eng. Ring</option>
                   <option value="wed_ring">Wed. Ring</option>
@@ -146,17 +152,17 @@ export default function WorkshopBoard({ jobs, onStageChange, onRefresh }: Props)
                 <select
                   value={newJobForm.job_type}
                   onChange={(e) => setNewJobForm((f) => ({ ...f, job_type: e.target.value }))}
-                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+                  style={fieldStyle}
                 >
                   <option value="major">Major</option>
                   <option value="minor">Minor</option>
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <select
                   value={newJobForm.complexity}
                   onChange={(e) => setNewJobForm((f) => ({ ...f, complexity: e.target.value }))}
-                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+                  style={fieldStyle}
                 >
                   <option value="standard">Standard</option>
                   <option value="complex">Complex</option>
@@ -165,32 +171,32 @@ export default function WorkshopBoard({ jobs, onStageChange, onRefresh }: Props)
                   type="date"
                   value={newJobForm.due_date}
                   onChange={(e) => setNewJobForm((f) => ({ ...f, due_date: e.target.value }))}
-                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+                  style={fieldStyle}
                 />
               </div>
               <input
                 placeholder="Assigned jeweller"
                 value={newJobForm.assigned_jeweller}
                 onChange={(e) => setNewJobForm((f) => ({ ...f, assigned_jeweller: e.target.value }))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+                style={fieldStyle}
               />
               <textarea
                 placeholder="Instructions"
                 value={newJobForm.instructions}
                 onChange={(e) => setNewJobForm((f) => ({ ...f, instructions: e.target.value }))}
                 rows={2}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black resize-none"
+                style={{ ...fieldStyle, height: 'auto', padding: '8px 12px', resize: 'vertical' as const }}
               />
             </div>
-            <div className="flex gap-2 mt-4">
+            <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
               <button
                 onClick={() => { setAddingToStage(null); setNewJobForm(defaultForm); }}
-                className="flex-1 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: '1px solid #E8E8F0', fontSize: 14, fontWeight: 600, color: '#6B7280', background: '#fff', cursor: 'pointer' }}
               >Cancel</button>
               <button
                 onClick={() => handleAddJob(addingToStage)}
                 disabled={saving || !newJobForm.customer_surname.trim()}
-                className="flex-1 py-2 rounded-xl bg-black text-white text-sm font-semibold hover:bg-[#222] disabled:opacity-50"
+                style={{ flex: 1, padding: '10px 0', borderRadius: 8, background: '#635BFF', color: '#fff', fontSize: 14, fontWeight: 600, border: 'none', cursor: 'pointer', opacity: (saving || !newJobForm.customer_surname.trim()) ? 0.5 : 1 }}
               >{saving ? "Saving…" : "Add Job"}</button>
             </div>
           </div>
@@ -198,26 +204,24 @@ export default function WorkshopBoard({ jobs, onStageChange, onRefresh }: Props)
       )}
 
       <DragDropContext onDragEnd={onDragEnd}>
-        <div className="flex gap-4 overflow-x-auto pb-4" style={{ minHeight: "60vh" }}>
+        <div style={{ display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 16, minHeight: '60vh' }}>
           {STAGES.map((stage) => {
             const stageJobs = localJobs.filter((j) => j.stage === stage.id);
             return (
-              <div key={stage.id} className="flex-shrink-0 w-56 flex flex-col">
+              <div key={stage.id} style={{ flexShrink: 0, width: 224, display: 'flex', flexDirection: 'column' }}>
                 {/* Column header */}
                 <div
-                  className="flex items-center justify-between px-3 py-2 rounded-t-xl mb-1"
-                  style={{ background: stage.color + "18", borderBottom: `2px solid ${stage.color}` }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: '10px 10px 0 0', marginBottom: 2, background: stage.color + '15', borderBottom: `2px solid ${stage.color}` }}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-gray-800">{stage.label}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#1A1A2E' }}>{stage.label}</span>
                     <span
-                      className="text-xs font-bold rounded-full px-1.5 py-0.5 text-white"
-                      style={{ background: stage.color }}
+                      style={{ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '1px 6px', color: '#fff', background: stage.color }}
                     >{stageJobs.length}</span>
                   </div>
                   <button
                     onClick={() => setAddingToStage(stage.id)}
-                    className="text-gray-400 hover:text-gray-700 transition-colors text-lg leading-none"
+                    style={{ color: '#9CA3AF', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 0 }}
                     title="Add job"
                   >+</button>
                 </div>
@@ -228,9 +232,7 @@ export default function WorkshopBoard({ jobs, onStageChange, onRefresh }: Props)
                     <div
                       ref={provided.innerRef}
                       {...provided.droppableProps}
-                      className={`flex-1 rounded-b-xl p-2 space-y-2 min-h-[200px] transition-colors ${
-                        snapshot.isDraggingOver ? "bg-blue-50" : "bg-gray-50"
-                      }`}
+                      style={{ flex: 1, borderRadius: '0 0 10px 10px', padding: 8, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 200, background: snapshot.isDraggingOver ? '#EEF2FF' : '#F9FAFB', transition: 'background 0.15s' }}
                     >
                       {stageJobs.map((job, index) => (
                         <Draggable key={job.id} draggableId={job.id} index={index}>

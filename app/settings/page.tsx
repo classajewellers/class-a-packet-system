@@ -25,9 +25,9 @@ export default function SettingsPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Store Details */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 bg-[#1B1F2E]">
-          <h2 className="text-sm font-semibold text-white uppercase tracking-wide">Store Details</h2>
+      <div style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 24px', borderBottom: '1px solid #E8E8F0', background: '#1A1760' }}>
+          <h2 style={{ fontSize: 12, fontWeight: 600, color: '#FFFFFF', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>Store Details</h2>
         </div>
         <div className="px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
           {[
@@ -37,48 +37,46 @@ export default function SettingsPage() {
             { label: "Address", value: storeAddress },
           ].map(({ label, value }) => (
             <div key={label}>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{label}</p>
-              <p className="text-sm font-medium text-gray-800">{value}</p>
+              <p style={{ fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{label}</p>
+              <p style={{ fontSize: 14, fontWeight: 500, color: '#1A1A2E' }}>{value}</p>
             </div>
           ))}
         </div>
       </div>
 
       {/* Staff List */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 bg-[#1B1F2E]">
-          <h2 className="text-sm font-semibold text-white uppercase tracking-wide">
+      <div style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 24px', borderBottom: '1px solid #E8E8F0', background: '#1A1760' }}>
+          <h2 style={{ fontSize: 12, fontWeight: 600, color: '#FFFFFF', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>
             Staff ({STAFF_LIST.length})
           </h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left border-b border-gray-100 bg-gray-50">
-                <th className="px-5 py-3 text-xs font-semibold text-gray-500">Name</th>
-                <th className="px-5 py-3 text-xs font-semibold text-gray-500">Role</th>
-                <th className="px-5 py-3 text-xs font-semibold text-gray-500">Email</th>
+              <tr style={{ textAlign: 'left', borderBottom: '1px solid #E8E8F0', background: '#F9FAFB' }}>
+                <th style={{ padding: '12px 20px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Name</th>
+                <th style={{ padding: '12px 20px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Role</th>
+                <th style={{ padding: '12px 20px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Email</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody>
               {STAFF_LIST.map((member) => (
-                <tr key={member.name} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-5 py-3 flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-[#A3B2A4] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                <tr key={member.name} style={{ borderBottom: '1px solid #E8E8F0' }}
+                  onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = '#F9FAFB'}
+                  onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}>
+                  <td style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#635BFF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
                       {member.initials}
                     </div>
-                    <span className="font-medium text-gray-800">{member.name}</span>
+                    <span style={{ fontWeight: 500, color: '#1A1A2E' }}>{member.name}</span>
                   </td>
-                  <td className="px-5 py-3">
-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
-                      member.role === "manager"
-                        ? "bg-[#1B1F2E] text-white"
-                        : "bg-gray-100 text-gray-600"
-                    }`}>
+                  <td style={{ padding: '12px 20px' }}>
+                    <span style={{ display: 'inline-flex', padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 500, background: member.role === "manager" ? '#635BFF' : '#E5E7EB', color: member.role === "manager" ? '#fff' : '#374151' }}>
                       {ROLE_LABELS[member.role]}
                     </span>
                   </td>
-                  <td className="px-5 py-3 text-gray-500">{member.email}</td>
+                  <td style={{ padding: '12px 20px', color: '#6B7280', fontSize: 14 }}>{member.email}</td>
                 </tr>
               ))}
             </tbody>
@@ -87,10 +85,10 @@ export default function SettingsPage() {
       </div>
 
       {/* About */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">About</p>
-        <p className="text-sm text-gray-700 font-medium">Class A Order System v1.0</p>
-        <p className="text-xs text-gray-400 mt-1">Internal repair and order management system for Class A Jewellers</p>
+      <div style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, padding: 24 }}>
+        <p style={{ fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>About</p>
+        <p style={{ fontSize: 14, fontWeight: 500, color: '#1A1A2E' }}>Class A Order System v1.0</p>
+        <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>Internal repair and order management system for Class A Jewellers</p>
       </div>
     </div>
   );

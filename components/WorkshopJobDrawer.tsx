@@ -28,15 +28,27 @@ const STAGES = [
   { id: "completed",     label: "Completed" },
 ];
 
-const STATUS_COLORS: Record<ComponentItem["status"], string> = {
-  ordered: "bg-amber-100 text-amber-700 border-amber-200",
-  arrived: "bg-blue-100 text-blue-700 border-blue-200",
-  checked: "bg-emerald-100 text-emerald-700 border-emerald-200",
+const STATUS_STYLES: Record<ComponentItem["status"], React.CSSProperties> = {
+  ordered: { background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A' },
+  arrived: { background: '#DBEAFE', color: '#1E40AF', border: '1px solid #BFDBFE' },
+  checked: { background: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0' },
 };
 const STATUS_NEXT: Record<ComponentItem["status"], ComponentItem["status"]> = {
   ordered: "arrived",
   arrived: "checked",
   checked: "ordered",
+};
+
+const fieldStyle: React.CSSProperties = {
+  width: '100%', border: '1px solid #E8E8F0', borderRadius: 8,
+  background: '#fff', fontSize: 14, padding: '0 12px', color: '#1A1A2E',
+  outline: 'none', height: 40, fontFamily: 'inherit',
+};
+
+const textareaStyle: React.CSSProperties = {
+  width: '100%', border: '1px solid #E8E8F0', borderRadius: 8,
+  background: '#fff', fontSize: 14, padding: '8px 12px', color: '#1A1A2E',
+  outline: 'none', fontFamily: 'inherit', resize: 'vertical',
 };
 
 function newComponentId() {
@@ -137,26 +149,27 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
     }
   }
 
-  const field = "w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:bg-white transition-colors";
-
   return (
-    <div className="fixed inset-0 z-50 flex">
+    <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex' }}>
       {/* Backdrop */}
-      <div className="flex-1 bg-black/40" onClick={onClose} />
+      <div style={{ flex: 1, background: 'rgba(0,0,0,0.3)' }} onClick={onClose} />
 
       {/* Drawer */}
-      <div className="w-full max-w-md bg-white shadow-2xl overflow-y-auto flex flex-col">
+      <div style={{ width: 480, background: '#FFFFFF', borderLeft: '1px solid #E8E8F0', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 sticky top-0 bg-white z-10">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 20, background: '#FFFFFF', borderBottom: '1px solid #E8E8F0', position: 'sticky', top: 0, zIndex: 10 }}>
           <div>
-            <p className="text-xs text-gray-500">{STAGES.find((s) => s.id === local.stage)?.label ?? local.stage}</p>
-            <h2 className="font-bold text-base text-black">{local.customer_surname ?? "Workshop Job"}</h2>
+            <p style={{ fontSize: 12, color: '#6B7280', marginBottom: 2 }}>{STAGES.find((s) => s.id === local.stage)?.label ?? local.stage}</p>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>{local.customer_surname ?? "Workshop Job"}</h2>
           </div>
-          <div className="flex items-center gap-3">
-            {saving && <span className="text-xs text-gray-400 animate-pulse">Saving…</span>}
-            <button onClick={onClose} className="rounded-full p-2 hover:bg-gray-100 transition-colors">
-              <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {saving && <span style={{ fontSize: 12, color: '#9CA3AF' }}>Saving…</span>}
+            <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = '#F9FAFB'}
+              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = 'transparent'}
+            >
+              <svg style={{ width: 20, height: 20, color: '#6B7280' }} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
@@ -164,29 +177,29 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
         </div>
 
         {local.packet_id && (
-          <div className="px-5 py-2 border-b border-gray-100 bg-gray-50">
+          <div style={{ padding: '8px 20px', borderBottom: '1px solid #E8E8F0', background: '#F9FAFB' }}>
             <Link
               href={`/orders?open_packet=${local.packet_id}`}
-              className="text-xs font-semibold text-[#A3B2A4] hover:text-black transition-colors"
+              style={{ fontSize: 12, fontWeight: 600, color: '#635BFF', textDecoration: 'none' }}
               onClick={onClose}
             >
-              View Order & Specs →
+              View Order &amp; Specs →
             </Link>
           </div>
         )}
 
-        <div className="flex-1 px-5 py-4 space-y-6">
+        <div style={{ flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
           {/* Stage selector */}
           <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Stage</p>
+            <p style={{ fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Stage</p>
             <select
               value={local.stage}
               onChange={(e) => {
                 setField("stage", e.target.value);
                 patch({ stage: e.target.value });
               }}
-              className={field}
+              style={fieldStyle}
             >
               {STAGES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
@@ -194,102 +207,102 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
 
           {/* Job details */}
           <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 border-b border-gray-100 pb-1">Job Details</p>
-            <div className="space-y-3">
+            <p style={{ fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12, borderBottom: '1px solid #E8E8F0', paddingBottom: 4 }}>Job Details</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Customer Surname</label>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Customer Surname</label>
                 <input
                   type="text"
                   value={local.customer_surname ?? ""}
                   onChange={(e) => setField("customer_surname", e.target.value)}
                   onBlur={(e) => handleBlurSave("customer_surname", e.target.value || null)}
-                  className={field}
+                  style={fieldStyle}
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Description</label>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Description</label>
                 <textarea
                   rows={2}
                   value={local.description ?? ""}
                   onChange={(e) => setField("description", e.target.value)}
                   onBlur={(e) => handleBlurSave("description", e.target.value || null)}
-                  className={`${field} resize-none`}
+                  style={textareaStyle}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Category</label>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Category</label>
                   <select
                     value={local.category}
                     onChange={(e) => { setField("category", e.target.value); patch({ category: e.target.value }); }}
-                    className={field}
+                    style={fieldStyle}
                   >
                     {CATEGORY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Complexity</label>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Complexity</label>
                   <select
                     value={local.complexity}
                     onChange={(e) => { setField("complexity", e.target.value); patch({ complexity: e.target.value }); }}
-                    className={field}
+                    style={fieldStyle}
                   >
                     <option value="standard">Standard</option>
                     <option value="complex">Complex</option>
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Job Type</label>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Job Type</label>
                   <select
                     value={local.job_type}
                     onChange={(e) => { setField("job_type", e.target.value); patch({ job_type: e.target.value }); }}
-                    className={field}
+                    style={fieldStyle}
                   >
                     <option value="major">Major</option>
                     <option value="minor">Minor</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Due Date</label>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Due Date</label>
                   <input
                     type="date"
                     value={local.due_date ?? ""}
                     onChange={(e) => { setField("due_date", e.target.value || null); patch({ due_date: e.target.value || null }); }}
-                    className={field}
+                    style={fieldStyle}
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Assigned Jeweller</label>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Assigned Jeweller</label>
                 <select
                   value={local.assigned_jeweller ?? ""}
                   onChange={(e) => { setField("assigned_jeweller", e.target.value || null); patch({ assigned_jeweller: e.target.value || null }); }}
-                  className={field}
+                  style={fieldStyle}
                 >
                   <option value="">— Unassigned —</option>
                   {JEWELLERS.map((j) => <option key={j} value={j}>{j}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Instructions</label>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Instructions</label>
                 <textarea
                   rows={3}
                   value={local.instructions ?? ""}
                   onChange={(e) => setField("instructions", e.target.value)}
                   onBlur={(e) => handleBlurSave("instructions", e.target.value || null)}
-                  className={`${field} resize-none`}
+                  style={textareaStyle}
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Notes</label>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Notes</label>
                 <textarea
                   rows={2}
                   value={local.notes ?? ""}
                   onChange={(e) => setField("notes", e.target.value)}
                   onBlur={(e) => handleBlurSave("notes", e.target.value || null)}
-                  className={`${field} resize-none`}
+                  style={textareaStyle}
                 />
               </div>
             </div>
@@ -297,11 +310,11 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
 
           {/* Components section */}
           <div>
-            <div className="flex items-center justify-between border-b border-gray-100 pb-1 mb-3">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Components</p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #E8E8F0', paddingBottom: 4, marginBottom: 12 }}>
+              <p style={{ fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Components</p>
               <button
                 onClick={() => setAddingComponent((v) => !v)}
-                className="text-xs font-semibold text-[#A3B2A4] hover:text-black transition-colors"
+                style={{ fontSize: 12, fontWeight: 600, color: '#635BFF', background: 'transparent', border: 'none', cursor: 'pointer' }}
               >
                 + Add Component
               </button>
@@ -309,32 +322,32 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
 
             {/* All received banner */}
             {allReceived && (
-              <div className="mb-3 flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
-                <span className="text-emerald-600 text-sm">✓</span>
-                <p className="text-sm font-semibold text-emerald-700">All components received — ready for Pre-Check</p>
+              <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8, background: '#DCFCE7', border: '1px solid #BBF7D0', borderRadius: 12, padding: '8px 12px' }}>
+                <span style={{ color: '#166534', fontSize: 14 }}>✓</span>
+                <p style={{ fontSize: 14, fontWeight: 600, color: '#166534', margin: 0 }}>All components received — ready for Pre-Check</p>
               </div>
             )}
 
             {/* Add component form */}
             {addingComponent && (
-              <div className="bg-gray-50 rounded-xl border border-gray-200 p-3 mb-3 space-y-2">
+              <div style={{ background: '#F9FAFB', borderRadius: 12, border: '1px solid #E8E8F0', padding: 12, marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <input
                   placeholder="Component name *"
                   value={newComp.name}
                   onChange={(e) => setNewComp((c) => ({ ...c, name: e.target.value }))}
-                  className={field}
+                  style={fieldStyle}
                 />
-                <div className="grid grid-cols-2 gap-2">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                   <input
                     placeholder="Quantity"
                     value={newComp.quantity}
                     onChange={(e) => setNewComp((c) => ({ ...c, quantity: e.target.value }))}
-                    className={field}
+                    style={fieldStyle}
                   />
                   <select
                     value={newComp.status}
                     onChange={(e) => setNewComp((c) => ({ ...c, status: e.target.value as ComponentItem["status"] }))}
-                    className={field}
+                    style={fieldStyle}
                   >
                     <option value="ordered">Ordered</option>
                     <option value="arrived">Arrived</option>
@@ -345,17 +358,17 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
                   placeholder="Notes (optional)"
                   value={newComp.notes}
                   onChange={(e) => setNewComp((c) => ({ ...c, notes: e.target.value }))}
-                  className={field}
+                  style={fieldStyle}
                 />
-                <div className="flex gap-2">
+                <div style={{ display: 'flex', gap: 8 }}>
                   <button
                     onClick={() => { setAddingComponent(false); setNewComp({ name: "", quantity: "1", status: "ordered", notes: "" }); }}
-                    className="flex-1 py-2 rounded-lg border border-gray-300 text-xs font-semibold text-gray-600 hover:bg-gray-100"
+                    style={{ flex: 1, padding: '8px 0', borderRadius: 8, border: '1px solid #E8E8F0', fontSize: 12, fontWeight: 600, color: '#6B7280', background: '#fff', cursor: 'pointer' }}
                   >Cancel</button>
                   <button
                     onClick={addComponent}
                     disabled={!newComp.name.trim()}
-                    className="flex-1 py-2 rounded-lg bg-black text-white text-xs font-semibold hover:bg-[#222] disabled:opacity-40"
+                    style={{ flex: 1, padding: '8px 0', borderRadius: 8, background: '#635BFF', color: '#fff', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer', opacity: !newComp.name.trim() ? 0.4 : 1 }}
                   >Add</button>
                 </div>
               </div>
@@ -363,31 +376,31 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
 
             {/* Component list */}
             {local.components.length === 0 && !addingComponent ? (
-              <p className="text-sm text-gray-400 italic">No components added yet</p>
+              <p style={{ fontSize: 14, color: '#9CA3AF', fontStyle: 'italic' }}>No components added yet</p>
             ) : (
-              <div className="space-y-2">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {local.components.map((comp) => (
-                  <div key={comp.id} className="flex items-start gap-2 bg-white border border-gray-200 rounded-xl p-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold text-gray-900 truncate">{comp.name}</span>
-                        <span className="text-xs text-gray-400">× {comp.quantity}</span>
+                  <div key={comp.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: '#fff', border: '1px solid #E8E8F0', borderRadius: 12, padding: 12 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>{comp.name}</span>
+                        <span style={{ fontSize: 12, color: '#9CA3AF' }}>× {comp.quantity}</span>
                         <button
                           onClick={() => cycleStatus(comp.id)}
-                          className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border cursor-pointer hover:opacity-80 transition-opacity ${STATUS_COLORS[comp.status]}`}
+                          style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer', ...STATUS_STYLES[comp.status] }}
                           title="Click to advance status"
                         >
                           {comp.status.charAt(0).toUpperCase() + comp.status.slice(1)}
                         </button>
                       </div>
-                      {comp.notes && <p className="text-xs text-gray-500 mt-0.5">{comp.notes}</p>}
+                      {comp.notes && <p style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>{comp.notes}</p>}
                     </div>
                     <button
                       onClick={() => deleteComponent(comp.id)}
-                      className="flex-shrink-0 text-gray-300 hover:text-red-500 transition-colors p-0.5"
+                      style={{ flexShrink: 0, color: '#D1D5DB', background: 'transparent', border: 'none', cursor: 'pointer', padding: 2 }}
                       title="Remove component"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     </button>
@@ -398,18 +411,18 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
           </div>
 
           {/* Meta */}
-          <p className="text-xs text-gray-400">
+          <p style={{ fontSize: 12, color: '#9CA3AF' }}>
             Ref: {local.reference_number || "—"} &bull; Created {formatDateAU(local.created_at?.split("T")[0])}
           </p>
 
           {/* Delete */}
-          <div className="pt-2 pb-4">
+          <div style={{ paddingBottom: 8 }}>
             <button
               onClick={handleDelete}
               disabled={deleting}
-              className="w-full flex items-center justify-center gap-2 bg-red-600 text-white text-sm font-semibold py-3 rounded-xl hover:bg-red-700 active:scale-[0.98] transition-all disabled:opacity-50"
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, padding: '12px 0', borderRadius: 8, border: 'none', cursor: 'pointer', opacity: deleting ? 0.5 : 1 }}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
               </svg>
               {deleting ? "Deleting…" : "Delete Job"}

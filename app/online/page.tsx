@@ -67,10 +67,10 @@ export default function OnlinePage() {
 
       <div className="max-w-7xl mx-auto space-y-4">
         {/* Header bar */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+        <div style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, padding: 16 }}>
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex-1 min-w-[200px] relative">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <svg style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF' }} className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
               </svg>
               <input
@@ -78,15 +78,12 @@ export default function OnlinePage() {
                 placeholder="Search online orders…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black"
+                style={{ width: '100%', paddingLeft: 36, paddingRight: 12, border: '1px solid #E8E8F0', borderRadius: 8, background: '#fff', height: 40, fontSize: 14, color: '#1A1A2E', outline: 'none' }}
               />
             </div>
             {unprinted > 0 && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-xs font-semibold text-green-700">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-                </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#DCFCE7', border: '1px solid #BBF7D0', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#166534' }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10B981', display: 'inline-block' }} />
                 {unprinted} to print
               </div>
             )}
@@ -94,57 +91,53 @@ export default function OnlinePage() {
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100">
-            <h2 className="text-sm font-semibold text-black">
+        <div style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ padding: '12px 20px', borderBottom: '1px solid #E8E8F0' }}>
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', margin: 0 }}>
               {loading ? "Loading…" : `${packets.length} online order${packets.length !== 1 ? "s" : ""}`}
             </h2>
           </div>
           <div className="overflow-x-auto">
             {loading ? (
-              <div className="py-12 text-center text-gray-400 text-sm">Loading…</div>
+              <div style={{ padding: '48px 0', textAlign: 'center', color: '#6B7280', fontSize: 14 }}>Loading…</div>
             ) : packets.length === 0 ? (
-              <div className="py-12 text-center text-gray-400 text-sm">No online orders found</div>
+              <div style={{ padding: '48px 0', textAlign: 'center', color: '#6B7280', fontSize: 14 }}>No online orders found</div>
             ) : (
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left border-b border-gray-100 bg-gray-50">
-                    <th className="px-4 py-3 text-xs font-semibold text-gray-500">Ref</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-gray-500">Customer</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-gray-500">Source</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-gray-500">Order #</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-gray-500">Items</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-gray-500">Due Date</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-gray-500">Label</th>
+                  <tr style={{ textAlign: 'left', borderBottom: '1px solid #E8E8F0', background: '#F9FAFB' }}>
+                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ref</th>
+                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Customer</th>
+                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Source</th>
+                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Order #</th>
+                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Items</th>
+                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Due Date</th>
+                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Label</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody>
                   {packets.map((p) => {
                     const name = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
                     return (
                       <tr
                         key={p.id}
                         onClick={() => setSelected(p)}
-                        className="hover:bg-gray-50 cursor-pointer transition-colors"
+                        style={{ borderBottom: '1px solid #E8E8F0', cursor: 'pointer', transition: 'background .12s' }}
+                        onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = '#F9FAFB'}
+                        onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}
                       >
-                        <td className="px-4 py-3 font-mono text-xs text-gray-500">{p.reference_number}</td>
-                        <td className="px-4 py-3 font-medium text-gray-800">{name}</td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            (p.order_source ?? "").toLowerCase().includes("shopify")
-                              ? "bg-green-100 text-green-700"
-                              : "bg-gray-100 text-gray-600"
-                          }`}>
+                        <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: 12, color: '#6B7280' }}>{p.reference_number}</td>
+                        <td style={{ padding: '12px 16px', fontWeight: 500, color: '#1A1A2E' }}>{name}</td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{ display: 'inline-flex', padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 500, background: (p.order_source ?? "").toLowerCase().includes("shopify") ? '#DCFCE7' : '#F3F4F6', color: (p.order_source ?? "").toLowerCase().includes("shopify") ? '#166534' : '#374151' }}>
                             {p.order_source || "—"}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-gray-600">{p.order_number || "—"}</td>
-                        <td className="px-4 py-3 text-gray-500 max-w-xs truncate">{p.items_ordered || "—"}</td>
-                        <td className="px-4 py-3 text-gray-500">{formatDateAU(p.due_date) || "—"}</td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            p.label_printed ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
-                          }`}>
+                        <td style={{ padding: '12px 16px', color: '#374151' }}>{p.order_number || "—"}</td>
+                        <td style={{ padding: '12px 16px', color: '#6B7280', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.items_ordered || "—"}</td>
+                        <td style={{ padding: '12px 16px', color: '#6B7280' }}>{formatDateAU(p.due_date) || "—"}</td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{ display: 'inline-flex', padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 500, background: p.label_printed ? '#DCFCE7' : '#FEF3C7', color: p.label_printed ? '#166534' : '#92400E' }}>
                             {p.label_printed ? "Printed" : "Unprinted"}
                           </span>
                         </td>

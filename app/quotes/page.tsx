@@ -131,26 +131,18 @@ export default function QuotesPage() {
         {!loading && quotes.length > 0 && (
           <>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Active</p>
-                <p className="text-2xl font-bold text-gray-900">{activeQuotes.length}</p>
-              </div>
-              <div className={`rounded-xl border shadow-sm p-4 ${followUpDueToday.length > 0 ? "bg-red-50 border-red-200" : "bg-white border-gray-200"}`}>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Follow Up Today</p>
-                <p className={`text-2xl font-bold ${followUpDueToday.length > 0 ? "text-red-600" : "text-gray-900"}`}>{followUpDueToday.length}</p>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Won This Month</p>
-                <p className="text-2xl font-bold text-emerald-600">{wonThisMonth.length}</p>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Lost This Month</p>
-                <p className="text-2xl font-bold text-gray-900">{lostThisMonth.length}</p>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Conversion Rate</p>
-                <p className="text-2xl font-bold text-gray-900">{conversionRate}%</p>
-              </div>
+              {[
+                { label: 'Active', value: activeQuotes.length, color: '#1A1A2E' },
+                { label: 'Follow Up Today', value: followUpDueToday.length, color: followUpDueToday.length > 0 ? '#EF4444' : '#1A1A2E' },
+                { label: 'Won This Month', value: wonThisMonth.length, color: '#10B981' },
+                { label: 'Lost This Month', value: lostThisMonth.length, color: '#1A1A2E' },
+                { label: 'Conversion Rate', value: `${conversionRate}%`, color: '#1A1A2E' },
+              ].map(({ label, value, color }) => (
+                <div key={label} style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, padding: 16, borderLeft: '3px solid #635BFF' }}>
+                  <p style={{ fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>{label}</p>
+                  <p style={{ fontSize: 28, fontWeight: 700, color, lineHeight: 1 }}>{value}</p>
+                </div>
+              ))}
             </div>
             <QuoteStatsBar quotes={quotes} />
           </>
@@ -160,11 +152,11 @@ export default function QuotesPage() {
         {!loading && quotes.length > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3 flex-wrap">
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Filter by Staff</label>
+              <label style={{ fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filter by Staff</label>
               <select
                 value={quoteStaffFilter}
                 onChange={(e) => setQuoteStaffFilter(e.target.value)}
-                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black"
+                style={{ border: '1px solid #E8E8F0', borderRadius: 8, background: '#fff', height: 36, fontSize: 14, padding: '0 12px', color: '#1A1A2E', outline: 'none' }}
               >
                 <option value="all">All Staff</option>
                 {Object.keys(STAFF_EMAIL_MAP).map((name) => (
@@ -174,7 +166,7 @@ export default function QuotesPage() {
                 ))}
               </select>
               {quoteStaffFilter !== "all" && (
-                <button onClick={() => setQuoteStaffFilter("all")} className="text-xs text-gray-400 hover:text-gray-700 underline">
+                <button onClick={() => setQuoteStaffFilter("all")} style={{ fontSize: 12, color: '#6B7280', background: 'transparent', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
                   Clear
                 </button>
               )}
@@ -182,11 +174,9 @@ export default function QuotesPage() {
               {quoteView === "board" && (
                 <button
                   onClick={() => setShowConverted((v) => !v)}
-                  className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    showConverted ? "border-gray-400 bg-gray-100 text-gray-700" : "border-gray-200 bg-white text-gray-400 hover:text-gray-600"
-                  }`}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 8, border: `1px solid ${showConverted ? '#635BFF' : '#E8E8F0'}`, padding: '6px 12px', fontSize: 12, fontWeight: 600, background: showConverted ? '#EEF2FF' : '#fff', color: showConverted ? '#635BFF' : '#6B7280', cursor: 'pointer', transition: 'all .15s' }}
                 >
-                  <span className={`h-2 w-2 rounded-full ${showConverted ? "bg-gray-500" : "bg-gray-300"}`} />
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: showConverted ? '#635BFF' : '#D1D5DB', display: 'inline-block' }} />
                   {showConverted ? "Hiding converted" : "Show converted"}
                 </button>
               )}
@@ -197,9 +187,7 @@ export default function QuotesPage() {
                     <button
                       key={f}
                       onClick={() => setQuoteListFilter(f)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors capitalize ${
-                        quoteListFilter === f ? "bg-black text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                      }`}
+                      style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: quoteListFilter === f ? '#635BFF' : '#F9FAFB', color: quoteListFilter === f ? '#fff' : '#6B7280', border: `1px solid ${quoteListFilter === f ? '#635BFF' : '#E8E8F0'}`, cursor: 'pointer', transition: 'all .15s' }}
                     >
                       {f === "active" ? "Active" : f === "all" ? "All" : "Converted"}
                     </button>
@@ -207,14 +195,14 @@ export default function QuotesPage() {
                 </div>
               )}
             </div>
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm font-semibold">
+            <div style={{ display: 'flex', borderRadius: 8, border: '1px solid #E8E8F0', overflow: 'hidden', fontSize: 14, fontWeight: 600 }}>
               <button
                 onClick={() => setQuoteView("board")}
-                className={`px-4 py-2 transition-colors ${quoteView === "board" ? "bg-black text-white" : "bg-white text-gray-500 hover:text-black"}`}
+                style={{ padding: '8px 16px', background: quoteView === "board" ? '#635BFF' : '#fff', color: quoteView === "board" ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', transition: 'all .15s' }}
               >Board</button>
               <button
                 onClick={() => setQuoteView("list")}
-                className={`px-4 py-2 transition-colors border-l border-gray-200 ${quoteView === "list" ? "bg-black text-white" : "bg-white text-gray-500 hover:text-black"}`}
+                style={{ padding: '8px 16px', background: quoteView === "list" ? '#635BFF' : '#fff', color: quoteView === "list" ? '#fff' : '#6B7280', border: 'none', borderLeft: '1px solid #E8E8F0', cursor: 'pointer', transition: 'all .15s' }}
               >List</button>
             </div>
           </div>
@@ -240,21 +228,21 @@ export default function QuotesPage() {
             showConverted={showConverted}
           />
         ) : (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, overflow: 'hidden' }}>
             {selectedIds.size > 0 && (
-              <div className="px-4 py-2.5 bg-red-50 border-b border-red-100 flex items-center justify-between gap-3">
-                <span className="text-sm font-medium text-red-700">{selectedIds.size} quote{selectedIds.size !== 1 ? "s" : ""} selected</span>
+              <div style={{ padding: '10px 16px', background: '#FEE2E2', borderBottom: '1px solid #FECACA', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <span style={{ fontSize: 14, fontWeight: 500, color: '#991B1B' }}>{selectedIds.size} quote{selectedIds.size !== 1 ? "s" : ""} selected</span>
                 <div className="flex gap-2">
-                  <button onClick={() => setSelectedIds(new Set())} className="text-xs font-semibold text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200 bg-white">Clear</button>
-                  <button onClick={handleBulkDelete} className="text-xs font-semibold text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg">Delete ({selectedIds.size})</button>
+                  <button onClick={() => setSelectedIds(new Set())} style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', padding: '6px 12px', borderRadius: 8, border: '1px solid #E8E8F0', background: '#fff', cursor: 'pointer' }}>Clear</button>
+                  <button onClick={handleBulkDelete} style={{ fontSize: 12, fontWeight: 600, color: '#fff', background: '#EF4444', padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer' }}>Delete ({selectedIds.size})</button>
                 </div>
               </div>
             )}
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 text-left bg-gray-50">
-                    <th className="px-4 py-3 w-8">
+                  <tr style={{ borderBottom: '1px solid #E8E8F0', textAlign: 'left', background: '#F9FAFB' }}>
+                    <th style={{ padding: '12px 16px', width: 32 }}>
                       <input
                         type="checkbox"
                         checked={filteredListQuotes.length > 0 && filteredListQuotes.every((q) => selectedIds.has(q.id))}
@@ -265,30 +253,26 @@ export default function QuotesPage() {
                           if (e.target.checked) setSelectedIds(new Set(filteredListQuotes.map((q) => q.id)));
                           else setSelectedIds(new Set());
                         }}
-                        className="h-4 w-4 rounded border-gray-300 accent-black cursor-pointer"
+                        style={{ accentColor: '#635BFF', cursor: 'pointer' }}
                       />
                     </th>
-                    <th className="px-4 py-3 font-semibold text-black">Reference No.</th>
-                    <th className="px-4 py-3 font-semibold text-black">Customer</th>
-                    <th className="px-4 py-3 font-semibold text-black">Assigned To</th>
-                    <th className="px-4 py-3 font-semibold text-black">Stage</th>
-                    <th className="px-4 py-3 font-semibold text-black">Follow Up Date</th>
-                    {quoteListFilter === "converted" && (
-                      <th className="px-4 py-3 font-semibold text-black">Order</th>
-                    )}
-                    <th className="px-4 py-3 font-semibold text-black">Created At</th>
+                    {['Reference No.','Customer','Assigned To','Stage','Follow Up Date',...(quoteListFilter === "converted" ? ['Order'] : []),'Created At'].map(h => (
+                      <th key={h} style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                    ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody>
                   {filteredListQuotes.map((q) => {
                     const name = [q.customer_first_name, q.customer_last_name].filter(Boolean).join(" ") || "—";
                     return (
                       <tr
                         key={q.id}
                         onClick={() => setSelectedQuote(q)}
-                        className="hover:bg-gray-50 cursor-pointer"
+                        style={{ borderBottom: '1px solid #E8E8F0', cursor: 'pointer', transition: 'background .12s' }}
+                        onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = '#F9FAFB'}
+                        onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}
                       >
-                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <td style={{ padding: '12px 16px' }} onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
                             checked={selectedIds.has(q.id)}
@@ -299,18 +283,18 @@ export default function QuotesPage() {
                                 return n;
                               });
                             }}
-                            className="h-4 w-4 rounded border-gray-300 accent-black cursor-pointer"
+                            style={{ accentColor: '#635BFF', cursor: 'pointer' }}
                           />
                         </td>
-                        <td className="px-4 py-3 font-mono text-xs text-gray-500">{q.reference_number}</td>
-                        <td className="px-4 py-3 font-medium text-gray-800">{name}</td>
-                        <td className="px-4 py-3 text-gray-600 capitalize">{q.assigned_to || "—"}</td>
-                        <td className="px-4 py-3 text-gray-600 capitalize">{q.status?.replace(/_/g, " ") || "—"}</td>
-                        <td className="px-4 py-3 text-gray-500">{formatDateAU(q.follow_up_date) || "—"}</td>
+                        <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: 12, color: '#6B7280' }}>{q.reference_number}</td>
+                        <td style={{ padding: '12px 16px', fontWeight: 500, color: '#1A1A2E' }}>{name}</td>
+                        <td style={{ padding: '12px 16px', color: '#374151' }} className="capitalize">{q.assigned_to || "—"}</td>
+                        <td style={{ padding: '12px 16px', color: '#374151' }} className="capitalize">{q.status?.replace(/_/g, " ") || "—"}</td>
+                        <td style={{ padding: '12px 16px', color: '#6B7280' }}>{formatDateAU(q.follow_up_date) || "—"}</td>
                         {quoteListFilter === "converted" && (
-                          <td className="px-4 py-3 font-mono text-xs text-gray-500">{q.packet_reference || "—"}</td>
+                          <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: 12, color: '#6B7280' }}>{q.packet_reference || "—"}</td>
                         )}
-                        <td className="px-4 py-3 text-gray-400 text-xs">{formatDateAU(q.created_at?.split("T")[0]) || "—"}</td>
+                        <td style={{ padding: '12px 16px', color: '#9CA3AF', fontSize: 12 }}>{formatDateAU(q.created_at?.split("T")[0]) || "—"}</td>
                       </tr>
                     );
                   })}

@@ -119,7 +119,7 @@ export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate, sho
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-      <div className="flex gap-3 overflow-x-auto pb-4 min-h-[60vh] items-start">
+      <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 16, minHeight: '60vh', alignItems: 'flex-start' }}>
         {PIPELINE_STAGES.map((stage) => {
           const config = STAGE_CONFIG[stage];
           const cards = sortCards(
@@ -135,23 +135,22 @@ export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate, sho
           return (
             <div
               key={stage}
-              className="flex-shrink-0 w-64 flex flex-col rounded-2xl overflow-hidden border border-gray-200 shadow-sm"
+              style={{ flexShrink: 0, width: 256, display: 'flex', flexDirection: 'column', borderRadius: 12, overflow: 'hidden', border: '1px solid #E8E8F0' }}
             >
               {/* Column header */}
               <div
-                className="px-3 py-2.5 flex items-center justify-between flex-shrink-0"
-                style={{ backgroundColor: config.color }}
+                style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, background: config.color }}
               >
-                <span className="text-white font-semibold text-sm tracking-wide">
+                <span style={{ color: '#fff', fontWeight: 600, fontSize: 13, letterSpacing: '0.02em' }}>
                   {config.label}
                 </span>
-                <div className="flex items-center gap-1.5">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   {overdueCount > 0 && (
-                    <span className="bg-white/30 text-white text-xs font-bold rounded-full px-1.5 py-0.5">
+                    <span style={{ background: 'rgba(255,255,255,0.3)', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '1px 6px' }}>
                       {overdueCount} overdue
                     </span>
                   )}
-                  <span className="bg-white/20 text-white text-xs font-bold rounded-full px-2 py-0.5">
+                  <span style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '1px 8px' }}>
                     {cards.length}
                   </span>
                 </div>
@@ -163,14 +162,10 @@ export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate, sho
                   <div
                     ref={provided.innerRef}
                     {...provided.droppableProps}
-                    className={`flex-1 p-2 space-y-2 min-h-[200px] transition-colors duration-150 ${
-                      snapshot.isDraggingOver
-                        ? "bg-gray-100 ring-2 ring-inset ring-gray-300"
-                        : "bg-gray-50"
-                    }`}
+                    style={{ flex: 1, padding: 8, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 200, background: snapshot.isDraggingOver ? '#EEF2FF' : '#F9FAFB', transition: 'background 0.15s' }}
                   >
                     {cards.length === 0 && !snapshot.isDraggingOver && (
-                      <p className="text-xs text-gray-400 text-center pt-6 italic select-none">
+                      <p style={{ fontSize: 12, color: '#D1D5DB', textAlign: 'center', paddingTop: 24, fontStyle: 'italic', userSelect: 'none' }}>
                         No quotes
                       </p>
                     )}
@@ -182,12 +177,14 @@ export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate, sho
                             ref={dragProvided.innerRef}
                             {...dragProvided.draggableProps}
                             {...dragProvided.dragHandleProps}
-                            style={dragProvided.draggableProps.style}
-                            className={`transition-shadow duration-150 rounded-xl ${
-                              dragSnapshot.isDragging
-                                ? "shadow-2xl ring-2 ring-black/10 rotate-1 scale-[1.02]"
-                                : ""
-                            } ${q.status === "converted" ? "opacity-60" : ""}`}
+                            style={{
+                              ...dragProvided.draggableProps.style,
+                              transition: 'box-shadow 0.15s',
+                              borderRadius: 10,
+                              boxShadow: dragSnapshot.isDragging ? '0 8px 24px rgba(0,0,0,0.12)' : undefined,
+                              transform: dragSnapshot.isDragging ? `${dragProvided.draggableProps.style?.transform ?? ''} rotate(1deg)` : undefined,
+                              opacity: q.status === "converted" ? 0.6 : 1,
+                            }}
                           >
                             <QuoteCard
                               quote={q}

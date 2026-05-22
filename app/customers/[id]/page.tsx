@@ -7,21 +7,23 @@ import PacketDetailDrawer from "@/components/PacketDetailDrawer";
 
 type Tab = "orders" | "quotes" | "timeline" | "notes";
 
-const TYPE_COLORS: Record<string, string> = {
-  repair:        "bg-orange-100 text-orange-700",
-  custom_order:  "bg-purple-100 text-purple-700",
-  layby:         "bg-blue-100 text-blue-700",
-  client_intake: "bg-teal-100 text-teal-700",
-  online_order:  "bg-green-100 text-green-700",
+const TYPE_BADGE_STYLES: Record<string, React.CSSProperties> = {
+  repair:        { background: '#FEF3C7', color: '#92400E' },
+  custom_order:  { background: '#EEF2FF', color: '#635BFF' },
+  layby:         { background: '#DBEAFE', color: '#1E40AF' },
+  client_intake: { background: '#DCFCE7', color: '#166534' },
+  online_order:  { background: '#DCFCE7', color: '#166534' },
 };
 
-const STAGE_COLORS: Record<string, string> = {
-  pending:      "bg-gray-100 text-gray-600",
-  follow_up_1:  "bg-amber-100 text-amber-700",
-  follow_up_2:  "bg-orange-100 text-orange-700",
-  job_won:      "bg-green-100 text-green-700",
-  job_lost:     "bg-red-100 text-red-600",
+const STAGE_BADGE_STYLES: Record<string, React.CSSProperties> = {
+  pending:      { background: '#F3F4F6', color: '#374151' },
+  follow_up_1:  { background: '#DBEAFE', color: '#1E40AF' },
+  follow_up_2:  { background: '#FEF3C7', color: '#92400E' },
+  job_won:      { background: '#DCFCE7', color: '#166534' },
+  job_lost:     { background: '#FEE2E2', color: '#991B1B' },
 };
+// Default fallback styles
+const DEFAULT_BADGE: React.CSSProperties = { background: '#F3F4F6', color: '#374151' };
 
 interface CustomerData {
   email: string;
@@ -53,9 +55,9 @@ interface TimelineEvent {
 
 function StatPill({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
   return (
-    <div className={`flex flex-col items-center justify-center rounded-xl px-4 py-3 ${accent ? "bg-black text-white" : "bg-gray-50 border border-gray-200"}`}>
-      <span className={`text-xl font-bold ${accent ? "text-white" : "text-gray-900"}`}>{value}</span>
-      <span className={`text-xs font-medium mt-0.5 ${accent ? "text-white/70" : "text-gray-400"}`}>{label}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: 12, padding: '12px 16px', background: accent ? '#635BFF' : '#F9FAFB', border: accent ? 'none' : '1px solid #E8E8F0' }}>
+      <span style={{ fontSize: 20, fontWeight: 700, color: accent ? '#fff' : '#1A1A2E' }}>{value}</span>
+      <span style={{ fontSize: 12, fontWeight: 500, marginTop: 2, color: accent ? 'rgba(255,255,255,0.7)' : '#6B7280' }}>{label}</span>
     </div>
   );
 }
@@ -64,15 +66,11 @@ function TabButton({ label, active, onClick, count }: { label: string; active: b
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${
-        active
-          ? "border-black text-black"
-          : "border-transparent text-gray-400 hover:text-gray-700"
-      }`}
+      style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', fontSize: 14, fontWeight: 600, background: 'transparent', border: 'none', borderBottom: `2px solid ${active ? '#635BFF' : 'transparent'}`, color: active ? '#635BFF' : '#6B7280', cursor: 'pointer', transition: 'all .15s', whiteSpace: 'nowrap', marginBottom: -1 }}
     >
       {label}
       {count != null && count > 0 && (
-        <span className={`text-xs rounded-full px-1.5 py-0.5 font-bold ${active ? "bg-black text-white" : "bg-gray-100 text-gray-600"}`}>
+        <span style={{ fontSize: 11, borderRadius: 999, padding: '2px 6px', fontWeight: 700, background: active ? '#635BFF' : '#F3F4F6', color: active ? '#fff' : '#6B7280' }}>
           {count}
         </span>
       )}
@@ -193,17 +191,17 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
       <div className="max-w-4xl mx-auto space-y-5">
 
         {/* ── Customer header ── */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+        <div style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, padding: 24 }}>
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               {/* Initials circle */}
               <div className="flex items-center gap-3 mb-2">
-                <div className="w-12 h-12 rounded-full bg-[#A3B2A4] flex items-center justify-center text-white text-lg font-bold flex-shrink-0">
+                <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#635BFF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 18, fontWeight: 700, flexShrink: 0 }}>
                   {(customer?.first_name?.[0] ?? email[0] ?? "?").toUpperCase()}
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-gray-900">{name}</h1>
-                  <p className="text-sm text-gray-500">{email}</p>
+                  <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>{name}</h1>
+                  <p style={{ fontSize: 14, color: '#6B7280', margin: 0 }}>{email}</p>
                 </div>
               </div>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500 mt-2">
@@ -239,8 +237,8 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
         </div>
 
         {/* ── Tabs ── */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="flex border-b border-gray-100 overflow-x-auto">
+        <div style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', borderBottom: '1px solid #E8E8F0', overflowX: 'auto' }}>
             <TabButton label="Orders" active={activeTab === "orders"} onClick={() => setActiveTab("orders")} count={packets.length} />
             <TabButton label="Quotes" active={activeTab === "quotes"} onClick={() => setActiveTab("quotes")} count={quotes.length} />
             <TabButton label="Timeline" active={activeTab === "timeline"} onClick={() => setActiveTab("timeline")} count={timeline.length} />
@@ -255,18 +253,13 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
               ) : (
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left bg-gray-50 border-b border-gray-100">
-                      <th className="px-5 py-3 text-xs font-semibold text-gray-500">Reference</th>
-                      <th className="px-5 py-3 text-xs font-semibold text-gray-500">Type</th>
-                      <th className="px-5 py-3 text-xs font-semibold text-gray-500">Description</th>
-                      <th className="px-5 py-3 text-xs font-semibold text-gray-500">Due</th>
-                      <th className="px-5 py-3 text-xs font-semibold text-gray-500">Total</th>
-                      <th className="px-5 py-3 text-xs font-semibold text-gray-500">Status</th>
-                      <th className="px-5 py-3 text-xs font-semibold text-gray-500">Specs</th>
-                      <th className="px-5 py-3 text-xs font-semibold text-gray-500">Certificate</th>
+                    <tr style={{ textAlign: 'left', borderBottom: '1px solid #E8E8F0', background: '#F9FAFB' }}>
+                      {['Reference','Type','Description','Due','Total','Status','Specs','Certificate'].map((h) => (
+                        <th key={h} style={{ padding: '12px 20px', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                      ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
+                  <tbody>
                     {packets.map((p) => {
                       const isOverdue = p.due_date && p.due_date < new Date().toISOString().split("T")[0] && !p.collected_date;
                       const status = p.collected_date ? "Collected" : isOverdue ? "Overdue" : "Active";
@@ -274,40 +267,41 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
                         <tr
                           key={p.id}
                           onClick={() => setSelectedPacket(p)}
-                          className="hover:bg-gray-50 cursor-pointer transition-colors"
+                          style={{ borderBottom: '1px solid #E8E8F0', cursor: 'pointer', transition: 'background .12s' }}
+                          onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = '#F9FAFB'}
+                          onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}
                         >
-                          <td className="px-5 py-3 font-mono text-xs text-gray-500">{p.reference_number}</td>
-                          <td className="px-5 py-3">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${TYPE_COLORS[p.packet_type] ?? "bg-gray-100 text-gray-600"}`}>
+                          <td style={{ padding: '12px 20px', fontFamily: 'monospace', fontSize: 11, color: '#6B7280' }}>{p.reference_number}</td>
+                          <td style={{ padding: '12px 20px' }}>
+                            <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, ...(TYPE_BADGE_STYLES[p.packet_type] ?? DEFAULT_BADGE) }}>
                               {packetTypeLabel(p.packet_type)}
                             </span>
                           </td>
-                          <td className="px-5 py-3 text-gray-700 max-w-[200px] truncate">
+                          <td style={{ padding: '12px 20px', color: '#374151', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {p.articles || p.instructions || "—"}
                           </td>
-                          <td className={`px-5 py-3 text-sm ${isOverdue ? "text-red-600 font-semibold" : "text-gray-500"}`}>
+                          <td style={{ padding: '12px 20px', fontSize: 14, color: isOverdue ? '#EF4444' : '#6B7280', fontWeight: isOverdue ? 600 : 400 }}>
                             {formatDateAU(p.due_date) || "—"}
                           </td>
-                          <td className="px-5 py-3 font-semibold text-gray-800">
+                          <td style={{ padding: '12px 20px', fontWeight: 600, color: '#1A1A2E' }}>
                             {typeof p.total_charges === "number" ? formatCurrency(p.total_charges) : "—"}
                           </td>
-                          <td className="px-5 py-3">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
-                              status === "Collected" ? "bg-green-100 text-green-700" :
-                              status === "Overdue"   ? "bg-red-100 text-red-600" :
-                              "bg-gray-100 text-gray-600"
-                            }`}>
+                          <td style={{ padding: '12px 20px' }}>
+                            <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600,
+                              ...(status === "Collected" ? { background: '#DCFCE7', color: '#166534' } :
+                                  status === "Overdue"   ? { background: '#FEE2E2', color: '#991B1B' } :
+                                  { background: '#F3F4F6', color: '#374151' }) }}>
                               {status}
                             </span>
                           </td>
-                          <td className="px-5 py-3">
+                          <td style={{ padding: '12px 20px' }}>
                             {p.item_specifications && Object.keys(p.item_specifications as Record<string, unknown>).length > 0 && (
-                              <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                              <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: '#DBEAFE', color: '#1E40AF' }}>
                                 Specs
                               </span>
                             )}
                           </td>
-                          <td className="px-5 py-3">
+                          <td style={{ padding: '12px 20px' }}>
                             {p.valuation_status === "approved" && (
                               <button
                                 onClick={(e) => {
@@ -316,7 +310,7 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
                                     generateValuationCertificate(p);
                                   });
                                 }}
-                                className="inline-flex px-2 py-1 rounded-lg text-xs font-semibold bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors"
+                                style={{ display: 'inline-flex', padding: '4px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600, background: '#DCFCE7', color: '#166534', border: 'none', cursor: 'pointer' }}
                               >
                                 View Certificate
                               </button>
@@ -339,28 +333,30 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
               ) : (
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left bg-gray-50 border-b border-gray-100">
-                      <th className="px-5 py-3 text-xs font-semibold text-gray-500">Reference</th>
-                      <th className="px-5 py-3 text-xs font-semibold text-gray-500">Type</th>
-                      <th className="px-5 py-3 text-xs font-semibold text-gray-500">Notes</th>
-                      <th className="px-5 py-3 text-xs font-semibold text-gray-500">Stage</th>
-                      <th className="px-5 py-3 text-xs font-semibold text-gray-500">Assigned To</th>
-                      <th className="px-5 py-3 text-xs font-semibold text-gray-500">Created</th>
+                    <tr style={{ textAlign: 'left', borderBottom: '1px solid #E8E8F0', background: '#F9FAFB' }}>
+                      {['Reference','Type','Notes','Stage','Assigned To','Created'].map((h) => (
+                        <th key={h} style={{ padding: '12px 20px', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                      ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
+                  <tbody>
                     {quotes.map((q) => (
-                      <tr key={q.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-5 py-3 font-mono text-xs text-gray-500">{q.reference_number}</td>
-                        <td className="px-5 py-3 text-gray-700">{q.quote_type || "—"}</td>
-                        <td className="px-5 py-3 text-gray-500 max-w-[200px] truncate">{q.notes || "—"}</td>
-                        <td className="px-5 py-3">
-                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${STAGE_COLORS[q.status] ?? "bg-gray-100 text-gray-600"}`}>
+                      <tr
+                        key={q.id}
+                        style={{ borderBottom: '1px solid #E8E8F0', transition: 'background .12s' }}
+                        onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = '#F9FAFB'}
+                        onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}
+                      >
+                        <td style={{ padding: '12px 20px', fontFamily: 'monospace', fontSize: 11, color: '#6B7280' }}>{q.reference_number}</td>
+                        <td style={{ padding: '12px 20px', color: '#374151' }}>{q.quote_type || "—"}</td>
+                        <td style={{ padding: '12px 20px', color: '#6B7280', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.notes || "—"}</td>
+                        <td style={{ padding: '12px 20px' }}>
+                          <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, ...(STAGE_BADGE_STYLES[q.status] ?? DEFAULT_BADGE) }}>
                             {(q.status ?? "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
                           </span>
                         </td>
-                        <td className="px-5 py-3 text-gray-500">{q.assigned_to || q.staff_member || "—"}</td>
-                        <td className="px-5 py-3 text-gray-400 text-xs">{formatDateAU(q.created_at?.split("T")[0])}</td>
+                        <td style={{ padding: '12px 20px', color: '#6B7280' }}>{q.assigned_to || q.staff_member || "—"}</td>
+                        <td style={{ padding: '12px 20px', color: '#9CA3AF', fontSize: 12 }}>{formatDateAU(q.created_at?.split("T")[0])}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -371,43 +367,40 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
 
           {/* ── Timeline tab ── */}
           {activeTab === "timeline" && (
-            <div className="px-5 py-4">
+            <div style={{ padding: '16px 20px' }}>
               {timeline.length === 0 ? (
-                <p className="py-10 text-center text-gray-400 text-sm">No history</p>
+                <p style={{ padding: '40px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 14 }}>No history</p>
               ) : (
-                <div className="relative">
+                <div style={{ position: 'relative' }}>
                   {/* Vertical line */}
-                  <div className="absolute left-5 top-0 bottom-0 w-px bg-gray-100" />
-                  <div className="space-y-4 pl-14">
+                  <div style={{ position: 'absolute', left: 20, top: 0, bottom: 0, width: 1, background: '#E8E8F0' }} />
+                  <div style={{ paddingLeft: 56, display: 'flex', flexDirection: 'column', gap: 16 }}>
                     {timeline.map((ev, i) => (
-                      <div key={i} className="relative">
+                      <div key={i} style={{ position: 'relative' }}>
                         {/* Icon */}
-                        <div className={`absolute -left-9 top-1 w-8 h-8 rounded-full flex items-center justify-center text-sm ${
-                          ev.type === "order" ? "bg-black text-white" : "bg-[#A3B2A4] text-white"
-                        }`}>
+                        <div style={{ position: 'absolute', left: -36, top: 4, width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, background: ev.type === "order" ? '#635BFF' : '#EEF2FF', color: ev.type === "order" ? '#fff' : '#635BFF' }}>
                           {ev.type === "order" ? "📦" : "💬"}
                         </div>
-                        <div className="bg-white border border-gray-200 rounded-xl p-3 hover:border-gray-300 transition-colors">
-                          <div className="flex items-start justify-between gap-2 flex-wrap">
+                        <div style={{ background: '#fff', border: '1px solid #E8E8F0', borderRadius: 12, padding: 12 }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
                             <div>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-sm font-semibold text-gray-900">{ev.label}</span>
-                                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                  ev.type === "order"
-                                    ? (ev.status === "Collected" ? "bg-green-100 text-green-700" : ev.status === "Overdue" ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-600")
-                                    : (STAGE_COLORS[ev.status] ?? "bg-gray-100 text-gray-600")
-                                }`}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>{ev.label}</span>
+                                <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600,
+                                  ...(ev.type === "order"
+                                    ? (ev.status === "Collected" ? { background: '#DCFCE7', color: '#166534' } : ev.status === "Overdue" ? { background: '#FEE2E2', color: '#991B1B' } : { background: '#F3F4F6', color: '#374151' })
+                                    : (STAGE_BADGE_STYLES[ev.status] ?? DEFAULT_BADGE)) }}>
                                   {ev.status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
                                 </span>
-                                <span className="font-mono text-xs text-gray-300">{ev.ref}</span>
+                                <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#D1D5DB' }}>{ev.ref}</span>
                               </div>
-                              <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{ev.description}</p>
+                              <p style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{ev.description}</p>
                             </div>
-                            <div className="text-right flex-shrink-0">
+                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
                               {ev.amount != null && (
-                                <p className="text-sm font-bold text-gray-900">{formatCurrency(ev.amount)}</p>
+                                <p style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>{formatCurrency(ev.amount)}</p>
                               )}
-                              <p className="text-xs text-gray-400">{formatDateAU(ev.date.split("T")[0])}</p>
+                              <p style={{ fontSize: 12, color: '#9CA3AF' }}>{formatDateAU(ev.date.split("T")[0])}</p>
                             </div>
                           </div>
                         </div>
@@ -421,10 +414,10 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
 
           {/* ── Notes tab ── */}
           {activeTab === "notes" && (
-            <div className="px-5 py-4">
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Staff Notes</label>
-                {notesSaving && <span className="text-xs text-gray-400 animate-pulse">Saving…</span>}
+            <div style={{ padding: '16px 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <label style={{ fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Staff Notes</label>
+                {notesSaving && <span style={{ fontSize: 12, color: '#9CA3AF' }} className="animate-pulse">Saving…</span>}
               </div>
               <textarea
                 rows={8}
@@ -434,9 +427,9 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
                   saveNotes(e.target.value);
                 }}
                 placeholder="Add notes about this customer — preferences, history, anything relevant for future visits…"
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-black focus:bg-white transition-colors resize-none"
+                style={{ width: '100%', borderRadius: 8, border: '1px solid #E8E8F0', background: '#F9FAFB', padding: '12px 16px', fontSize: 14, color: '#1A1A2E', outline: 'none', resize: 'vertical' as const, fontFamily: 'inherit' }}
               />
-              <p className="text-xs text-gray-400 mt-2">Notes save automatically. Visible to all staff.</p>
+              <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 8 }}>Notes save automatically. Visible to all staff.</p>
             </div>
           )}
         </div>

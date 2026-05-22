@@ -11,7 +11,6 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import NavBar from "@/components/NavBar";
 import { useUser } from "@/context/UserContext";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -137,22 +136,20 @@ export default function RevenuePage() {
     if (preset === "last_month") { setFrom(startOfLastMonthISO()); setTo(endOfLastMonthISO()); }
   }
 
-  const inputClass = "rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black";
   const s = data?.summary;
 
   return (
     <>
-      <NavBar />
-      <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-7xl mx-auto space-y-6">
 
         {/* ── Page header ── */}
         <div>
-          <h1 className="text-2xl font-bold text-black">Revenue</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Completed orders with charges recorded</p>
+          <h1 style={{ fontSize: 22, fontWeight: 600, color: '#1A1A2E' }}>Revenue</h1>
+          <p style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>Completed orders with charges recorded</p>
         </div>
 
         {/* ── Filters ── */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-3">
+        <div style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, padding: 16 }} className="space-y-3">
           {/* Quick buttons */}
           <div className="flex flex-wrap gap-2">
             {([
@@ -164,7 +161,9 @@ export default function RevenuePage() {
               <button
                 key={preset}
                 onClick={() => applyQuick(preset)}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: '#F9FAFB', color: '#6B7280', border: '1px solid #E8E8F0', cursor: 'pointer', transition: 'all .15s' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#EEF2FF'; (e.currentTarget as HTMLButtonElement).style.color = '#635BFF'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#F9FAFB'; (e.currentTarget as HTMLButtonElement).style.color = '#6B7280'; }}
               >
                 {label}
               </button>
@@ -177,22 +176,22 @@ export default function RevenuePage() {
                 type="date"
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
-                className={inputClass}
+                style={{ border: '1px solid #E8E8F0', borderRadius: 8, background: '#fff', height: 40, fontSize: 14, padding: '0 12px', color: '#1A1A2E', outline: 'none' }}
                 title="From date"
               />
-              <span className="text-gray-400 text-sm">to</span>
+              <span style={{ color: '#6B7280', fontSize: 13 }}>to</span>
               <input
                 type="date"
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
-                className={inputClass}
+                style={{ border: '1px solid #E8E8F0', borderRadius: 8, background: '#fff', height: 40, fontSize: 14, padding: '0 12px', color: '#1A1A2E', outline: 'none' }}
                 title="To date"
               />
             </div>
             <select
               value={type}
               onChange={(e) => setType(e.target.value)}
-              className={inputClass}
+              style={{ border: '1px solid #E8E8F0', borderRadius: 8, background: '#fff', height: 40, fontSize: 14, padding: '0 12px', color: '#1A1A2E', outline: 'none' }}
             >
               {TYPE_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -225,17 +224,17 @@ export default function RevenuePage() {
                 { label: "Avg Order Value",  value: formatCurrency(s?.avgOrderValue ?? 0) },
                 { label: "Largest Order",    value: formatCurrency(s?.largestOrder ?? 0) },
               ].map(({ label, value }) => (
-                <div key={label} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{label}</p>
-                  <p className="text-2xl font-bold text-black leading-none">{value}</p>
+                <div key={label} style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, padding: 20, borderLeft: '3px solid #635BFF' }}>
+                  <p style={{ fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>{label}</p>
+                  <p style={{ fontSize: 28, fontWeight: 700, color: '#1A1A2E', lineHeight: 1 }}>{value}</p>
                 </div>
               ))}
             </div>
 
             {/* ── Bar chart ── */}
             {data.daily.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-                <h2 className="text-sm font-semibold text-black mb-4">Daily Revenue</h2>
+              <div style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, padding: 20 }}>
+                <h2 style={{ fontSize: 16, fontWeight: 600, color: '#1A1A2E', marginBottom: 16 }}>Daily Revenue</h2>
                 <ResponsiveContainer width="100%" height={240}>
                   <BarChart data={data.daily} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -257,7 +256,7 @@ export default function RevenuePage() {
                       labelFormatter={(label: any) => formatDateLabel(String(label ?? ""))}
                       contentStyle={{ fontSize: 12 }}
                     />
-                    <Bar dataKey="revenue" fill="#000000" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="revenue" fill="#635BFF" radius={[3, 3, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -265,9 +264,9 @@ export default function RevenuePage() {
 
             {/* ── Day-by-day table ── */}
             {data.daily.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="px-5 py-3 border-b border-gray-100">
-                  <h2 className="text-sm font-semibold text-black">Day-by-Day Breakdown</h2>
+              <div style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, overflow: 'hidden' }}>
+                <div style={{ padding: '12px 20px', borderBottom: '1px solid #E8E8F0' }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 600, color: '#1A1A2E' }}>Day-by-Day Breakdown</h2>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -310,9 +309,9 @@ export default function RevenuePage() {
 
             {/* ── Order rows ── */}
             {data.rows.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="px-5 py-3 border-b border-gray-100">
-                  <h2 className="text-sm font-semibold text-black">{data.rows.length} Orders</h2>
+              <div style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, overflow: 'hidden' }}>
+                <div style={{ padding: '12px 20px', borderBottom: '1px solid #E8E8F0' }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 600, color: '#1A1A2E' }}>{data.rows.length} Orders</h2>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -346,7 +345,7 @@ export default function RevenuePage() {
             )}
           </>
         )}
-      </main>
+      </div>
     </>
   );
 }

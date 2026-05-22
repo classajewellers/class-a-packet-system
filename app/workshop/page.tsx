@@ -73,19 +73,16 @@ export default function WorkshopPage() {
   return (
     <div className="space-y-6">
       {/* Tab bar */}
-      <div className="flex border-b border-gray-200 gap-0">
-        <button
-          onClick={() => setTab("workshop")}
-          className={`px-5 py-2.5 text-sm font-semibold border-b-2 transition-colors ${tab === "workshop" ? "border-black text-black" : "border-transparent text-gray-400 hover:text-gray-700"}`}
-        >
-          Workshop
-        </button>
-        <button
-          onClick={() => setTab("valuations")}
-          className={`px-5 py-2.5 text-sm font-semibold border-b-2 transition-colors ${tab === "valuations" ? "border-black text-black" : "border-transparent text-gray-400 hover:text-gray-700"}`}
-        >
-          Valuations
-        </button>
+      <div style={{ display: 'flex', borderBottom: '1px solid #E8E8F0' }}>
+        {(['workshop','valuations'] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            style={{ padding: '10px 20px', fontSize: 14, fontWeight: 600, border: 'none', background: 'transparent', cursor: 'pointer', borderBottom: `2px solid ${tab === t ? '#635BFF' : 'transparent'}`, color: tab === t ? '#635BFF' : '#6B7280', transition: 'all .15s', marginBottom: -1, textTransform: 'capitalize' }}
+          >
+            {t.charAt(0).toUpperCase() + t.slice(1)}
+          </button>
+        ))}
       </div>
 
       {tab === "workshop" && (<>
@@ -96,9 +93,7 @@ export default function WorkshopPage() {
             <button
               key={f}
               onClick={() => setJobTypeFilter(f)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-colors ${
-                jobTypeFilter === f ? "bg-black text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}
+              style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: jobTypeFilter === f ? '#635BFF' : '#F9FAFB', color: jobTypeFilter === f ? '#fff' : '#6B7280', border: `1px solid ${jobTypeFilter === f ? '#635BFF' : '#E8E8F0'}`, cursor: 'pointer', transition: 'all .15s', textTransform: 'capitalize' }}
             >
               {f === "overdue" ? "Overdue" : f.charAt(0).toUpperCase() + f.slice(1)}
             </button>
@@ -108,7 +103,7 @@ export default function WorkshopPage() {
           <select
             value={jewellerFilter}
             onChange={(e) => setJewellerFilter(e.target.value)}
-            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black"
+            style={{ border: '1px solid #E8E8F0', borderRadius: 8, background: '#fff', height: 36, fontSize: 14, padding: '0 12px', color: '#1A1A2E', outline: 'none' }}
           >
             <option value="all">All Jewellers</option>
             {jewellers.map((j) => (
@@ -116,14 +111,14 @@ export default function WorkshopPage() {
             ))}
           </select>
         )}
-        <div className="ml-auto flex rounded-lg border border-gray-200 overflow-hidden text-sm font-semibold">
+        <div style={{ marginLeft: 'auto', display: 'flex', borderRadius: 8, border: '1px solid #E8E8F0', overflow: 'hidden', fontSize: 14, fontWeight: 600 }}>
           <button
             onClick={() => setView("board")}
-            className={`px-4 py-1.5 transition-colors ${view === "board" ? "bg-black text-white" : "bg-white text-gray-500 hover:text-black"}`}
+            style={{ padding: '6px 16px', background: view === "board" ? '#635BFF' : '#fff', color: view === "board" ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', transition: 'all .15s' }}
           >Board</button>
           <button
             onClick={() => setView("list")}
-            className={`px-4 py-1.5 transition-colors border-l border-gray-200 ${view === "list" ? "bg-black text-white" : "bg-white text-gray-500 hover:text-black"}`}
+            style={{ padding: '6px 16px', background: view === "list" ? '#635BFF' : '#fff', color: view === "list" ? '#fff' : '#6B7280', border: 'none', borderLeft: '1px solid #E8E8F0', cursor: 'pointer', transition: 'all .15s' }}
           >List</button>
         </div>
       </div>
@@ -140,38 +135,36 @@ export default function WorkshopPage() {
         <WorkshopBoard jobs={mainJobs} onStageChange={handleStageChange} onRefresh={fetchJobs} />
       ) : (
         /* List view */
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100">
-            <h2 className="text-sm font-semibold text-black">{mainJobs.length} job{mainJobs.length !== 1 ? "s" : ""}</h2>
+        <div style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ padding: '12px 20px', borderBottom: '1px solid #E8E8F0' }}>
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', margin: 0 }}>{mainJobs.length} job{mainJobs.length !== 1 ? "s" : ""}</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left border-b border-gray-100 bg-gray-50">
-                  <th className="px-5 py-3 text-xs font-semibold text-gray-500">Customer</th>
-                  <th className="px-5 py-3 text-xs font-semibold text-gray-500">Description</th>
-                  <th className="px-5 py-3 text-xs font-semibold text-gray-500">Category</th>
-                  <th className="px-5 py-3 text-xs font-semibold text-gray-500">Jeweller</th>
-                  <th className="px-5 py-3 text-xs font-semibold text-gray-500">Stage</th>
-                  <th className="px-5 py-3 text-xs font-semibold text-gray-500">Due Date</th>
-                  <th className="px-5 py-3 text-xs font-semibold text-gray-500">Days In Stage</th>
+                <tr style={{ textAlign: 'left', borderBottom: '1px solid #E8E8F0', background: '#F9FAFB' }}>
+                  {['Customer','Description','Category','Jeweller','Stage','Due Date','Days In Stage'].map(h => (
+                    <th key={h} style={{ padding: '12px 20px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                  ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody>
                 {mainJobs.map((j) => {
                   const isOverdue = j.due_date != null && j.due_date < today;
                   const days = Math.floor((Date.now() - new Date(j.stage_changed_at).getTime()) / (1000 * 60 * 60 * 24));
                   return (
-                    <tr key={j.id} className="hover:bg-gray-50">
-                      <td className="px-5 py-3 font-semibold text-gray-800">{j.customer_surname || "—"}</td>
-                      <td className="px-5 py-3 text-gray-600 max-w-xs truncate">{j.description || "—"}</td>
-                      <td className="px-5 py-3 text-gray-500 capitalize">{j.category}</td>
-                      <td className="px-5 py-3 text-gray-500">{j.assigned_jeweller || "—"}</td>
-                      <td className="px-5 py-3 text-gray-500 capitalize">{j.stage.replace(/_/g, " ")}</td>
-                      <td className={`px-5 py-3 text-sm ${isOverdue ? "text-red-600 font-semibold" : "text-gray-500"}`}>
+                    <tr key={j.id} style={{ borderBottom: '1px solid #E8E8F0', transition: 'background .12s' }}
+                      onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = '#F9FAFB'}
+                      onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}>
+                      <td style={{ padding: '12px 20px', fontWeight: 600, color: '#1A1A2E' }}>{j.customer_surname || "—"}</td>
+                      <td style={{ padding: '12px 20px', color: '#374151', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{j.description || "—"}</td>
+                      <td style={{ padding: '12px 20px', color: '#6B7280', textTransform: 'capitalize' }}>{j.category}</td>
+                      <td style={{ padding: '12px 20px', color: '#6B7280' }}>{j.assigned_jeweller || "—"}</td>
+                      <td style={{ padding: '12px 20px', color: '#6B7280', textTransform: 'capitalize' }}>{j.stage.replace(/_/g, " ")}</td>
+                      <td style={{ padding: '12px 20px', fontSize: 14, color: isOverdue ? '#EF4444' : '#6B7280', fontWeight: isOverdue ? 600 : 400 }}>
                         {formatDateAU(j.due_date) || "—"}
                       </td>
-                      <td className="px-5 py-3 text-gray-400 text-xs">{days}d</td>
+                      <td style={{ padding: '12px 20px', color: '#9CA3AF', fontSize: 12 }}>{days}d</td>
                     </tr>
                   );
                 })}
@@ -183,29 +176,25 @@ export default function WorkshopPage() {
 
       {/* Subcontractors */}
       {subcontractorJobs.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
-            <h2 className="text-sm font-semibold text-black">Subcontractors ({subcontractorJobs.length})</h2>
+        <div style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ padding: '12px 20px', borderBottom: '1px solid #E8E8F0', background: '#F9FAFB' }}>
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', margin: 0 }}>Subcontractors ({subcontractorJobs.length})</h2>
           </div>
-          <div className="divide-y divide-gray-100">
+          <div>
             {subcontractorJobs.map((j) => (
-              <div key={j.id} className="px-5 py-4 flex items-start justify-between gap-4">
+              <div key={j.id} style={{ padding: '16px 20px', borderBottom: '1px solid #E8E8F0', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
                 <div>
-                  <p className="font-semibold text-gray-800">{j.subcontractor_name || "Unknown"}</p>
-                  <p className="text-sm text-gray-600 mt-0.5">{j.description}</p>
+                  <p style={{ fontWeight: 600, color: '#1A1A2E' }}>{j.subcontractor_name || "Unknown"}</p>
+                  <p style={{ fontSize: 14, color: '#374151', marginTop: 2 }}>{j.description}</p>
                   {j.subcontractor_instructions && (
-                    <p className="text-xs text-gray-400 mt-1">{j.subcontractor_instructions}</p>
+                    <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>{j.subcontractor_instructions}</p>
                   )}
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>
                     Due: {formatDateAU(j.subcontractor_due_date) || "—"} &bull; Ref: {j.reference_number || "—"}
                   </p>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${
-                    j.subcontractor_status === "received"
-                      ? "bg-green-100 text-green-700"
-                      : "bg-amber-100 text-amber-700"
-                  }`}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  <span style={{ display: 'inline-flex', padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 500, background: j.subcontractor_status === "received" ? '#DCFCE7' : '#FEF3C7', color: j.subcontractor_status === "received" ? '#166534' : '#92400E' }}>
                     {j.subcontractor_status === "received" ? "Received" : "Sent"}
                   </span>
                 </div>

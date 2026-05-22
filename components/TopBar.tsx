@@ -29,17 +29,15 @@ export default function TopBar() {
   const title = getPageTitle(pathname);
 
   return (
-    <header className="ds-topbar">
-      <div className="ds-topbar-crumb">
-        <span>Workspace</span>
-        <span className="sep">/</span>
-        <b>{title}</b>
+    <header style={{ height: 64, borderBottom: '1px solid #E8E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', background: '#FFFFFF', flexShrink: 0 }}>
+      <div style={{ fontSize: 18, fontWeight: 600, color: '#1A1A2E' }}>
+        {title}
       </div>
       <div className="flex items-center gap-3">
         {user && (
           <div className="flex items-center gap-2">
-            <span className="ds-avatar" title={user.name}>{user.initials}</span>
-            <span style={{ fontSize: 13, color: "var(--text-2)", fontWeight: 500 }} className="hidden sm:block">
+            <span style={{ width: 32, height: 32, borderRadius: '50%', background: '#635BFF', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600 }} title={user.name}>{user.initials}</span>
+            <span style={{ fontSize: 13, color: '#1A1A2E', fontWeight: 500 }} className="hidden sm:block">
               {user.name}
             </span>
           </div>

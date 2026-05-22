@@ -83,35 +83,32 @@ function PinPad({ member, onSuccess, onCancel }: PinPadProps) {
     <div
       style={{
         position: "fixed", inset: 0, zIndex: 100,
-        background: "rgba(5,5,10,0.75)",
-        backdropFilter: "blur(8px)",
+        background: "rgba(0,0,0,0.6)",
         display: "flex", alignItems: "center", justifyContent: "center",
       }}
       onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
     >
       <div style={{
-        background: "var(--bg-sidebar)",
-        border: "1px solid var(--border)",
-        borderRadius: 20,
-        boxShadow: "var(--shadow-lg)",
-        padding: "32px 28px 28px",
-        width: 320,
+        background: "#FFFFFF",
+        borderRadius: 24,
+        boxShadow: "0 18px 40px rgba(0,0,0,0.12)",
+        padding: "32px",
+        width: 360,
         display: "flex", flexDirection: "column", alignItems: "center", gap: 24,
       }}>
         {/* Staff identity */}
         <div style={{ textAlign: "center" }}>
           <div style={{
             width: 64, height: 64, borderRadius: "50%",
-            background: "linear-gradient(135deg, #7C6AFE, #4D3CE0)",
+            background: "#635BFF",
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 24, fontWeight: 700, color: "#fff",
             margin: "0 auto 12px",
-            boxShadow: "0 0 20px rgba(124,106,254,0.4)",
           }}>
             {member.initials}
           </div>
-          <div style={{ fontSize: 17, fontWeight: 600, color: "var(--text)" }}>{member.name}</div>
-          <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>Enter your PIN</div>
+          <div style={{ fontSize: 17, fontWeight: 600, color: "#1A1A2E" }}>{member.name}</div>
+          <div style={{ fontSize: 13, color: "#6B7280", marginTop: 4 }}>Enter your PIN</div>
         </div>
 
         {/* PIN dots */}
@@ -122,16 +119,16 @@ function PinPad({ member, onSuccess, onCancel }: PinPadProps) {
           {[0,1,2,3].map((i) => (
             <div key={i} style={{
               width: 16, height: 16, borderRadius: "50%",
-              border: `2px solid ${digits.length > i ? "var(--violet)" : "var(--border-strong)"}`,
-              background: digits.length > i ? "var(--violet)" : "transparent",
-              boxShadow: digits.length > i ? "0 0 10px var(--violet-glow)" : "none",
+              border: `2px solid ${digits.length > i ? "#635BFF" : "#E8E8F0"}`,
+              background: digits.length > i ? "#635BFF" : "transparent",
+              boxShadow: "none",
               transition: "all 0.15s ease",
             }} />
           ))}
         </div>
 
         {/* Error */}
-        <div style={{ minHeight: 20, fontSize: 13, color: "var(--danger)", textAlign: "center" }}>
+        <div style={{ minHeight: 20, fontSize: 13, color: "#EF4444", textAlign: "center" }}>
           {error ?? ""}
         </div>
 
@@ -150,18 +147,18 @@ function PinPad({ member, onSuccess, onCancel }: PinPadProps) {
                 onClick={() => isBack ? pressBack() : pressDigit(key)}
                 disabled={isDisabled}
                 style={{
-                  height: 60, borderRadius: 12,
-                  background: isBack ? "transparent" : "var(--bg-elevated)",
-                  border: `1px solid ${isBack ? "transparent" : "var(--border-subtle)"}`,
-                  color: isDisabled ? "var(--text-dim)" : "var(--text)",
+                  width: 56, height: 56, borderRadius: 8,
+                  background: isBack ? "transparent" : "#F9FAFB",
+                  border: `1px solid ${isBack ? "transparent" : "#E8E8F0"}`,
+                  color: isDisabled ? "#9CA3AF" : "#1A1A2E",
                   fontSize: isBack ? 20 : 22,
                   fontWeight: 600,
                   cursor: isDisabled ? "not-allowed" : "pointer",
                   transition: "all 0.12s",
                   fontFamily: "inherit",
                 }}
-                onMouseEnter={(e) => { if (!isDisabled && !isBack) (e.currentTarget as HTMLButtonElement).style.background = "var(--bg-card-alt)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border)"; }}
-                onMouseLeave={(e) => { if (!isBack) (e.currentTarget as HTMLButtonElement).style.background = "var(--bg-elevated)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border-subtle)"; }}
+                onMouseEnter={(e) => { if (!isDisabled && !isBack) (e.currentTarget as HTMLButtonElement).style.background = "#EEF2FF"; (e.currentTarget as HTMLButtonElement).style.borderColor = "#E8E8F0"; }}
+                onMouseLeave={(e) => { if (!isBack) (e.currentTarget as HTMLButtonElement).style.background = "#F9FAFB"; (e.currentTarget as HTMLButtonElement).style.borderColor = "#E8E8F0"; }}
                 onMouseDown={(e) => { if (!isDisabled) (e.currentTarget as HTMLButtonElement).style.transform = "scale(0.94)"; }}
                 onMouseUp={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "none"; }}
               >
@@ -176,11 +173,11 @@ function PinPad({ member, onSuccess, onCancel }: PinPadProps) {
           onClick={onCancel}
           style={{
             background: "transparent", border: "none",
-            color: "var(--text-muted)", fontSize: 13, cursor: "pointer",
+            color: "#6B7280", fontSize: 13, cursor: "pointer",
             padding: "4px 12px", borderRadius: 8, fontFamily: "inherit",
           }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--text)"; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--text-muted)"; }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#1A1A2E"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#6B7280"; }}
         >
           Cancel
         </button>
@@ -209,10 +206,10 @@ function StaffTileButton({ member, onClick }: { member: StaffMember; onClick: (m
       onClick={() => onClick(member)}
       style={{
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        gap: 12, padding: "20px 12px",
-        background: "var(--bg-card)",
-        border: "1px solid var(--border-subtle)",
-        borderRadius: 16,
+        gap: 12, padding: "16px",
+        background: "#FFFFFF",
+        border: "1px solid #E8E8F0",
+        borderRadius: 12,
         cursor: "pointer",
         transition: "all 0.15s",
         minHeight: 150, width: "100%",
@@ -220,13 +217,13 @@ function StaffTileButton({ member, onClick }: { member: StaffMember; onClick: (m
       }}
       onMouseEnter={(e) => {
         const el = e.currentTarget as HTMLButtonElement;
-        el.style.borderColor = "var(--violet)";
-        el.style.boxShadow = "0 0 0 1px rgba(124,106,254,0.3), 0 4px 14px rgba(0,0,0,0.3)";
+        el.style.borderColor = "#635BFF";
+        el.style.boxShadow = "0 2px 8px rgba(99,91,255,0.15)";
         el.style.transform = "translateY(-1px)";
       }}
       onMouseLeave={(e) => {
         const el = e.currentTarget as HTMLButtonElement;
-        el.style.borderColor = "var(--border-subtle)";
+        el.style.borderColor = "#E8E8F0";
         el.style.boxShadow = "none";
         el.style.transform = "none";
       }}
@@ -234,23 +231,20 @@ function StaffTileButton({ member, onClick }: { member: StaffMember; onClick: (m
       onMouseUp={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "none"; }}
     >
       <div style={{
-        width: 56, height: 56, borderRadius: "50%",
-        background: "linear-gradient(135deg, #7C6AFE, #4D3CE0)",
+        width: 48, height: 48, borderRadius: "50%",
+        background: "#635BFF",
         display: "flex", alignItems: "center", justifyContent: "center",
         fontSize: 18, fontWeight: 700, color: "#fff",
-        boxShadow: "0 0 16px rgba(124,106,254,0.3)",
       }}>
         {member.initials}
       </div>
-      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", textAlign: "center", lineHeight: 1.3 }}>
+      <span style={{ fontSize: 14, fontWeight: 500, color: "#1A1A2E", textAlign: "center", lineHeight: 1.3 }}>
         {member.name}
       </span>
       <span style={{
-        fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
-        padding: "3px 10px", borderRadius: 99,
-        background: member.role === "manager" ? "rgba(124,106,254,0.15)" : "rgba(255,255,255,0.05)",
-        color: member.role === "manager" ? "#C9C0FF" : "var(--text-muted)",
-        border: `1px solid ${member.role === "manager" ? "rgba(124,106,254,0.3)" : "var(--border-subtle)"}`,
+        fontSize: 11, fontWeight: 500, padding: "2px 10px", borderRadius: 999,
+        background: member.role === "manager" ? "#635BFF" : "#E5E7EB",
+        color: member.role === "manager" ? "#fff" : "#374151",
       }}>
         {ROLE_LABELS[member.role]}
       </span>
@@ -274,40 +268,37 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column" }}>
+    <div style={{ minHeight: "100vh", background: "#1A1760", display: "flex", flexDirection: "column" }}>
 
       {/* Header */}
       <header style={{
-        background: "var(--bg-sidebar)",
-        borderBottom: "1px solid var(--border-subtle)",
         padding: "16px 32px",
         display: "flex", alignItems: "center", justifyContent: "space-between",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{
             width: 32, height: 32, borderRadius: 8,
-            background: "linear-gradient(135deg, #20202C, #15151D)",
-            border: "1px solid var(--border)",
+            background: "rgba(255,255,255,0.1)",
             display: "flex", alignItems: "center", justifyContent: "center",
           }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--violet)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
             </svg>
           </div>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", color: "var(--text)" }}>CLASS A</div>
-            <div style={{ fontSize: 10, color: "var(--text-muted)", letterSpacing: "0.1em" }}>JEWELLERS · OS</div>
+            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", color: "#FFFFFF" }}>CLASS A</div>
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", letterSpacing: "0.1em" }}>JEWELLERS · OS</div>
           </div>
         </div>
-        <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Order System</div>
+        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>Order System</div>
       </header>
 
       {/* Body */}
       <main style={{ flex: 1, maxWidth: 960, margin: "0 auto", width: "100%", padding: "40px 24px" }}>
-        <h1 style={{ fontSize: 26, fontWeight: 600, color: "var(--text)", textAlign: "center", marginBottom: 6, letterSpacing: "-0.015em" }}>
+        <h1 style={{ fontSize: 24, fontWeight: 600, color: "#FFFFFF", textAlign: "center", marginBottom: 6 }}>
           Who&apos;s serving today?
         </h1>
-        <p style={{ fontSize: 14, color: "var(--text-muted)", textAlign: "center", marginBottom: 40 }}>
+        <p style={{ fontSize: 14, color: "rgba(255,255,255,0.6)", textAlign: "center", marginBottom: 40 }}>
           Select your name, then enter your PIN
         </p>
 
@@ -317,10 +308,10 @@ export default function LoginPage() {
           return (
             <section key={role} style={{ marginBottom: 36 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-                <h2 style={{ fontSize: 11, fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.12em", margin: 0 }}>
+                <h2 style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.12em", margin: 0 }}>
                   {ROLE_SECTION_LABELS[role]}
                 </h2>
-                <div style={{ flex: 1, height: 1, background: "var(--border-subtle)" }} />
+                <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.1)" }} />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 12 }}>
                 {members.map((member) => (
@@ -333,7 +324,7 @@ export default function LoginPage() {
       </main>
 
       {/* Footer */}
-      <footer style={{ textAlign: "center", padding: "16px", fontSize: 12, color: "var(--text-dim)" }}>
+      <footer style={{ textAlign: "center", padding: "16px", fontSize: 12, color: "rgba(255,255,255,0.4)" }}>
         Class A Jewellers · 40 North East Road, Walkerville SA 5081
       </footer>
 

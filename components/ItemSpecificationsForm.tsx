@@ -63,7 +63,11 @@ export default function ItemSpecificationsForm({ packetId: _packetId, specs: ini
   const [approving, setApproving] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
 
-  const field = "w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:bg-white transition-colors";
+  const fieldStyle: React.CSSProperties = {
+    width: '100%', border: '1px solid #E8E8F0', borderRadius: 8,
+    background: '#fff', fontSize: 14, padding: '0 12px', color: '#1A1A2E',
+    outline: 'none', height: 40, fontFamily: 'inherit',
+  };
 
   function update<K extends keyof ItemSpecifications>(key: K, value: ItemSpecifications[K]) {
     setSpecs((prev) => ({ ...prev, [key]: value }));
@@ -147,63 +151,65 @@ export default function ItemSpecificationsForm({ packetId: _packetId, specs: ini
 
   const hasSpecs = specs.metal_type || (specs.stones ?? []).length > 0 || specs.item_description;
 
+  const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 };
+  const sectionHeadStyle: React.CSSProperties = { fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, borderBottom: '1px solid #E8E8F0', paddingBottom: 4 };
+
   return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden">
+    <div style={{ border: '1px solid #E8E8F0', borderRadius: 12, overflow: 'hidden' }}>
       {/* Collapsible header */}
       <button
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#F9FAFB', border: 'none', cursor: 'pointer' }}
       >
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-gray-700 uppercase tracking-widest">Specifications & Valuation</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Specifications &amp; Valuation</span>
           {valuationStatus && valuationStatus !== "draft" && (
-            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
-              valuationStatus === "approved" ? "bg-emerald-100 text-emerald-700" :
-              valuationStatus === "pending_review" ? "bg-amber-100 text-amber-700" :
-              "bg-gray-100 text-gray-500"
-            }`}>
+            <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600,
+              ...(valuationStatus === "approved" ? { background: '#DCFCE7', color: '#166534' } :
+                  valuationStatus === "pending_review" ? { background: '#FEF3C7', color: '#92400E' } :
+                  { background: '#F3F4F6', color: '#6B7280' }) }}>
               {valuationStatus === "approved" ? "✓ Approved" :
                valuationStatus === "pending_review" ? "⏳ Pending Review" : valuationStatus}
             </span>
           )}
         </div>
-        <svg className={`w-4 h-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+        <svg style={{ width: 16, height: 16, color: '#9CA3AF', transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
       </button>
 
       {open && (
-        <div className="px-4 py-4 space-y-5">
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 20 }}>
 
           {/* Status banner */}
           {submitted && valuationStatus !== "approved" && (
-            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
-              <span className="text-emerald-600">✓</span>
-              <p className="text-sm font-semibold text-emerald-700">Sent to Sam for review</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#DCFCE7', border: '1px solid #BBF7D0', borderRadius: 12, padding: '8px 12px' }}>
+              <span style={{ color: '#166534' }}>✓</span>
+              <p style={{ fontSize: 14, fontWeight: 600, color: '#166534', margin: 0 }}>Sent to Sam for review</p>
             </div>
           )}
 
           {/* Metal */}
           <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 border-b border-gray-100 pb-1">Metal</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2">
-                <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Metal Type</label>
-                <select value={specs.metal_type} onChange={(e) => update("metal_type", e.target.value)} onBlur={handleBlur} className={field}>
+            <p style={sectionHeadStyle}>Metal</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={labelStyle}>Metal Type</label>
+                <select value={specs.metal_type} onChange={(e) => update("metal_type", e.target.value)} onBlur={handleBlur} style={fieldStyle}>
                   {METAL_TYPES.map((m) => <option key={m}>{m}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Weight (g)</label>
-                <input type="number" step="0.01" value={specs.metal_weight} onChange={(e) => update("metal_weight", e.target.value)} onBlur={handleBlur} className={field} placeholder="4.20" />
+                <label style={labelStyle}>Weight (g)</label>
+                <input type="number" step="0.01" value={specs.metal_weight} onChange={(e) => update("metal_weight", e.target.value)} onBlur={handleBlur} style={fieldStyle} placeholder="4.20" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Hallmark</label>
-                <input type="text" value={specs.hallmark} onChange={(e) => update("hallmark", e.target.value)} onBlur={handleBlur} className={field} placeholder="750" />
+                <label style={labelStyle}>Hallmark</label>
+                <input type="text" value={specs.hallmark} onChange={(e) => update("hallmark", e.target.value)} onBlur={handleBlur} style={fieldStyle} placeholder="750" />
               </div>
-              <div className="col-span-2">
-                <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Finish</label>
-                <select value={specs.finish} onChange={(e) => update("finish", e.target.value)} onBlur={handleBlur} className={field}>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={labelStyle}>Finish</label>
+                <select value={specs.finish} onChange={(e) => update("finish", e.target.value)} onBlur={handleBlur} style={fieldStyle}>
                   {FINISHES.map((f) => <option key={f}>{f}</option>)}
                 </select>
               </div>
@@ -212,91 +218,91 @@ export default function ItemSpecificationsForm({ packetId: _packetId, specs: ini
 
           {/* Main Stones */}
           <div>
-            <div className="flex items-center justify-between border-b border-gray-100 pb-1 mb-3">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Main Stones</p>
-              <button onClick={addStone} className="text-xs font-semibold text-[#A3B2A4] hover:text-black transition-colors">+ Add Stone</button>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #E8E8F0', paddingBottom: 4, marginBottom: 12 }}>
+              <p style={{ fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Main Stones</p>
+              <button onClick={addStone} style={{ fontSize: 12, fontWeight: 600, color: '#635BFF', background: 'transparent', border: 'none', cursor: 'pointer' }}>+ Add Stone</button>
             </div>
             {(specs.stones ?? []).length === 0 && (
-              <p className="text-sm text-gray-400 italic">No stones added — click + Add Stone</p>
+              <p style={{ fontSize: 14, color: '#9CA3AF', fontStyle: 'italic' }}>No stones added — click + Add Stone</p>
             )}
             {(specs.stones ?? []).map((stone, idx) => (
-              <div key={stone.id} className="bg-gray-50 rounded-xl border border-gray-200 p-3 mb-3 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-gray-700">Stone {idx + 1}</span>
-                  <button onClick={() => removeStone(stone.id)} className="text-xs text-red-400 hover:text-red-600">Remove</button>
+              <div key={stone.id} style={{ background: '#F9FAFB', borderRadius: 10, border: '1px solid #E8E8F0', padding: 12, marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>Stone {idx + 1}</span>
+                  <button onClick={() => removeStone(stone.id)} style={{ fontSize: 12, color: '#EF4444', background: 'transparent', border: 'none', cursor: 'pointer' }}>Remove</button>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Stone Type</label>
-                    <select value={stone.stone_type} onChange={(e) => updateStone(stone.id, "stone_type", e.target.value)} onBlur={handleBlur} className={field}>
+                    <label style={labelStyle}>Stone Type</label>
+                    <select value={stone.stone_type} onChange={(e) => updateStone(stone.id, "stone_type", e.target.value)} onBlur={handleBlur} style={fieldStyle}>
                       {STONE_TYPES.map((s) => <option key={s}>{s}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Carat Weight</label>
-                    <input type="number" step="0.01" value={stone.carat_weight} onChange={(e) => updateStone(stone.id, "carat_weight", e.target.value)} onBlur={handleBlur} className={field} placeholder="1.02" />
+                    <label style={labelStyle}>Carat Weight</label>
+                    <input type="number" step="0.01" value={stone.carat_weight} onChange={(e) => updateStone(stone.id, "carat_weight", e.target.value)} onBlur={handleBlur} style={fieldStyle} placeholder="1.02" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Certificate Lab</label>
-                    <select value={stone.certificate_lab} onChange={(e) => updateStone(stone.id, "certificate_lab", e.target.value)} onBlur={handleBlur} className={field}>
+                    <label style={labelStyle}>Certificate Lab</label>
+                    <select value={stone.certificate_lab} onChange={(e) => updateStone(stone.id, "certificate_lab", e.target.value)} onBlur={handleBlur} style={fieldStyle}>
                       {CERT_LABS.map((c) => <option key={c}>{c}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Certificate #</label>
-                    <input type="text" value={stone.certificate_number} onChange={(e) => updateStone(stone.id, "certificate_number", e.target.value)} onBlur={handleBlur} className={field} placeholder="2336753259" />
+                    <label style={labelStyle}>Certificate #</label>
+                    <input type="text" value={stone.certificate_number} onChange={(e) => updateStone(stone.id, "certificate_number", e.target.value)} onBlur={handleBlur} style={fieldStyle} placeholder="2336753259" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Shape</label>
-                    <select value={stone.shape} onChange={(e) => updateStone(stone.id, "shape", e.target.value)} onBlur={handleBlur} className={field}>
+                    <label style={labelStyle}>Shape</label>
+                    <select value={stone.shape} onChange={(e) => updateStone(stone.id, "shape", e.target.value)} onBlur={handleBlur} style={fieldStyle}>
                       {SHAPES.map((s) => <option key={s}>{s}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Colour</label>
-                    <select value={stone.colour_grade} onChange={(e) => updateStone(stone.id, "colour_grade", e.target.value)} onBlur={handleBlur} className={field}>
+                    <label style={labelStyle}>Colour</label>
+                    <select value={stone.colour_grade} onChange={(e) => updateStone(stone.id, "colour_grade", e.target.value)} onBlur={handleBlur} style={fieldStyle}>
                       {COLOUR_GRADES.map((c) => <option key={c}>{c}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Clarity</label>
-                    <select value={stone.clarity_grade} onChange={(e) => updateStone(stone.id, "clarity_grade", e.target.value)} onBlur={handleBlur} className={field}>
+                    <label style={labelStyle}>Clarity</label>
+                    <select value={stone.clarity_grade} onChange={(e) => updateStone(stone.id, "clarity_grade", e.target.value)} onBlur={handleBlur} style={fieldStyle}>
                       {CLARITY_GRADES.map((c) => <option key={c}>{c}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Cut</label>
-                    <select value={stone.cut_grade} onChange={(e) => updateStone(stone.id, "cut_grade", e.target.value)} onBlur={handleBlur} className={field}>
+                    <label style={labelStyle}>Cut</label>
+                    <select value={stone.cut_grade} onChange={(e) => updateStone(stone.id, "cut_grade", e.target.value)} onBlur={handleBlur} style={fieldStyle}>
                       {GRADE_OPTIONS.map((g) => <option key={g}>{g}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Polish</label>
-                    <select value={stone.polish} onChange={(e) => updateStone(stone.id, "polish", e.target.value)} onBlur={handleBlur} className={field}>
+                    <label style={labelStyle}>Polish</label>
+                    <select value={stone.polish} onChange={(e) => updateStone(stone.id, "polish", e.target.value)} onBlur={handleBlur} style={fieldStyle}>
                       {GRADE_OPTIONS.map((g) => <option key={g}>{g}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Symmetry</label>
-                    <select value={stone.symmetry} onChange={(e) => updateStone(stone.id, "symmetry", e.target.value)} onBlur={handleBlur} className={field}>
+                    <label style={labelStyle}>Symmetry</label>
+                    <select value={stone.symmetry} onChange={(e) => updateStone(stone.id, "symmetry", e.target.value)} onBlur={handleBlur} style={fieldStyle}>
                       {GRADE_OPTIONS.map((g) => <option key={g}>{g}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Fluorescence</label>
-                    <select value={stone.fluorescence} onChange={(e) => updateStone(stone.id, "fluorescence", e.target.value)} onBlur={handleBlur} className={field}>
+                    <label style={labelStyle}>Fluorescence</label>
+                    <select value={stone.fluorescence} onChange={(e) => updateStone(stone.id, "fluorescence", e.target.value)} onBlur={handleBlur} style={fieldStyle}>
                       {FLUORESCENCE.map((f) => <option key={f}>{f}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Setting Type</label>
-                    <select value={stone.setting_type} onChange={(e) => updateStone(stone.id, "setting_type", e.target.value)} onBlur={handleBlur} className={field}>
+                    <label style={labelStyle}>Setting Type</label>
+                    <select value={stone.setting_type} onChange={(e) => updateStone(stone.id, "setting_type", e.target.value)} onBlur={handleBlur} style={fieldStyle}>
                       {SETTING_TYPES.map((s) => <option key={s}>{s}</option>)}
                     </select>
                   </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Measurements</label>
-                    <input type="text" value={stone.measurements} onChange={(e) => updateStone(stone.id, "measurements", e.target.value)} onBlur={handleBlur} className={field} placeholder="6.5 x 6.48 x 3.9mm" />
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={labelStyle}>Measurements</label>
+                    <input type="text" value={stone.measurements} onChange={(e) => updateStone(stone.id, "measurements", e.target.value)} onBlur={handleBlur} style={fieldStyle} placeholder="6.5 x 6.48 x 3.9mm" />
                   </div>
                 </div>
               </div>
@@ -305,42 +311,42 @@ export default function ItemSpecificationsForm({ packetId: _packetId, specs: ini
 
           {/* Accent Stones */}
           <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 border-b border-gray-100 pb-1">Accent Stones (optional)</p>
-            <div className="space-y-2">
+            <p style={sectionHeadStyle}>Accent Stones (optional)</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div>
-                <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Description</label>
-                <input type="text" value={specs.accent_description} onChange={(e) => update("accent_description", e.target.value)} onBlur={handleBlur} className={field} placeholder="16 round brilliant pavé diamonds, approx 0.32ct TW, G-H, VS-SI" />
+                <label style={labelStyle}>Description</label>
+                <input type="text" value={specs.accent_description} onChange={(e) => update("accent_description", e.target.value)} onBlur={handleBlur} style={fieldStyle} placeholder="16 round brilliant pavé diamonds, approx 0.32ct TW, G-H, VS-SI" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Total Carat Weight</label>
-                <input type="number" step="0.01" value={specs.accent_carat_weight} onChange={(e) => update("accent_carat_weight", e.target.value)} onBlur={handleBlur} className={field} placeholder="0.32" />
+                <label style={labelStyle}>Total Carat Weight</label>
+                <input type="number" step="0.01" value={specs.accent_carat_weight} onChange={(e) => update("accent_carat_weight", e.target.value)} onBlur={handleBlur} style={fieldStyle} placeholder="0.32" />
               </div>
             </div>
           </div>
 
           {/* Item Details */}
           <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 border-b border-gray-100 pb-1">Item Details</p>
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+            <p style={sectionHeadStyle}>Item Details</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Item Type</label>
-                  <select value={specs.item_type} onChange={(e) => update("item_type", e.target.value)} onBlur={handleBlur} className={field}>
+                  <label style={labelStyle}>Item Type</label>
+                  <select value={specs.item_type} onChange={(e) => update("item_type", e.target.value)} onBlur={handleBlur} style={fieldStyle}>
                     {ITEM_TYPES.map((t) => <option key={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Ring Size</label>
-                  <input type="text" value={specs.ring_size} onChange={(e) => update("ring_size", e.target.value)} onBlur={handleBlur} className={field} placeholder="N" />
+                  <label style={labelStyle}>Ring Size</label>
+                  <input type="text" value={specs.ring_size} onChange={(e) => update("ring_size", e.target.value)} onBlur={handleBlur} style={fieldStyle} placeholder="N" />
                 </div>
               </div>
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-semibold text-gray-400 uppercase">Item Description</label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <label style={labelStyle}>Item Description</label>
                   <button
                     onClick={generateDescription}
                     disabled={generatingDesc}
-                    className="text-xs font-semibold text-[#A3B2A4] hover:text-black transition-colors disabled:opacity-40"
+                    style={{ fontSize: 12, fontWeight: 600, color: '#635BFF', background: 'transparent', border: 'none', cursor: 'pointer', opacity: generatingDesc ? 0.4 : 1 }}
                   >
                     {generatingDesc ? "Generating…" : "✨ Generate Description"}
                   </button>
@@ -350,7 +356,7 @@ export default function ItemSpecificationsForm({ packetId: _packetId, specs: ini
                   value={specs.item_description}
                   onChange={(e) => update("item_description", e.target.value)}
                   onBlur={handleBlur}
-                  className={`${field} resize-none`}
+                  style={{ width: '100%', border: '1px solid #E8E8F0', borderRadius: 8, background: '#fff', fontSize: 14, padding: '8px 12px', color: '#1A1A2E', outline: 'none', fontFamily: 'inherit', resize: 'vertical' as const }}
                   placeholder="Professional jewellery description for the valuation certificate…"
                 />
               </div>
@@ -359,21 +365,21 @@ export default function ItemSpecificationsForm({ packetId: _packetId, specs: ini
 
           {/* Sam: ERV + Approve */}
           {isSam && valuationStatus === "pending_review" && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
-              <p className="text-xs font-bold text-amber-800 uppercase tracking-wide">Sam&apos;s Review</p>
+            <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Sam&apos;s Review</p>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Estimated Replacement Value (AUD)</label>
+                <label style={{ ...labelStyle, color: '#92400E' }}>Estimated Replacement Value (AUD)</label>
                 <input
                   type="number"
                   step="0.01"
                   value={erv}
                   onChange={(e) => setErv(e.target.value)}
-                  className={field}
+                  style={fieldStyle}
                   placeholder="8500.00"
                 />
               </div>
               {approveError && (
-                <div className="text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#991B1B', background: '#FEE2E2', border: '1px solid #FECACA', borderRadius: 8, padding: '8px 12px' }}>
                   ✗ {approveError}
                 </div>
               )}
@@ -381,7 +387,7 @@ export default function ItemSpecificationsForm({ packetId: _packetId, specs: ini
                 type="button"
                 onClick={handleApprove}
                 disabled={approving || !erv}
-                className="w-full bg-emerald-600 text-white font-semibold py-3 rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-40"
+                style={{ width: '100%', background: '#10B981', color: '#fff', fontWeight: 600, padding: '12px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 14, opacity: (approving || !erv) ? 0.4 : 1 }}
               >
                 {approving ? "Approving…" : "✓ Approve & Generate Certificate"}
               </button>
@@ -393,7 +399,7 @@ export default function ItemSpecificationsForm({ packetId: _packetId, specs: ini
             <button
               onClick={handleSubmitForReview}
               disabled={submitting || submitted}
-              className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-40"
+              style={{ width: '100%', background: '#635BFF', color: '#fff', fontWeight: 600, padding: '12px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 14, opacity: (submitting || submitted) ? 0.4 : 1 }}
             >
               {submitting ? "Submitting…" : submitted ? "Sent to Sam for review ✓" : "Submit for Valuation Review"}
             </button>
