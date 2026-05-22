@@ -346,11 +346,9 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
               <p className="text-xs font-bold text-black uppercase tracking-widest mb-2">📦 Dispatch Date</p>
               <input
                 type="date"
-                value={local.due_date ?? ""}
-                onChange={(e) => {
-                  set("due_date", e.target.value || null);
-                  patch({ due_date: e.target.value || null });
-                }}
+                value={local.due_date ? local.due_date.split("T")[0] : ""}
+                onChange={(e) => set("due_date", e.target.value || null)}
+                onBlur={(e) => patch({ due_date: e.target.value || null })}
                 className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-lg font-bold text-black focus:outline-none focus:ring-2 focus:ring-black"
               />
             </div>
@@ -411,11 +409,9 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Due Date</p>
               <input
                 type="date"
-                value={local.due_date ?? ""}
-                onChange={(e) => {
-                  set("due_date", e.target.value || null);
-                  patch({ due_date: e.target.value || null });
-                }}
+                value={local.due_date ? local.due_date.split("T")[0] : ""}
+                onChange={(e) => set("due_date", e.target.value || null)}
+                onBlur={(e) => patch({ due_date: e.target.value || null })}
                 className="w-full rounded-xl border-0 bg-white px-4 py-3 text-lg font-bold text-black focus:outline-none focus:ring-2 focus:ring-white"
               />
             </div>

@@ -31,17 +31,26 @@ function resolveDueDate(due_date: string | null | undefined): string {
 }
 
 /**
- * Resolve delivery display — checks delivery_method, shipping_method, then
- * packet_data.shippingMethod as a last resort.
+ * Resolve delivery display — checks every known field where shipping method
+ * may be stored, in priority order. Only falls back to "Pickup" when no field
+ * has a value.
  */
 function resolveDelivery(packet: Packet): string {
-  const dm = (packet as { delivery_method?: string | null }).delivery_method;
-  return (
-    dm ||
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pd = packet.packet_data as any;
+  const delivery =
+    (packet as { delivery_method?: string | null }).delivery_method ||
     packet.shipping_method ||
-    (packet.packet_data as { shippingMethod?: string } | null)?.shippingMethod ||
-    "Pickup"
-  );
+    pd?.shippingMethod ||
+    pd?.shipping_method ||
+    null;
+
+  console.log("[label] Delivery value:", delivery, "from fields:", {
+    delivery_method: (packet as { delivery_method?: string | null }).delivery_method,
+    shipping_method: packet.shipping_method,
+  });
+
+  return delivery || "Pickup";
 }
 
 /**
@@ -105,7 +114,7 @@ export function generateDymoXML(packet: Packet): string {
     <Variable Name="Phone">${esc(packet.customer_phone)}</Variable>
     <Variable Name="Email">${esc(packet.customer_email)}</Variable>
     <Variable Name="InDate">In: ${esc(formatDateAU(packet.in_date))}</Variable>
-    <Variable Name="CustomerNo">Cust#: ${esc(packet.customer_number)}</Variable>
+    <Variable Name="CustomerNo">CUST #: _______________________</Variable>
     <Variable Name="StockNo">Stock#: ${esc(packet.stock_number)}</Variable>
     <Variable Name="Valuation">Valuation Req: ${packet.valuation_required ? "YES" : "NO"}</Variable>
     <Variable Name="Contact">Contact: ${esc(contactPref)}</Variable>
@@ -709,12 +718,16 @@ export function generatePrintHTML(packet: Packet): string {
     </div>
   </div>
 
-  <!-- 8. Staff / repair tracker / collected -->
+  <!-- 8. Staff / repair tracker / customer number / collected -->
   <div class="bottom">
     <strong>Staff:</strong> ${esc(packet.staff_member ?? "—")}
     <div style="margin-top:1.5mm;">
+      <strong>CUST #:</strong>
+      <span style="display:inline-block; width:52mm; border-bottom:0.75pt solid #000; vertical-align:bottom;">&nbsp;</span>
+    </div>
+    <div style="margin-top:1.5mm;">
       <strong>REPAIR TRACKER NO:</strong>
-      <span style="display:inline-block; width:48mm; border-bottom:0.75pt solid #000; vertical-align:bottom;">&nbsp;</span>
+      <span style="display:inline-block; width:40mm; border-bottom:0.75pt solid #000; vertical-align:bottom;">&nbsp;</span>
     </div>
     <div class="collected-row">Collected: ___/___/___&nbsp;&nbsp;&nbsp;Signed: ____________________</div>
   </div>
