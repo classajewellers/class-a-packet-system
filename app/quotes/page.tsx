@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import Link from "next/link";
 import { Quote } from "@/lib/types";
 import { getSupabaseClient } from "@/lib/supabase";
 import { STAFF_EMAIL_MAP } from "@/lib/staffEmails";
@@ -129,6 +130,20 @@ export default function QuotesPage() {
       )}
 
       <div className="max-w-7xl mx-auto space-y-4">
+        {/* Page header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>Quotes</h1>
+          <Link
+            href="/quotes/builder"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#635BFF', color: '#fff', borderRadius: 8, padding: '9px 18px', fontWeight: 500, fontSize: 14, textDecoration: 'none' }}
+            onMouseEnter={e => (e.currentTarget as HTMLAnchorElement).style.background = '#4F46E5'}
+            onMouseLeave={e => (e.currentTarget as HTMLAnchorElement).style.background = '#635BFF'}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            Build Quote
+          </Link>
+        </div>
+
         {/* Stats bar */}
         {!loading && quotes.length > 0 && (
           <>
