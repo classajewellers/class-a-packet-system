@@ -100,13 +100,25 @@ export async function DELETE(
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
   const supabase = createServerSupabaseClient();
-  const { error } = await supabase.from("quotes").delete().eq("id", id);
+
+  // Use .select() to confirm the row was actually removed — a plain delete()
+  // returns no error even when RLS silently blocks it.
+  const { data: deleted, error } = await supabase
+    .from("quotes")
+    .delete()
+    .eq("id", id)
+    .select("id");
 
   if (error) {
     console.error("[quotes/delete] Supabase error:", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  if (!deleted || deleted.length === 0) {
+    console.error("[quotes/delete] Row not deleted — not found or blocked:", id);
+    return NextResponse.json({ error: "Row not found or delete was blocked by the database" }, { status: 404 });
+  }
+
   console.log("[quotes/delete] Deleted quote:", id);
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ success: true });
 }

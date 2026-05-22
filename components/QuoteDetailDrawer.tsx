@@ -129,10 +129,11 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
     setDeleting(true);
     try {
       const res = await fetch(`/api/quotes/${local.id}`, { method: "DELETE" });
-      if (res.ok) {
+      const json = await res.json().catch(() => ({}));
+      console.log("[delete quote] Response:", json);
+      if (json.success === true) {
         onDelete(local.id);
       } else {
-        const json = await res.json().catch(() => ({}));
         alert(`Failed to delete: ${json.error ?? "Unknown error"}`);
       }
     } catch {
