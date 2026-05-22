@@ -147,24 +147,24 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
 
   // ── Delete ────────────────────────────────────────────────────────────────
   async function handleDelete() {
-    if (!window.confirm(
-      `Are you sure you want to delete order ${local.reference_number}? This cannot be undone.`
-    )) return;
+    if (!confirm('Are you sure you want to delete this order? This cannot be undone.')) return;
     setDeleting(true);
     try {
-      const res = await fetch(`/api/admin/packets/${local.id}`, { method: "DELETE" });
-      const json = await res.json().catch(() => ({}));
-      console.log("[delete] Response:", json);
-      if (json.success === true) {
-        // Only remove from local state after confirming Supabase deleted it
-        onDelete(local.id);
+      console.log('[handleDelete] Deleting:', local.id)
+      const res = await fetch(`/api/admin/packets/${local.id}`, { method: 'DELETE' })
+      const json = await res.json()
+      console.log('[handleDelete] Response:', json)
+      if (json.success) {
+        onDelete(local.id)
+        onClose()
       } else {
-        alert(`Failed to delete: ${json.error ?? "Unknown error"}`);
+        alert('Delete failed: ' + (json.error || 'Unknown error'))
       }
-    } catch {
-      alert("Network error — could not delete order.");
+    } catch (err) {
+      console.error('[handleDelete] Error:', err)
+      alert('Delete failed: ' + String(err))
     } finally {
-      setDeleting(false);
+      setDeleting(false)
     }
   }
 
