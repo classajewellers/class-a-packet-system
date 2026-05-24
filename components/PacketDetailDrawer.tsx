@@ -146,22 +146,26 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
   }
 
   // ── Delete ────────────────────────────────────────────────────────────────
-  async function handleDelete() {
-    if (!confirm('Are you sure you want to delete this order? This cannot be undone.')) return;
-    setDeleting(true);
+  const handleDelete = async () => {
+    if (!window.confirm(`Delete order ${local.reference_number}? This cannot be undone.`)) return
+    console.log('[handleDelete] Starting delete for:', local.id)
+    setDeleting(true)
     try {
-      console.log('[handleDelete] Deleting:', local.id)
-      const res = await fetch(`/api/admin/packets/${local.id}`, { method: 'DELETE' })
+      const url = `/api/admin/packets/${local.id}`
+      console.log('[handleDelete] DELETE', url)
+      const res = await fetch(url, { method: 'DELETE' })
+      console.log('[handleDelete] Response status:', res.status)
       const json = await res.json()
-      console.log('[handleDelete] Response:', json)
+      console.log('[handleDelete] Response body:', json)
       if (json.success) {
+        console.log('[handleDelete] Delete successful')
         onDelete(local.id)
         onClose()
       } else {
         alert('Delete failed: ' + (json.error || 'Unknown error'))
       }
     } catch (err) {
-      console.error('[handleDelete] Error:', err)
+      console.error('[handleDelete] Exception:', err)
       alert('Delete failed: ' + String(err))
     } finally {
       setDeleting(false)
@@ -910,6 +914,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
           {/* ── Delete ── */}
           <div className="pt-2 pb-4">
             <button
+              type="button"
               onClick={handleDelete}
               disabled={deleting}
               style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, padding: '12px', borderRadius: 12, border: 'none', cursor: deleting ? 'not-allowed' : 'pointer', opacity: deleting ? 0.5 : 1, transition: 'background .15s' }}
