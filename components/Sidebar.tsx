@@ -274,7 +274,7 @@ export default function Sidebar({ onOpenAI }: Props) {
           <NavLink href="/workshop" icon={Wrench} label="Workshop" />
         )}
         {isManager && (
-          <NavLink href="/revenue" icon={BarChart2} label="Revenue" />
+          <NavLink href="/reporting" icon={BarChart2} label="Reporting" />
         )}
         {isManager && <NavLink href="/pricing" icon={Tag} label="Pricing" />}
         {isManager && (

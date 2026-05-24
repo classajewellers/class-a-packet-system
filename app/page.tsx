@@ -170,7 +170,7 @@ export default function DashboardPage() {
               label="Revenue MTD"
               value={revenueThisMonth != null ? formatCurrency(revenueThisMonth) : "—"}
               sub="month to date"
-              href="/revenue"
+              href="/reporting"
             />
           </>
         )}
