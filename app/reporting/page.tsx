@@ -369,9 +369,10 @@ function OrdersSection({ data }: { data: any }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "flex", gap: 14 }}>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
         <KpiCard label="Total Created" value={s.totalCreated} />
         <KpiCard label="Overdue Count" value={s.overdueCount} sub="past due date, unprinted" />
+        <KpiCard label="Avg Turnaround" value={`${Math.round(s.avgTurnaround ?? 0)}d`} sub="created → due date" />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
@@ -453,26 +454,45 @@ function OrdersSection({ data }: { data: any }) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function WorkshopSection({ data }: { data: any }) {
   if (!data) return <EmptyState message="No workshop data." />;
-  const { byJeweller, overdue } = data;
+  const { summary: s, byJeweller, byStage, overdue } = data;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      {byJeweller.length > 0 && (
-        <ChartCard title="Active Jobs per Jeweller">
-          <BarChart data={byJeweller} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="jeweller" tick={{ fontSize: 11 }} />
-            <YAxis tick={{ fontSize: 11 }} width={32} />
-            <Tooltip contentStyle={{ fontSize: 12 }} />
-            <Bar dataKey="count" fill="#635BFF" radius={[3, 3, 0, 0]} />
-          </BarChart>
-        </ChartCard>
-      )}
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+        <KpiCard label="Active Jobs" value={s?.totalActive ?? 0} />
+        <KpiCard label="Completed in Period" value={s?.completedInPeriod ?? 0} />
+        <KpiCard label="Overdue" value={s?.overdueCount ?? 0} />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+        {byJeweller?.length > 0 && (
+          <ChartCard title="Active Jobs per Jeweller">
+            <BarChart data={byJeweller} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="jeweller" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} width={32} />
+              <Tooltip contentStyle={{ fontSize: 12 }} />
+              <Bar dataKey="count" fill="#635BFF" radius={[3, 3, 0, 0]} />
+            </BarChart>
+          </ChartCard>
+        )}
+        {byStage?.length > 0 && (
+          <ChartCard title="Jobs by Stage" height={Math.max(200, (byStage?.length ?? 0) * 44)}>
+            <BarChart data={byStage} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <YAxis dataKey="stage" type="category" width={110} tick={{ fontSize: 11 }} />
+              <XAxis type="number" tick={{ fontSize: 11 }} />
+              <Tooltip contentStyle={{ fontSize: 12 }} />
+              <Bar dataKey="count" fill="#06B6D4" radius={[0, 3, 3, 0]} />
+            </BarChart>
+          </ChartCard>
+        )}
+      </div>
 
       <SectionTable
-        title={`Overdue Workshop Jobs (${overdue.length})`}
+        title={`Overdue Workshop Jobs (${overdue?.length ?? 0})`}
         headers={["Reference", "Customer", "Jeweller", "Stage", "Due Date", "Days Overdue"]}
-        rows={overdue.map((o: { reference_number: string; customer_surname: string; jeweller: string; stage: string; due_date: string; days_overdue: number }) => [
+        rows={(overdue ?? []).map((o: { reference_number: string; customer_surname: string; jeweller: string; stage: string; due_date: string; days_overdue: number }) => [
           o.reference_number,
           o.customer_surname,
           o.jeweller,
@@ -484,7 +504,7 @@ function WorkshopSection({ data }: { data: any }) {
           downloadCSV(
             "overdue-workshop.csv",
             ["Reference", "Customer", "Jeweller", "Stage", "Due Date", "Days Overdue"],
-            overdue.map((o: { reference_number: string; customer_surname: string; jeweller: string; stage: string; due_date: string; days_overdue: number }) => [
+            (overdue ?? []).map((o: { reference_number: string; customer_surname: string; jeweller: string; stage: string; due_date: string; days_overdue: number }) => [
               o.reference_number,
               o.customer_surname,
               o.jeweller,
@@ -502,7 +522,7 @@ function WorkshopSection({ data }: { data: any }) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function QuotesSection({ data }: { data: any }) {
   if (!data) return <EmptyState message="No quotes data for this period." />;
-  const { summary: s, byStaff, pipeline } = data;
+  const { summary: s, byStatus, byStaff, pipeline } = data;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -513,8 +533,31 @@ function QuotesSection({ data }: { data: any }) {
         <KpiCard label="Pipeline Value" value={fmtCurrency(s.totalPipelineValue)} />
       </div>
 
-      {byStaff.length > 0 && (
-        <ChartCard title="Conversion Rate by Staff" height={Math.max(200, byStaff.length * 50)}>
+      {byStatus?.length > 0 && (
+        <ChartCard title="Quotes by Status" height={260}>
+          <PieChart>
+            <Pie data={byStatus} dataKey="count" nameKey="status" cx="50%" cy="45%" innerRadius={50} outerRadius={90}>
+              {byStatus.map((_: unknown, i: number) => (
+                <Cell key={i} fill={COLORS[i % COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              formatter={(value: any, name: any) => [value, STATUS_LABELS[String(name)] ?? name]}
+              contentStyle={{ fontSize: 12 }}
+            />
+            <Legend
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              formatter={(value: any) => STATUS_LABELS[value] ?? value}
+              iconSize={10}
+              wrapperStyle={{ fontSize: 12 }}
+            />
+          </PieChart>
+        </ChartCard>
+      )}
+
+      {byStaff?.length > 0 && (
+        <ChartCard title="Conversion Rate by Staff" height={Math.max(200, (byStaff?.length ?? 0) * 50)}>
           <BarChart data={byStaff} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <YAxis dataKey="staff" type="category" width={100} tick={{ fontSize: 11 }} />
@@ -571,8 +614,9 @@ function CustomersSection({ data }: { data: any }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "flex", gap: 14 }}>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
         <KpiCard label="New in Period" value={s.newInPeriod} />
+        <KpiCard label="Returning in Period" value={s.returningInPeriod} />
         <KpiCard label="Active (90d)" value={s.activeCustomers} sub="visited in last 90 days" />
         <KpiCard label="Total Customers" value={s.totalCustomers} />
       </div>
@@ -843,6 +887,12 @@ export default function ReportingPage() {
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
+    if (section === "inventory") {
+      setLoading(false);
+      setError(null);
+      setData(null);
+      return;
+    }
     setLoading(true);
     setError(null);
     setData(null);
@@ -922,7 +972,8 @@ export default function ReportingPage() {
                   color: item.disabled ? "#9CA3AF" : active ? "#635BFF" : "#1A1A2E",
                   fontSize: 14,
                   fontWeight: active ? 600 : 400,
-                  cursor: item.disabled ? "default" : "pointer",
+                  cursor: item.disabled ? "not-allowed" : "pointer",
+                  opacity: item.disabled ? 0.5 : 1,
                   transition: "background .15s",
                 }}
                 onMouseEnter={(e) => {
