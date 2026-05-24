@@ -1138,9 +1138,53 @@ export default function ReportingPage() {
           {loading && <LoadingState />}
           {error && !loading && (
             <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12, padding: 16, color: "#DC2626", fontSize: 14 }}>
-              {error}
+              <strong>Error loading {section}:</strong> {error}
+              <div style={{ marginTop: 8, fontSize: 12, color: "#9CA3AF" }}>
+                Check the server terminal for detailed logs.
+              </div>
             </div>
           )}
+
+          {/* Record count banner — always visible after a successful fetch */}
+          {!loading && !error && data && section !== "inventory" && (
+            <div style={{
+              background: (data._meta?.recordCount ?? 0) === 0 ? "#FFFBEB" : "#F0FDF4",
+              border: `1px solid ${(data._meta?.recordCount ?? 0) === 0 ? "#FDE68A" : "#BBF7D0"}`,
+              borderRadius: 10,
+              padding: "8px 14px",
+              fontSize: 12,
+              color: (data._meta?.recordCount ?? 0) === 0 ? "#92400E" : "#166534",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}>
+              <span>
+                {(data._meta?.recordCount ?? 0) === 0
+                  ? `⚠ No records found for "${section}" between ${start} and ${end}. Try widening the date range.`
+                  : `✓ ${data._meta?.recordCount} record${data._meta?.recordCount !== 1 ? "s" : ""} found between ${start} and ${end}`}
+              </span>
+              {(data._meta?.recordCount ?? 0) === 0 && (
+                <button
+                  onClick={() => { setStart(startOfYearISO()); setEnd(todayISO()); }}
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: 6,
+                    border: "1px solid #F59E0B",
+                    background: "#FEF3C7",
+                    color: "#92400E",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                    marginLeft: 12,
+                  }}
+                >
+                  Try This Year
+                </button>
+              )}
+            </div>
+          )}
+
           {!loading && !error && section === "sales" && <SalesSection data={data} start={start} end={end} />}
           {!loading && !error && section === "orders" && <OrdersSection data={data} start={start} end={end} />}
           {!loading && !error && section === "workshop" && <WorkshopSection data={data} start={start} end={end} />}
