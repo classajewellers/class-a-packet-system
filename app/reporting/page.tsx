@@ -244,11 +244,86 @@ function EmptyState({ message }: { message: string }) {
   );
 }
 
+// ── Debug panel ───────────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function DebugPanel({ data, section, start, end }: { data: any; section: string; start: string; end: string }) {
+  const [open, setOpen] = useState(false);
+  const meta = data?._meta;
+  const keys = data ? Object.keys(data).filter(k => k !== '_meta') : [];
+  const arraySizes = keys.reduce((acc: Record<string, number>, k) => {
+    if (Array.isArray(data[k])) acc[k] = data[k].length;
+    return acc;
+  }, {});
+
+  return (
+    <div style={{ border: "1px solid #FDE68A", borderRadius: 12, overflow: "hidden", background: "#FFFBEB" }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "10px 16px",
+          background: "transparent",
+          border: "none",
+          cursor: "pointer",
+          fontSize: 12,
+          fontWeight: 600,
+          color: "#92400E",
+          textAlign: "left",
+        }}
+      >
+        <span>🔍 Debug Info (manager only)</span>
+        <span style={{ fontSize: 10, opacity: 0.7 }}>{open ? "▲ collapse" : "▼ expand"}</span>
+      </button>
+      {open && (
+        <div style={{ padding: "0 16px 16px", fontSize: 12, color: "#78350F" }}>
+          <div style={{ marginBottom: 8 }}>
+            <strong>Section:</strong> {section} &nbsp;|&nbsp;
+            <strong>Range:</strong> {start} → {end} &nbsp;|&nbsp;
+            <strong>Records:</strong> {meta?.recordCount ?? "unknown"}
+          </div>
+          <div style={{ marginBottom: 8 }}>
+            <strong>Response keys:</strong> {keys.join(", ") || "none"}
+          </div>
+          {Object.keys(arraySizes).length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <strong>Array lengths:</strong>{" "}
+              {Object.entries(arraySizes).map(([k, v]) => `${k}: ${v}`).join(", ")}
+            </div>
+          )}
+          {data?.summary && (
+            <div style={{ marginBottom: 8 }}>
+              <strong>Summary:</strong>
+              <pre style={{ margin: "4px 0 0", padding: 8, background: "#FEF3C7", borderRadius: 6, fontSize: 11, overflowX: "auto" }}>
+                {JSON.stringify(data.summary, null, 2)}
+              </pre>
+            </div>
+          )}
+          <div>
+            <strong>First record preview:</strong>
+            {keys.map(k => Array.isArray(data[k]) && data[k].length > 0 ? (
+              <div key={k} style={{ marginTop: 6 }}>
+                <span style={{ fontWeight: 600 }}>{k}[0]:</span>
+                <pre style={{ margin: "2px 0 0", padding: 6, background: "#FEF3C7", borderRadius: 4, fontSize: 10, overflowX: "auto" }}>
+                  {JSON.stringify(data[k][0], null, 2)}
+                </pre>
+              </div>
+            ) : null)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Section renderers ─────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function SalesSection({ data }: { data: any }) {
-  if (!data) return <EmptyState message="No sales data for this period." />;
+function SalesSection({ data, start, end }: { data: any; start: string; end: string }) {
+  if (!data) return <EmptyState message={`No sales data between ${start} and ${end}.`} />;
   const { summary: s, daily, byType, byStaff, topOrders } = data;
 
   return (
@@ -358,13 +433,14 @@ function SalesSection({ data }: { data: any }) {
           )
         }
       />
+      <DebugPanel data={data} section="sales" start={start} end={end} />
     </div>
   );
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function OrdersSection({ data }: { data: any }) {
-  if (!data) return <EmptyState message="No order data for this period." />;
+function OrdersSection({ data, start, end }: { data: any; start: string; end: string }) {
+  if (!data) return <EmptyState message={`No order data between ${start} and ${end}.`} />;
   const { summary: s, daily, byType, overdue } = data;
 
   return (
@@ -447,13 +523,14 @@ function OrdersSection({ data }: { data: any }) {
           )
         }
       />
+      <DebugPanel data={data} section="orders" start={start} end={end} />
     </div>
   );
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function WorkshopSection({ data }: { data: any }) {
-  if (!data) return <EmptyState message="No workshop data." />;
+function WorkshopSection({ data, start, end }: { data: any; start: string; end: string }) {
+  if (!data) return <EmptyState message={`No workshop data between ${start} and ${end}.`} />;
   const { summary: s, byJeweller, byStage, overdue } = data;
 
   return (
@@ -515,13 +592,14 @@ function WorkshopSection({ data }: { data: any }) {
           )
         }
       />
+      <DebugPanel data={data} section="workshop" start={start} end={end} />
     </div>
   );
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function QuotesSection({ data }: { data: any }) {
-  if (!data) return <EmptyState message="No quotes data for this period." />;
+function QuotesSection({ data, start, end }: { data: any; start: string; end: string }) {
+  if (!data) return <EmptyState message={`No quotes data between ${start} and ${end}.`} />;
   const { summary: s, byStatus, byStaff, pipeline } = data;
 
   return (
@@ -598,15 +676,16 @@ function QuotesSection({ data }: { data: any }) {
           )
         }
       />
+      <DebugPanel data={data} section="quotes" start={start} end={end} />
     </div>
   );
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function CustomersSection({ data }: { data: any }) {
+function CustomersSection({ data, start, end }: { data: any; start: string; end: string }) {
   const [inactiveTab, setInactiveTab] = useState<"90" | "180" | "365">("90");
 
-  if (!data) return <EmptyState message="No customer data." />;
+  if (!data) return <EmptyState message={`No customer data between ${start} and ${end}.`} />;
   const { summary: s, topCustomers, inactive90, inactive180, inactive365 } = data;
 
   const inactiveData = inactiveTab === "90" ? inactive90 : inactiveTab === "180" ? inactive180 : inactive365;
@@ -751,13 +830,14 @@ function CustomersSection({ data }: { data: any }) {
           </>
         )}
       </div>
+      <DebugPanel data={data} section="customers" start={start} end={end} />
     </div>
   );
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function StaffSection({ data }: { data: any }) {
-  if (!data) return <EmptyState message="No staff data for this period." />;
+function StaffSection({ data, start, end }: { data: any; start: string; end: string }) {
+  if (!data) return <EmptyState message={`No staff data between ${start} and ${end}.`} />;
   const { performance } = data;
 
   return (
@@ -809,6 +889,7 @@ function StaffSection({ data }: { data: any }) {
           )
         }
       />
+      <DebugPanel data={data} section="staff" start={start} end={end} />
     </div>
   );
 }
@@ -897,9 +978,13 @@ export default function ReportingPage() {
     setError(null);
     setData(null);
     try {
-      const params = new URLSearchParams({ section, start, end });
-      const res = await fetch(`/api/reporting?${params}`, { cache: "no-store" });
+      const url = `/api/reporting?section=${section}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+      console.log('[reporting page] fetching section:', section, 'start:', start, 'end:', end);
+      console.log('[reporting page] API URL:', url);
+      const res = await fetch(url, { cache: "no-store" });
+      console.log('[reporting page] response status:', res.status);
       const json = await res.json();
+      console.log('[reporting page] response data keys:', Object.keys(json));
       if (!res.ok) throw new Error(json.error ?? "Failed to load data");
       setData(json);
     } catch (e) {
@@ -1056,12 +1141,12 @@ export default function ReportingPage() {
               {error}
             </div>
           )}
-          {!loading && !error && section === "sales" && <SalesSection data={data} />}
-          {!loading && !error && section === "orders" && <OrdersSection data={data} />}
-          {!loading && !error && section === "workshop" && <WorkshopSection data={data} />}
-          {!loading && !error && section === "quotes" && <QuotesSection data={data} />}
-          {!loading && !error && section === "customers" && <CustomersSection data={data} />}
-          {!loading && !error && section === "staff" && <StaffSection data={data} />}
+          {!loading && !error && section === "sales" && <SalesSection data={data} start={start} end={end} />}
+          {!loading && !error && section === "orders" && <OrdersSection data={data} start={start} end={end} />}
+          {!loading && !error && section === "workshop" && <WorkshopSection data={data} start={start} end={end} />}
+          {!loading && !error && section === "quotes" && <QuotesSection data={data} start={start} end={end} />}
+          {!loading && !error && section === "customers" && <CustomersSection data={data} start={start} end={end} />}
+          {!loading && !error && section === "staff" && <StaffSection data={data} start={start} end={end} />}
           {section === "inventory" && <InventorySection />}
         </div>
       </div>

@@ -35,7 +35,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
     // ── INVENTORY ──────────────────────────────────────────────────────────────
     if (section === "inventory") {
-      return NextResponse.json({ placeholder: true });
+      return NextResponse.json({ _meta: { section, start, end, recordCount: 0 }, placeholder: true });
     }
 
     // ── SALES ──────────────────────────────────────────────────────────────────
@@ -51,6 +51,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         .gt("total_charges", 0)
         .order("created_at", { ascending: true });
 
+      console.log('[reporting:sales] packets:', packets?.length ?? 0, 'error:', error?.message ?? 'none');
       if (error)
         return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -149,6 +150,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         }));
 
       return NextResponse.json({
+        _meta: { section, start, end, recordCount: rows.length },
         summary: {
           totalRevenue,
           orderCount,
@@ -176,6 +178,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         .lt("created_at", `${endPlusOne}T00:00:00`)
         .order("created_at", { ascending: true });
 
+      console.log('[reporting:orders] packets:', packets?.length ?? 0, 'error:', error?.message ?? 'none');
       if (error)
         return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -205,6 +208,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         .order("due_date", { ascending: true })
         .limit(100);
 
+      console.log('[reporting:orders] overduePackets:', overduePackets?.length ?? 0);
       const overdueRows = overduePackets ?? [];
       const overdueCount = overdueRows.length;
 
@@ -240,6 +244,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       }));
 
       return NextResponse.json({
+        _meta: { section, start, end, recordCount: rows.length },
         summary: { totalCreated, overdueCount, avgTurnaround },
         daily,
         byType,
@@ -256,6 +261,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         )
         .order("created_at", { ascending: false });
 
+      console.log('[reporting:workshop] jobs:', jobs?.length ?? 0, 'error:', error?.message ?? 'none');
       if (error)
         return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -310,6 +316,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         .sort((a, b) => b.days_overdue - a.days_overdue);
 
       return NextResponse.json({
+        _meta: { section, start, end, recordCount: jobs?.length ?? 0 },
         summary: {
           totalActive: activeJobs.length,
           completedInPeriod: completedInPeriod.length,
@@ -332,6 +339,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         .lt("created_at", `${endPlusOne}T00:00:00`)
         .order("created_at", { ascending: true });
 
+      console.log('[reporting:quotes] quotes:', quotes?.length ?? 0, 'error:', error?.message ?? 'none');
       if (error)
         return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -419,6 +427,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       }));
 
       return NextResponse.json({
+        _meta: { section, start, end, recordCount: rows.length },
         summary: {
           totalCreated,
           wonCount,
@@ -445,6 +454,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         .not("customer_email", "is", null)
         .order("created_at", { ascending: true });
 
+      console.log('[reporting:customers] packets:', packets?.length ?? 0, 'error:', error?.message ?? 'none');
       if (error)
         return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -564,6 +574,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         .map(toRow);
 
       return NextResponse.json({
+        _meta: { section, start, end, recordCount: (packets ?? []).length },
         summary: {
           newInPeriod,
           returningInPeriod,
@@ -586,12 +597,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         .lt("created_at", `${endPlusOne}T00:00:00`)
         .neq("packet_type", "client_intake");
 
+      console.log('[reporting:staff] packets:', packets?.length ?? 0, 'error:', pe?.message ?? 'none');
       const { data: quotes, error: qe } = await supabase
         .from("quotes")
         .select("assigned_to, status")
         .gte("created_at", `${start}T00:00:00`)
         .lt("created_at", `${endPlusOne}T00:00:00`);
 
+      console.log('[reporting:staff] quotes:', quotes?.length ?? 0, 'error:', qe?.message ?? 'none');
       if (pe)
         return NextResponse.json({ error: pe.message }, { status: 500 });
       if (qe)
@@ -646,7 +659,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         }))
         .sort((a, b) => b.revenueGenerated - a.revenueGenerated);
 
-      return NextResponse.json({ performance });
+      return NextResponse.json({ _meta: { section, start, end, recordCount: (packets ?? []).length }, performance });
     }
 
     return NextResponse.json({ error: "Unknown section" }, { status: 400 });
