@@ -10,14 +10,40 @@ export async function DELETE(
   console.log('[DELETE /api/admin/packets/[id]] id:', params.id)
   try {
     const supabase = createServerSupabaseClient()
+
+    // Step 1: Remove foreign key references from quotes table
+    const { error: quoteError } = await supabase
+      .from('quotes')
+      .update({ converted_to_packet_id: null })
+      .eq('converted_to_packet_id', params.id)
+
+    if (quoteError) {
+      console.error('[DELETE] Error clearing quote references:', quoteError)
+      // Continue anyway — the reference may not exist
+    }
+
+    // Step 2: Remove foreign key references from workshop_jobs table
+    const { error: workshopError } = await supabase
+      .from('workshop_jobs')
+      .update({ packet_id: null })
+      .eq('packet_id', params.id)
+
+    if (workshopError) {
+      console.error('[DELETE] Error clearing workshop references:', workshopError)
+      // Continue anyway
+    }
+
+    // Step 3: Now delete the packet
     const { error } = await supabase
       .from('packets')
       .delete()
       .eq('id', params.id)
+
     if (error) {
       console.error('[DELETE] Supabase error:', error)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
+
     console.log('[DELETE] Success')
     return NextResponse.json({ success: true })
   } catch (err) {
