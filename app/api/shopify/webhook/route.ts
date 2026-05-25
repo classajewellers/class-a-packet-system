@@ -33,6 +33,9 @@ export const dynamic = "force-dynamic";
 //   noteAttributes    → Note Attributes array  ← REQUIRED for gift wrapping detection
 //                        (in Zapier: map Shopify "Note Attributes" field here)
 //                        Format: [{name: 'Gift Wrapping', value: 'Yes'}, ...]
+//   subtotalPrice     → Shopify "Subtotal Price"  ← REQUIRED for original price
+//   totalLineItemsPrice → Shopify "Total Line Items Price"  ← fallback original price
+//                        (totalPrice = after discounts; these fields = before discounts)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ZapierFlatOrder {
@@ -46,6 +49,8 @@ interface ZapierFlatOrder {
   customerLastName?: string;
   billingName?: string;          // billing address full name (last-resort fallback)
   totalPrice?: number | string;
+  subtotalPrice?: number | string;       // pre-discount subtotal (preferred for total_charges)
+  totalLineItemsPrice?: number | string; // sum of line item original prices (fallback)
   shippingFirstName?: string;    // shipping address name — may contain full name
   shippingAddress1?: string;
   shippingCity?: string;
@@ -327,15 +332,36 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const suburb   = body.shippingCity       ?? null;
   const state    = body.shippingProvinceCode ?? null;
   const postcode = body.shippingPostalCode ?? null;
-  const orderNum = body.orderNumber        ?? null;
-  const total    = parseFloat(String(body.totalPrice ?? "0")) || 0;
-  const note     = body.orderNote          || null;
+  const orderNum = body.orderNumber ?? null;
+  const note     = body.orderNote   || null;
+
+  // Use original (pre-discount) price as total_charges.
+  // subtotalPrice = line item sum before shipping/tax/discounts.
+  // totalLineItemsPrice = sum of individual item prices before order-level discounts.
+  // totalPrice = final amount charged after all discounts — we store this separately.
+  const originalPrice =
+    parseFloat(String(body.subtotalPrice ?? "")) ||
+    parseFloat(String(body.totalLineItemsPrice ?? "")) ||
+    parseFloat(String(body.totalPrice ?? "")) ||
+    0;
+  const finalPrice = parseFloat(String(body.totalPrice ?? "")) || 0;
+  const discountAmount = Math.max(0, originalPrice - finalPrice);
+
+  console.log("[webhook] pricing:", {
+    subtotalPrice: body.subtotalPrice,
+    totalLineItemsPrice: body.totalLineItemsPrice,
+    totalPrice: body.totalPrice,
+    originalPrice,
+    finalPrice,
+    discountAmount,
+  });
 
   console.log("[webhook] Order note:", body.orderNote);
   console.log("[shopify/webhook] Resolved name:", { firstName, lastName });
   console.log("[shopify/webhook] Mapped fields:", {
     orderNumber: orderNum, email, phone, firstName, lastName,
-    total, articlesLength: articles.length, shippingMethod, dispatchDate,
+    originalPrice, finalPrice, discountAmount,
+    articlesLength: articles.length, shippingMethod, dispatchDate,
   });
 
   // ── 5. Build insert payload ───────────────────────────────────────────────
@@ -353,7 +379,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     articles:              articles || null,
     items_ordered:         articles || null,
     instructions:          note,
-    total_charges:         total    || null,
+    total_charges:         originalPrice || null,
     deposit:               null,
     balance:               null,
     in_date:               todayISO(),
@@ -368,7 +394,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     shipping_postcode:     null,
     order_source:          "Shopify",
     gift_wrapping:         hasGiftWrap || null,
-    packet_data:           body as unknown as Record<string, unknown>,
+    packet_data:           {
+      ...(body as unknown as Record<string, unknown>),
+      original_price:  originalPrice,
+      final_price:     finalPrice,
+      discount_amount: discountAmount > 0 ? discountAmount : 0,
+    },
   };
 
   // ── 6. Insert into Supabase ───────────────────────────────────────────────

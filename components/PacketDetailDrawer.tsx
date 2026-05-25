@@ -234,6 +234,9 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
           due_date:         local.due_date,
           gift_wrapping:    local.gift_wrapping,
           delivery_method:  (local as unknown as { delivery_method?: string | null }).delivery_method,
+          shipping_method:  local.shipping_method,
+          total_charges:    local.total_charges,
+          deposit:          local.deposit,
         }),
       });
 

@@ -38,19 +38,28 @@ function resolveDueDate(due_date: string | null | undefined): string {
 function resolveDelivery(packet: Packet): string {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pd = packet.packet_data as any;
+
   const delivery =
     (packet as { delivery_method?: string | null }).delivery_method ||
     packet.shipping_method ||
-    pd?.shippingMethod ||
     pd?.shipping_method ||
+    pd?.shippingMethod ||
+    pd?.shipping_lines?.[0]?.title ||
+    pd?.shippingLines?.[0]?.title ||
     null;
 
-  console.log("[label] Delivery value:", delivery, "from fields:", {
+  console.log("[label] delivery fields:", {
     delivery_method: (packet as { delivery_method?: string | null }).delivery_method,
     shipping_method: packet.shipping_method,
+    packet_data_shipping_method: pd?.shipping_method,
+    packet_data_shippingMethod: pd?.shippingMethod,
+    packet_data_shipping_lines_0: pd?.shipping_lines?.[0]?.title,
+    resolved: delivery,
   });
 
-  return delivery || "Pickup";
+  // Only show Pickup if ALL fields are empty / null / blank
+  const deliveryDisplay = delivery && delivery.trim() !== "" ? delivery.trim() : "Pickup";
+  return deliveryDisplay;
 }
 
 /**
