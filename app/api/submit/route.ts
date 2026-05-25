@@ -165,6 +165,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
   if (shouldAutoSend && confirmWebhook) {
     const customerName = [packet.customer_first_name, packet.customer_last_name]
       .filter(Boolean).join(" ");
+    const isInStore = packet.packet_type === "repair" || packet.packet_type === "custom_order";
     const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "https://class-a-packet-system.vercel.app").replace(/\/$/, "");
     const claimSlipUrl = `${appUrl}/claim/${packet.reference_number}`;
     const autoPayload = {
@@ -175,7 +176,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
       reference_number: packet.reference_number,
       due_date:         formatDateAU(packet.due_date),
       total_charges:    "",
-      claim_slip_url:   claimSlipUrl,
+      ...(isInStore && { claim_slip_url: claimSlipUrl }),
     };
     // Fire-and-forget — do not block submission response
     fetch(confirmWebhook, {
@@ -184,14 +185,16 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
       body:    JSON.stringify(autoPayload),
     }).catch((err) => console.warn("[submit] Auto-send SMS failed:", err));
 
-    // Record claim slip URL in DB (fire-and-forget)
-    supabase.from("packets").update({
-      claim_slip_url:      claimSlipUrl,
-      claim_slip_sent:     true,
-      claim_slip_sent_at:  new Date().toISOString(),
-    }).eq("id", packet.id).then(({ error }) => {
-      if (error) console.warn("[submit] claim_slip_url DB update failed:", error.message);
-    });
+    // Record claim slip URL in DB for in-store orders only (fire-and-forget)
+    if (isInStore) {
+      supabase.from("packets").update({
+        claim_slip_url:      claimSlipUrl,
+        claim_slip_sent:     true,
+        claim_slip_sent_at:  new Date().toISOString(),
+      }).eq("id", packet.id).then(({ error }) => {
+        if (error) console.warn("[submit] claim_slip_url DB update failed:", error.message);
+      });
+    }
   }
 
   // ── 6. Upsert customer record ─────────────────────────────────────────────────
