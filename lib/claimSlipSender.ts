@@ -1,17 +1,18 @@
 /**
  * claimSlipSender.ts — server-side only
  *
- * Shared logic for generating, storing, and SMS-sending a claim slip.
+ * Generates a claim slip URL (served via /claim/[reference]) and sends
+ * it to the customer via SMS through Zapier → Podium.
+ *
  * Called from:
  *   - /api/orders/claim-slip  (drawer "Send Claim Slip" button)
  *   - /api/submit             (auto-send on new repair/custom_order)
+ *
+ * No file storage needed — the page renders on demand from Supabase data.
  */
 import { SupabaseClient } from "@supabase/supabase-js";
 import { Packet } from "./types";
-import { generateClaimSlipHTML } from "./claimSlipGenerator";
 import { formatAustralianPhone } from "./formatters";
-
-const BUCKET = "claim-slips";
 
 export interface ClaimSlipResult {
   url: string;
@@ -19,58 +20,18 @@ export interface ClaimSlipResult {
 }
 
 /**
- * Ensure the 'claim-slips' Supabase Storage bucket exists and is public.
- * Safe to call multiple times — no-ops if already exists.
+ * Build the public claim slip URL for this packet.
+ * Format: https://class-a-packet-system.vercel.app/claim/CA-20260518-0001
  */
-async function ensureBucket(supabase: SupabaseClient): Promise<void> {
-  const { data: buckets } = await supabase.storage.listBuckets();
-  const exists = (buckets ?? []).some((b) => b.id === BUCKET);
-  if (!exists) {
-    const { error } = await supabase.storage.createBucket(BUCKET, {
-      public: true,
-      allowedMimeTypes: ["text/html"],
-    });
-    if (error && !error.message.includes("already exists")) {
-      throw new Error(`Failed to create storage bucket: ${error.message}`);
-    }
-  }
-}
-
-/**
- * Upload the claim slip HTML to Supabase Storage.
- * Returns the public URL.
- */
-async function uploadClaimSlip(
-  supabase: SupabaseClient,
-  referenceNumber: string,
-  html: string
-): Promise<string> {
-  await ensureBucket(supabase);
-
-  const filename = `${referenceNumber}.html`;
-  const blob = Buffer.from(html, "utf-8");
-
-  const { error } = await supabase.storage
-    .from(BUCKET)
-    .upload(filename, blob, {
-      contentType: "text/html; charset=utf-8",
-      upsert: true, // overwrite on resend
-    });
-
-  if (error) {
-    throw new Error(`Storage upload failed: ${error.message}`);
-  }
-
-  const { data: urlData } = supabase.storage
-    .from(BUCKET)
-    .getPublicUrl(filename);
-
-  return urlData.publicUrl;
+function buildClaimSlipUrl(referenceNumber: string): string {
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ??
+    "https://class-a-packet-system.vercel.app";
+  return `${appUrl}/claim/${referenceNumber}`;
 }
 
 /**
  * Send the claim slip SMS via Zapier → Podium.
- * Fire-and-forget friendly — returns a promise but logs instead of throws.
  */
 async function sendClaimSlipSMS(
   packet: Packet,
@@ -112,12 +73,11 @@ async function sendClaimSlipSMS(
 
 /**
  * Full claim slip flow:
- * 1. Generate HTML
- * 2. Upload to Supabase Storage
- * 3. Update packet record (claim_slip_url, claim_slip_sent, claim_slip_sent_at)
- * 4. Send SMS via Zapier
+ * 1. Build the public URL from the reference number
+ * 2. Update packet record (claim_slip_url, claim_slip_sent, claim_slip_sent_at)
+ * 3. Send SMS via Zapier
  *
- * Returns the public URL of the stored claim slip.
+ * Returns the claim slip URL.
  */
 export async function sendClaimSlip(
   packet: Packet,
@@ -125,14 +85,11 @@ export async function sendClaimSlip(
 ): Promise<ClaimSlipResult> {
   console.log("[claim-slip] Starting for packet:", packet.reference_number);
 
-  // 1. Generate HTML
-  const html = generateClaimSlipHTML(packet);
+  // 1. Build URL (no file upload needed — page renders on demand)
+  const url = buildClaimSlipUrl(packet.reference_number);
+  console.log("[claim-slip] URL:", url);
 
-  // 2. Upload to storage
-  const url = await uploadClaimSlip(supabase, packet.reference_number, html);
-  console.log("[claim-slip] Uploaded to:", url);
-
-  // 3. Update packet record
+  // 2. Update packet record
   const now = new Date().toISOString();
   const { error: updateError } = await supabase
     .from("packets")
@@ -148,13 +105,13 @@ export async function sendClaimSlip(
     // Non-fatal — proceed with SMS
   }
 
-  // 4. Send SMS (non-fatal if it fails)
+  // 3. Send SMS (non-fatal if it fails)
   try {
     await sendClaimSlipSMS(packet, url);
     console.log("[claim-slip] SMS sent to:", packet.customer_phone);
   } catch (smsErr) {
     console.warn("[claim-slip] SMS send failed:", smsErr);
-    // Don't throw — URL is already stored, which is the primary value
+    // Don't throw — URL is still valid even if SMS fails
   }
 
   return { url, reference: packet.reference_number };
