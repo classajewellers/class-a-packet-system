@@ -36,29 +36,40 @@ function resolveDueDate(due_date: string | null | undefined): string {
  * has a value.
  */
 function resolveDelivery(packet: Packet): string {
+  // Full packet dump — lets us see exactly what Supabase returned
+  console.log("[label] FULL PACKET shipping fields:", {
+    delivery_method: (packet as { delivery_method?: string | null }).delivery_method,
+    shipping_method: packet.shipping_method,
+    packet_data: packet.packet_data,
+    packet_data_type: typeof packet.packet_data,
+  });
+
+  // packet_data may arrive as a JSON string (some Supabase client versions
+  // return jsonb columns as strings rather than parsed objects).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pd = packet.packet_data as any;
+  let packetData: any = {};
+  try {
+    packetData =
+      typeof packet.packet_data === "string"
+        ? JSON.parse(packet.packet_data)
+        : (packet.packet_data ?? {});
+  } catch {
+    packetData = {};
+  }
 
   const delivery =
     (packet as { delivery_method?: string | null }).delivery_method ||
     packet.shipping_method ||
-    pd?.shipping_method ||
-    pd?.shippingMethod ||
-    pd?.shipping_lines?.[0]?.title ||
-    pd?.shippingLines?.[0]?.title ||
+    packetData.shipping_method ||
+    packetData.shippingMethod ||
+    packetData.shipping_lines?.[0]?.title ||
+    packetData.shippingLines?.[0]?.title ||
     null;
-
-  console.log("[label] delivery fields:", {
-    delivery_method: (packet as { delivery_method?: string | null }).delivery_method,
-    shipping_method: packet.shipping_method,
-    packet_data_shipping_method: pd?.shipping_method,
-    packet_data_shippingMethod: pd?.shippingMethod,
-    packet_data_shipping_lines_0: pd?.shipping_lines?.[0]?.title,
-    resolved: delivery,
-  });
 
   // Only show Pickup if ALL fields are empty / null / blank
   const deliveryDisplay = delivery && delivery.trim() !== "" ? delivery.trim() : "Pickup";
+
+  console.log("[label] resolved delivery:", deliveryDisplay);
   return deliveryDisplay;
 }
 
