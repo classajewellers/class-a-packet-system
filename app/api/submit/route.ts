@@ -3,7 +3,6 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { generateReferenceNumber, generateRepairTrackerNumber } from "@/lib/referenceNumber";
 import { parseCurrency, packetTypeLabel, formatDateAU, formatAustralianPhone } from "@/lib/formatters";
 import { PacketFormData, Packet, SubmitResponse } from "@/lib/types";
-import { sendClaimSlip } from "@/lib/claimSlipSender";
 
 export const dynamic = "force-dynamic";
 
@@ -166,17 +165,17 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
   if (shouldAutoSend && confirmWebhook) {
     const customerName = [packet.customer_first_name, packet.customer_last_name]
       .filter(Boolean).join(" ");
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "https://class-a-packet-system.vercel.app").replace(/\/$/, "");
+    const claimSlipUrl = `${appUrl}/claim/${packet.reference_number}`;
     const autoPayload = {
       order_source:     "In-Store",
       customer_name:    customerName,
       customer_phone:   formatAustralianPhone(packet.customer_phone),
-      customer_email:   packet.customer_email  ?? "",
       order_type:       packetTypeLabel(packet.packet_type),
-      articles:         packet.articles        ?? "",
-      instructions:     packet.instructions    ?? "",
       reference_number: packet.reference_number,
       due_date:         formatDateAU(packet.due_date),
       total_charges:    "",
+      claim_slip_url:   claimSlipUrl,
     };
     // Fire-and-forget — do not block submission response
     fetch(confirmWebhook, {
@@ -184,21 +183,18 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify(autoPayload),
     }).catch((err) => console.warn("[submit] Auto-send SMS failed:", err));
+
+    // Record claim slip URL in DB (fire-and-forget)
+    supabase.from("packets").update({
+      claim_slip_url:      claimSlipUrl,
+      claim_slip_sent:     true,
+      claim_slip_sent_at:  new Date().toISOString(),
+    }).eq("id", packet.id).then(({ error }) => {
+      if (error) console.warn("[submit] claim_slip_url DB update failed:", error.message);
+    });
   }
 
-  // ── 6. Auto-send Claim Slip for repair / custom_order with phone ──────────
-  if (isAutoSendType && hasPhone) {
-    void (async () => {
-      try {
-        await sendClaimSlip(packet, supabase);
-        console.log("[submit] Claim slip sent to:", packet.customer_phone);
-      } catch (err) {
-        console.warn("[submit] Claim slip send failed (non-fatal):", err);
-      }
-    })();
-  }
-
-  // ── 7. Upsert customer record ─────────────────────────────────────────────────
+  // ── 6. Upsert customer record ─────────────────────────────────────────────────
   if (packet.customer_email) {
     void (async () => {
       try {
@@ -216,7 +212,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
     })();
   }
 
-  // ── 8. Auto-create workshop job for repair/custom_order ──────────────────────
+  // ── 7. Auto-create workshop job for repair/custom_order ──────────────────────
   if (packet.packet_type === "repair" || packet.packet_type === "custom_order") {
     const initialStage = packet.packet_type === "repair" ? "precheck" : "new";
     const jobType = packet.packet_type === "repair" ? "minor" : "major";
@@ -238,7 +234,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
     }
   }
 
-  // ── 9. Mark quote as converted (if this order was created from a quote) ─────
+  // ── 8. Mark quote as converted (if this order was created from a quote) ─────
   if (formData.from_quote_id) {
     console.log("[submit] Marking quote as converted:", formData.from_quote_id);
     const { error: quoteErr } = await supabase
@@ -255,7 +251,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
     }
   }
 
-  // ── 9. Return success ──────────────────────────────────────────────────────
+  // ── 9. Return success ─────────────────────────────────────────────────────
   return NextResponse.json({
     packet,
     results: { supabase: "success" },
