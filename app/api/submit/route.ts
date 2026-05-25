@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { generateReferenceNumber, generateRepairTrackerNumber } from "@/lib/referenceNumber";
 import { parseCurrency, packetTypeLabel, formatDateAU, formatAustralianPhone } from "@/lib/formatters";
 import { PacketFormData, Packet, SubmitResponse } from "@/lib/types";
+import { sendClaimSlip } from "@/lib/claimSlipSender";
 
 export const dynamic = "force-dynamic";
 
@@ -183,6 +184,18 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify(autoPayload),
     }).catch((err) => console.warn("[submit] Auto-send SMS failed:", err));
+  }
+
+  // ── 6. Auto-send Claim Slip for repair / custom_order with phone ──────────
+  if (isAutoSendType && hasPhone) {
+    void (async () => {
+      try {
+        await sendClaimSlip(packet, supabase);
+        console.log("[submit] Claim slip sent to:", packet.customer_phone);
+      } catch (err) {
+        console.warn("[submit] Claim slip send failed (non-fatal):", err);
+      }
+    })();
   }
 
   // ── 7. Upsert customer record ─────────────────────────────────────────────────

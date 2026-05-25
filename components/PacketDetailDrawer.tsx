@@ -65,6 +65,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
   const [local, setLocal] = useState<Packet>(packet);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [reprintLoading, setReprintLoading] = useState(false);
+  const [claimSlipLoading, setClaimSlipLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -272,6 +273,35 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
     }
   }
 
+  // ── Send Claim Slip ───────────────────────────────────────────────────────
+  async function handleSendClaimSlip() {
+    setClaimSlipLoading(true);
+    try {
+      const res = await fetch("/api/orders/claim-slip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ packet_id: local.id }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) {
+        setToast({ type: "error", message: json.error ?? "Failed to send claim slip" });
+        return;
+      }
+      // Update local state so the "sent" badge appears without a full reload
+      setLocal((prev) => ({
+        ...prev,
+        claim_slip_sent: true,
+        claim_slip_url: json.url,
+      }));
+      const phone = local.customer_phone ?? "customer";
+      setToast({ type: "success", message: `Claim slip sent to ${phone}` });
+    } catch (err) {
+      setToast({ type: "error", message: "Claim slip failed: " + String(err) });
+    } finally {
+      setClaimSlipLoading(false);
+    }
+  }
+
   // ── Valuation handlers ────────────────────────────────────────────────────
   async function handleSaveSpecs(specs: ItemSpecifications) {
     await patch({ item_specifications: specs as unknown as Record<string, unknown> });
@@ -397,6 +427,29 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
               </button>
             )}
           </div>
+
+          {/* ── Send Claim Slip (repair / custom_order only) ── */}
+          {(local.packet_type === "repair" || local.packet_type === "custom_order") && (
+            <div>
+              <button
+                onClick={handleSendClaimSlip}
+                disabled={claimSlipLoading}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', background: '#EEF2FF', color: '#635BFF', fontSize: 14, fontWeight: 600, padding: '12px', borderRadius: 12, border: 'none', cursor: claimSlipLoading ? 'not-allowed' : 'pointer', opacity: claimSlipLoading ? 0.6 : 1, transition: 'all .15s' }}
+                onMouseEnter={e => { if (!claimSlipLoading) (e.currentTarget as HTMLButtonElement).style.background = '#E0E7FF'; }}
+                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = '#EEF2FF'}
+              >
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
+                </svg>
+                {claimSlipLoading ? "Generating…" : "Send Claim Slip"}
+              </button>
+              {local.claim_slip_sent && (
+                <p style={{ textAlign: 'center', fontSize: 12, color: '#16A34A', marginTop: 6, fontWeight: 500 }}>
+                  ✓ Claim slip sent{local.claim_slip_sent_at ? ` · ${formatDateAU(local.claim_slip_sent_at.split("T")[0])}` : ""}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* ── Print Confirmation (full-width, outline style) ── */}
           <button

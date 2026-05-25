@@ -199,6 +199,11 @@ export interface Packet {
   valuation_approved_by: string | null;
   estimated_replacement_value: number | null;
   valuation_certificate_number: string | null;
+
+  // Claim slip tracking
+  claim_slip_sent?: boolean | null;
+  claim_slip_url?: string | null;
+  claim_slip_sent_at?: string | null;
 }
 
 // ─────────────────────────────────────────────
