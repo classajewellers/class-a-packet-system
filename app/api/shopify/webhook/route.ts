@@ -30,6 +30,9 @@ export const dynamic = "force-dynamic";
 //   lineItems         → Line items blob (Zapier raw text format)
 //   shippingLines     → Shipping lines blob (Zapier raw text format)
 //   orderNote         → Order notes / customer instructions
+//   noteAttributes    → Note Attributes array  ← REQUIRED for gift wrapping detection
+//                        (in Zapier: map Shopify "Note Attributes" field here)
+//                        Format: [{name: 'Gift Wrapping', value: 'Yes'}, ...]
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ZapierFlatOrder {
@@ -52,6 +55,8 @@ interface ZapierFlatOrder {
   lineItems?: unknown;           // array OR raw text blob
   shippingLines?: unknown;       // array OR raw text blob
   orderNote?: string;
+  noteAttributes?: unknown;      // [{name: 'Gift Wrapping', value: 'Yes'}, ...] or [{key, value}]
+  note_attributes?: unknown;     // snake_case alias from some Zapier setups
   [key: string]: unknown;
 }
 
@@ -125,16 +130,16 @@ function parseLineItems(raw: any): string {
       "chain", "initial", "birthstone",
       "pendant", "pendant 1", "pendant 2", "pendant 3", "pendant 4", "pendant 5", "pendant 6",
       "number", "font", "text", "message", "name",
-      "finish", "width", "length", "weight", "alloy", "plating",
-      "rhodium", "confirmation", "style", "design",
+      "finish", "width", "length", "weight", "alloy",
+      // Metal/material specifics — important for necklaces, bracelets, rings
+      "material", "plating", "rhodium", "silver", "platinum",
+      "confirmation", "style", "design",
     ];
 
     const attrMatches: RegExpExecArray[] = [];
     const attrRe = /'key':\s*'([^']*)',\s*'value':\s*'([^']*)'/g;
     let attrM: RegExpExecArray | null;
     while ((attrM = attrRe.exec(block)) !== null) attrMatches.push(attrM);
-
-    console.log('[webhook] customAttributes found:', attrMatches.length);
 
     const attrs = attrMatches
       .filter((m) => {
@@ -144,11 +149,22 @@ function parseLineItems(raw: any): string {
         if (!val) return false;
         // Skip internal / tracking keys (Shopify internal fields start with _)
         if (key.startsWith("_") || key.startsWith("cl_")) return false;
-        // Must match a meaningful product attribute key (case-insensitive)
+        // Must match a meaningful product attribute key (case-insensitive).
+        // Note: do NOT skip based on whether the value appears in variantTitle —
+        // attributes and variant title can carry different information.
         return meaningfulKeys.some((k) => key.includes(k.toLowerCase()));
       })
       .map((m) => `  ${m[1]}: ${m[2].trim()}`)
       .join("\n");
+
+    console.log(
+      "[webhook] line item:",
+      name,
+      "variantTitle:", variantRaw || "(none)",
+      "appendVariant:", shouldAppendVariant,
+      "attrs found:", attrMatches.length,
+      "attrs kept:", attrs ? attrs.split("\n").length : 0
+    );
 
     results.push(`${qty}x ${displayName}${attrs ? "\n" + attrs : ""}`);
   }
@@ -260,6 +276,49 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   console.log("[shopify/webhook] shippingMethod:", shippingMethod);
   console.log("[shopify/webhook] dispatchDate:", dispatchDate);
 
+  // ── 3b. Gift wrapping detection ───────────────────────────────────────────
+  // Shopify can signal gift wrapping via order-level note attributes, line item
+  // custom attributes, or a mention in the order note.
+  const noteAttributesRaw = body.noteAttributes ?? body.note_attributes ?? [];
+  const noteAttributes: Array<{ name?: string; key?: string; value?: unknown }> =
+    Array.isArray(noteAttributesRaw) ? noteAttributesRaw : [];
+
+  // Find any note attribute whose key/name mentions "gift"
+  const giftWrapAttr = noteAttributes.find(
+    (a) =>
+      a.name?.toLowerCase().includes("gift") ||
+      a.key?.toLowerCase().includes("gift")
+  );
+
+  // Check line items blob for gift wrap customAttributes
+  const lineItemsStr =
+    typeof body.lineItems === "string"
+      ? body.lineItems
+      : JSON.stringify(body.lineItems ?? "");
+
+  const hasGiftWrap =
+    // Note attribute set to "Yes" or "true"
+    giftWrapAttr?.value === "Yes" ||
+    giftWrapAttr?.value === "yes" ||
+    giftWrapAttr?.value === "true" ||
+    giftWrapAttr?.value === true ||
+    // Gift wrap mentioned in line item custom attributes blob
+    lineItemsStr.toLowerCase().includes("gift wrap") ||
+    lineItemsStr.toLowerCase().includes("gift wrapping") ||
+    // Gift wrap mentioned in the free-text order note
+    body.orderNote?.toLowerCase().includes("gift wrap") ||
+    false;
+
+  console.log("[webhook] gift wrap detection:", {
+    noteAttributesCount: noteAttributes.length,
+    giftWrapAttr,
+    lineItemsBlobMentionsGift:
+      lineItemsStr.toLowerCase().includes("gift wrap") ||
+      lineItemsStr.toLowerCase().includes("gift wrapping"),
+    orderNoteMentionsGift: body.orderNote?.toLowerCase().includes("gift wrap") ?? false,
+    hasGiftWrap,
+  });
+
   // ── 4. Map fields ─────────────────────────────────────────────────────────
   const { firstName, lastName } = resolveName(body);
   const email    = body.customerEmail      ?? null;
@@ -308,6 +367,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     shipping_state:        null,
     shipping_postcode:     null,
     order_source:          "Shopify",
+    gift_wrapping:         hasGiftWrap || null,
     packet_data:           body as unknown as Record<string, unknown>,
   };
 
