@@ -326,6 +326,7 @@ export interface WorkshopJob {
   category: string;
   complexity: string;
   stage: string;
+  track: string;                          // 'repair' | 'collections' | 'manufacturing'
   assigned_jeweller: string | null;
   due_date: string | null;
   instructions: string | null;
@@ -338,6 +339,11 @@ export interface WorkshopJob {
   notes: string | null;
   stage_changed_at: string;
   components: ComponentItem[];
+  // Manufacturing WSJB QC pre-check checklist
+  wsjb_precheck_complete: boolean | null;
+  wsjb_subcontractor_required: boolean | null;
+  wsjb_subcontractor_name: string | null;
+  wsjb_ready_for_jeweller: boolean | null;
 }
 
 // ─────────────────────────────────────────────

@@ -3,21 +3,9 @@
 import { useState } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { WorkshopJob } from "@/lib/types";
+import { WorkshopTrack, TRACK_LABELS, TRACK_STAGES, STAGE_LABELS, STAGE_COLOURS, stagesForFilter, trackFromJobType } from "@/lib/workshopConfig";
 import WorkshopJobCard from "@/components/WorkshopJobCard";
 import WorkshopJobDrawer from "@/components/WorkshopJobDrawer";
-
-const STAGES = [
-  { id: "new",           label: "New",           color: "#635BFF" },
-  { id: "cad",           label: "CAD",            color: "#8B5CF6" },
-  { id: "cadbox",        label: "CAD Box",        color: "#7C3AED" },
-  { id: "precheck",      label: "Pre-Check",      color: "#F59E0B" },
-  { id: "in_progress",   label: "In Progress",    color: "#3B82F6" },
-  { id: "collection",    label: "Collection",     color: "#06B6D4" },
-  { id: "manufacturing", label: "Manufacturing",  color: "#10B981" },
-  { id: "qc",            label: "QC",             color: "#F97316" },
-  { id: "ready",         label: "Ready",          color: "#22C55E" },
-  { id: "completed",     label: "Completed",      color: "#6B7280" },
-];
 
 const fieldStyle: React.CSSProperties = {
   width: '100%', border: '1px solid #E8E8F0', borderRadius: 8,
@@ -31,6 +19,7 @@ interface NewJobForm {
   category: string;
   complexity: string;
   job_type: string;
+  track: string;
   assigned_jeweller: string;
   due_date: string;
   instructions: string;
@@ -41,7 +30,8 @@ const defaultForm: NewJobForm = {
   description: "",
   category: "other",
   complexity: "standard",
-  job_type: "major",
+  job_type: "repair",
+  track: "repair",
   assigned_jeweller: "",
   due_date: "",
   instructions: "",
@@ -54,17 +44,35 @@ interface Props {
   onJobDeleted: (id: string) => void;
 }
 
+type TrackFilter = WorkshopTrack | "all";
+
+const TRACK_FILTER_OPTIONS: { value: TrackFilter; label: string }[] = [
+  { value: "all",           label: "All Tracks" },
+  { value: "repair",        label: "Repair" },
+  { value: "collections",   label: "Collections" },
+  { value: "manufacturing", label: "Manufacturing" },
+];
+
 export default function WorkshopBoard({ jobs, onStageChange, onRefresh, onJobDeleted }: Props) {
   const [localJobs, setLocalJobs] = useState<WorkshopJob[]>(jobs);
+  const [trackFilter, setTrackFilter] = useState<TrackFilter>("all");
   const [addingToStage, setAddingToStage] = useState<string | null>(null);
   const [newJobForm, setNewJobForm] = useState<NewJobForm>(defaultForm);
   const [saving, setSaving] = useState(false);
   const [selectedJob, setSelectedJob] = useState<WorkshopJob | null>(null);
 
-  // Keep local in sync with prop changes
+  // Keep local in sync with prop changes (detect list-level changes)
   if (jobs !== localJobs && JSON.stringify(jobs.map((j) => j.id)) !== JSON.stringify(localJobs.map((j) => j.id))) {
     setLocalJobs(jobs);
   }
+
+  const visibleStages = stagesForFilter(trackFilter);
+
+  // When a track filter is active, only show jobs on that track.
+  // When "all", show all jobs but only in columns that exist in their track.
+  const visibleJobs = trackFilter === "all"
+    ? localJobs
+    : localJobs.filter((j) => (j.track ?? "repair") === trackFilter);
 
   function onDragEnd(result: DropResult) {
     const { destination, source, draggableId } = result;
@@ -103,7 +111,19 @@ export default function WorkshopBoard({ jobs, onStageChange, onRefresh, onJobDel
   function handleJobDelete(id: string) {
     setLocalJobs((prev) => prev.filter((j) => j.id !== id));
     setSelectedJob(null);
-    onJobDeleted(id); // also update parent so the prop stays in sync
+    onJobDeleted(id);
+  }
+
+  // When opening "Add job" from a specific column, pre-fill the track to match
+  // the column's track (if in a filtered view) or the first track that includes
+  // that stage.
+  function openAddJob(stage: string) {
+    const defaultTrack =
+      trackFilter !== "all"
+        ? trackFilter
+        : (Object.entries(TRACK_STAGES).find(([, stages]) => stages[0] === stage)?.[0] as WorkshopTrack | undefined) ?? "repair";
+    setNewJobForm({ ...defaultForm, track: defaultTrack });
+    setAddingToStage(stage);
   }
 
   return (
@@ -118,12 +138,38 @@ export default function WorkshopBoard({ jobs, onStageChange, onRefresh, onJobDel
         />
       )}
 
+      {/* Track filter bar */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+        {TRACK_FILTER_OPTIONS.map((opt) => {
+          const active = trackFilter === opt.value;
+          return (
+            <button
+              key={opt.value}
+              onClick={() => setTrackFilter(opt.value)}
+              style={{
+                padding: '5px 14px',
+                borderRadius: 8,
+                fontSize: 12,
+                fontWeight: 600,
+                border: `1px solid ${active ? '#635BFF' : '#E8E8F0'}`,
+                background: active ? '#635BFF' : '#FFFFFF',
+                color: active ? '#fff' : '#6B7280',
+                cursor: 'pointer',
+                transition: 'all .15s',
+              }}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Add Job Modal */}
       {addingToStage && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div style={{ background: '#FFFFFF', borderRadius: 16, width: '100%', maxWidth: 480, padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1A1A2E', marginBottom: 16 }}>
-              New Job — {STAGES.find((s) => s.id === addingToStage)?.label}
+              New Job — {STAGE_LABELS[addingToStage] ?? addingToStage}
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <input
@@ -153,13 +199,39 @@ export default function WorkshopBoard({ jobs, onStageChange, onRefresh, onJobDel
                 </select>
                 <select
                   value={newJobForm.job_type}
-                  onChange={(e) => setNewJobForm((f) => ({ ...f, job_type: e.target.value }))}
+                  onChange={(e) => {
+                    const jt = e.target.value;
+                    setNewJobForm((f) => ({
+                      ...f,
+                      job_type: jt,
+                      // Auto-update track when job type changes
+                      track: f.track === trackFromJobType(f.job_type) ? trackFromJobType(jt) : f.track,
+                    }));
+                  }}
                   style={fieldStyle}
                 >
+                  <option value="repair">Repair</option>
+                  <option value="custom_order">Custom Order</option>
+                  <option value="collections">Collections</option>
                   <option value="major">Major</option>
                   <option value="minor">Minor</option>
                 </select>
               </div>
+
+              {/* Track — shown so staff can override */}
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Track</label>
+                <select
+                  value={newJobForm.track}
+                  onChange={(e) => setNewJobForm((f) => ({ ...f, track: e.target.value }))}
+                  style={fieldStyle}
+                >
+                  {(Object.entries(TRACK_LABELS) as [WorkshopTrack, string][]).map(([id, label]) => (
+                    <option key={id} value={id}>{label}</option>
+                  ))}
+                </select>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <select
                   value={newJobForm.complexity}
@@ -205,36 +277,50 @@ export default function WorkshopBoard({ jobs, onStageChange, onRefresh, onJobDel
         </div>
       )}
 
+      {/* Kanban board */}
       <DragDropContext onDragEnd={onDragEnd}>
-        <div style={{ display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 16, minHeight: '60vh' }}>
-          {STAGES.map((stage) => {
-            const stageJobs = localJobs.filter((j) => j.stage === stage.id);
+        <div style={{ display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 16, minHeight: '60vh', alignItems: 'flex-start' }}>
+          {visibleStages.map((stageId) => {
+            const stageJobs = visibleJobs.filter((j) => j.stage === stageId);
+            const colour = STAGE_COLOURS[stageId] ?? "#635BFF";
+            const label = STAGE_LABELS[stageId] ?? stageId;
+
             return (
-              <div key={stage.id} style={{ flexShrink: 0, width: 224, display: 'flex', flexDirection: 'column' }}>
+              <div key={stageId} style={{ flexShrink: 0, width: 224, display: 'flex', flexDirection: 'column' }}>
                 {/* Column header */}
                 <div
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: '10px 10px 0 0', marginBottom: 2, background: stage.color + '15', borderBottom: `2px solid ${stage.color}` }}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '8px 12px', borderRadius: '10px 10px 0 0', marginBottom: 2,
+                    background: colour + '15', borderBottom: `2px solid ${colour}`,
+                  }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: '#1A1A2E' }}>{stage.label}</span>
-                    <span
-                      style={{ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '1px 6px', color: '#fff', background: stage.color }}
-                    >{stageJobs.length}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#1A1A2E', lineHeight: 1.3 }}>{label}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '1px 6px', color: '#fff', background: colour, flexShrink: 0 }}>
+                      {stageJobs.length}
+                    </span>
                   </div>
                   <button
-                    onClick={() => setAddingToStage(stage.id)}
+                    onClick={() => openAddJob(stageId)}
                     style={{ color: '#9CA3AF', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 0 }}
                     title="Add job"
                   >+</button>
                 </div>
 
                 {/* Droppable column */}
-                <Droppable droppableId={stage.id}>
+                <Droppable droppableId={stageId}>
                   {(provided, snapshot) => (
                     <div
                       ref={provided.innerRef}
                       {...provided.droppableProps}
-                      style={{ flex: 1, borderRadius: '0 0 10px 10px', padding: 8, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 200, background: snapshot.isDraggingOver ? '#EEF2FF' : '#F9FAFB', transition: 'background 0.15s' }}
+                      style={{
+                        flex: 1, borderRadius: '0 0 10px 10px', padding: 8,
+                        display: 'flex', flexDirection: 'column', gap: 8,
+                        minHeight: 200,
+                        background: snapshot.isDraggingOver ? '#EEF2FF' : '#F9FAFB',
+                        transition: 'background 0.15s',
+                      }}
                     >
                       {stageJobs.map((job, index) => (
                         <Draggable key={job.id} draggableId={job.id} index={index}>
@@ -243,10 +329,7 @@ export default function WorkshopBoard({ jobs, onStageChange, onRefresh, onJobDel
                               ref={prov.innerRef}
                               {...prov.draggableProps}
                               {...prov.dragHandleProps}
-                              style={{
-                                ...prov.draggableProps.style,
-                                opacity: snap.isDragging ? 0.85 : 1,
-                              }}
+                              style={{ ...prov.draggableProps.style, opacity: snap.isDragging ? 0.85 : 1 }}
                             >
                               <WorkshopJobCard job={job} onClick={() => setSelectedJob(job)} />
                             </div>

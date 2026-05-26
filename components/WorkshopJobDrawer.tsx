@@ -5,8 +5,19 @@ import Link from "next/link";
 import { WorkshopJob, ComponentItem } from "@/lib/types";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
+import {
+  WorkshopTrack,
+  TRACK_LABELS,
+  TRACK_STAGES,
+  STAGE_LABELS,
+  WS_STAFF,
+  WSJB_STAFF,
+  SUBCONTRACTOR_NAMES,
+  isWsStage,
+  isWsjbStage,
+} from "@/lib/workshopConfig";
 
-const JEWELLERS = ["Ben Mucklow", "Viv Valladares", "Joseph Onorato", "David Johnson", "Jack Mullan"];
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const CATEGORY_OPTIONS = [
   { value: "eng_ring",    label: "Eng. Ring" },
@@ -15,19 +26,6 @@ const CATEGORY_OPTIONS = [
   { value: "repair",      label: "Repair" },
   { value: "bracelet",    label: "Bracelet" },
   { value: "other",       label: "Other" },
-];
-
-const STAGES = [
-  { id: "new",           label: "New" },
-  { id: "cad",           label: "CAD" },
-  { id: "cadbox",        label: "CAD Box" },
-  { id: "precheck",      label: "Pre-Check" },
-  { id: "in_progress",   label: "In Progress" },
-  { id: "collection",    label: "Collection" },
-  { id: "manufacturing", label: "Manufacturing" },
-  { id: "qc",            label: "QC" },
-  { id: "ready",         label: "Ready" },
-  { id: "completed",     label: "Completed" },
 ];
 
 const STATUS_STYLES: Record<ComponentItem["status"], React.CSSProperties> = {
@@ -64,6 +62,19 @@ function formatDateAU(iso: string | null | undefined): string {
   return `${d}/${m}/${y}`;
 }
 
+// ── Section header helper ──────────────────────────────────────────────────────
+
+function SectionHeader({ label, action }: { label: string; action?: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #E8E8F0', paddingBottom: 4, marginBottom: 12 }}>
+      <p style={{ fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>{label}</p>
+      {action}
+    </div>
+  );
+}
+
+// ── Props ─────────────────────────────────────────────────────────────────────
+
 interface Props {
   job: WorkshopJob;
   onClose: () => void;
@@ -71,16 +82,31 @@ interface Props {
   onDelete: (id: string) => void;
 }
 
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: Props) {
   const { user } = useUser();
   const isManager = canManage(user?.role);
-  const [local, setLocal] = useState<WorkshopJob>({ ...job, components: job.components ?? [] });
+
+  const [local, setLocal] = useState<WorkshopJob>({
+    ...job,
+    components: job.components ?? [],
+    track: job.track ?? "repair",
+    wsjb_precheck_complete: job.wsjb_precheck_complete ?? false,
+    wsjb_subcontractor_required: job.wsjb_subcontractor_required ?? false,
+    wsjb_subcontractor_name: job.wsjb_subcontractor_name ?? null,
+    wsjb_ready_for_jeweller: job.wsjb_ready_for_jeweller ?? false,
+  });
+
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [addingComponent, setAddingComponent] = useState(false);
   const [newComp, setNewComp] = useState<Omit<ComponentItem, "id">>({
     name: "", quantity: "1", status: "ordered", notes: "",
   });
+  const [subcOther, setSubcOther] = useState("");
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
 
   const patch = useCallback(async (updates: Partial<WorkshopJob>) => {
     setSaving(true);
@@ -109,6 +135,27 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
   function handleBlurSave<K extends keyof WorkshopJob>(key: K, value: WorkshopJob[K]) {
     patch({ [key]: value });
   }
+
+  // ── Stage options — filtered to current track ──────────────────────────────
+
+  const track = local.track as WorkshopTrack;
+  const trackStages = TRACK_STAGES[track] ?? Object.values(TRACK_STAGES).flat();
+
+  // ── Staff suggestions based on current stage ──────────────────────────────
+
+  const suggestedStaff: { name: string; role: string }[] =
+    isWsStage(local.stage) ? WS_STAFF :
+    isWsjbStage(local.stage) ? WSJB_STAFF :
+    [];
+
+  // ── WSJB QC Pre-check (manufacturing track) ───────────────────────────────
+
+  const showWsjbChecklist = local.track === "manufacturing" && local.stage === "wsjb_qc_precheck";
+  const canAdvanceToJeweller = !showWsjbChecklist || local.wsjb_precheck_complete;
+
+  // ── Sub-contractor at jeweller stage ──────────────────────────────────────
+
+  const showSubcToggle = local.stage === "jeweller";
 
   // ── Components ────────────────────────────────────────────────────────────
 
@@ -140,20 +187,17 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
     local.components.length > 0 &&
     local.components.every((c) => c.status === "arrived" || c.status === "checked");
 
-  // ── Delete job ────────────────────────────────────────────────────────────
+  // ── Delete ─────────────────────────────────────────────────────────────────
 
   async function handleDeleteJob() {
     if (!window.confirm("Delete this workshop job? This cannot be undone.")) return;
     setDeleting(true);
     try {
-      console.log("[delete workshop] deleting job:", job.id);
       const res = await fetch(`/api/workshop/jobs/${job.id}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
       });
-      console.log("[delete workshop] response status:", res.status);
       const json = await res.json();
-      console.log("[delete workshop] response:", json);
       if (json.success) {
         onDelete(job.id);
         onClose();
@@ -161,12 +205,13 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
         alert("Delete failed: " + (json.error || "Unknown error"));
       }
     } catch (err) {
-      console.error("[delete workshop] error:", err);
       alert("Delete failed: " + String(err));
     } finally {
       setDeleting(false);
     }
   }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex' }}>
@@ -174,17 +219,20 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
       <div style={{ flex: 1, background: 'rgba(0,0,0,0.3)' }} onClick={onClose} />
 
       {/* Drawer */}
-      <div style={{ width: 480, background: '#FFFFFF', borderLeft: '1px solid #E8E8F0', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ width: 520, background: '#FFFFFF', borderLeft: '1px solid #E8E8F0', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 20, background: '#FFFFFF', borderBottom: '1px solid #E8E8F0', position: 'sticky', top: 0, zIndex: 10 }}>
           <div>
-            <p style={{ fontSize: 12, color: '#6B7280', marginBottom: 2 }}>{STAGES.find((s) => s.id === local.stage)?.label ?? local.stage}</p>
+            <p style={{ fontSize: 12, color: '#6B7280', marginBottom: 2 }}>
+              {STAGE_LABELS[local.stage] ?? local.stage} &bull; {TRACK_LABELS[track] ?? track}
+            </p>
             <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>{local.customer_surname ?? "Workshop Job"}</h2>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {saving && <span style={{ fontSize: 12, color: '#9CA3AF' }}>Saving…</span>}
-            <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            <button onClick={onClose}
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = '#F9FAFB'}
               onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = 'transparent'}
             >
@@ -195,6 +243,7 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
           </div>
         </div>
 
+        {/* Link to order */}
         {local.packet_id && (
           <div style={{ padding: '8px 20px', borderBottom: '1px solid #E8E8F0', background: '#F9FAFB' }}>
             <Link
@@ -209,24 +258,263 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
 
         <div style={{ flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-          {/* Stage selector */}
+          {/* ── Track & Stage ─────────────────────────────────────────────── */}
           <div>
-            <p style={{ fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Stage</p>
-            <select
-              value={local.stage}
-              onChange={(e) => {
-                setField("stage", e.target.value);
-                patch({ stage: e.target.value });
-              }}
-              style={fieldStyle}
-            >
-              {STAGES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </select>
+            <SectionHeader label="Routing" />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              {/* Track */}
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Track</label>
+                <select
+                  value={local.track}
+                  onChange={(e) => {
+                    setField("track", e.target.value);
+                    patch({ track: e.target.value });
+                  }}
+                  style={fieldStyle}
+                >
+                  {(Object.entries(TRACK_LABELS) as [WorkshopTrack, string][]).map(([id, label]) => (
+                    <option key={id} value={id}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              {/* Stage — filtered to current track's stages */}
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Stage</label>
+                <select
+                  value={local.stage}
+                  onChange={(e) => {
+                    setField("stage", e.target.value);
+                    patch({ stage: e.target.value });
+                  }}
+                  style={fieldStyle}
+                >
+                  {trackStages.map((s) => (
+                    <option key={s} value={s}>{STAGE_LABELS[s] ?? s}</option>
+                  ))}
+                  <option value="completed">Completed</option>
+                </select>
+              </div>
+            </div>
           </div>
 
-          {/* Job details */}
+          {/* ── WSJB QC Pre-Check checklist (manufacturing only) ──────────── */}
+          {showWsjbChecklist && (
+            <div>
+              <SectionHeader label="WSJB QC Pre-Check" />
+              <div style={{ background: '#F9FAFB', border: '1px solid #E8E8F0', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+                {/* Pre-check complete */}
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={!!local.wsjb_precheck_complete}
+                    onChange={(e) => {
+                      setField("wsjb_precheck_complete", e.target.checked);
+                      patch({ wsjb_precheck_complete: e.target.checked });
+                    }}
+                    style={{ width: 16, height: 16, accentColor: '#635BFF', cursor: 'pointer' }}
+                  />
+                  <span style={{ fontSize: 14, fontWeight: 500, color: '#1A1A2E' }}>Pre-check complete</span>
+                </label>
+
+                {/* Sub-contractor required */}
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={!!local.wsjb_subcontractor_required}
+                    onChange={(e) => {
+                      setField("wsjb_subcontractor_required", e.target.checked);
+                      if (!e.target.checked) {
+                        setField("wsjb_subcontractor_name", null);
+                        patch({ wsjb_subcontractor_required: false, wsjb_subcontractor_name: null });
+                      } else {
+                        patch({ wsjb_subcontractor_required: true });
+                      }
+                    }}
+                    style={{ width: 16, height: 16, accentColor: '#635BFF', cursor: 'pointer' }}
+                  />
+                  <span style={{ fontSize: 14, fontWeight: 500, color: '#1A1A2E' }}>Sub-contractor required</span>
+                </label>
+
+                {local.wsjb_subcontractor_required && (
+                  <div style={{ marginLeft: 26, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {SUBCONTRACTOR_NAMES.map((name) => (
+                      <button
+                        key={name}
+                        onClick={() => {
+                          setField("wsjb_subcontractor_name", name);
+                          patch({ wsjb_subcontractor_name: name });
+                        }}
+                        style={{
+                          padding: '4px 12px', borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                          border: `1px solid ${local.wsjb_subcontractor_name === name ? '#635BFF' : '#E8E8F0'}`,
+                          background: local.wsjb_subcontractor_name === name ? '#635BFF' : '#fff',
+                          color: local.wsjb_subcontractor_name === name ? '#fff' : '#374151',
+                        }}
+                      >{name}</button>
+                    ))}
+                    <input
+                      placeholder="Other…"
+                      value={subcOther}
+                      onChange={(e) => setSubcOther(e.target.value)}
+                      onBlur={(e) => {
+                        if (e.target.value.trim()) {
+                          setField("wsjb_subcontractor_name", e.target.value.trim());
+                          patch({ wsjb_subcontractor_name: e.target.value.trim() });
+                        }
+                      }}
+                      style={{ ...fieldStyle, width: 100, height: 32 }}
+                    />
+                  </div>
+                )}
+
+                {/* Ready for jeweller — gated on pre-check */}
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: local.wsjb_precheck_complete ? 'pointer' : 'not-allowed', opacity: local.wsjb_precheck_complete ? 1 : 0.4 }}>
+                  <input
+                    type="checkbox"
+                    checked={!!local.wsjb_ready_for_jeweller}
+                    disabled={!local.wsjb_precheck_complete}
+                    onChange={(e) => {
+                      setField("wsjb_ready_for_jeweller", e.target.checked);
+                      patch({ wsjb_ready_for_jeweller: e.target.checked });
+                    }}
+                    style={{ width: 16, height: 16, accentColor: '#10B981', cursor: 'pointer' }}
+                  />
+                  <span style={{ fontSize: 14, fontWeight: 500, color: '#1A1A2E' }}>Ready to move to Jeweller</span>
+                </label>
+
+                {!canAdvanceToJeweller && (
+                  <p style={{ fontSize: 12, color: '#F59E0B', fontStyle: 'italic', margin: 0 }}>
+                    Complete the pre-check before advancing to Jeweller stage.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Sub-contractor toggle (jeweller stage, all tracks) ─────────── */}
+          {showSubcToggle && (
+            <div>
+              <SectionHeader label="Assignment" />
+              <div style={{ background: '#F9FAFB', border: '1px solid #E8E8F0', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={!!local.is_subcontractor}
+                    onChange={(e) => {
+                      setField("is_subcontractor", e.target.checked);
+                      if (!e.target.checked) {
+                        patch({ is_subcontractor: false, subcontractor_name: null });
+                      } else {
+                        patch({ is_subcontractor: true });
+                      }
+                    }}
+                    style={{ width: 16, height: 16, accentColor: '#635BFF', cursor: 'pointer' }}
+                  />
+                  <span style={{ fontSize: 14, fontWeight: 500, color: '#1A1A2E' }}>Send to sub-contractor instead</span>
+                </label>
+
+                {local.is_subcontractor ? (
+                  <div style={{ marginLeft: 26 }}>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Sub-contractor</label>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                      {SUBCONTRACTOR_NAMES.map((name) => (
+                        <button
+                          key={name}
+                          onClick={() => {
+                            setField("subcontractor_name", name);
+                            patch({ subcontractor_name: name });
+                          }}
+                          style={{
+                            padding: '4px 12px', borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                            border: `1px solid ${local.subcontractor_name === name ? '#635BFF' : '#E8E8F0'}`,
+                            background: local.subcontractor_name === name ? '#635BFF' : '#fff',
+                            color: local.subcontractor_name === name ? '#fff' : '#374151',
+                          }}
+                        >{name}</button>
+                      ))}
+                    </div>
+                    <input
+                      placeholder="Other sub-contractor name…"
+                      value={local.subcontractor_name && !SUBCONTRACTOR_NAMES.includes(local.subcontractor_name) ? local.subcontractor_name : ""}
+                      onChange={(e) => setField("subcontractor_name", e.target.value || null)}
+                      onBlur={(e) => handleBlurSave("subcontractor_name", e.target.value || null)}
+                      style={fieldStyle}
+                    />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 8 }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Due Date</label>
+                        <input
+                          type="date"
+                          value={local.subcontractor_due_date ?? ""}
+                          onChange={(e) => { setField("subcontractor_due_date", e.target.value || null); patch({ subcontractor_due_date: e.target.value || null }); }}
+                          style={fieldStyle}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Status</label>
+                        <select
+                          value={local.subcontractor_status ?? "sent"}
+                          onChange={(e) => { setField("subcontractor_status", e.target.value); patch({ subcontractor_status: e.target.value }); }}
+                          style={fieldStyle}
+                        >
+                          <option value="sent">Sent</option>
+                          <option value="received">Received</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div style={{ marginTop: 8 }}>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Instructions for sub-contractor</label>
+                      <textarea
+                        rows={2}
+                        value={local.subcontractor_instructions ?? ""}
+                        onChange={(e) => setField("subcontractor_instructions", e.target.value)}
+                        onBlur={(e) => handleBlurSave("subcontractor_instructions", e.target.value || null)}
+                        style={textareaStyle}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  /* Regular jeweller assignment */
+                  <div style={{ marginLeft: 26 }}>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Assign Jeweller</label>
+                    <select
+                      value={local.assigned_jeweller ?? ""}
+                      onChange={(e) => { setField("assigned_jeweller", e.target.value || null); patch({ assigned_jeweller: e.target.value || null }); }}
+                      style={fieldStyle}
+                    >
+                      <option value="">— Unassigned —</option>
+                      {[...WS_STAFF, ...WSJB_STAFF].map((s) => (
+                        <option key={s.name} value={s.name}>{s.name} ({s.role})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Suggested staff (non-jeweller stages) ────────────────────── */}
+          {!showSubcToggle && suggestedStaff.length > 0 && (
+            <div>
+              <SectionHeader label="Staff Assignment" />
+              <select
+                value={local.assigned_jeweller ?? ""}
+                onChange={(e) => { setField("assigned_jeweller", e.target.value || null); patch({ assigned_jeweller: e.target.value || null }); }}
+                style={fieldStyle}
+              >
+                <option value="">— Unassigned —</option>
+                {suggestedStaff.map((s) => (
+                  <option key={s.name} value={s.name}>{s.name} ({s.role})</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* ── Job Details ──────────────────────────────────────────────── */}
           <div>
-            <p style={{ fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12, borderBottom: '1px solid #E8E8F0', paddingBottom: 4 }}>Job Details</p>
+            <SectionHeader label="Job Details" />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Customer Surname</label>
@@ -279,6 +567,9 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
                     onChange={(e) => { setField("job_type", e.target.value); patch({ job_type: e.target.value }); }}
                     style={fieldStyle}
                   >
+                    <option value="repair">Repair</option>
+                    <option value="custom_order">Custom Order</option>
+                    <option value="collections">Collections</option>
                     <option value="major">Major</option>
                     <option value="minor">Minor</option>
                   </select>
@@ -293,17 +584,24 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
                   />
                 </div>
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Assigned Jeweller</label>
-                <select
-                  value={local.assigned_jeweller ?? ""}
-                  onChange={(e) => { setField("assigned_jeweller", e.target.value || null); patch({ assigned_jeweller: e.target.value || null }); }}
-                  style={fieldStyle}
-                >
-                  <option value="">— Unassigned —</option>
-                  {JEWELLERS.map((j) => <option key={j} value={j}>{j}</option>)}
-                </select>
-              </div>
+
+              {/* Jeweller / Sub.C assignment — only shown outside jeweller stage */}
+              {!showSubcToggle && (
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Assigned Jeweller</label>
+                  <select
+                    value={local.assigned_jeweller ?? ""}
+                    onChange={(e) => { setField("assigned_jeweller", e.target.value || null); patch({ assigned_jeweller: e.target.value || null }); }}
+                    style={fieldStyle}
+                  >
+                    <option value="">— Unassigned —</option>
+                    {[...WS_STAFF, ...WSJB_STAFF].map((s) => (
+                      <option key={s.name} value={s.name}>{s.name} ({s.role})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Instructions</label>
                 <textarea
@@ -327,27 +625,27 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
             </div>
           </div>
 
-          {/* Components section */}
+          {/* ── Components ─────────────────────────────────────────────────── */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #E8E8F0', paddingBottom: 4, marginBottom: 12 }}>
-              <p style={{ fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Components</p>
-              <button
-                onClick={() => setAddingComponent((v) => !v)}
-                style={{ fontSize: 12, fontWeight: 600, color: '#635BFF', background: 'transparent', border: 'none', cursor: 'pointer' }}
-              >
-                + Add Component
-              </button>
-            </div>
+            <SectionHeader
+              label="Components"
+              action={
+                <button
+                  onClick={() => setAddingComponent((v) => !v)}
+                  style={{ fontSize: 12, fontWeight: 600, color: '#635BFF', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                >
+                  + Add Component
+                </button>
+              }
+            />
 
-            {/* All received banner */}
             {allReceived && (
               <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8, background: '#DCFCE7', border: '1px solid #BBF7D0', borderRadius: 12, padding: '8px 12px' }}>
                 <span style={{ color: '#166534', fontSize: 14 }}>✓</span>
-                <p style={{ fontSize: 14, fontWeight: 600, color: '#166534', margin: 0 }}>All components received — ready for Pre-Check</p>
+                <p style={{ fontSize: 14, fontWeight: 600, color: '#166634', margin: 0 }}>All components received — ready for Pre-Check</p>
               </div>
             )}
 
-            {/* Add component form */}
             {addingComponent && (
               <div style={{ background: '#F9FAFB', borderRadius: 12, border: '1px solid #E8E8F0', padding: 12, marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <input
@@ -393,7 +691,6 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
               </div>
             )}
 
-            {/* Component list */}
             {local.components.length === 0 && !addingComponent ? (
               <p style={{ fontSize: 14, color: '#9CA3AF', fontStyle: 'italic' }}>No components added yet</p>
             ) : (

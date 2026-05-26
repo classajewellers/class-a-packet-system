@@ -28,7 +28,7 @@ export default function WorkshopPage() {
   const [jobs, setJobs] = useState<WorkshopJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<"board" | "list">("board");
-  const [jobTypeFilter, setJobTypeFilter] = useState<"all" | "major" | "minor" | "overdue">("all");
+  const [overdueFilter, setOverdueFilter] = useState(false);
   const [jewellerFilter, setJewellerFilter] = useState<string>("all");
   const [tab, setTab] = useState<"workshop" | "valuations">("workshop");
 
@@ -67,9 +67,7 @@ export default function WorkshopPage() {
   const jewellers = Array.from(new Set(jobs.map((j) => j.assigned_jeweller).filter(Boolean))) as string[];
 
   const filteredJobs = jobs.filter((j) => {
-    if (jobTypeFilter === "major" && j.job_type !== "major") return false;
-    if (jobTypeFilter === "minor" && j.job_type !== "minor") return false;
-    if (jobTypeFilter === "overdue" && (j.due_date == null || j.due_date >= today)) return false;
+    if (overdueFilter && (j.due_date == null || j.due_date >= today)) return false;
     if (jewellerFilter !== "all" && j.assigned_jeweller !== jewellerFilter) return false;
     return true;
   });
@@ -96,15 +94,12 @@ export default function WorkshopPage() {
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex gap-1">
-          {(["all", "major", "minor", "overdue"] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setJobTypeFilter(f)}
-              style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: jobTypeFilter === f ? '#635BFF' : '#F9FAFB', color: jobTypeFilter === f ? '#fff' : '#6B7280', border: `1px solid ${jobTypeFilter === f ? '#635BFF' : '#E8E8F0'}`, cursor: 'pointer', transition: 'all .15s', textTransform: 'capitalize' }}
-            >
-              {f === "overdue" ? "Overdue" : f.charAt(0).toUpperCase() + f.slice(1)}
-            </button>
-          ))}
+          <button
+            onClick={() => setOverdueFilter((v) => !v)}
+            style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: overdueFilter ? '#EF4444' : '#F9FAFB', color: overdueFilter ? '#fff' : '#6B7280', border: `1px solid ${overdueFilter ? '#EF4444' : '#E8E8F0'}`, cursor: 'pointer', transition: 'all .15s' }}
+          >
+            Overdue only
+          </button>
         </div>
         {jewellers.length > 0 && (
           <select
@@ -150,7 +145,7 @@ export default function WorkshopPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ textAlign: 'left', borderBottom: '1px solid #E8E8F0', background: '#F9FAFB' }}>
-                  {['Customer','Description','Category','Jeweller','Stage','Due Date','Days In Stage'].map(h => (
+                  {['Customer','Description','Track','Jeweller','Stage','Due Date','Days In Stage'].map(h => (
                     <th key={h} style={{ padding: '12px 20px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
                   ))}
                 </tr>
@@ -165,7 +160,7 @@ export default function WorkshopPage() {
                       onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}>
                       <td style={{ padding: '12px 20px', fontWeight: 600, color: '#1A1A2E' }}>{j.customer_surname || "—"}</td>
                       <td style={{ padding: '12px 20px', color: '#374151', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{j.description || "—"}</td>
-                      <td style={{ padding: '12px 20px', color: '#6B7280', textTransform: 'capitalize' }}>{j.category}</td>
+                      <td style={{ padding: '12px 20px', color: '#6B7280', textTransform: 'capitalize' }}>{(j.track ?? "repair").replace("_", " ")}</td>
                       <td style={{ padding: '12px 20px', color: '#6B7280' }}>{j.assigned_jeweller || "—"}</td>
                       <td style={{ padding: '12px 20px', color: '#6B7280', textTransform: 'capitalize' }}>{j.stage.replace(/_/g, " ")}</td>
                       <td style={{ padding: '12px 20px', fontSize: 14, color: isOverdue ? '#EF4444' : '#6B7280', fontWeight: isOverdue ? 600 : 400 }}>

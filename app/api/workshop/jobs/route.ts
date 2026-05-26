@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { trackFromJobType } from "@/lib/workshopConfig";
 
 export const dynamic = "force-dynamic";
 
@@ -42,10 +43,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const body = await req.json();
     const supabase = createServerSupabaseClient();
 
+    // Auto-derive track from job_type if not explicitly provided
+    const track = body.track ?? trackFromJobType(body.job_type ?? "repair");
+
+    // New jobs always land in the SR Job Drawer unless a stage is specified
+    const stage = body.stage ?? "sr_job_drawer";
+
     const { data, error } = await supabase
       .from("workshop_jobs")
       .insert({
         ...body,
+        stage,
+        track,
         stage_changed_at: new Date().toISOString(),
       })
       .select()

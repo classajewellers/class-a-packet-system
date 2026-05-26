@@ -1,6 +1,7 @@
 "use client";
 
 import { WorkshopJob } from "@/lib/types";
+import { WorkshopTrack, TRACK_LABELS, TRACK_COLOURS } from "@/lib/workshopConfig";
 
 const CATEGORY_BADGE_STYLES: Record<string, React.CSSProperties> = {
   eng_ring:     { background: '#EEF2FF', color: '#635BFF' },
@@ -50,22 +51,43 @@ export default function WorkshopJobCard({ job, onClick }: Props) {
   const days = daysInStage(job.stage_changed_at);
   const categoryStyle = CATEGORY_BADGE_STYLES[job.category] ?? CATEGORY_BADGE_STYLES.other;
 
+  // Track badge
+  const track = (job.track ?? "repair") as WorkshopTrack;
+  const trackColour = TRACK_COLOURS[track] ?? TRACK_COLOURS.repair;
+  const trackLabel = TRACK_LABELS[track] ?? track;
+
   return (
     <div
       onClick={onClick}
-      style={{ background: '#FFFFFF', borderRadius: 10, border: '1px solid #E8E8F0', padding: 12, cursor: 'grab', userSelect: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}
+      style={{
+        background: '#FFFFFF', borderRadius: 10, border: '1px solid #E8E8F0',
+        padding: 12, cursor: 'grab', userSelect: 'none',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+      }}
     >
-      {/* Customer surname */}
-      <p style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>
-        {job.customer_surname || "Unknown"}
-      </p>
+      {/* Track badge — top right */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 4, marginBottom: 4 }}>
+        <p style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0, flex: 1 }}>
+          {job.customer_surname || "Unknown"}
+        </p>
+        <span
+          style={{
+            flexShrink: 0, display: 'inline-flex', padding: '1px 6px', borderRadius: 999,
+            fontSize: 10, fontWeight: 700, letterSpacing: '0.03em',
+            background: trackColour.bg, color: trackColour.text,
+            border: `1px solid ${trackColour.border}`,
+          }}
+        >
+          {track === "manufacturing" ? "MFG" : trackLabel.toUpperCase().slice(0, 4)}
+        </span>
+      </div>
 
       {/* Description */}
       {job.description && (
         <p style={{ fontSize: 13, color: '#6B7280', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{job.description}</p>
       )}
 
-      {/* Badges */}
+      {/* Badges row */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
         <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, ...categoryStyle }}>
           {CATEGORY_LABELS[job.category] ?? job.category}
@@ -82,13 +104,15 @@ export default function WorkshopJobCard({ job, onClick }: Props) {
         )}
       </div>
 
-      {/* Assigned jeweller */}
-      {job.assigned_jeweller && (
+      {/* Assigned jeweller / sub-contractor */}
+      {(job.assigned_jeweller || job.is_subcontractor) && (
         <p style={{ fontSize: 12, color: '#6B7280', marginTop: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
           <svg style={{ width: 12, height: 12, flexShrink: 0 }} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
           </svg>
-          {job.assigned_jeweller}
+          {job.is_subcontractor && job.subcontractor_name
+            ? `Sub.C — ${job.subcontractor_name}`
+            : job.assigned_jeweller}
         </p>
       )}
 
