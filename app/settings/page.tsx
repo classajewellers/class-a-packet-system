@@ -77,7 +77,7 @@ export default function SettingsPage() {
                   </td>
                   <td style={{ padding: '12px 20px' }}>
                     <span style={{ display: 'inline-flex', padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 500, background: member.role === "manager" ? '#635BFF' : '#E5E7EB', color: member.role === "manager" ? '#fff' : '#374151' }}>
-                      {ROLE_LABELS[member.role]}
+                      {member.role ? ROLE_LABELS[member.role] : "—"}
                     </span>
                   </td>
                   <td style={{ padding: '12px 20px', color: '#6B7280', fontSize: 14 }}>{member.email}</td>

@@ -40,8 +40,8 @@ export default function StaffTile({ member, onClick }: Props) {
       </span>
 
       {/* Role badge */}
-      <span className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full ${ROLE_BADGE_STYLES[member.role]}`}>
-        {ROLE_LABELS[member.role]}
+      <span className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full ${member.role ? ROLE_BADGE_STYLES[member.role] : "bg-gray-200 text-gray-400"}`}>
+        {member.role ? ROLE_LABELS[member.role] : "—"}
       </span>
     </button>
   );

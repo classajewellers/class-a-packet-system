@@ -6,7 +6,7 @@ import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
 import { InventoryItem, InventoryItemType, InventoryLocation, InventorySupplier } from "@/lib/types";
 import { calculateMultiplier, multiplierColour } from "@/lib/marginCalculator";
-import { Plus, Search, X, ChevronDown } from "lucide-react";
+import { Plus, Search, X, ChevronDown, Upload, Download, AlertCircle, CheckCircle2 } from "lucide-react";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 const fmtCurrency = (v: number | null | undefined) =>
@@ -358,6 +358,313 @@ function ItemDrawer({ item, isNew, locations, suppliers, onClose, onSaved, isMan
   );
 }
 
+// ─── CSV helpers ──────────────────────────────────────────────────────────────
+
+const CSV_TEMPLATE_HEADERS = [
+  "sku", "name", "category", "department", "item_type",
+  "supplier_code", "cost_price", "retail_price", "reorder_point", "notes",
+];
+
+function downloadTemplate() {
+  const exampleRow = "RNG-001,Diamond Solitaire,Rings,Fine Jewellery,retail,SUP-001,2500.00,6500.00,2,18ct white gold";
+  const blob = new Blob(
+    [CSV_TEMPLATE_HEADERS.join(",") + "\n" + exampleRow],
+    { type: "text/csv" }
+  );
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "inventory_import_template.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Minimal CSV parser — handles quoted fields with commas inside. */
+function parseCSV(text: string): { headers: string[]; rows: Record<string, string>[] } {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 1) return { headers: [], rows: [] };
+
+  function splitLine(line: string): string[] {
+    const cols: string[] = [];
+    let cur = "";
+    let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { inQ = !inQ; continue; }
+      if (c === "," && !inQ) { cols.push(cur.trim()); cur = ""; continue; }
+      cur += c;
+    }
+    cols.push(cur.trim());
+    return cols;
+  }
+
+  const headers = splitLine(lines[0]);
+  const rows: Record<string, string>[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const vals = splitLine(lines[i]);
+    const row: Record<string, string> = {};
+    headers.forEach((h, idx) => { row[h] = vals[idx] ?? ""; });
+    rows.push(row);
+  }
+  return { headers, rows };
+}
+
+// ─── CSV Import Modal ──────────────────────────────────────────────────────────
+
+interface ImportResult {
+  imported: number;
+  failed: { row: number; reason: string }[];
+}
+
+interface CsvImportModalProps {
+  onClose: () => void;
+  onDone: () => void;
+}
+
+function CsvImportModal({ onClose, onDone }: CsvImportModalProps) {
+  const [csvText, setCsvText] = useState<string | null>(null);
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [preview, setPreview] = useState<Record<string, string>[]>([]);
+  const [allRows, setAllRows] = useState<Record<string, string>[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState<ImportResult | null>(null);
+  const [fileError, setFileError] = useState("");
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileError("");
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const { headers: h, rows } = parseCSV(text);
+      if (!h.includes("sku") || !h.includes("name")) {
+        setFileError("CSV must include at least 'sku' and 'name' columns.");
+        setCsvText(null); setHeaders([]); setPreview([]); setAllRows([]);
+        return;
+      }
+      setCsvText(text);
+      setHeaders(h);
+      setAllRows(rows);
+      setPreview(rows.slice(0, 5));
+    };
+    reader.readAsText(file);
+  }
+
+  async function handleImport() {
+    if (!allRows.length) return;
+    setImporting(true);
+    let imported = 0;
+    const failed: { row: number; reason: string }[] = [];
+
+    for (let i = 0; i < allRows.length; i++) {
+      const row = allRows[i];
+      if (!row.sku?.trim() || !row.name?.trim()) {
+        failed.push({ row: i + 2, reason: "Missing SKU or Name" });
+        continue;
+      }
+      const payload = {
+        sku: row.sku.trim(),
+        name: row.name.trim(),
+        category: row.category?.trim() || null,
+        department: row.department?.trim() || null,
+        item_type: row.item_type?.trim() === "internal" ? "internal" : "retail",
+        supplier_code: row.supplier_code?.trim() || null,
+        cost_price: row.cost_price ? parseFloat(row.cost_price) : null,
+        retail_price: row.retail_price ? parseFloat(row.retail_price) : null,
+        reorder_point: row.reorder_point ? parseInt(row.reorder_point) : null,
+        notes: row.notes?.trim() || null,
+      };
+      try {
+        const res = await fetch("/api/inventory/items", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const json = await res.json();
+        if (json.error) {
+          failed.push({ row: i + 2, reason: json.error });
+        } else {
+          imported++;
+        }
+      } catch (err) {
+        failed.push({ row: i + 2, reason: String(err) });
+      }
+    }
+
+    setImporting(false);
+    setResult({ imported, failed });
+    if (imported > 0) onDone();
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%", padding: "8px 10px", border: "1px solid #E5E7EB",
+    borderRadius: 6, fontSize: 13, color: "#1A1A2E", background: "#fff",
+    boxSizing: "border-box",
+  };
+
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{ background: "#fff", borderRadius: 12, width: "100%", maxWidth: 700, maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+
+        {/* Header */}
+        <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #F3F4F6", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#1A1A2E" }}>Import Stock from CSV</h2>
+            <p style={{ margin: "3px 0 0", fontSize: 13, color: "#6B7280" }}>Upload a CSV file to bulk-import inventory items</p>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", padding: 4 }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: "20px 24px", flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 20 }}>
+
+          {/* Result view */}
+          {result ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ display: "flex", gap: 12 }}>
+                <div style={{ flex: 1, background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: 8, padding: "14px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+                  <CheckCircle2 size={20} color="#059669" />
+                  <div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: "#065F46" }}>{result.imported}</div>
+                    <div style={{ fontSize: 12, color: "#059669" }}>items imported</div>
+                  </div>
+                </div>
+                {result.failed.length > 0 && (
+                  <div style={{ flex: 1, background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, padding: "14px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+                    <AlertCircle size={20} color="#DC2626" />
+                    <div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: "#991B1B" }}>{result.failed.length}</div>
+                      <div style={{ fontSize: 12, color: "#DC2626" }}>failed</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {result.failed.length > 0 && (
+                <div style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 8, overflow: "hidden" }}>
+                  <div style={{ padding: "10px 14px", background: "#F3F4F6", borderBottom: "1px solid #E5E7EB", fontSize: 12, fontWeight: 600, color: "#6B7280" }}>FAILED ROWS</div>
+                  <div style={{ maxHeight: 200, overflowY: "auto" }}>
+                    {result.failed.map((f) => (
+                      <div key={f.row} style={{ padding: "8px 14px", borderBottom: "1px solid #F3F4F6", fontSize: 13, display: "flex", gap: 12 }}>
+                        <span style={{ color: "#9CA3AF", flexShrink: 0 }}>Row {f.row}</span>
+                        <span style={{ color: "#991B1B" }}>{f.reason}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Step 1: Download template / upload */}
+              <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                <button
+                  onClick={downloadTemplate}
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", background: "#F3F4F6", border: "1px solid #E5E7EB", borderRadius: 6, cursor: "pointer", fontSize: 13, color: "#374151", fontWeight: 500, whiteSpace: "nowrap" }}
+                >
+                  <Download size={14} />
+                  Download Template
+                </button>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: "block" }}>
+                    <div style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", color: csvText ? "#1A1A2E" : "#9CA3AF" }}>
+                      <Upload size={14} style={{ flexShrink: 0 }} />
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {csvText ? `${allRows.length} rows ready to import` : "Choose CSV file…"}
+                      </span>
+                    </div>
+                    <input type="file" accept=".csv,text/csv" onChange={handleFile} style={{ display: "none" }} />
+                  </label>
+                  {fileError && <p style={{ margin: "6px 0 0", fontSize: 12, color: "#DC2626" }}>{fileError}</p>}
+                </div>
+              </div>
+
+              {/* Template columns info */}
+              {!csvText && (
+                <div style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 8, padding: "12px 14px" }}>
+                  <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 600, color: "#6B7280" }}>EXPECTED COLUMNS</p>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {CSV_TEMPLATE_HEADERS.map((h) => (
+                      <code key={h} style={{ fontSize: 11, background: "#EEF2FF", color: "#4338CA", padding: "2px 7px", borderRadius: 4 }}>{h}</code>
+                    ))}
+                  </div>
+                  <p style={{ margin: "8px 0 0", fontSize: 12, color: "#9CA3AF" }}>
+                    <code style={{ fontSize: 11 }}>item_type</code> must be <code style={{ fontSize: 11 }}>retail</code> or <code style={{ fontSize: 11 }}>internal</code> (defaults to retail if blank).
+                    SKU and Name are required.
+                  </p>
+                </div>
+              )}
+
+              {/* Preview */}
+              {preview.length > 0 && (
+                <div>
+                  <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 600, color: "#6B7280" }}>
+                    PREVIEW — first {preview.length} of {allRows.length} rows
+                  </p>
+                  <div style={{ overflowX: "auto", border: "1px solid #E5E7EB", borderRadius: 8 }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                      <thead>
+                        <tr style={{ background: "#F9FAFB" }}>
+                          {headers.map((h) => (
+                            <th key={h} style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#6B7280", whiteSpace: "nowrap", borderBottom: "1px solid #E5E7EB" }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preview.map((row, i) => (
+                          <tr key={i} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                            {headers.map((h) => (
+                              <td key={h} style={{ padding: "7px 12px", color: "#374151", whiteSpace: "nowrap", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {row[h] || <span style={{ color: "#D1D5DB" }}>—</span>}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: "14px 24px", borderTop: "1px solid #F3F4F6", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          {result ? (
+            <button
+              onClick={onClose}
+              style={{ padding: "8px 20px", background: "#635BFF", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 500 }}
+            >
+              Done
+            </button>
+          ) : (
+            <>
+              <button onClick={onClose} style={{ padding: "8px 16px", background: "#F3F4F6", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, color: "#374151" }}>
+                Cancel
+              </button>
+              <button
+                onClick={handleImport}
+                disabled={!csvText || importing || allRows.length === 0}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 20px", background: "#635BFF", color: "#fff", border: "none", borderRadius: 6, cursor: (!csvText || importing) ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 500, opacity: (!csvText || importing) ? 0.6 : 1 }}
+              >
+                <Upload size={14} />
+                {importing ? `Importing…` : `Import ${allRows.length > 0 ? allRows.length + " rows" : ""}`}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ─────────────────────────────────────────────────────────────────
 export default function InventoryStockPage() {
   const { user } = useUser();
@@ -381,6 +688,7 @@ export default function InventoryStockPage() {
 
   const [drawerItem, setDrawerItem] = useState<InventoryItem | null>(null);
   const [drawerNew, setDrawerNew] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -430,13 +738,22 @@ export default function InventoryStockPage() {
             {items.length} item{items.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <button
-          onClick={openNew}
-          style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 500 }}
-        >
-          <Plus size={15} />
-          New Item
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={() => setShowImport(true)}
+            style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 14px", background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 500 }}
+          >
+            <Upload size={14} />
+            Import CSV
+          </button>
+          <button
+            onClick={openNew}
+            style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 500 }}
+          >
+            <Plus size={15} />
+            New Item
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -564,7 +881,7 @@ export default function InventoryStockPage() {
         </table>
       </div>
 
-      {/* Drawer */}
+      {/* Item drawer */}
       {showDrawer && (
         <ItemDrawer
           item={drawerItem}
@@ -574,6 +891,14 @@ export default function InventoryStockPage() {
           onClose={closeDrawer}
           onSaved={handleSaved}
           isManager={isManager}
+        />
+      )}
+
+      {/* CSV import modal */}
+      {showImport && (
+        <CsvImportModal
+          onClose={() => setShowImport(false)}
+          onDone={() => { fetchAll(); }}
         />
       )}
     </div>

@@ -1,6 +1,7 @@
 // Shared user/session types — no "use client" so importable anywhere.
 
-export type UserRole = "admin" | "manager" | "staff";
+// null = profile not yet loaded (loading state — never render gated content)
+export type UserRole = "admin" | "manager" | "staff" | null;
 
 export interface LoggedInUser {
   id: string;
@@ -11,7 +12,8 @@ export interface LoggedInUser {
   loggedInAt: string;
 }
 
-/** Returns true for roles that can access manager-level features. */
+/** Returns true for roles that can access manager-level features.
+ *  Explicitly returns false for null (role not yet loaded) and undefined. */
 export function canManage(role: UserRole | undefined): boolean {
   return role === "admin" || role === "manager";
 }

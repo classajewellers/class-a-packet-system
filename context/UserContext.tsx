@@ -10,20 +10,21 @@ import {
 } from "react";
 import { LoggedInUser, UserRole } from "@/lib/userTypes";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
-// Top-level import is safe: createBrowserSupabaseClient() has a typeof window
-// guard so calling it on the server returns a non-cached instance that won't
-// store auth state. The singleton is only activated client-side.
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 interface UserContextType {
   user: LoggedInUser | null;
   hydrated: boolean;
+  /** True while the role is being fetched from the profiles table.
+   *  Role-gated UI should render a skeleton instead of role-dependent content. */
+  roleLoading: boolean;
   logout: () => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType>({
   user: null,
   hydrated: false,
+  roleLoading: true,
   logout: async () => {},
 });
 
@@ -40,21 +41,26 @@ function deriveInitials(name: string): string {
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<LoggedInUser | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  // True until the profile row has been read at least once.
+  const [roleLoading, setRoleLoading] = useState(true);
 
-  // Keep a ref to the supabase instance so logout() can call signOut()
-  // without needing it in the closure's dependency array.
   const supabaseRef = useRef(createBrowserSupabaseClient());
 
+  // Generation counter — incremented on every loadProfile call.
+  // Any completion whose gen doesn't match the latest is discarded,
+  // which prevents a slow/timed-out first call from overwriting a faster second call.
+  const loadGenRef = useRef(0);
+
   useEffect(() => {
-    // Re-read from ref — this is the same singleton every time
     const supabase = supabaseRef.current;
     let cancelled = false;
 
     async function loadProfile(userId: string, email: string) {
-      // Race the profile query against a 5 s timeout.
-      // Supabase errors come back as { data: null, error } (no throw), so a
-      // try/catch alone won't save us if the network is slow. Promise.race
-      // guarantees setUser always fires within 5 s regardless of Supabase state.
+      // Claim a generation slot. If another call starts before this one
+      // finishes, our gen will be stale and we'll discard the result.
+      const gen = ++loadGenRef.current;
+      setRoleLoading(true);
+
       let profileData: { full_name?: string | null; role?: string | null } | null = null;
 
       try {
@@ -64,50 +70,71 @@ export function UserProvider({ children }: { children: ReactNode }) {
           .eq("id", userId)
           .single();
 
+        // 8 s timeout — generous but bounded
         const timeoutPromise = new Promise<{ data: null }>((resolve) =>
-          setTimeout(() => resolve({ data: null }), 5000)
+          setTimeout(() => resolve({ data: null }), 8000)
         );
 
         const result = await Promise.race([queryPromise, timeoutPromise]);
         profileData = result.data;
       } catch {
-        // Network-level exception — profileData stays null, use fallback below
+        // Network-level exception — profileData stays null
       }
 
-      if (cancelled) return;
+      // Discard stale results (another loadProfile call won the race).
+      if (cancelled || gen !== loadGenRef.current) return;
 
-      setUser({
-        id: userId,
-        name: profileData?.full_name || email,
-        role: ((profileData?.role) ?? "staff") as UserRole,
-        email,
-        initials: deriveInitials(profileData?.full_name || email),
-        loggedInAt: new Date().toISOString(),
-      });
+      if (profileData) {
+        // Profile row found — use confirmed role (or "staff" if role column is empty)
+        setUser({
+          id: userId,
+          name: profileData.full_name || email,
+          role: ((profileData.role) ?? "staff") as UserRole,
+          email,
+          initials: deriveInitials(profileData.full_name || email),
+          loggedInAt: new Date().toISOString(),
+        });
+      } else {
+        // Profile not found or timed out.
+        // Set user with null role so the sidebar knows we're still uncertain —
+        // never guess "staff" when we haven't confirmed from the DB.
+        setUser((prev) =>
+          prev
+            ? { ...prev } // keep existing user/role if we already had one
+            : {
+                id: userId,
+                name: email,
+                role: null,
+                email,
+                initials: deriveInitials(email),
+                loggedInAt: new Date().toISOString(),
+              }
+        );
+      }
+
+      setRoleLoading(false);
     }
 
-    // ── Initial session check ─────────────────────────────────────────────────
-    // getSession() reads from cookies — fast, no network call for anonymous users.
-    // Wrapped in an async IIFE so we can use await/try-finally cleanly.
+    // ── Initial session check ──────────────────────────────────────────────────
     (async () => {
       try {
         const { data } = await supabase.auth.getSession();
         if (cancelled) return;
         if (data.session?.user) {
           await loadProfile(data.session.user.id, data.session.user.email ?? "");
+        } else {
+          // No session — nothing to load
+          setRoleLoading(false);
         }
       } catch (err) {
         console.error("[UserContext] getSession failed:", err);
+        if (!cancelled) setRoleLoading(false);
       } finally {
-        // Always unblock the UI — even if Supabase is unreachable.
         if (!cancelled) setHydrated(true);
       }
     })();
 
-    // ── Auth state listener ───────────────────────────────────────────────────
-    // Because we use a singleton client, this listener receives events from
-    // signInWithPassword() called in the login form — even though that call
-    // happens in a different component.
+    // ── Auth state listener ────────────────────────────────────────────────────
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, session: Session | null) => {
@@ -122,26 +149,28 @@ export function UserProvider({ children }: { children: ReactNode }) {
           await loadProfile(session.user.id, session.user.email ?? "");
         }
       } else if (event === "SIGNED_OUT") {
+        loadGenRef.current++; // invalidate any in-flight loadProfile
         setUser(null);
+        setRoleLoading(false);
       }
       // INITIAL_SESSION is ignored — getSession() handles the initial state.
-      // Ignoring it prevents the race where onAuthStateChange fires session=null
-      // before getSession() has a chance to resolve.
     });
 
     return () => {
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, []); // Run once on mount — supabase singleton never changes
+  }, []);
 
   async function logout() {
+    loadGenRef.current++; // invalidate in-flight loads
     await supabaseRef.current.auth.signOut();
     setUser(null);
+    setRoleLoading(false);
   }
 
   return (
-    <UserContext.Provider value={{ user, hydrated, logout }}>
+    <UserContext.Provider value={{ user, hydrated, roleLoading, logout }}>
       {children}
     </UserContext.Provider>
   );

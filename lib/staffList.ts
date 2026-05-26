@@ -41,7 +41,7 @@ export const STAFF_LIST: StaffMember[] = [
 
 export const STAFF_NAMES: string[] = STAFF_LIST.map((m) => m.name);
 
-export const ROLE_LABELS: Record<UserRole, string> = {
+export const ROLE_LABELS: Record<NonNullable<UserRole>, string> = {
   admin:   "Admin",
   manager: "Manager",
   staff:   "Staff",
