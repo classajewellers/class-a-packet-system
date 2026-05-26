@@ -11,6 +11,7 @@ export async function GET(req: NextRequest) {
     const location_id = searchParams.get('location_id') ?? ''
     const supplier_id = searchParams.get('supplier_id') ?? ''
     const department = searchParams.get('department') ?? ''
+    const lowstock = searchParams.get('lowstock') === 'true'
 
     const supabase = createServerSupabaseClient()
     let query = supabase
@@ -35,13 +36,22 @@ export async function GET(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     // Aggregate stock quantity across all locations
-    const items = (data ?? []).map((item: Record<string, unknown>) => {
+    let items = (data ?? []).map((item: Record<string, unknown>) => {
       const stockRows = (item.inventory_stock as { quantity: number }[] | null) ?? []
       const total_stock = stockRows.reduce((sum: number, r: { quantity: number }) => sum + (r.quantity ?? 0), 0)
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { inventory_stock: _stock, ...rest } = item
       return { ...rest, total_stock }
     })
+
+    // Low stock filter: total_stock <= reorder_point (reorder_point must be set > 0)
+    if (lowstock) {
+      items = items.filter((item) => {
+        const rp = (item as { reorder_point?: number | null }).reorder_point
+        const ts = (item as { total_stock?: number }).total_stock ?? 0
+        return rp != null && rp > 0 && ts <= rp
+      })
+    }
 
     return NextResponse.json({ items })
   } catch (err) {

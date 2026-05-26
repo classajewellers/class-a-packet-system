@@ -466,3 +466,24 @@ export interface InventoryStockRow {
   quantity: number;
   updated_at: string;
 }
+
+export type InventoryMovementType =
+  | 'receive' | 'transfer' | 'sale' | 'return'
+  | 'adjustment' | 'workshop_in' | 'workshop_out' | 'stocktake';
+
+export interface InventoryMovement {
+  id: string;
+  item_id: string;
+  from_location_id: string | null;
+  to_location_id: string | null;
+  quantity: number;
+  movement_type: InventoryMovementType;
+  reference: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  // Joined
+  item?: { name: string; sku: string } | null;
+  from_location?: { name: string } | null;
+  to_location?: { name: string } | null;
+}

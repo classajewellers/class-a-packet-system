@@ -4,8 +4,30 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Packet } from "@/lib/types";
+import { Packet, InventoryMovement, InventoryMovementType } from "@/lib/types";
 import { packetTypeLabel, formatDateAU, formatCurrency } from "@/lib/formatters";
+
+// ── Movement helpers ──────────────────────────────────────────────────────────
+const MOVEMENT_BADGE: Record<InventoryMovementType, { bg: string; fg: string; label: string }> = {
+  receive:      { bg: "#DCFCE7", fg: "#166534", label: "Receive" },
+  transfer:     { bg: "#DBEAFE", fg: "#1E40AF", label: "Transfer" },
+  sale:         { bg: "#EEF2FF", fg: "#635BFF", label: "Sale" },
+  return:       { bg: "#FEF3C7", fg: "#92400E", label: "Return" },
+  adjustment:   { bg: "#F3F4F6", fg: "#374151", label: "Adjustment" },
+  workshop_in:  { bg: "#FDF4FF", fg: "#7E22CE", label: "Workshop In" },
+  workshop_out: { bg: "#FFF7ED", fg: "#9A3412", label: "Workshop Out" },
+  stocktake:    { bg: "#F0FDF4", fg: "#166534", label: "Stocktake" },
+};
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
 
 // ── Vault badge styles by packet type ────────────────────────────────────────
 const TYPE_BADGE_STYLE: Record<string, React.CSSProperties> = {
@@ -78,6 +100,8 @@ export default function DashboardPage() {
   const [packets, setPackets] = useState<Packet[]>([]);
   const [loading, setLoading] = useState(true);
   const [revenueThisMonth, setRevenueThisMonth] = useState<number | null>(null);
+  const [lowStockCount, setLowStockCount] = useState<number | null>(null);
+  const [recentMovements, setRecentMovements] = useState<InventoryMovement[]>([]);
 
   useEffect(() => {
     fetch("/api/admin/packets?limit=200", { cache: "no-store" })
@@ -99,6 +123,18 @@ export default function DashboardPage() {
           setRevenueThisMonth(total);
         }
       })
+      .catch(() => {});
+
+    // Inventory: low stock count
+    fetch("/api/inventory/items?lowstock=true", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json) => setLowStockCount((json.items ?? []).length))
+      .catch(() => {});
+
+    // Inventory: recent movements
+    fetch("/api/inventory/movements?limit=5", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json) => setRecentMovements(json.movements ?? []))
       .catch(() => {});
   }, []);
 
@@ -157,9 +193,9 @@ export default function DashboardPage() {
     <div style={{ padding: 24, maxWidth: 1200, margin: "0 auto" }}>
 
       {/* ── Stat cards ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0,1fr))", gap: 14, marginBottom: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0,1fr))", gap: 14, marginBottom: 24 }}>
         {loading ? (
-          Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)
+          Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
         ) : (
           <>
             <StatCard label="Today's Orders"   value={todaysOrders}    sub="submitted today"     href="/orders?filter=today" />
@@ -171,6 +207,12 @@ export default function DashboardPage() {
               value={revenueThisMonth != null ? formatCurrency(revenueThisMonth) : "—"}
               sub="month to date"
               href="/reporting"
+            />
+            <StatCard
+              label="Low Stock"
+              value={lowStockCount ?? "—"}
+              sub="items below reorder point"
+              href="/inventory/stock?lowstock=true"
             />
           </>
         )}
@@ -279,6 +321,41 @@ export default function DashboardPage() {
                         {packetTypeLabel(p.packet_type)} ·{" "}
                         <span style={{ color: "#EF4444" }}>Due {formatDateAU(p.due_date)}</span>
                       </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          {/* Recent Stock Movements */}
+          <div style={card}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: "1px solid #E8E8F0" }}>
+              <span style={{ fontWeight: 600, fontSize: 14, color: "#1A1A2E" }}>Recent Movements</span>
+              <Link href="/inventory/stock" style={{ textDecoration: "none", color: "#635BFF", fontSize: 12, fontWeight: 500 }}>
+                View all →
+              </Link>
+            </div>
+            {recentMovements.length === 0 ? (
+              <div style={{ padding: "20px 16px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>No movements yet</div>
+            ) : (
+              <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
+                {recentMovements.map((m) => {
+                  const cfg = MOVEMENT_BADGE[m.movement_type] ?? { bg: "#F3F4F6", fg: "#374151", label: m.movement_type };
+                  return (
+                    <li key={m.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: "1px solid #E8E8F0" }}>
+                      <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: cfg.bg, color: cfg.fg, whiteSpace: "nowrap" }}>
+                        {cfg.label}
+                      </span>
+                      <span style={{ flex: 1, fontSize: 13, color: "#1A1A2E", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {m.item?.name ?? "—"}
+                      </span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: "#374151", whiteSpace: "nowrap" }}>
+                        {m.quantity > 0 ? `+${m.quantity}` : m.quantity}
+                      </span>
+                      <span style={{ fontSize: 11, color: "#9CA3AF", whiteSpace: "nowrap" }}>
+                        {timeAgo(m.created_at)}
+                      </span>
                     </li>
                   );
                 })}
