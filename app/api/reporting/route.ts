@@ -544,6 +544,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           "customer_email, customer_first_name, customer_last_name, customer_phone, total_charges, created_at"
         )
         .not("customer_email", "is", null)
+        .neq("customer_email", "")
         .order("created_at", { ascending: true });
 
       console.log(

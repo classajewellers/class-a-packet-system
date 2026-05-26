@@ -2,7 +2,8 @@
 
 export const dynamic = "force-dynamic";
 
-import { useState, useEffect, useCallback, ReactNode } from "react";
+import { useState, useEffect, useCallback, ReactNode, Component } from "react";
+import React from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import {
@@ -319,25 +320,64 @@ function DebugPanel({ data, section, start, end }: { data: any; section: string;
   );
 }
 
+// ── Error boundary ────────────────────────────────────────────────────────────
+
+class SectionErrorBoundary extends Component<
+  { children: ReactNode; onRetry: () => void },
+  { error: Error | null }
+> {
+  constructor(props: { children: ReactNode; onRetry: () => void }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error("[reporting] Section render error:", error, info.componentStack);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 40, textAlign: "center", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "#DC2626", marginBottom: 8 }}>Section failed to render</div>
+          <div style={{ fontSize: 12, color: "#DC2626", marginBottom: 16, fontFamily: "monospace" }}>{String(this.state.error)}</div>
+          <button
+            onClick={() => { this.setState({ error: null }); this.props.onRetry(); }}
+            style={{ padding: "8px 20px", background: "#EF4444", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600 }}
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ── Section renderers ─────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function SalesSection({ data, start, end }: { data: any; start: string; end: string }) {
   if (!data) return <EmptyState message={`No sales data between ${start} and ${end}.`} />;
-  const { summary: s, daily, byType, byStaff, topOrders } = data;
+  const s = data.summary ?? {};
+  const daily: unknown[] = data.daily ?? [];
+  const byType: unknown[] = data.byType ?? [];
+  const byStaff: unknown[] = data.byStaff ?? [];
+  const topOrders: unknown[] = data.topOrders ?? [];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* KPI row */}
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-        <KpiCard label="Total Revenue" value={fmtCurrency(s.totalRevenue)} delta={s.revChange} />
-        <KpiCard label="Orders" value={s.orderCount} delta={s.orderChange} />
-        <KpiCard label="Avg Order Value" value={fmtCurrency(s.avgOrderValue)} />
+        <KpiCard label="Total Revenue" value={fmtCurrency(s.totalRevenue ?? 0)} delta={s.revChange ?? null} />
+        <KpiCard label="Orders" value={s.orderCount ?? 0} delta={s.orderChange ?? null} />
+        <KpiCard label="Avg Order Value" value={fmtCurrency(s.avgOrderValue ?? 0)} />
         <KpiCard
           label="vs Prior Period"
           value={s.revChange != null ? (s.revChange >= 0 ? `+${fmtPct(s.revChange)}` : fmtPct(s.revChange)) : "N/A"}
-          sub={`Prior: ${fmtCurrency(s.priorRevenue)}`}
-          delta={s.revChange}
+          sub={`Prior: ${fmtCurrency(s.priorRevenue ?? 0)}`}
+          delta={s.revChange ?? null}
         />
       </div>
 
@@ -410,24 +450,24 @@ function SalesSection({ data, start, end }: { data: any; start: string; end: str
       <SectionTable
         title="Top 10 Orders"
         headers={["Reference", "Customer", "Type", "Staff", "Total", "Date"]}
-        rows={topOrders.map((o: { reference_number: string; customer: string; type: string; staff: string; total: number; date: string }) => [
+        rows={(topOrders as { reference_number: string; customer: string; type: string; staff: string; total: number; date: string }[]).map((o) => [
           o.reference_number,
           o.customer,
           PACKET_TYPE_LABELS[o.type] ?? o.type,
           o.staff,
-          fmtCurrency(o.total),
+          fmtCurrency(o.total ?? 0),
           o.date,
         ])}
         onExport={() =>
           downloadCSV(
             "top-orders.csv",
             ["Reference", "Customer", "Type", "Staff", "Total", "Date"],
-            topOrders.map((o: { reference_number: string; customer: string; type: string; staff: string; total: number; date: string }) => [
+            (topOrders as { reference_number: string; customer: string; type: string; staff: string; total: number; date: string }[]).map((o) => [
               o.reference_number,
               o.customer,
               o.type,
               o.staff,
-              o.total,
+              o.total ?? 0,
               o.date,
             ])
           )
@@ -441,13 +481,16 @@ function SalesSection({ data, start, end }: { data: any; start: string; end: str
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function OrdersSection({ data, start, end }: { data: any; start: string; end: string }) {
   if (!data) return <EmptyState message={`No order data between ${start} and ${end}.`} />;
-  const { summary: s, daily, byType, overdue } = data;
+  const s = data.summary ?? {};
+  const daily: unknown[] = data.daily ?? [];
+  const byType: unknown[] = data.byType ?? [];
+  const overdue: unknown[] = data.overdue ?? [];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-        <KpiCard label="Total Created" value={s.totalCreated} />
-        <KpiCard label="Overdue Count" value={s.overdueCount} sub="past due date, unprinted" />
+        <KpiCard label="Total Created" value={s.totalCreated ?? 0} />
+        <KpiCard label="Overdue Count" value={s.overdueCount ?? 0} sub="past due date, unprinted" />
         <KpiCard label="Avg Turnaround" value={`${Math.round(s.avgTurnaround ?? 0)}d`} sub="created → due date" />
       </div>
 
@@ -494,7 +537,7 @@ function OrdersSection({ data, start, end }: { data: any; start: string; end: st
       <SectionTable
         title={`Overdue Orders (${overdue.length})`}
         headers={["Reference", "Customer", "Type", "Due Date", "Days Overdue"]}
-        rows={overdue.map((o: { reference_number: string; customer: string; type: string; due_date: string; days_overdue: number }) => [
+        rows={(overdue as { reference_number: string; customer: string; type: string; due_date: string; days_overdue: number }[]).map((o) => [
           o.reference_number,
           o.customer,
           PACKET_TYPE_LABELS[o.type] ?? o.type,
@@ -513,7 +556,7 @@ function OrdersSection({ data, start, end }: { data: any; start: string; end: st
           downloadCSV(
             "overdue-orders.csv",
             ["Reference", "Customer", "Type", "Due Date", "Days Overdue"],
-            overdue.map((o: { reference_number: string; customer: string; type: string; due_date: string; days_overdue: number }) => [
+            (overdue as { reference_number: string; customer: string; type: string; due_date: string; days_overdue: number }[]).map((o) => [
               o.reference_number,
               o.customer,
               o.type,
@@ -600,15 +643,18 @@ function WorkshopSection({ data, start, end }: { data: any; start: string; end: 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function QuotesSection({ data, start, end }: { data: any; start: string; end: string }) {
   if (!data) return <EmptyState message={`No quotes data between ${start} and ${end}.`} />;
-  const { summary: s, byStatus, byStaff, pipeline } = data;
+  const s = data.summary ?? {};
+  const byStatus: unknown[] = data.byStatus ?? [];
+  const byStaff: unknown[] = data.byStaff ?? [];
+  const pipeline: unknown[] = data.pipeline ?? [];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-        <KpiCard label="Total Created" value={s.totalCreated} />
-        <KpiCard label="Won" value={s.wonCount} />
-        <KpiCard label="Conversion Rate" value={fmtPct(s.conversionRate)} />
-        <KpiCard label="Pipeline Value" value={fmtCurrency(s.totalPipelineValue)} />
+        <KpiCard label="Total Created" value={s.totalCreated ?? 0} />
+        <KpiCard label="Won" value={s.wonCount ?? 0} />
+        <KpiCard label="Conversion Rate" value={fmtPct(s.conversionRate ?? 0)} />
+        <KpiCard label="Pipeline Value" value={fmtCurrency(s.totalPipelineValue ?? 0)} />
       </div>
 
       {byStatus?.length > 0 && (
@@ -653,19 +699,19 @@ function QuotesSection({ data, start, end }: { data: any; start: string; end: st
       <SectionTable
         title={`Pipeline (${pipeline.length})`}
         headers={["Reference", "Customer", "Staff", "Status", "Value", "Date"]}
-        rows={pipeline.map((o: { reference_number: string; customer: string; staff: string; status: string; value: number; date: string }) => [
+        rows={(pipeline as { reference_number: string; customer: string; staff: string; status: string; value: number; date: string }[]).map((o) => [
           o.reference_number,
           o.customer,
           o.staff,
           STATUS_LABELS[o.status] ?? o.status,
-          fmtCurrency(o.value),
+          fmtCurrency(o.value ?? 0),
           o.date,
         ])}
         onExport={() =>
           downloadCSV(
             "quotes-pipeline.csv",
             ["Reference", "Customer", "Staff", "Status", "Value", "Date"],
-            pipeline.map((o: { reference_number: string; customer: string; staff: string; status: string; value: number; date: string }) => [
+            (pipeline as { reference_number: string; customer: string; staff: string; status: string; value: number; date: string }[]).map((o) => [
               o.reference_number,
               o.customer,
               o.staff,
@@ -686,7 +732,11 @@ function CustomersSection({ data, start, end }: { data: any; start: string; end:
   const [inactiveTab, setInactiveTab] = useState<"90" | "180" | "365">("90");
 
   if (!data) return <EmptyState message={`No customer data between ${start} and ${end}.`} />;
-  const { summary: s, topCustomers, inactive90, inactive180, inactive365 } = data;
+  const s = data.summary ?? {};
+  const topCustomers: unknown[] = data.topCustomers ?? [];
+  const inactive90: unknown[] = data.inactive90 ?? [];
+  const inactive180: unknown[] = data.inactive180 ?? [];
+  const inactive365: unknown[] = data.inactive365 ?? [];
 
   const inactiveData = inactiveTab === "90" ? inactive90 : inactiveTab === "180" ? inactive180 : inactive365;
   const inactiveLabel = `${inactiveTab}d inactive`;
@@ -694,16 +744,16 @@ function CustomersSection({ data, start, end }: { data: any; start: string; end:
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-        <KpiCard label="New in Period" value={s.newInPeriod} />
-        <KpiCard label="Returning in Period" value={s.returningInPeriod} />
-        <KpiCard label="Active (90d)" value={s.activeCustomers} sub="visited in last 90 days" />
-        <KpiCard label="Total Customers" value={s.totalCustomers} />
+        <KpiCard label="New in Period" value={s.newInPeriod ?? 0} />
+        <KpiCard label="Returning in Period" value={s.returningInPeriod ?? 0} />
+        <KpiCard label="Active (90d)" value={s.activeCustomers ?? 0} sub="visited in last 90 days" />
+        <KpiCard label="Total Customers" value={s.totalCustomers ?? 0} />
       </div>
 
       <SectionTable
         title="Top 20 Customers by Spend"
         headers={["Name", "Email", "Phone", "Orders", "Total Spend", "Last Visit"]}
-        rows={topCustomers.map((c: { name: string; email: string; phone: string; total_orders: number; total_spend: number; last_visit_date: string }) => [
+        rows={(topCustomers as { name: string; email: string; phone: string; total_orders: number; total_spend: number; last_visit_date: string }[]).map((c) => [
           c.name,
           c.email ?? "—",
           c.phone ?? "—",
@@ -715,7 +765,7 @@ function CustomersSection({ data, start, end }: { data: any; start: string; end:
           downloadCSV(
             "top-customers.csv",
             ["Name", "Email", "Phone", "Orders", "Total Spend", "Last Visit"],
-            topCustomers.map((c: { name: string; email: string; phone: string; total_orders: number; total_spend: number; last_visit_date: string }) => [
+            (topCustomers as { name: string; email: string; phone: string; total_orders: number; total_spend: number; last_visit_date: string }[]).map((c) => [
               c.name,
               c.email,
               c.phone,
@@ -781,7 +831,7 @@ function CustomersSection({ data, start, end }: { data: any; start: string; end:
                   </tr>
                 </thead>
                 <tbody>
-                  {inactiveData.map((c: { name: string; email: string; phone: string; last_visit_date: string; total_spend: number }, ri: number) => (
+                  {(inactiveData as { name: string; email: string; phone: string; last_visit_date: string; total_spend: number }[]).map((c, ri) => (
                     <tr
                       key={ri}
                       style={{ background: ri % 2 === 0 ? "#fff" : "#F9FAFB" }}
@@ -804,7 +854,7 @@ function CustomersSection({ data, start, end }: { data: any; start: string; end:
                   downloadCSV(
                     `inactive-${inactiveTab}d.csv`,
                     ["Name", "Email", "Phone", "Last Visit", "Total Spend"],
-                    inactiveData.map((c: { name: string; email: string; phone: string; last_visit_date: string; total_spend: number }) => [
+                    (inactiveData as { name: string; email: string; phone: string; last_visit_date: string; total_spend: number }[]).map((c) => [
                       c.name,
                       c.email,
                       c.phone,
@@ -838,7 +888,11 @@ function CustomersSection({ data, start, end }: { data: any; start: string; end:
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function StaffSection({ data, start, end }: { data: any; start: string; end: string }) {
   if (!data) return <EmptyState message={`No staff data between ${start} and ${end}.`} />;
-  const { performance } = data;
+  const performance: unknown[] = data.performance ?? [];
+
+  if (performance.length === 0) {
+    return <EmptyState message={`No staff data between ${start} and ${end}.`} />;
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -866,25 +920,25 @@ function StaffSection({ data, start, end }: { data: any; start: string; end: str
       <SectionTable
         title="Staff Performance"
         headers={["Staff", "Orders", "Revenue", "Quotes Created", "Quotes Won", "Conversion Rate"]}
-        rows={performance.map((p: { staff: string; ordersCreated: number; revenueGenerated: number; quotesCreated: number; quotesWon: number; conversionRate: number }) => [
+        rows={(performance as { staff: string; ordersCreated: number; revenueGenerated: number; quotesCreated: number; quotesWon: number; conversionRate: number }[]).map((p) => [
           p.staff,
-          p.ordersCreated,
-          fmtCurrency(p.revenueGenerated),
-          p.quotesCreated,
-          p.quotesWon,
-          fmtPct(p.conversionRate),
+          p.ordersCreated ?? 0,
+          fmtCurrency(p.revenueGenerated ?? 0),
+          p.quotesCreated ?? 0,
+          p.quotesWon ?? 0,
+          fmtPct(p.conversionRate ?? 0),
         ])}
         onExport={() =>
           downloadCSV(
             "staff-performance.csv",
             ["Staff", "Orders", "Revenue", "Quotes Created", "Quotes Won", "Conversion Rate"],
-            performance.map((p: { staff: string; ordersCreated: number; revenueGenerated: number; quotesCreated: number; quotesWon: number; conversionRate: number }) => [
+            (performance as { staff: string; ordersCreated: number; revenueGenerated: number; quotesCreated: number; quotesWon: number; conversionRate: number }[]).map((p) => [
               p.staff,
-              p.ordersCreated,
-              p.revenueGenerated,
-              p.quotesCreated,
-              p.quotesWon,
-              fmtPct(p.conversionRate),
+              p.ordersCreated ?? 0,
+              p.revenueGenerated ?? 0,
+              p.quotesCreated ?? 0,
+              p.quotesWon ?? 0,
+              fmtPct(p.conversionRate ?? 0),
             ])
           )
         }
@@ -1185,12 +1239,16 @@ export default function ReportingPage() {
             </div>
           )}
 
-          {!loading && !error && section === "sales" && <SalesSection data={data} start={start} end={end} />}
-          {!loading && !error && section === "orders" && <OrdersSection data={data} start={start} end={end} />}
-          {!loading && !error && section === "workshop" && <WorkshopSection data={data} start={start} end={end} />}
-          {!loading && !error && section === "quotes" && <QuotesSection data={data} start={start} end={end} />}
-          {!loading && !error && section === "customers" && <CustomersSection data={data} start={start} end={end} />}
-          {!loading && !error && section === "staff" && <StaffSection data={data} start={start} end={end} />}
+          {!loading && !error && section !== "inventory" && (
+            <SectionErrorBoundary onRetry={fetchData}>
+              {section === "sales"     && <SalesSection     data={data} start={start} end={end} />}
+              {section === "orders"    && <OrdersSection    data={data} start={start} end={end} />}
+              {section === "workshop"  && <WorkshopSection  data={data} start={start} end={end} />}
+              {section === "quotes"    && <QuotesSection    data={data} start={start} end={end} />}
+              {section === "customers" && <CustomersSection data={data} start={start} end={end} />}
+              {section === "staff"     && <StaffSection     data={data} start={start} end={end} />}
+            </SectionErrorBoundary>
+          )}
           {section === "inventory" && <InventorySection />}
         </div>
       </div>
