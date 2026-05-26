@@ -26,10 +26,10 @@ create table if not exists inventory_movements (
 
 alter table inventory_movements enable row level security;
 
-create policy "Authenticated read inventory_movements"
-  on inventory_movements for select
-  using (auth.role() = 'authenticated');
+drop policy if exists "Authenticated read inventory_movements" on inventory_movements;
+drop policy if exists "Authenticated write inventory_movements" on inventory_movements;
 
-create policy "Authenticated write inventory_movements"
-  on inventory_movements for all
-  using (auth.role() = 'authenticated');
+create policy "Authenticated read inventory_movements" on inventory_movements
+  for select using (auth.role() = 'authenticated');
+create policy "Authenticated write inventory_movements" on inventory_movements
+  for all using (auth.role() = 'authenticated');
