@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import Link from "next/link";
 import { WorkshopJob, ComponentItem } from "@/lib/types";
+import { useUser } from "@/context/UserContext";
 
 const JEWELLERS = ["Ben Mucklow", "Viv Valladares", "Joseph Onorato", "David Johnson", "Jack Mullan"];
 
@@ -70,6 +71,8 @@ interface Props {
 }
 
 export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: Props) {
+  const { user } = useUser();
+  const isManager = user?.role === "manager";
   const [local, setLocal] = useState<WorkshopJob>({ ...job, components: job.components ?? [] });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -139,11 +142,19 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
   // ── Delete job ────────────────────────────────────────────────────────────
 
   async function handleDelete() {
-    if (!confirm(`Delete job for ${local.customer_surname ?? "this customer"}? This cannot be undone.`)) return;
+    if (!confirm(`Delete workshop job ${local.reference_number ?? "for " + (local.customer_surname ?? "this customer")}? This cannot be undone.`)) return;
     setDeleting(true);
     try {
-      await fetch(`/api/workshop/jobs/${local.id}`, { method: "DELETE" });
-      onDelete(local.id);
+      const res = await fetch(`/api/workshop/jobs/${local.id}`, { method: "DELETE" });
+      const json = await res.json();
+      if (json.success) {
+        onClose();
+        onDelete(local.id);
+      } else {
+        alert("Delete failed: " + (json.error || "Unknown error"));
+      }
+    } catch (err) {
+      alert("Delete failed: " + String(err));
     } finally {
       setDeleting(false);
     }
@@ -415,19 +426,21 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
             Ref: {local.reference_number || "—"} &bull; Created {formatDateAU(local.created_at?.split("T")[0])}
           </p>
 
-          {/* Delete */}
-          <div style={{ paddingBottom: 8 }}>
-            <button
-              onClick={handleDelete}
-              disabled={deleting}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, padding: '12px 0', borderRadius: 8, border: 'none', cursor: 'pointer', opacity: deleting ? 0.5 : 1 }}
-            >
-              <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-              </svg>
-              {deleting ? "Deleting…" : "Delete Job"}
-            </button>
-          </div>
+          {/* Delete — manager only */}
+          {isManager && (
+            <div style={{ paddingBottom: 8 }}>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, padding: '12px 0', borderRadius: 8, border: 'none', cursor: deleting ? 'not-allowed' : 'pointer', opacity: deleting ? 0.5 : 1 }}
+              >
+                <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                </svg>
+                {deleting ? "Deleting…" : "Delete Job"}
+              </button>
+            </div>
+          )}
 
         </div>
       </div>

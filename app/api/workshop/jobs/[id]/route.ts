@@ -55,6 +55,7 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
+  console.log("[DELETE workshop job] id:", params.id);
   try {
     const supabase = createServerSupabaseClient();
     const { error } = await supabase
@@ -62,9 +63,15 @@ export async function DELETE(
       .delete()
       .eq("id", params.id);
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      console.error("[DELETE workshop job] error:", error);
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    }
+
+    console.log("[DELETE workshop job] success");
     return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    console.error("[DELETE workshop job] exception:", err);
+    return NextResponse.json({ success: false, error: String(err) }, { status: 500 });
   }
 }

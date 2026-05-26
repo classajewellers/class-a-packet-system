@@ -96,16 +96,28 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
-  console.log('[DELETE] Hit — id:', params.id)
+  console.log("[DELETE quote] id:", params.id);
   const supabase = createServerSupabaseClient();
+
+  // Clear FK reference on packets before deleting to avoid constraint errors
+  const { error: clearErr } = await supabase
+    .from("quotes")
+    .update({ converted_to_packet_id: null })
+    .eq("id", params.id);
+  if (clearErr) {
+    console.warn("[DELETE quote] FK clear failed (non-fatal):", clearErr.message);
+  }
+
   const { error } = await supabase
     .from("quotes")
     .delete()
-    .eq("id", params.id)
+    .eq("id", params.id);
+
   if (error) {
-    console.error('[DELETE] Error:', error)
+    console.error("[DELETE quote] error:", error);
     return NextResponse.json({ error: error.message, success: false }, { status: 500 });
   }
-  console.log('[DELETE] Success — id:', params.id)
+
+  console.log("[DELETE quote] success — id:", params.id);
   return NextResponse.json({ success: true });
 }
