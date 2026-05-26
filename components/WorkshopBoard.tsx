@@ -51,9 +51,10 @@ interface Props {
   jobs: WorkshopJob[];
   onStageChange: (jobId: string, newStage: string) => Promise<void>;
   onRefresh: () => void;
+  onJobDeleted: (id: string) => void;
 }
 
-export default function WorkshopBoard({ jobs, onStageChange, onRefresh }: Props) {
+export default function WorkshopBoard({ jobs, onStageChange, onRefresh, onJobDeleted }: Props) {
   const [localJobs, setLocalJobs] = useState<WorkshopJob[]>(jobs);
   const [addingToStage, setAddingToStage] = useState<string | null>(null);
   const [newJobForm, setNewJobForm] = useState<NewJobForm>(defaultForm);
@@ -102,6 +103,7 @@ export default function WorkshopBoard({ jobs, onStageChange, onRefresh }: Props)
   function handleJobDelete(id: string) {
     setLocalJobs((prev) => prev.filter((j) => j.id !== id));
     setSelectedJob(null);
+    onJobDeleted(id); // also update parent so the prop stays in sync
   }
 
   return (

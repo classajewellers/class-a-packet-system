@@ -55,6 +55,10 @@ export default function WorkshopPage() {
     });
   }
 
+  function handleJobDeleted(id: string) {
+    setJobs((prev) => prev.filter((j) => j.id !== id));
+  }
+
   if (!user || !canManage(user.role)) return null;
 
   const today = new Date().toISOString().split("T")[0];
@@ -135,7 +139,7 @@ export default function WorkshopPage() {
           <p className="text-sm">Loading workshop…</p>
         </div>
       ) : view === "board" ? (
-        <WorkshopBoard jobs={mainJobs} onStageChange={handleStageChange} onRefresh={fetchJobs} />
+        <WorkshopBoard jobs={mainJobs} onStageChange={handleStageChange} onRefresh={fetchJobs} onJobDeleted={handleJobDeleted} />
       ) : (
         /* List view */
         <div style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, overflow: 'hidden' }}>
