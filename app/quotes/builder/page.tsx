@@ -81,6 +81,12 @@ export default function QuoteBuilderPage() {
   const [quoteDescription, setQuoteDescription] = useState('');
   const [internalNotes, setInternalNotes] = useState('');
 
+  // Manual price overrides (right panel)
+  // manualCostPrice — manager/admin only; overrides auto-calculated total cost
+  // manualRetailPrice — all roles; auto-filled from cost, editable override
+  const [manualCostPrice, setManualCostPrice] = useState('');
+  const [manualRetailPrice, setManualRetailPrice] = useState('');
+
   // UI state
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -151,6 +157,14 @@ export default function QuoteBuilderPage() {
     return { metalCost, mainStoneCost, mainStoneSettingCost, addonsCost, totalCost, bracket, rawPrice, quotedPrice, suggestedRetail, mult, mColour, costMap, extraLabour };
   }, [metalType, weight, metalRates, includeMainStone, stones, isManager, fixedCosts, smallSettings, smallSettingsQty, butterflies, chain, additionalLabour, additionalLabourAmount, marginBrackets]);
 
+  // Effective cost/retail — manual overrides win over component-calculated values
+  const effectiveCost = manualCostPrice !== '' ? (parseFloat(manualCostPrice) || 0) : pricing.totalCost;
+  const effectiveRetail = manualRetailPrice !== ''
+    ? (parseFloat(manualRetailPrice) || 0)
+    : (effectiveCost > 0 ? calculateRetailPrice(effectiveCost) : pricing.quotedPrice);
+  const effectiveMult = calculateMultiplier(effectiveRetail, effectiveCost);
+  const effectiveMColour = effectiveMult != null ? multiplierColour(effectiveMult) : null;
+
   function selectTemplate(t: QuoteTemplate) {
     setSelectedTemplate(t);
     if (t.default_metal) setMetalType(t.default_metal);
@@ -189,10 +203,11 @@ export default function QuoteBuilderPage() {
           chain: chain,
           additional_labour: parseFloat(additionalLabourAmount) || 0,
         },
-        total_cost: pricing.totalCost,
+        total_cost: effectiveCost,
         multiplier: pricing.bracket?.multiplier ?? null,
         raw_price: pricing.rawPrice,
-        quoted_price: pricing.quotedPrice,
+        quoted_price: effectiveRetail,
+        cost_price: isManager ? effectiveCost : undefined,
       };
       const res = await fetch('/api/quotes/builder', {
         method: 'POST',
@@ -202,8 +217,8 @@ export default function QuoteBuilderPage() {
           assignedTo: user?.name ?? null,
           template: selectedTemplate?.name ?? null,
           quoteDescription, internalNotes,
-          quotedPrice: pricing.quotedPrice,
-          totalCost: pricing.totalCost,
+          quotedPrice: effectiveRetail,
+          totalCost: effectiveCost,
           multiplier: pricing.bracket?.multiplier ?? null,
           rawPrice: pricing.rawPrice,
           quoteBuilderData: qbd,
@@ -265,9 +280,9 @@ export default function QuoteBuilderPage() {
       follow_up_2_at: null,
       job_won_at: null,
       job_lost_at: null,
-      total: pricing.quotedPrice,
+      total: effectiveRetail,
       quote_builder_data: pdfQbd,
-      quoted_price: pricing.quotedPrice,
+      quoted_price: effectiveRetail,
     };
     const html = generateQuoteHTML(quoteObj);
     const win = window.open('', '_blank');
@@ -871,16 +886,86 @@ export default function QuoteBuilderPage() {
               </>
             )}
 
+            {/* Price override inputs */}
+            <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {/* Cost Price — manager/admin only */}
+              {isManager && (
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#635BFF', display: 'block', marginBottom: 4 }}>
+                    Cost Price (override)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={manualCostPrice}
+                    onChange={(e) => {
+                      setManualCostPrice(e.target.value);
+                      const cost = parseFloat(e.target.value);
+                      if (!isNaN(cost) && cost > 0) {
+                        setManualRetailPrice(String(calculateRetailPrice(cost)));
+                      } else if (e.target.value === '') {
+                        setManualRetailPrice('');
+                      }
+                    }}
+                    placeholder={pricing.totalCost > 0 ? pricing.totalCost.toFixed(2) : 'Enter cost…'}
+                    style={{ ...inputStyle, borderColor: '#C4BFFE' }}
+                    onFocus={e => (e.target.style.borderColor = '#635BFF')}
+                    onBlur={e => (e.target.style.borderColor = '#C4BFFE')}
+                  />
+                </div>
+              )}
+
+              {/* Retail Price — all roles */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>
+                  Retail Price
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={manualRetailPrice}
+                  onChange={(e) => setManualRetailPrice(e.target.value)}
+                  placeholder={effectiveRetail > 0 ? String(effectiveRetail) : 'Enter retail…'}
+                  style={inputStyle}
+                  onFocus={e => (e.target.style.borderColor = '#635BFF')}
+                  onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
+                />
+              </div>
+
+              {/* Multiplier badge — manager/admin only */}
+              {isManager && effectiveMult != null && effectiveMColour && (() => {
+                const COLOURS = {
+                  green:  { bg: '#DCFCE7', text: '#15803D' },
+                  orange: { bg: '#FEF9C3', text: '#B45309' },
+                  red:    { bg: '#FEE2E2', text: '#DC2626' },
+                };
+                const cs = COLOURS[effectiveMColour];
+                const profit = effectiveRetail - effectiveCost;
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', borderRadius: 6, background: cs.bg }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: cs.text }}>
+                      ×{effectiveMult.toFixed(2)}
+                    </span>
+                    <span style={{ fontSize: 12, color: cs.text, opacity: 0.75 }}>
+                      (${profit.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} profit)
+                    </span>
+                  </div>
+                );
+              })()}
+            </div>
+
             {/* Quoted price */}
             <div style={{ marginBottom: 24 }}>
               <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>Quoted Price (incl. GST)</div>
               <div style={{ fontSize: 40, fontWeight: 800, color: '#1A1A2E', lineHeight: 1 }}>
-                {pricing.quotedPrice > 0
-                  ? `$${pricing.quotedPrice.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                {effectiveRetail > 0
+                  ? `$${effectiveRetail.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
                   : '—'}
               </div>
-              {pricing.quotedPrice > 0 && (
-                <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>Rounded to nearest $50</div>
+              {effectiveRetail > 0 && manualRetailPrice === '' && (
+                <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>Rounded to nearest $5</div>
               )}
             </div>
 
