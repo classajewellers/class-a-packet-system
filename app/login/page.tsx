@@ -3,9 +3,11 @@
 export const dynamic = "force-dynamic";
 
 import { useState, FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -16,8 +18,6 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
 
-    // createBrowserSupabaseClient() returns the singleton — same instance that
-    // UserContext's onAuthStateChange is listening to, so SIGNED_IN propagates.
     const supabase = createBrowserSupabaseClient();
 
     const { error: authError } = await supabase.auth.signInWithPassword({
@@ -31,7 +31,11 @@ export default function LoginPage() {
       return;
     }
 
-    // AuthGuard in ClientProviders detects the session and redirects to "/"
+    // Redirect immediately — the session token is now stored in cookies.
+    // Don't wait for UserContext to load the profile; that happens in the background.
+    // If we waited for onAuthStateChange → loadProfile → setUser → AuthGuard,
+    // any slowness in the profiles query would leave the button stuck forever.
+    router.push("/");
   }
 
   return (

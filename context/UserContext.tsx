@@ -51,34 +51,39 @@ export function UserProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     async function loadProfile(userId: string, email: string) {
+      // Race the profile query against a 5 s timeout.
+      // Supabase errors come back as { data: null, error } (no throw), so a
+      // try/catch alone won't save us if the network is slow. Promise.race
+      // guarantees setUser always fires within 5 s regardless of Supabase state.
+      let profileData: { full_name?: string | null; role?: string | null } | null = null;
+
       try {
-        const { data } = await supabase
+        const queryPromise = supabase
           .from("profiles")
           .select("full_name, role")
           .eq("id", userId)
           .single();
 
-        if (cancelled) return;
-        setUser({
-          id: userId,
-          name: data?.full_name || email,
-          role: ((data?.role) ?? "staff") as UserRole,
-          email,
-          initials: deriveInitials(data?.full_name || email),
-          loggedInAt: new Date().toISOString(),
-        });
+        const timeoutPromise = new Promise<{ data: null }>((resolve) =>
+          setTimeout(() => resolve({ data: null }), 5000)
+        );
+
+        const result = await Promise.race([queryPromise, timeoutPromise]);
+        profileData = result.data;
       } catch {
-        // Profile query failed (e.g. migration not yet applied) — use minimal fallback
-        if (cancelled) return;
-        setUser({
-          id: userId,
-          name: email,
-          role: "staff",
-          email,
-          initials: deriveInitials(email),
-          loggedInAt: new Date().toISOString(),
-        });
+        // Network-level exception — profileData stays null, use fallback below
       }
+
+      if (cancelled) return;
+
+      setUser({
+        id: userId,
+        name: profileData?.full_name || email,
+        role: ((profileData?.role) ?? "staff") as UserRole,
+        email,
+        initials: deriveInitials(profileData?.full_name || email),
+        loggedInAt: new Date().toISOString(),
+      });
     }
 
     // ── Initial session check ─────────────────────────────────────────────────
