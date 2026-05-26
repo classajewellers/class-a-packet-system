@@ -32,7 +32,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   // Public pages: render immediately, no auth check, no shell
   if (isPublicPage) return <>{children}</>;
 
-  // Show nothing until localStorage is read
+  // Show nothing until Supabase session is resolved
   if (!hydrated) return null;
   // Suppress content while redirect is in flight
   if (!user && !isLoginPage) return null;

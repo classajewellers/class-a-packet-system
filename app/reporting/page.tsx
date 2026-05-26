@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback, ReactNode, Component } from "react";
 import React from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
+import { canManage } from "@/lib/userTypes";
 import {
   BarChart,
   Bar,
@@ -1008,7 +1009,7 @@ export default function ReportingPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (user && user.role !== "manager") {
+    if (user && !canManage(user.role)) {
       router.replace("/");
     }
   }, [user, router]);
@@ -1060,7 +1061,7 @@ export default function ReportingPage() {
     if (preset === "year") { setStart(startOfYearISO()); setEnd(todayISO()); }
   }
 
-  if (user && user.role !== "manager") return null;
+  if (user && !canManage(user.role)) return null;
 
   const QUICK_BTNS = [
     { label: "Today", preset: "today" },

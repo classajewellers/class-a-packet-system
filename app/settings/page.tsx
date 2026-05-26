@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
+import { canManage } from "@/lib/userTypes";
 import { STAFF_LIST, ROLE_LABELS } from "@/lib/staffList";
 
 export default function SettingsPage() {
@@ -12,12 +13,12 @@ export default function SettingsPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (user && user.role !== "manager") {
+    if (user && !canManage(user.role)) {
       router.replace("/orders");
     }
   }, [user, router]);
 
-  if (!user || user.role !== "manager") return null;
+  if (!user || !canManage(user.role)) return null;
 
   const storeName = process.env.NEXT_PUBLIC_STORE_NAME ?? "Class A Jewellers";
   const storePhone = process.env.NEXT_PUBLIC_STORE_PHONE ?? "(08) 8344 7722";

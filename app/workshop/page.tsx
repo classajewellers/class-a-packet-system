@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
+import { canManage } from "@/lib/userTypes";
 import { WorkshopJob } from "@/lib/types";
 import { formatDateAU } from "@/lib/formatters";
 import nextDynamic from "next/dynamic";
@@ -19,7 +20,7 @@ export default function WorkshopPage() {
 
   // Manager-only guard
   useEffect(() => {
-    if (user && user.role !== "manager") {
+    if (user && !canManage(user.role)) {
       router.replace("/orders");
     }
   }, [user, router]);
@@ -54,7 +55,7 @@ export default function WorkshopPage() {
     });
   }
 
-  if (!user || user.role !== "manager") return null;
+  if (!user || !canManage(user.role)) return null;
 
   const today = new Date().toISOString().split("T")[0];
 

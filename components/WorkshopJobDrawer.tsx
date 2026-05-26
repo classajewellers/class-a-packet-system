@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import Link from "next/link";
 import { WorkshopJob, ComponentItem } from "@/lib/types";
 import { useUser } from "@/context/UserContext";
+import { canManage } from "@/lib/userTypes";
 
 const JEWELLERS = ["Ben Mucklow", "Viv Valladares", "Joseph Onorato", "David Johnson", "Jack Mullan"];
 
@@ -72,7 +73,7 @@ interface Props {
 
 export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: Props) {
   const { user } = useUser();
-  const isManager = user?.role === "manager";
+  const isManager = canManage(user?.role);
   const [local, setLocal] = useState<WorkshopJob>({ ...job, components: job.components ?? [] });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);

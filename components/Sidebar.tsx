@@ -15,7 +15,9 @@ import {
   Settings,
   Sparkles,
   ChevronDown,
+  UserCog,
 } from "lucide-react";
+import { canManage } from "@/lib/userTypes";
 
 interface Props {
   onOpenAI: () => void;
@@ -30,7 +32,8 @@ export default function Sidebar({ onOpenAI }: Props) {
   const { user, logout } = useUser();
   const router = useRouter();
 
-  const isManager = user?.role === "manager";
+  const isManager = canManage(user?.role);
+  const isAdmin = user?.role === "admin";
   const quotesExpanded = pathname.startsWith("/quotes");
 
   const initials = (name: string) =>
@@ -280,6 +283,9 @@ export default function Sidebar({ onOpenAI }: Props) {
         {isManager && (
           <NavLink href="/settings" icon={Settings} label="Settings" />
         )}
+        {isAdmin && (
+          <NavLink href="/admin/users" icon={UserCog} label="Users" />
+        )}
 
         {/* AI Assistant */}
         <button
@@ -372,11 +378,11 @@ export default function Sidebar({ onOpenAI }: Props) {
               </div>
             </div>
             <button
-              onClick={() => {
-                logout();
+              onClick={async () => {
+                await logout();
                 router.push("/login");
               }}
-              title="Switch user"
+              title="Sign out"
               style={{
                 background: "rgba(99,91,255,0.2)",
                 border: "none",
@@ -398,7 +404,7 @@ export default function Sidebar({ onOpenAI }: Props) {
                   "rgba(99,91,255,0.2)")
               }
             >
-              Switch
+              Sign out
             </button>
           </div>
         )}
