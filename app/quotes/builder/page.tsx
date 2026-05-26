@@ -1045,32 +1045,58 @@ export default function QuoteBuilderPage() {
                           </span>
                         </div>
                       )}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: effectiveMult != null && effectiveMColour ? 8 : 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span style={{ color: '#6B7280' }}>Quoted price</span>
                         <span style={{ fontWeight: 600 }}>
                           ${pricing.quotedPrice.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                         </span>
                       </div>
-
-                      {/* Overall multiplier badge */}
-                      {effectiveMult != null && effectiveMColour && (() => {
-                        const cs = MULT_COLOURS[effectiveMColour];
-                        const profit = effectiveRetail - effectiveCost;
-                        return (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', borderRadius: 6, background: cs.bg }}>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: cs.text }}>
-                              ×{effectiveMult.toFixed(2)}
-                            </span>
-                            <span style={{ fontSize: 12, color: cs.text, opacity: 0.75 }}>
-                              (${profit.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} profit)
-                            </span>
-                          </div>
-                        );
-                      })()}
                     </div>
                   </div>
                 )}
               </>
+            )}
+
+            {/* ── Always-visible cost summary (manager/admin) ── */}
+            {isManager && (
+              <div style={{ background: '#F9FAFB', border: '1px solid #E8E8F0', borderRadius: 8, padding: 12, marginBottom: 16, fontSize: 13 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ color: '#6B7280' }}>Total cost</span>
+                  <span style={{ fontWeight: 600, color: pricing.totalCost > 0 ? '#1A1A2E' : '#9CA3AF' }}>
+                    {pricing.totalCost > 0 ? `$${pricing.totalCost.toFixed(2)}` : '—'}
+                  </span>
+                </div>
+                {pricing.suggestedRetail > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <span style={{ color: '#6B7280' }}>Suggested retail</span>
+                    <span style={{ fontWeight: 500, color: '#635BFF' }}>
+                      ${pricing.suggestedRetail.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: effectiveMult != null && effectiveMColour ? 8 : 0 }}>
+                  <span style={{ color: '#6B7280' }}>Quoted price</span>
+                  <span style={{ fontWeight: 600 }}>
+                    {effectiveRetail > 0
+                      ? `$${effectiveRetail.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                      : '—'}
+                  </span>
+                </div>
+                {effectiveMult != null && effectiveMColour && (() => {
+                  const cs = MULT_COLOURS[effectiveMColour];
+                  const profit = effectiveRetail - effectiveCost;
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', borderRadius: 6, background: cs.bg }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: cs.text }}>
+                        ×{effectiveMult.toFixed(2)}
+                      </span>
+                      <span style={{ fontSize: 12, color: cs.text, opacity: 0.75 }}>
+                        (${profit.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} profit)
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
             )}
 
             {/* Item price list (when multiple items with prices) */}
