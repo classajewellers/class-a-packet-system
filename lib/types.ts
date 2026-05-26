@@ -303,6 +303,10 @@ export interface Quote {
   // Quote builder fields
   quote_builder_data?: Record<string, unknown> | null;
   quoted_price?: number | null;
+  /** Job category shown as the heading on customer PDFs (set in quote builder). */
+  job_type?: string | null;
+  /** Free-text description printed on customer PDFs exactly as typed. */
+  job_description?: string | null;
 }
 
 // ─────────────────────────────────────────────

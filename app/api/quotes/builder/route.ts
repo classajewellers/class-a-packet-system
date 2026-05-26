@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
       quoteDescription, internalNotes,
       quotedPrice,
       quoteBuilderData, quoteType,
+      jobType, jobDescription,
     } = body
 
     const referenceNumber = await generateQuoteReferenceNumber()
@@ -35,6 +36,8 @@ export async function POST(req: NextRequest) {
         quoted_price: quotedPrice ?? null,
         total: quotedPrice ?? null,
         quote_builder_data: quoteBuilderData ?? null,
+        job_type: jobType || null,
+        job_description: jobDescription || null,
         pending_at: now,
         status_changed_at: now,
       })

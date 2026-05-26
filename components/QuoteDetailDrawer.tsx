@@ -218,6 +218,24 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
             Open Quote / Save PDF
           </button>
 
+          {/* ── Job type & description ── */}
+          {(local.job_type || local.job_description) && (
+            <Section title="Quote Description">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {local.job_type && (
+                  <span style={{ display: 'inline-block', width: 'fit-content', padding: '3px 10px', borderRadius: 6, background: '#EEF2FF', color: '#635BFF', fontSize: 12, fontWeight: 700, letterSpacing: '0.03em' }}>
+                    {local.job_type}
+                  </span>
+                )}
+                {local.job_description && (
+                  <p style={{ fontSize: 14, color: '#1A1A2E', margin: 0, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                    {local.job_description}
+                  </p>
+                )}
+              </div>
+            </Section>
+          )}
+
           {/* ── Convert error banner ── */}
           {convertError && (
             <div style={{ borderRadius: 12, background: '#FEE2E2', border: '1px solid #FECACA', padding: '12px 16px', fontSize: 14, color: '#991B1B', fontWeight: 500 }}>

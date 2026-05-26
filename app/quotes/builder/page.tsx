@@ -38,6 +38,16 @@ const TEMPLATE_EMOJI: Record<string, string> = {
   'Custom Job': '⭐',
 };
 
+const PDF_JOB_TYPES = ['Engagement Ring', 'Wedding Ring', 'Fine Jewellery', 'Repair'] as const;
+type PdfJobType = typeof PDF_JOB_TYPES[number];
+
+const PDF_JOB_PLACEHOLDERS: Record<PdfJobType, string> = {
+  'Engagement Ring': 'e.g. 18ct White Gold Solitaire Engagement Ring, 4 Claw, Size: N',
+  'Wedding Ring':    'e.g. 18ct Yellow Gold Half Round Wedding Ring 5.5mm × 1.5mm, Size: Q',
+  'Fine Jewellery':  'e.g. 18ct Rose Gold Diamond Tennis Bracelet, 2.00ct TW',
+  'Repair':          'e.g. Resize platinum ring from Size L to Size N, re-tip 4 claws',
+};
+
 export default function QuoteBuilderPage() {
   const { user, hydrated } = useUser();
   const router = useRouter();
@@ -76,6 +86,10 @@ export default function QuoteBuilderPage() {
   const [chain, setChain] = useState(false);
   const [additionalLabour, setAdditionalLabour] = useState(false);
   const [additionalLabourAmount, setAdditionalLabourAmount] = useState('');
+
+  // PDF job type + description (what prints on the customer PDF)
+  const [pdfJobType, setPdfJobType] = useState<PdfJobType | ''>('');
+  const [pdfJobDescription, setPdfJobDescription] = useState('');
 
   // Description
   const [quoteDescription, setQuoteDescription] = useState('');
@@ -217,6 +231,8 @@ export default function QuoteBuilderPage() {
           assignedTo: user?.name ?? null,
           template: selectedTemplate?.name ?? null,
           quoteDescription, internalNotes,
+          jobType: pdfJobType || null,
+          jobDescription: pdfJobDescription || null,
           quotedPrice: effectiveRetail,
           totalCost: effectiveCost,
           multiplier: pricing.bracket?.multiplier ?? null,
@@ -283,6 +299,8 @@ export default function QuoteBuilderPage() {
       total: effectiveRetail,
       quote_builder_data: pdfQbd,
       quoted_price: effectiveRetail,
+      job_type: pdfJobType || null,
+      job_description: pdfJobDescription || null,
     };
     const html = generateQuoteHTML(quoteObj);
     const win = window.open('', '_blank');
@@ -429,6 +447,56 @@ export default function QuoteBuilderPage() {
               </div>
             </div>
             {errors.contact && <div style={errorStyle}>{errors.contact}</div>}
+          </div>
+
+          {/* PDF Job Type + Description */}
+          <div style={sectionCard}>
+            <div style={sectionHeading}>Quote Description (prints on PDF)</div>
+
+            {/* Job type selector */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+              {PDF_JOB_TYPES.map((jt) => {
+                const active = pdfJobType === jt;
+                return (
+                  <button
+                    key={jt}
+                    type="button"
+                    onClick={() => setPdfJobType(active ? '' : jt)}
+                    style={{
+                      padding: '7px 16px',
+                      borderRadius: 8,
+                      border: `1px solid ${active ? '#635BFF' : '#E8E8F0'}`,
+                      background: active ? '#635BFF' : '#fff',
+                      color: active ? '#fff' : '#374151',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all .15s',
+                    }}
+                  >
+                    {jt}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Description textarea */}
+            <textarea
+              value={pdfJobDescription}
+              onChange={e => setPdfJobDescription(e.target.value)}
+              onFocus={e => (e.target.style.borderColor = '#635BFF')}
+              onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
+              rows={4}
+              placeholder={
+                pdfJobType
+                  ? PDF_JOB_PLACEHOLDERS[pdfJobType]
+                  : 'Select a job type above, then type the description that will appear on the customer PDF…'
+              }
+              style={{ ...inputStyle, minHeight: 90, resize: 'vertical', lineHeight: 1.6 }}
+            />
+            <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 6 }}>
+              Exactly as typed — no auto-formatting. This replaces the stone/metal spec breakdown on the PDF.
+            </p>
           </div>
 
           {/* Template */}

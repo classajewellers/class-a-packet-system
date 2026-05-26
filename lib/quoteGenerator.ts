@@ -31,60 +31,85 @@ export function generateQuoteHTML(quote: Quote): string {
   // ── Builder quote: three-line layout ───────────────────────────────────────
   let itemsSection = "";
   if (isBuilderQuote) {
-    const qbd = builderData!;
-    const designText = typeof qbd.design === "string" ? esc(qbd.design) : "&nbsp;";
-
-    let stoneText = "&nbsp;";
-
-    // main_stone is an array in the new format; fall back to wrapping legacy single object
-    const rawMs = qbd.main_stone;
-    const msArr: Array<Record<string, unknown>> = Array.isArray(rawMs)
-      ? (rawMs as Array<Record<string, unknown>>)
-      : rawMs != null
-      ? [rawMs as Record<string, unknown>]
-      : [];
-
-    if (msArr.length > 0) {
-      // Check if all stones have identical specs
-      const first = msArr[0];
-      const allSame = msArr.length === 1 || msArr.every(s =>
-        s.carat_weight === first.carat_weight &&
-        s.shape === first.shape &&
-        s.colour === first.colour &&
-        s.clarity === first.clarity &&
-        s.origin === first.origin
-      );
-
-      if (allSame) {
-        const qty = msArr.length;
-        const carat = first.carat_weight != null ? `${first.carat_weight}ct ` : "";
-        const parts = [first.colour, first.clarity, first.origin, first.shape]
-          .map(v => (v != null && v !== "" ? String(v) : null))
-          .filter(Boolean)
-          .join(" ");
-        stoneText = esc(`${qty > 1 ? `${qty}x ` : ""}${carat}${parts}`);
-      } else {
-        // Different specs — one line per stone
-        stoneText = msArr.map((s, i) => {
-          const carat = s.carat_weight != null ? `${s.carat_weight}ct ` : "";
-          const parts = [s.colour, s.clarity, s.origin, s.shape]
-            .map(v => (v != null && v !== "" ? String(v) : null))
-            .filter(Boolean)
-            .join(" ");
-          return esc(`Stone ${i + 1}: ${carat}${parts}`);
-        }).join("<br>");
-      }
-    }
-
     const priceNum = quote.quoted_price ?? quote.total ?? null;
     const priceText = priceNum != null
       ? `$${Number(priceNum).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       : "&nbsp;";
 
-    const showStoneRow = msArr.length > 0;
-    const priceRowBg = showStoneRow ? "#ffffff" : "#f0f0f0";
+    // ── New layout: job type heading + free-text description ─────────────────
+    if (quote.job_description) {
+      const jobTypeText = esc(quote.job_type ?? "Custom Order");
+      const descText = esc(quote.job_description).replace(/\n/g, "<br>");
 
-    itemsSection = `
+      itemsSection = `
+  <table class="line-items">
+    <thead>
+      <tr>
+        <th colspan="2" style="font-size:11pt;letter-spacing:1px;">${jobTypeText}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="background:#ffffff;">
+        <td colspan="2" style="padding:14px 12px;font-size:10pt;color:#222;line-height:1.6;">${descText}</td>
+      </tr>
+      <tr style="background:#f0f0f0;">
+        <td style="padding:8px 12px;font-size:9pt;color:#555;border-right:1px solid #ddd;vertical-align:middle;width:110px;">Price</td>
+        <td style="padding:10px 12px;font-size:14pt;font-weight:bold;color:#000;">${priceText}</td>
+      </tr>
+    </tbody>
+  </table>`;
+
+    } else {
+      // ── Legacy auto-generated layout: Design / Stone / Price ──────────────
+      const qbd = builderData!;
+      const designText = typeof qbd.design === "string" ? esc(qbd.design) : "&nbsp;";
+
+      let stoneText = "&nbsp;";
+
+      // main_stone is an array in the new format; fall back to wrapping legacy single object
+      const rawMs = qbd.main_stone;
+      const msArr: Array<Record<string, unknown>> = Array.isArray(rawMs)
+        ? (rawMs as Array<Record<string, unknown>>)
+        : rawMs != null
+        ? [rawMs as Record<string, unknown>]
+        : [];
+
+      if (msArr.length > 0) {
+        // Check if all stones have identical specs
+        const first = msArr[0];
+        const allSame = msArr.length === 1 || msArr.every(s =>
+          s.carat_weight === first.carat_weight &&
+          s.shape === first.shape &&
+          s.colour === first.colour &&
+          s.clarity === first.clarity &&
+          s.origin === first.origin
+        );
+
+        if (allSame) {
+          const qty = msArr.length;
+          const carat = first.carat_weight != null ? `${first.carat_weight}ct ` : "";
+          const parts = [first.colour, first.clarity, first.origin, first.shape]
+            .map(v => (v != null && v !== "" ? String(v) : null))
+            .filter(Boolean)
+            .join(" ");
+          stoneText = esc(`${qty > 1 ? `${qty}x ` : ""}${carat}${parts}`);
+        } else {
+          // Different specs — one line per stone
+          stoneText = msArr.map((s, i) => {
+            const carat = s.carat_weight != null ? `${s.carat_weight}ct ` : "";
+            const parts = [s.colour, s.clarity, s.origin, s.shape]
+              .map(v => (v != null && v !== "" ? String(v) : null))
+              .filter(Boolean)
+              .join(" ");
+            return esc(`Stone ${i + 1}: ${carat}${parts}`);
+          }).join("<br>");
+        }
+      }
+
+      const showStoneRow = msArr.length > 0;
+      const priceRowBg = showStoneRow ? "#ffffff" : "#f0f0f0";
+
+      itemsSection = `
   <table class="line-items">
     <thead>
       <tr>
@@ -107,6 +132,7 @@ export function generateQuoteHTML(quote: Quote): string {
       </tr>
     </tbody>
   </table>`;
+    }
   } else {
     // ── Regular quote: existing line items table ──────────────────────────────
     const lineItems: LineItem[] = quote.line_items ?? [];
