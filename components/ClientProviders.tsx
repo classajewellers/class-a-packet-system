@@ -22,7 +22,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   // to /login server-side anyway, so this is just a client-side fallback.
   const [forceShow, setForceShow] = useState(false);
   useEffect(() => {
-    const id = setTimeout(() => setForceShow(true), 10_000);
+    const id = setTimeout(() => setForceShow(true), 5_000);
     return () => clearTimeout(id);
   }, []);
 

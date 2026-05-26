@@ -6,10 +6,14 @@ import {
   useState,
   useEffect,
   useRef,
-  useCallback,
   ReactNode,
 } from "react";
 import { LoggedInUser, UserRole } from "@/lib/userTypes";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
+// Top-level import is safe: createBrowserSupabaseClient() has a typeof window
+// guard so calling it on the server returns a non-cached instance that won't
+// store auth state. The singleton is only activated client-side.
+import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 interface UserContextType {
   user: LoggedInUser | null;
@@ -37,18 +41,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<LoggedInUser | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
-  // Initialised lazily inside useEffect so it never runs during SSR.
-  // Stored in a ref so logout() can access the same instance.
-  const supabaseRef = useRef<ReturnType<
-    typeof import("@/lib/supabase-browser").createBrowserSupabaseClient
-  > | null>(null);
+  // Keep a ref to the supabase instance so logout() can call signOut()
+  // without needing it in the closure's dependency array.
+  const supabaseRef = useRef(createBrowserSupabaseClient());
 
-  const loadProfile = useCallback(
-    async (
-      supabase: NonNullable<typeof supabaseRef.current>,
-      userId: string,
-      email: string
-    ) => {
+  useEffect(() => {
+    // Re-read from ref — this is the same singleton every time
+    const supabase = supabaseRef.current;
+    let cancelled = false;
+
+    async function loadProfile(userId: string, email: string) {
       try {
         const { data } = await supabase
           .from("profiles")
@@ -56,6 +58,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           .eq("id", userId)
           .single();
 
+        if (cancelled) return;
         setUser({
           id: userId,
           name: data?.full_name || email,
@@ -64,9 +67,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
           initials: deriveInitials(data?.full_name || email),
           loggedInAt: new Date().toISOString(),
         });
-      } catch (err) {
-        // Profile fetch failed — still show a minimal user so the app loads.
-        console.error("[UserContext] loadProfile error:", err);
+      } catch {
+        // Profile query failed (e.g. migration not yet applied) — use minimal fallback
+        if (cancelled) return;
         setUser({
           id: userId,
           name: email,
@@ -76,45 +79,33 @@ export function UserProvider({ children }: { children: ReactNode }) {
           loggedInAt: new Date().toISOString(),
         });
       }
-    },
-    []
-  );
+    }
 
-  useEffect(() => {
-    let cancelled = false;
-
-    // Import and create the Supabase client here (client-side only).
-    // Using a dynamic require so the module is never evaluated during SSR.
-    const { createBrowserSupabaseClient } =
-      require("@/lib/supabase-browser") as typeof import("@/lib/supabase-browser");
-
-    const supabase = createBrowserSupabaseClient();
-    supabaseRef.current = supabase;
-
-    // ── Initial session check ──────────────────────────────────────────────
-    supabase.auth
-      .getSession()
-      .then(async ({ data: { session } }) => {
+    // ── Initial session check ─────────────────────────────────────────────────
+    // getSession() reads from cookies — fast, no network call for anonymous users.
+    // Wrapped in an async IIFE so we can use await/try-finally cleanly.
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
         if (cancelled) return;
-        if (session?.user) {
-          await loadProfile(supabase, session.user.id, session.user.email ?? "");
+        if (data.session?.user) {
+          await loadProfile(data.session.user.id, data.session.user.email ?? "");
         }
-      })
-      .catch((err) => {
-        // Log but don't crash — still need to unblock the UI.
+      } catch (err) {
         console.error("[UserContext] getSession failed:", err);
-      })
-      .finally(() => {
-        // ALWAYS unblock the UI, even if something went wrong.
+      } finally {
+        // Always unblock the UI — even if Supabase is unreachable.
         if (!cancelled) setHydrated(true);
-      });
+      }
+    })();
 
-    // ── Auth state listener ───────────────────────────────────────────────
-    // Guard on the event type to avoid the INITIAL_SESSION race where
-    // onAuthStateChange fires with session=null before getSession resolves.
+    // ── Auth state listener ───────────────────────────────────────────────────
+    // Because we use a singleton client, this listener receives events from
+    // signInWithPassword() called in the login form — even though that call
+    // happens in a different component.
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, session: Session | null) => {
       if (cancelled) return;
 
       if (
@@ -123,27 +114,26 @@ export function UserProvider({ children }: { children: ReactNode }) {
         event === "USER_UPDATED"
       ) {
         if (session?.user) {
-          await loadProfile(supabase, session.user.id, session.user.email ?? "");
+          await loadProfile(session.user.id, session.user.email ?? "");
         }
       } else if (event === "SIGNED_OUT") {
         setUser(null);
       }
-      // INITIAL_SESSION and PASSWORD_RECOVERY are intentionally ignored here;
-      // getSession() above handles the initial state reliably.
+      // INITIAL_SESSION is ignored — getSession() handles the initial state.
+      // Ignoring it prevents the race where onAuthStateChange fires session=null
+      // before getSession() has a chance to resolve.
     });
 
     return () => {
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, [loadProfile]);
+  }, []); // Run once on mount — supabase singleton never changes
 
-  const logout = useCallback(async () => {
-    if (supabaseRef.current) {
-      await supabaseRef.current.auth.signOut();
-    }
+  async function logout() {
+    await supabaseRef.current.auth.signOut();
     setUser(null);
-  }, []);
+  }
 
   return (
     <UserContext.Provider value={{ user, hydrated, logout }}>
