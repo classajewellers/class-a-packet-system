@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Quote } from "@/lib/types";
 import { generateQuoteHTML } from "@/lib/quoteGenerator";
+import { useUser } from "@/context/UserContext";
+import { canManage } from "@/lib/userTypes";
 import {
   PIPELINE_STAGES,
   STAGE_CONFIG,
@@ -58,6 +60,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }: Props) {
   const router = useRouter();
+  const { user } = useUser();
+  const isManager = canManage(user?.role);
   const [local, setLocal] = useState<Quote>(quote);
   const [moving, setMoving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -359,20 +363,80 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
                     <th style={{ paddingBottom: 8, textAlign: 'left', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', width: 20 }}>#</th>
                     <th style={{ paddingBottom: 8, textAlign: 'left', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase' }}>Design</th>
                     <th style={{ paddingBottom: 8, textAlign: 'left', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase' }}>Stone</th>
-                    <th style={{ paddingBottom: 8, textAlign: 'right', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Price</th>
+                    <th style={{ paddingBottom: 8, textAlign: 'right', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Retail</th>
+                    {isManager && (
+                      <th style={{ paddingBottom: 8, textAlign: 'right', fontSize: 11, fontWeight: 500, color: '#635BFF', textTransform: 'uppercase', whiteSpace: 'nowrap', paddingLeft: 12 }}>Cost</th>
+                    )}
+                    {isManager && (
+                      <th style={{ paddingBottom: 8, textAlign: 'right', fontSize: 11, fontWeight: 500, color: '#635BFF', textTransform: 'uppercase', whiteSpace: 'nowrap', paddingLeft: 12 }}>Margin</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
-                  {(local.line_items ?? []).map((li, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid #E8E8F0' }}>
-                      <td style={{ padding: '8px 0', color: '#9CA3AF', fontSize: 12 }}>{i + 1}</td>
-                      <td style={{ padding: '8px 8px 8px 0', color: '#1A1A2E' }}>{li.design ?? (li as {item?: string}).item}</td>
-                      <td style={{ padding: '8px 8px 8px 0', color: '#6B7280' }}>{li.stone}</td>
-                      <td style={{ padding: '8px 0', textAlign: 'right', color: '#1A1A2E', fontWeight: 600, whiteSpace: 'nowrap' }}>{li.price}</td>
-                    </tr>
-                  ))}
+                  {(local.line_items ?? []).map((li, i) => {
+                    // Margin: only calculable when both are plain numbers
+                    const retail = parseFloat(li.price?.replace(/[^0-9.]/g, '') ?? '');
+                    const cost   = parseFloat((li.cost_price ?? '').replace(/[^0-9.]/g, '') ?? '');
+                    const hasMargin = isManager && !isNaN(retail) && !isNaN(cost) && cost > 0;
+                    const marginAmt = hasMargin ? retail - cost : null;
+                    const marginPct = hasMargin ? ((retail - cost) / retail) * 100 : null;
+
+                    return (
+                      <tr key={i} style={{ borderBottom: '1px solid #E8E8F0' }}>
+                        <td style={{ padding: '8px 0', color: '#9CA3AF', fontSize: 12 }}>{i + 1}</td>
+                        <td style={{ padding: '8px 8px 8px 0', color: '#1A1A2E' }}>{li.design}</td>
+                        <td style={{ padding: '8px 8px 8px 0', color: '#6B7280' }}>{li.stone}</td>
+                        <td style={{ padding: '8px 0', textAlign: 'right', color: '#1A1A2E', fontWeight: 600, whiteSpace: 'nowrap' }}>{li.price}</td>
+                        {isManager && (
+                          <td style={{ padding: '8px 0 8px 12px', textAlign: 'right', color: '#635BFF', whiteSpace: 'nowrap', fontSize: 13 }}>
+                            {li.cost_price || '—'}
+                          </td>
+                        )}
+                        {isManager && (
+                          <td style={{ padding: '8px 0 8px 12px', textAlign: 'right', whiteSpace: 'nowrap', fontSize: 12 }}>
+                            {marginAmt !== null && marginPct !== null ? (
+                              <span style={{ color: marginAmt >= 0 ? '#16A34A' : '#DC2626', fontWeight: 500 }}>
+                                ${marginAmt.toFixed(0)} ({marginPct.toFixed(0)}%)
+                              </span>
+                            ) : '—'}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
+              {/* Totals row for managers */}
+              {isManager && (() => {
+                const items = local.line_items ?? [];
+                const totalRetail = items.reduce((sum, li) => {
+                  const v = parseFloat(li.price?.replace(/[^0-9.]/g, '') ?? '');
+                  return sum + (isNaN(v) ? 0 : v);
+                }, 0);
+                const totalCost = items.reduce((sum, li) => {
+                  const v = parseFloat((li.cost_price ?? '').replace(/[^0-9.]/g, '') ?? '');
+                  return sum + (isNaN(v) ? 0 : v);
+                }, 0);
+                const hasCosts = items.some(li => li.cost_price && li.cost_price.trim() !== '');
+                if (!hasCosts) return null;
+                const totalMargin = totalRetail - totalCost;
+                const totalMarginPct = totalRetail > 0 ? (totalMargin / totalRetail) * 100 : 0;
+                return (
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #E8E8F0', display: 'flex', gap: 20, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: 12, color: '#6B7280' }}>
+                      Total Retail: <strong style={{ color: '#1A1A2E' }}>${totalRetail.toLocaleString('en-AU', { minimumFractionDigits: 2 })}</strong>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#6B7280' }}>
+                      Total Cost: <strong style={{ color: '#635BFF' }}>${totalCost.toLocaleString('en-AU', { minimumFractionDigits: 2 })}</strong>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#6B7280' }}>
+                      Margin: <strong style={{ color: totalMargin >= 0 ? '#16A34A' : '#DC2626' }}>
+                        ${totalMargin.toLocaleString('en-AU', { minimumFractionDigits: 2 })} ({totalMarginPct.toFixed(0)}%)
+                      </strong>
+                    </div>
+                  </div>
+                );
+              })()}
             </Section>
           )}
 

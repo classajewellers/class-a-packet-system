@@ -6,6 +6,7 @@ import { useState, useCallback } from "react";
 import { QuoteFormData, QuoteType, LineItem, Quote } from "@/lib/types";
 import { defaultFollowUpDate } from "@/lib/pipeline";
 import { useUser } from "@/context/UserContext";
+import { canManage } from "@/lib/userTypes";
 import NavBar from "@/components/NavBar";
 import QuoteTypeSelector from "@/components/QuoteTypeSelector";
 import QuoteCustomerSection from "@/components/QuoteCustomerSection";
@@ -56,6 +57,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 
 export default function QuoteFormPage() {
   const { user } = useUser();
+  const isManager = canManage(user?.role);
   const [formData, setFormData]       = useState<QuoteFormData>(makeDefaultFormData(user?.name));
   const [errors, setErrors]           = useState<Partial<Record<keyof QuoteFormData, string>>>({});
   const [submitting, setSubmitting]   = useState(false);
@@ -156,6 +158,7 @@ export default function QuoteFormPage() {
               <QuoteLineItems
                 lineItems={formData.line_items}
                 onChange={handleLineItemsChange}
+                isManager={isManager}
               />
             </Card>
 

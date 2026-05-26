@@ -115,7 +115,7 @@ export function generateQuoteHTML(quote: Quote): string {
     const MIN_ROWS = 8;
     const filledItems: FilledItem[] = [...lineItems];
     while (filledItems.length < MIN_ROWS) {
-      filledItems.push({ design: "", stone: "", price: "", _empty: true });
+      filledItems.push({ design: "", stone: "", price: "", cost_price: "", _empty: true });
     }
 
     const tableRows = filledItems

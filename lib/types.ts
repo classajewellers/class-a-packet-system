@@ -260,7 +260,10 @@ export type QuoteType = "repair" | "custom_order";
 export interface LineItem {
   design: string;
   stone: string;
+  /** Retail price — what the customer pays. Shown on quotes and PDFs. */
   price: string;
+  /** Cost price — what we pay. Manager/admin only. Never on customer documents. */
+  cost_price?: string;
 }
 
 export interface Quote {

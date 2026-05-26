@@ -24,7 +24,7 @@ export default function QuoteDocument({ quote }: { quote: Quote }) {
   const paddingStart = lineItems.length;
   const filledItems = [...lineItems];
   while (filledItems.length < MIN_ROWS) {
-    filledItems.push({ design: "", stone: "", price: "" });
+    filledItems.push({ design: "", stone: "", price: "", cost_price: "" });
   }
 
   const createdDate =
