@@ -1,0 +1,35 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+
+export const dynamic = 'force-dynamic'
+
+export async function GET() {
+  const supabase = createServerSupabaseClient()
+  const { data, error } = await supabase
+    .from('inventory_locations')
+    .select('*')
+    .order('created_at', { ascending: true })
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ locations: data ?? [] })
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const supabase = createServerSupabaseClient()
+    const { data, error } = await supabase
+      .from('inventory_locations')
+      .insert({
+        name: body.name,
+        type: body.type,
+        bin_code_format: body.bin_code_format || null,
+        shopify_visible: body.shopify_visible ?? false,
+      })
+      .select()
+      .single()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ location: data })
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}

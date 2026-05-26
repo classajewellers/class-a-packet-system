@@ -404,3 +404,64 @@ export interface QuoteFormData {
   follow_up_date: string;
   from_quote_id?: string;
 }
+
+// ─────────────────────────────────────────────
+// Inventory
+// ─────────────────────────────────────────────
+export type InventoryLocationType = 'display' | 'storage' | 'workshop' | 'transit' | 'consignment';
+export type InventoryItemType = 'retail' | 'internal';
+
+export interface InventoryLocation {
+  id: string;
+  name: string;
+  type: InventoryLocationType;
+  bin_code_format: string | null;
+  shopify_visible: boolean;
+  created_at: string;
+}
+
+export interface InventorySupplier {
+  id: string;
+  name: string;
+  contact_name: string | null;
+  email: string | null;
+  phone: string | null;
+  lead_time_days: number | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface InventoryItem {
+  id: string;
+  sku: string;
+  name: string;
+  description: string | null;
+  item_type: InventoryItemType;
+  category: string | null;
+  department: string | null;
+  supplier_id: string | null;
+  supplier_code: string | null;
+  cost_price: number | null;
+  retail_price: number | null;
+  packaging_cost: number | null;
+  landed_cost: number | null;
+  reorder_point: number | null;
+  metal_type: string | null;
+  metal_weight_grams: number | null;
+  location_id: string | null;
+  shopify_synced: boolean;
+  notes: string | null;
+  created_at: string;
+  // Joined fields (optional)
+  supplier?: InventorySupplier | null;
+  location?: InventoryLocation | null;
+  total_stock?: number | null;
+}
+
+export interface InventoryStockRow {
+  id: string;
+  item_id: string;
+  location_id: string;
+  quantity: number;
+  updated_at: string;
+}

@@ -16,6 +16,7 @@ import {
   Sparkles,
   ChevronDown,
   UserCog,
+  Package,
 } from "lucide-react";
 import { canManage } from "@/lib/userTypes";
 
@@ -35,6 +36,7 @@ export default function Sidebar({ onOpenAI }: Props) {
   const isManager = canManage(user?.role);
   const isAdmin = user?.role === "admin";
   const quotesExpanded = pathname.startsWith("/quotes");
+  const inventoryExpanded = pathname.startsWith("/inventory");
 
   const initials = (name: string) =>
     name
@@ -276,6 +278,67 @@ export default function Sidebar({ onOpenAI }: Props) {
         {isManager && (
           <NavLink href="/workshop" icon={Wrench} label="Workshop" />
         )}
+
+        {/* Inventory — expandable, manager/admin only */}
+        {isManager && (
+          <div>
+            <div
+              role="button"
+              tabIndex={0}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "10px 16px",
+                borderRadius: 8,
+                cursor: "pointer",
+                background: inventoryExpanded ? ACTIVE_BG : "transparent",
+                color: inventoryExpanded ? ACTIVE_COLOR : DEFAULT_COLOR,
+                fontWeight: inventoryExpanded ? 500 : 400,
+                fontSize: 14,
+                transition: "background .15s, color .15s",
+              }}
+              onClick={() => router.push("/inventory/stock")}
+              onMouseEnter={(e) => {
+                if (!inventoryExpanded) {
+                  (e.currentTarget as HTMLDivElement).style.background = ACTIVE_BG;
+                  (e.currentTarget as HTMLDivElement).style.color = ACTIVE_COLOR;
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!inventoryExpanded) {
+                  (e.currentTarget as HTMLDivElement).style.background = "transparent";
+                  (e.currentTarget as HTMLDivElement).style.color = DEFAULT_COLOR;
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") router.push("/inventory/stock");
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <Package size={20} strokeWidth={1.75} />
+                <span>Inventory</span>
+              </div>
+              <ChevronDown
+                size={14}
+                strokeWidth={2}
+                style={{
+                  transform: inventoryExpanded ? "rotate(180deg)" : "rotate(0deg)",
+                  transition: "transform .2s",
+                  opacity: 0.6,
+                }}
+              />
+            </div>
+            {inventoryExpanded && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
+                <SubLink href="/inventory/stock" label="Stock" />
+                <SubLink href="/inventory/locations" label="Locations" />
+                <SubLink href="/inventory/suppliers" label="Suppliers" />
+              </div>
+            )}
+          </div>
+        )}
+
         {isManager && (
           <NavLink href="/reporting" icon={BarChart2} label="Reporting" />
         )}
