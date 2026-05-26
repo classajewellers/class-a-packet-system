@@ -50,20 +50,35 @@ export function calculateRetailPrice(cost: number): number {
 }
 
 /**
- * Calculate margin percentage given retail and cost prices.
- * Returns null if retail is 0 or invalid.
+ * Calculate the actual multiplier (retail ÷ cost).
+ * Returns null if either value is 0 or invalid.
  */
+export function calculateMultiplier(retail: number, cost: number): number | null {
+  if (retail <= 0 || cost <= 0) return null;
+  return retail / cost;
+}
+
+/**
+ * Return a colour token based on the multiplier.
+ * green  = ≥ 2.50
+ * orange = 2.00 – 2.49
+ * red    = < 2.00
+ */
+export function multiplierColour(mult: number): "green" | "orange" | "red" {
+  if (mult >= 2.50) return "green";
+  if (mult >= 2.00) return "orange";
+  return "red";
+}
+
+// ── Legacy helpers kept for any remaining call-sites ─────────────────────────
+
+/** @deprecated Use calculateMultiplier + multiplierColour instead */
 export function calculateMarginPct(retail: number, cost: number): number | null {
   if (retail <= 0 || cost <= 0) return null;
   return ((retail - cost) / retail) * 100;
 }
 
-/**
- * Return a colour class based on the margin percentage.
- * green  = >55%
- * orange = 40–55%
- * red    = <40%
- */
+/** @deprecated Use multiplierColour instead */
 export function marginColour(pct: number): "green" | "orange" | "red" {
   if (pct >= 55) return "green";
   if (pct >= 40) return "orange";

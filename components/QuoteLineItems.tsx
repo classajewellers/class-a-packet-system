@@ -1,7 +1,7 @@
 "use client";
 
 import { LineItem } from "@/lib/types";
-import { calculateRetailPrice, calculateMarginPct, marginColour } from "@/lib/marginCalculator";
+import { calculateRetailPrice, calculateMultiplier, multiplierColour } from "@/lib/marginCalculator";
 
 interface Props {
   lineItems: LineItem[];
@@ -72,13 +72,13 @@ export default function QuoteLineItems({ lineItems, onChange, isManager }: Props
       </div>
 
       {lineItems.map((li, i) => {
-        // Margin calculation for managers
+        // Multiplier calculation for managers
         const retailNum = parseFloat((li.price ?? "").replace(/[^0-9.]/g, ""));
         const costNum   = parseFloat((li.cost_price ?? "").replace(/[^0-9.]/g, ""));
-        const marginPct = isManager && !isNaN(retailNum) && !isNaN(costNum)
-          ? calculateMarginPct(retailNum, costNum)
+        const mult = isManager && !isNaN(retailNum) && !isNaN(costNum)
+          ? calculateMultiplier(retailNum, costNum)
           : null;
-        const colour = marginPct != null ? marginColour(marginPct) : null;
+        const colour = mult != null ? multiplierColour(mult) : null;
         const colourStyle = colour ? MARGIN_COLOURS[colour] : null;
 
         return (
@@ -131,8 +131,8 @@ export default function QuoteLineItems({ lineItems, onChange, isManager }: Props
               </button>
             </div>
 
-            {/* Margin indicator — manager only, shown when both retail & cost are present */}
-            {isManager && marginPct != null && colourStyle && (
+            {/* Multiplier indicator — manager only, shown when both retail & cost are present */}
+            {isManager && mult != null && colourStyle && (
               <div className={`grid ${gridCols} gap-2`}>
                 {/* Skip Design, Stone columns */}
                 <span />
@@ -142,9 +142,7 @@ export default function QuoteLineItems({ lineItems, onChange, isManager }: Props
                   className="col-span-2 flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium"
                   style={{ background: colourStyle.bg, color: colourStyle.text }}
                 >
-                  <span>
-                    {marginPct.toFixed(1)}% margin
-                  </span>
+                  <span>×{mult.toFixed(2)}</span>
                   <span style={{ opacity: 0.6 }}>
                     (${(retailNum - costNum).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} profit)
                   </span>

@@ -374,12 +374,12 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
                 </thead>
                 <tbody>
                   {(local.line_items ?? []).map((li, i) => {
-                    // Margin: only calculable when both are plain numbers
+                    // Multiplier: only calculable when both are plain numbers
                     const retail = parseFloat(li.price?.replace(/[^0-9.]/g, '') ?? '');
                     const cost   = parseFloat((li.cost_price ?? '').replace(/[^0-9.]/g, '') ?? '');
                     const hasMargin = isManager && !isNaN(retail) && !isNaN(cost) && cost > 0;
                     const marginAmt = hasMargin ? retail - cost : null;
-                    const marginPct = hasMargin ? ((retail - cost) / retail) * 100 : null;
+                    const mult = hasMargin ? retail / cost : null;
 
                     return (
                       <tr key={i} style={{ borderBottom: '1px solid #E8E8F0' }}>
@@ -394,9 +394,15 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
                         )}
                         {isManager && (
                           <td style={{ padding: '8px 0 8px 12px', textAlign: 'right', whiteSpace: 'nowrap', fontSize: 12 }}>
-                            {marginAmt !== null && marginPct !== null ? (
-                              <span style={{ color: marginAmt >= 0 ? '#16A34A' : '#DC2626', fontWeight: 500 }}>
-                                ${marginAmt.toFixed(0)} ({marginPct.toFixed(0)}%)
+                            {marginAmt !== null && mult !== null ? (
+                              <span style={{
+                                color: mult >= 2.50 ? '#15803D' : mult >= 2.00 ? '#B45309' : '#DC2626',
+                                fontWeight: 600,
+                              }}>
+                                ×{mult.toFixed(2)}
+                                <span style={{ fontWeight: 400, opacity: 0.75, marginLeft: 4 }}>
+                                  (${marginAmt.toFixed(0)})
+                                </span>
                               </span>
                             ) : '—'}
                           </td>
@@ -420,7 +426,8 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
                 const hasCosts = items.some(li => li.cost_price && li.cost_price.trim() !== '');
                 if (!hasCosts) return null;
                 const totalMargin = totalRetail - totalCost;
-                const totalMarginPct = totalRetail > 0 ? (totalMargin / totalRetail) * 100 : 0;
+                const totalMult = totalCost > 0 ? totalRetail / totalCost : null;
+                const multColour = totalMult == null ? '#6B7280' : totalMult >= 2.50 ? '#15803D' : totalMult >= 2.00 ? '#B45309' : '#DC2626';
                 return (
                   <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #E8E8F0', display: 'flex', gap: 20, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                     <div style={{ fontSize: 12, color: '#6B7280' }}>
@@ -430,8 +437,11 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
                       Total Cost: <strong style={{ color: '#635BFF' }}>${totalCost.toLocaleString('en-AU', { minimumFractionDigits: 2 })}</strong>
                     </div>
                     <div style={{ fontSize: 12, color: '#6B7280' }}>
-                      Margin: <strong style={{ color: totalMargin >= 0 ? '#16A34A' : '#DC2626' }}>
-                        ${totalMargin.toLocaleString('en-AU', { minimumFractionDigits: 2 })} ({totalMarginPct.toFixed(0)}%)
+                      Multiplier: <strong style={{ color: multColour }}>
+                        {totalMult != null ? `×${totalMult.toFixed(2)}` : '—'}
+                        <span style={{ fontWeight: 400, marginLeft: 4 }}>
+                          (${totalMargin.toLocaleString('en-AU', { minimumFractionDigits: 2 })} profit)
+                        </span>
                       </strong>
                     </div>
                   </div>

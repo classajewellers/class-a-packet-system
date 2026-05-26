@@ -8,7 +8,7 @@ import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
 import Link from "next/link";
 import { generateQuoteHTML } from "@/lib/quoteGenerator";
-import { calculateRetailPrice, calculateMarginPct, marginColour } from "@/lib/marginCalculator";
+import { calculateRetailPrice, calculateMultiplier, multiplierColour } from "@/lib/marginCalculator";
 
 interface MetalRate { id: string; metal_type: string; price_per_gram: number; }
 interface FixedCost { id: string; key: string; label: string; amount: number; }
@@ -144,11 +144,11 @@ export default function QuoteBuilderPage() {
     // Quoted price: prefer blended suggested retail, fall back to DB bracket
     const quotedPrice = suggestedRetail > 0 ? suggestedRetail : Math.ceil(rawPrice / 50) * 50;
 
-    // Margin against total cost (using quotedPrice as retail)
-    const marginPct = calculateMarginPct(quotedPrice, totalCost);
-    const mColour = marginPct != null ? marginColour(marginPct) : null;
+    // Multiplier against total cost (using quotedPrice as retail)
+    const mult = calculateMultiplier(quotedPrice, totalCost);
+    const mColour = mult != null ? multiplierColour(mult) : null;
 
-    return { metalCost, mainStoneCost, mainStoneSettingCost, addonsCost, totalCost, bracket, rawPrice, quotedPrice, suggestedRetail, marginPct, mColour, costMap, extraLabour };
+    return { metalCost, mainStoneCost, mainStoneSettingCost, addonsCost, totalCost, bracket, rawPrice, quotedPrice, suggestedRetail, mult, mColour, costMap, extraLabour };
   }, [metalType, weight, metalRates, includeMainStone, stones, isManager, fixedCosts, smallSettings, smallSettingsQty, butterflies, chain, additionalLabour, additionalLabourAmount, marginBrackets]);
 
   function selectTemplate(t: QuoteTemplate) {
@@ -838,15 +838,15 @@ export default function QuoteBuilderPage() {
                           </span>
                         </div>
                       )}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: pricing.marginPct != null ? 8 : 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: pricing.mult != null ? 8 : 0 }}>
                         <span style={{ color: '#6B7280' }}>Quoted price</span>
                         <span style={{ fontWeight: 600 }}>
                           ${pricing.quotedPrice.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                         </span>
                       </div>
 
-                      {/* Margin indicator */}
-                      {pricing.marginPct != null && pricing.mColour && (() => {
+                      {/* Multiplier indicator */}
+                      {pricing.mult != null && pricing.mColour && (() => {
                         const COLOURS = {
                           green:  { bg: '#DCFCE7', text: '#15803D' },
                           orange: { bg: '#FEF9C3', text: '#B45309' },
@@ -857,7 +857,7 @@ export default function QuoteBuilderPage() {
                         return (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', borderRadius: 6, background: cs.bg }}>
                             <span style={{ fontSize: 13, fontWeight: 700, color: cs.text }}>
-                              {pricing.marginPct.toFixed(1)}% margin
+                              ×{pricing.mult.toFixed(2)}
                             </span>
                             <span style={{ fontSize: 12, color: cs.text, opacity: 0.75 }}>
                               (${profit.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} profit)
