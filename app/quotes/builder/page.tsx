@@ -5,8 +5,10 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
+import { canManage } from "@/lib/userTypes";
 import Link from "next/link";
 import { generateQuoteHTML } from "@/lib/quoteGenerator";
+import { calculateRetailPrice, calculateMarginPct, marginColour } from "@/lib/marginCalculator";
 
 interface MetalRate { id: string; metal_type: string; price_per_gram: number; }
 interface FixedCost { id: string; key: string; label: string; amount: number; }
@@ -39,6 +41,7 @@ const TEMPLATE_EMOJI: Record<string, string> = {
 export default function QuoteBuilderPage() {
   const { user, hydrated } = useUser();
   const router = useRouter();
+  const isManager = canManage(user?.role);
 
   // Pricing data
   const [metalRates, setMetalRates] = useState<MetalRate[]>([]);
@@ -97,8 +100,8 @@ export default function QuoteBuilderPage() {
     const metalRate = metalRates.find(r => r.metal_type === metalType);
     const metalCost = metalRate ? (parseFloat(weight) || 0) * metalRate.price_per_gram : 0;
 
-    // Main stone cost: sum of all individual stone costs (manager only)
-    const mainStoneCost = (includeMainStone && user?.role === 'manager')
+    // Main stone cost: sum of all individual stone costs (manager/admin only)
+    const mainStoneCost = (includeMainStone && isManager)
       ? stones.reduce((sum, s) => sum + (parseFloat(s.cost) || 0), 0)
       : 0;
 
@@ -129,15 +132,24 @@ export default function QuoteBuilderPage() {
 
     const totalCost = metalCost + mainStoneCost + addonsCost;
 
+    // Suggested retail from blended margin calculator (lib/marginCalculator.ts)
+    const suggestedRetail = totalCost > 0 ? calculateRetailPrice(totalCost) : 0;
+
+    // Legacy DB bracket multiplier (kept for backward compat with quotedPrice)
     const bracket = marginBrackets.find(b =>
       totalCost >= b.cost_min && (b.cost_max == null || totalCost <= b.cost_max)
     ) ?? marginBrackets[marginBrackets.length - 1];
 
     const rawPrice = bracket ? totalCost * bracket.multiplier : totalCost;
-    const quotedPrice = Math.ceil(rawPrice / 50) * 50;
+    // Quoted price: prefer blended suggested retail, fall back to DB bracket
+    const quotedPrice = suggestedRetail > 0 ? suggestedRetail : Math.ceil(rawPrice / 50) * 50;
 
-    return { metalCost, mainStoneCost, mainStoneSettingCost, addonsCost, totalCost, bracket, rawPrice, quotedPrice, costMap, extraLabour };
-  }, [metalType, weight, metalRates, includeMainStone, stones, user, fixedCosts, smallSettings, smallSettingsQty, butterflies, chain, additionalLabour, additionalLabourAmount, marginBrackets]);
+    // Margin against total cost (using quotedPrice as retail)
+    const marginPct = calculateMarginPct(quotedPrice, totalCost);
+    const mColour = marginPct != null ? marginColour(marginPct) : null;
+
+    return { metalCost, mainStoneCost, mainStoneSettingCost, addonsCost, totalCost, bracket, rawPrice, quotedPrice, suggestedRetail, marginPct, mColour, costMap, extraLabour };
+  }, [metalType, weight, metalRates, includeMainStone, stones, isManager, fixedCosts, smallSettings, smallSettingsQty, butterflies, chain, additionalLabour, additionalLabourAmount, marginBrackets]);
 
   function selectTemplate(t: QuoteTemplate) {
     setSelectedTemplate(t);
@@ -166,7 +178,7 @@ export default function QuoteBuilderPage() {
           colour: s.colour || null,
           clarity: s.clarity || null,
           origin: s.origin,
-          cost: user?.role === 'manager' ? (parseFloat(s.cost) || 0) : 0,
+          cost: isManager ? (parseFloat(s.cost) || 0) : 0,
         })) : null,
         setting_cost: pricing.mainStoneSettingCost,
         addons: {
@@ -462,7 +474,7 @@ export default function QuoteBuilderPage() {
                     <option key={r.id} value={r.metal_type}>{r.metal_type}</option>
                   ))}
                 </select>
-                {user?.role === 'manager' && metalType && (
+                {isManager && metalType && (
                   <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>
                     Rate: ${metalRates.find(r => r.metal_type === metalType)?.price_per_gram.toFixed(2)}/g
                   </div>
@@ -481,7 +493,7 @@ export default function QuoteBuilderPage() {
                   onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
                   placeholder="e.g. 5.5"
                 />
-                {user?.role === 'manager' && weight && metalType && (
+                {isManager && weight && metalType && (
                   <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>
                     Metal cost: ${pricing.metalCost.toFixed(2)}
                   </div>
@@ -567,7 +579,7 @@ export default function QuoteBuilderPage() {
                     </div>
 
                     {/* Origin toggle */}
-                    <div style={{ display: 'flex', gap: 0, borderRadius: 8, overflow: 'hidden', border: '1px solid #E8E8F0', width: 'fit-content', marginBottom: user?.role === 'manager' ? 10 : 0 }}>
+                    <div style={{ display: 'flex', gap: 0, borderRadius: 8, overflow: 'hidden', border: '1px solid #E8E8F0', width: 'fit-content', marginBottom: isManager ? 10 : 0 }}>
                       {(['Lab Grown', 'Natural'] as const).map(o => (
                         <button
                           key={o}
@@ -583,8 +595,8 @@ export default function QuoteBuilderPage() {
                       ))}
                     </div>
 
-                    {/* Manager: per-stone cost price */}
-                    {user?.role === 'manager' && (
+                    {/* Manager/Admin: per-stone cost price */}
+                    {isManager && (
                       <div>
                         <label style={labelStyle}>Cost Price ($)</label>
                         <input
@@ -629,13 +641,13 @@ export default function QuoteBuilderPage() {
               {/* Labour — always included, no toggle */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#F9FAFB', borderRadius: 8, border: '1px solid #E8E8F0' }}>
                 <span style={{ fontSize: 14, color: '#374151', fontWeight: 500 }}>Labour</span>
-                {user?.role === 'manager' && (
-                  <span style={{ fontSize: 13, color: '#6B7280' }}>$300.00</span>
+                {isManager && (
+                  <span style={{ fontSize: 13, color: '#6B7280' }}>${(fixedCosts.find(fc => fc.key === 'labour')?.amount ?? 300).toFixed(2)}</span>
                 )}
               </div>
 
               {/* Main Stone Setting — auto-calculated from stone count */}
-              {user?.role === 'manager' && includeMainStone && pricing.mainStoneSettingCost > 0 && (
+              {isManager && includeMainStone && pricing.mainStoneSettingCost > 0 && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#F9FAFB', borderRadius: 8, border: '1px solid #E8E8F0' }}>
                   <span style={{ fontSize: 14, color: '#374151' }}>Stone Settings (auto)</span>
                   <span style={{ fontSize: 13, color: '#6B7280' }}>
@@ -657,7 +669,7 @@ export default function QuoteBuilderPage() {
                         value={smallSettingsQty}
                         onChange={e => setSmallSettingsQty(e.target.value)}
                       />
-                      {user?.role === 'manager' && (
+                      {isManager && (
                         <span style={{ fontSize: 12, color: '#6B7280' }}>= ${((parseInt(smallSettingsQty) || 0) * 30).toFixed(2)}</span>
                       )}
                     </div>
@@ -675,8 +687,8 @@ export default function QuoteBuilderPage() {
                   />
                   <span style={{ fontSize: 14, color: '#374151' }}>Butterflies (earrings)</span>
                 </div>
-                {user?.role === 'manager' && butterflies && (
-                  <span style={{ fontSize: 13, color: '#6B7280' }}>$15.00</span>
+                {isManager && butterflies && (
+                  <span style={{ fontSize: 13, color: '#6B7280' }}>${(fixedCosts.find(fc => fc.key === 'butterflies')?.amount ?? 15).toFixed(2)}</span>
                 )}
               </label>
               <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}>
@@ -689,8 +701,8 @@ export default function QuoteBuilderPage() {
                   />
                   <span style={{ fontSize: 14, color: '#374151' }}>Chain (bracelet/necklace)</span>
                 </div>
-                {user?.role === 'manager' && chain && (
-                  <span style={{ fontSize: 13, color: '#6B7280' }}>$40.00</span>
+                {isManager && chain && (
+                  <span style={{ fontSize: 13, color: '#6B7280' }}>${(fixedCosts.find(fc => fc.key === 'chain')?.amount ?? 40).toFixed(2)}</span>
                 )}
               </label>
 
@@ -751,23 +763,27 @@ export default function QuoteBuilderPage() {
               Live Price
             </div>
 
-            {/* Manager cost breakdown */}
-            {user?.role === 'manager' && (
+            {/* Manager/Admin cost breakdown */}
+            {isManager && (
               <>
                 <div style={{ marginBottom: 12 }}>
                   <Toggle on={showCostBreakdown} onChange={setShowCostBreakdown} label="Show cost breakdown" />
                 </div>
                 {showCostBreakdown && (
                   <div style={{ background: '#F9FAFB', border: '1px solid #E8E8F0', borderRadius: 8, padding: 14, marginBottom: 16, fontSize: 13 }}>
+
+                    {/* ── Cost inputs ── */}
                     {pricing.metalCost > 0 && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <span style={{ color: '#6B7280' }}>Metal ({weight}g × ${metalRates.find(r => r.metal_type === metalType)?.price_per_gram.toFixed(2)})</span>
+                        <span style={{ color: '#6B7280' }}>
+                          Metal{weight && metalType ? ` (${weight}g × $${metalRates.find(r => r.metal_type === metalType)?.price_per_gram.toFixed(2)})` : ''}
+                        </span>
                         <span style={{ fontWeight: 500 }}>${pricing.metalCost.toFixed(2)}</span>
                       </div>
                     )}
                     {pricing.mainStoneCost > 0 && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <span style={{ color: '#6B7280' }}>Main Stone</span>
+                        <span style={{ color: '#6B7280' }}>Stone cost</span>
                         <span style={{ fontWeight: 500 }}>${pricing.mainStoneCost.toFixed(2)}</span>
                       </div>
                     )}
@@ -779,13 +795,13 @@ export default function QuoteBuilderPage() {
                     )}
                     {pricing.costMap.mainStoneSetting !== undefined && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <span style={{ color: '#6B7280' }}>Stone Settings ({stones.length}×)</span>
+                        <span style={{ color: '#6B7280' }}>Stone settings ({stones.length}×)</span>
                         <span style={{ fontWeight: 500 }}>${pricing.costMap.mainStoneSetting.toFixed(2)}</span>
                       </div>
                     )}
                     {pricing.costMap.smallSettings !== undefined && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <span style={{ color: '#6B7280' }}>Small Settings ({smallSettingsQty})</span>
+                        <span style={{ color: '#6B7280' }}>Small settings ({smallSettingsQty})</span>
                         <span style={{ fontWeight: 500 }}>${pricing.costMap.smallSettings.toFixed(2)}</span>
                       </div>
                     )}
@@ -803,25 +819,52 @@ export default function QuoteBuilderPage() {
                     )}
                     {pricing.extraLabour > 0 && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <span style={{ color: '#6B7280' }}>Additional Labour</span>
+                        <span style={{ color: '#6B7280' }}>Additional labour</span>
                         <span style={{ fontWeight: 500 }}>${pricing.extraLabour.toFixed(2)}</span>
                       </div>
                     )}
+
+                    {/* ── Totals ── */}
                     <div style={{ borderTop: '1px solid #E8E8F0', marginTop: 8, paddingTop: 8 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{ color: '#6B7280', fontWeight: 500 }}>Total Cost</span>
-                        <span style={{ fontWeight: 600 }}>${pricing.totalCost.toFixed(2)}</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <span style={{ color: '#6B7280', fontWeight: 600 }}>Total cost</span>
+                        <span style={{ fontWeight: 700 }}>${pricing.totalCost.toFixed(2)}</span>
                       </div>
-                      {pricing.bracket && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <span style={{ color: '#6B7280' }}>Multiplier</span>
-                          <span style={{ fontWeight: 500, color: '#635BFF' }}>×{pricing.bracket.multiplier.toFixed(3)}</span>
+                      {pricing.suggestedRetail > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <span style={{ color: '#6B7280' }}>Suggested retail</span>
+                          <span style={{ fontWeight: 500, color: '#635BFF' }}>
+                            ${pricing.suggestedRetail.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                          </span>
                         </div>
                       )}
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: '#6B7280' }}>Raw price</span>
-                        <span style={{ fontWeight: 500 }}>${pricing.rawPrice.toFixed(2)}</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: pricing.marginPct != null ? 8 : 0 }}>
+                        <span style={{ color: '#6B7280' }}>Quoted price</span>
+                        <span style={{ fontWeight: 600 }}>
+                          ${pricing.quotedPrice.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </span>
                       </div>
+
+                      {/* Margin indicator */}
+                      {pricing.marginPct != null && pricing.mColour && (() => {
+                        const COLOURS = {
+                          green:  { bg: '#DCFCE7', text: '#15803D' },
+                          orange: { bg: '#FEF9C3', text: '#B45309' },
+                          red:    { bg: '#FEE2E2', text: '#DC2626' },
+                        };
+                        const cs = COLOURS[pricing.mColour];
+                        const profit = pricing.quotedPrice - pricing.totalCost;
+                        return (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', borderRadius: 6, background: cs.bg }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: cs.text }}>
+                              {pricing.marginPct.toFixed(1)}% margin
+                            </span>
+                            <span style={{ fontSize: 12, color: cs.text, opacity: 0.75 }}>
+                              (${profit.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} profit)
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
