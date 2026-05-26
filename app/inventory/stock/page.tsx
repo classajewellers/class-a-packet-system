@@ -12,6 +12,49 @@ import { Plus, Search, X, ChevronDown } from "lucide-react";
 const fmtCurrency = (v: number | null | undefined) =>
   v != null ? `$${v.toFixed(2)}` : "—";
 
+/** Build a flat ordered list of { id, label } for location dropdowns.
+ *  Sub-locations appear as "Parent → Child", sorted under their parent. */
+function buildLocationOptions(locations: InventoryLocation[]): { id: string; label: string }[] {
+  const parents = locations.filter((l) => !l.parent_id);
+  const childrenByParent = new Map<string, InventoryLocation[]>();
+  for (const l of locations) {
+    if (l.parent_id) {
+      const arr = childrenByParent.get(l.parent_id) ?? [];
+      arr.push(l);
+      childrenByParent.set(l.parent_id, arr);
+    }
+  }
+  // Include lone sub-locations whose parent isn't in the list (edge case)
+  const placedChildIds = new Set<string>();
+  const result: { id: string; label: string }[] = [];
+  for (const parent of parents) {
+    result.push({ id: parent.id, label: parent.name });
+    for (const child of childrenByParent.get(parent.id) ?? []) {
+      result.push({ id: child.id, label: `${parent.name} → ${child.name}` });
+      placedChildIds.add(child.id);
+    }
+  }
+  // Orphans
+  for (const l of locations) {
+    if (l.parent_id && !placedChildIds.has(l.id)) {
+      result.push({ id: l.id, label: l.name });
+    }
+  }
+  return result;
+}
+
+/** Lookup label for a single location id given the full locations list. */
+function locationLabel(locationId: string | null | undefined, locations: InventoryLocation[]): string {
+  if (!locationId) return "—";
+  const loc = locations.find((l) => l.id === locationId);
+  if (!loc) return "—";
+  if (loc.parent_id) {
+    const parent = locations.find((l) => l.id === loc.parent_id);
+    return parent ? `${parent.name} → ${loc.name}` : loc.name;
+  }
+  return loc.name;
+}
+
 const ITEM_TYPE_LABEL: Record<string, string> = {
   retail: "Retail",
   internal: "Internal",
@@ -266,7 +309,9 @@ function ItemDrawer({ item, isNew, locations, suppliers, onClose, onSaved, isMan
               <label style={labelStyle}>Default Location</label>
               <select style={inputStyle} value={form.location_id} onChange={(e) => set("location_id", e.target.value)}>
                 <option value="">— None —</option>
-                {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                {buildLocationOptions(locations).map((opt) => (
+                  <option key={opt.id} value={opt.id}>{opt.label}</option>
+                ))}
               </select>
             </div>
             <div>
@@ -426,7 +471,9 @@ export default function InventoryStockPage() {
         <div style={{ position: "relative" }}>
           <select value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)} style={{ padding: "8px 28px 8px 10px", border: "1px solid #E5E7EB", borderRadius: 6, fontSize: 13, color: filterLocation ? "#1A1A2E" : "#9CA3AF", background: "#fff", cursor: "pointer", appearance: "none" }}>
             <option value="">All locations</option>
-            {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            {buildLocationOptions(locations).map((opt) => (
+              <option key={opt.id} value={opt.id}>{opt.label}</option>
+            ))}
           </select>
           <ChevronDown size={12} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
         </div>
@@ -492,7 +539,7 @@ export default function InventoryStockPage() {
                     {item.supplier ? item.supplier.name : "—"}
                   </td>
                   <td style={{ padding: "11px 14px", fontSize: 13, color: "#6B7280" }}>
-                    {item.location ? item.location.name : "—"}
+                    {locationLabel(item.location_id, locations)}
                   </td>
                   <td style={{ padding: "11px 14px", fontSize: 13, color: "#1A1A2E", fontWeight: 500 }}>
                     {item.total_stock ?? 0}

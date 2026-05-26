@@ -417,6 +417,7 @@ export interface InventoryLocation {
   type: InventoryLocationType;
   bin_code_format: string | null;
   shopify_visible: boolean;
+  parent_id: string | null;
   created_at: string;
 }
 

@@ -8,7 +8,9 @@ export async function GET() {
   const { data, error } = await supabase
     .from('inventory_locations')
     .select('*')
-    .order('created_at', { ascending: true })
+    // parents first, then children; alphabetical within each group
+    .order('parent_id', { ascending: true, nullsFirst: true })
+    .order('name', { ascending: true })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ locations: data ?? [] })
 }
@@ -24,6 +26,7 @@ export async function POST(req: NextRequest) {
         type: body.type,
         bin_code_format: body.bin_code_format || null,
         shopify_visible: body.shopify_visible ?? false,
+        parent_id: body.parent_id || null,
       })
       .select()
       .single()

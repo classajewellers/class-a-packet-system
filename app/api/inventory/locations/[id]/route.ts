@@ -14,6 +14,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         type: body.type,
         bin_code_format: body.bin_code_format ?? null,
         shopify_visible: body.shopify_visible ?? false,
+        parent_id: body.parent_id || null,
       })
       .eq('id', params.id)
       .select()
