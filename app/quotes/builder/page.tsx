@@ -25,8 +25,20 @@ interface StoneEntry {
   cost: string; // manager only
 }
 
+interface BuilderItem {
+  id: string;
+  job_type: string;
+  description: string;
+  retail_price: string;
+  cost_price: string;
+}
+
 function newStone(): StoneEntry {
   return { id: Math.random().toString(36).slice(2), caratWeight: '', shape: '', colour: '', clarity: '', origin: 'Lab Grown', cost: '' };
+}
+
+function newBuilderItem(): BuilderItem {
+  return { id: Math.random().toString(36).slice(2), job_type: '', description: '', retail_price: '', cost_price: '' };
 }
 
 const TEMPLATE_EMOJI: Record<string, string> = {
@@ -38,14 +50,14 @@ const TEMPLATE_EMOJI: Record<string, string> = {
   'Custom Job': '⭐',
 };
 
-const PDF_JOB_TYPES = ['Engagement Ring', 'Wedding Ring', 'Fine Jewellery', 'Repair'] as const;
-type PdfJobType = typeof PDF_JOB_TYPES[number];
+const BUILDER_JOB_TYPES = ['Engagement Ring', 'Wedding Ring', 'Fine Jewellery', 'Repair', 'Other'] as const;
 
-const PDF_JOB_PLACEHOLDERS: Record<PdfJobType, string> = {
+const BUILDER_JOB_PLACEHOLDERS: Record<string, string> = {
   'Engagement Ring': 'e.g. 18ct White Gold Solitaire Engagement Ring, 4 Claw, Size: N',
   'Wedding Ring':    'e.g. 18ct Yellow Gold Half Round Wedding Ring 5.5mm × 1.5mm, Size: Q',
   'Fine Jewellery':  'e.g. 18ct Rose Gold Diamond Tennis Bracelet, 2.00ct TW',
   'Repair':          'e.g. Resize platinum ring from Size L to Size N, re-tip 4 claws',
+  'Other':           'e.g. Custom repair, alteration, or other work',
 };
 
 export default function QuoteBuilderPage() {
@@ -87,19 +99,12 @@ export default function QuoteBuilderPage() {
   const [additionalLabour, setAdditionalLabour] = useState(false);
   const [additionalLabourAmount, setAdditionalLabourAmount] = useState('');
 
-  // PDF job type + description (what prints on the customer PDF)
-  const [pdfJobType, setPdfJobType] = useState<PdfJobType | ''>('');
-  const [pdfJobDescription, setPdfJobDescription] = useState('');
+  // Builder items (multi-item quote lines)
+  const [builderItems, setBuilderItems] = useState<BuilderItem[]>([newBuilderItem()]);
 
   // Description
   const [quoteDescription, setQuoteDescription] = useState('');
   const [internalNotes, setInternalNotes] = useState('');
-
-  // Manual price overrides (right panel)
-  // manualCostPrice — manager/admin only; overrides auto-calculated total cost
-  // manualRetailPrice — all roles; auto-filled from cost, editable override
-  const [manualCostPrice, setManualCostPrice] = useState('');
-  const [manualRetailPrice, setManualRetailPrice] = useState('');
 
   // UI state
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -171,13 +176,24 @@ export default function QuoteBuilderPage() {
     return { metalCost, mainStoneCost, mainStoneSettingCost, addonsCost, totalCost, bracket, rawPrice, quotedPrice, suggestedRetail, mult, mColour, costMap, extraLabour };
   }, [metalType, weight, metalRates, includeMainStone, stones, isManager, fixedCosts, smallSettings, smallSettingsQty, butterflies, chain, additionalLabour, additionalLabourAmount, marginBrackets]);
 
-  // Effective cost/retail — manual overrides win over component-calculated values
-  const effectiveCost = manualCostPrice !== '' ? (parseFloat(manualCostPrice) || 0) : pricing.totalCost;
-  const effectiveRetail = manualRetailPrice !== ''
-    ? (parseFloat(manualRetailPrice) || 0)
-    : (effectiveCost > 0 ? calculateRetailPrice(effectiveCost) : pricing.quotedPrice);
+  // Sum retail/cost prices from builder items
+  const itemsRetailTotal = builderItems.reduce((sum, item) => {
+    const p = parseFloat(item.retail_price) || 0;
+    return sum + p;
+  }, 0);
+  const itemsCostTotal = isManager ? builderItems.reduce((sum, item) => {
+    const c = parseFloat(item.cost_price) || 0;
+    return sum + c;
+  }, 0) : 0;
+
+  const effectiveRetail = itemsRetailTotal > 0 ? itemsRetailTotal : pricing.quotedPrice;
+  const effectiveCost = itemsCostTotal > 0 ? itemsCostTotal : pricing.totalCost;
   const effectiveMult = calculateMultiplier(effectiveRetail, effectiveCost);
   const effectiveMColour = effectiveMult != null ? multiplierColour(effectiveMult) : null;
+
+  function updateBuilderItem(id: string, field: keyof BuilderItem, value: string) {
+    setBuilderItems(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
+  }
 
   function selectTemplate(t: QuoteTemplate) {
     setSelectedTemplate(t);
@@ -197,6 +213,7 @@ export default function QuoteBuilderPage() {
     try {
       const quoteType = selectedTemplate?.name === 'Ring Resize / Repair' ? 'repair' : 'custom_order';
       const qbd = {
+        items: builderItems,
         design: design || null,
         template: selectedTemplate?.name ?? null,
         metal: { type: metalType, weight: parseFloat(weight) || 0, cost: pricing.metalCost },
@@ -221,7 +238,6 @@ export default function QuoteBuilderPage() {
         multiplier: pricing.bracket?.multiplier ?? null,
         raw_price: pricing.rawPrice,
         quoted_price: effectiveRetail,
-        cost_price: isManager ? effectiveCost : undefined,
       };
       const res = await fetch('/api/quotes/builder', {
         method: 'POST',
@@ -231,14 +247,13 @@ export default function QuoteBuilderPage() {
           assignedTo: user?.name ?? null,
           template: selectedTemplate?.name ?? null,
           quoteDescription, internalNotes,
-          jobType: pdfJobType || null,
-          jobDescription: pdfJobDescription || null,
           quotedPrice: effectiveRetail,
           totalCost: effectiveCost,
           multiplier: pricing.bracket?.multiplier ?? null,
           rawPrice: pricing.rawPrice,
           quoteBuilderData: qbd,
           quoteType,
+          pipelineStage: 'Pending',
         }),
       });
       const json = await res.json();
@@ -254,8 +269,14 @@ export default function QuoteBuilderPage() {
 
   function handlePrintPDF() {
     const now = new Date().toISOString();
-    // Build a partial qbd so the PDF uses the builder layout
-    const pdfQbd: Record<string, unknown> = { design: design || null };
+    const pdfQbd: Record<string, unknown> = {
+      design: design || null,
+      items: builderItems.map(item => ({
+        job_type: item.job_type,
+        description: item.description,
+        retail_price: item.retail_price,
+      })),
+    };
     if (includeMainStone) {
       pdfQbd.main_stone = stones.map(s => ({
         carat_weight: parseFloat(s.caratWeight) || null,
@@ -299,8 +320,6 @@ export default function QuoteBuilderPage() {
       total: effectiveRetail,
       quote_builder_data: pdfQbd,
       quoted_price: effectiveRetail,
-      job_type: pdfJobType || null,
-      job_description: pdfJobDescription || null,
     };
     const html = generateQuoteHTML(quoteObj);
     const win = window.open('', '_blank');
@@ -374,6 +393,12 @@ export default function QuoteBuilderPage() {
       </div>
     );
   }
+
+  const MULT_COLOURS = {
+    green:  { bg: '#DCFCE7', text: '#15803D' },
+    orange: { bg: '#FEF9C3', text: '#B45309' },
+    red:    { bg: '#FEE2E2', text: '#DC2626' },
+  };
 
   return (
     <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
@@ -449,54 +474,155 @@ export default function QuoteBuilderPage() {
             {errors.contact && <div style={errorStyle}>{errors.contact}</div>}
           </div>
 
-          {/* PDF Job Type + Description */}
+          {/* Quote Items */}
           <div style={sectionCard}>
-            <div style={sectionHeading}>Quote Description (prints on PDF)</div>
+            <div style={sectionHeading}>Quote Items</div>
 
-            {/* Job type selector */}
-            <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
-              {PDF_JOB_TYPES.map((jt) => {
-                const active = pdfJobType === jt;
-                return (
-                  <button
-                    key={jt}
-                    type="button"
-                    onClick={() => setPdfJobType(active ? '' : jt)}
-                    style={{
-                      padding: '7px 16px',
-                      borderRadius: 8,
-                      border: `1px solid ${active ? '#635BFF' : '#E8E8F0'}`,
-                      background: active ? '#635BFF' : '#fff',
-                      color: active ? '#fff' : '#374151',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      transition: 'all .15s',
-                    }}
-                  >
-                    {jt}
-                  </button>
-                );
-              })}
-            </div>
+            {builderItems.map((item, idx) => {
+              const itemRetail = parseFloat(item.retail_price) || 0;
+              const itemCost = parseFloat(item.cost_price) || 0;
+              const itemMult = isManager && itemRetail > 0 && itemCost > 0
+                ? calculateMultiplier(itemRetail, itemCost)
+                : null;
+              const itemMColour = itemMult != null ? multiplierColour(itemMult) : null;
 
-            {/* Description textarea */}
-            <textarea
-              value={pdfJobDescription}
-              onChange={e => setPdfJobDescription(e.target.value)}
-              onFocus={e => (e.target.style.borderColor = '#635BFF')}
-              onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
-              rows={4}
-              placeholder={
-                pdfJobType
-                  ? PDF_JOB_PLACEHOLDERS[pdfJobType]
-                  : 'Select a job type above, then type the description that will appear on the customer PDF…'
-              }
-              style={{ ...inputStyle, minHeight: 90, resize: 'vertical', lineHeight: 1.6 }}
-            />
-            <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 6 }}>
-              Exactly as typed — no auto-formatting. This replaces the stone/metal spec breakdown on the PDF.
-            </p>
+              return (
+                <div
+                  key={item.id}
+                  style={{
+                    background: '#F9FAFB',
+                    border: '1px solid #E8E8F0',
+                    borderRadius: 10,
+                    padding: 14,
+                    marginBottom: idx < builderItems.length - 1 ? 12 : 0,
+                  }}
+                >
+                  {/* Item header row */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Item {idx + 1}</span>
+                    {builderItems.length > 1 && (
+                      <button
+                        onClick={() => setBuilderItems(prev => prev.filter(i => i.id !== item.id))}
+                        style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 18, color: '#9CA3AF', lineHeight: 1, padding: '0 2px' }}
+                        title="Remove item"
+                      >×</button>
+                    )}
+                  </div>
+
+                  {/* Job type pill buttons */}
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+                    {BUILDER_JOB_TYPES.map(jt => {
+                      const active = item.job_type === jt;
+                      return (
+                        <button
+                          key={jt}
+                          type="button"
+                          onClick={() => updateBuilderItem(item.id, 'job_type', active ? '' : jt)}
+                          style={{
+                            padding: '6px 14px',
+                            borderRadius: 8,
+                            border: `1px solid ${active ? '#635BFF' : '#E8E8F0'}`,
+                            background: active ? '#635BFF' : '#fff',
+                            color: active ? '#fff' : '#374151',
+                            fontSize: 13,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            transition: 'all .15s',
+                          }}
+                        >
+                          {jt}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Description textarea */}
+                  <div style={{ marginBottom: 12 }}>
+                    <textarea
+                      value={item.description}
+                      onChange={e => updateBuilderItem(item.id, 'description', e.target.value)}
+                      onFocus={e => (e.target.style.borderColor = '#635BFF')}
+                      onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
+                      rows={3}
+                      placeholder={
+                        item.job_type
+                          ? BUILDER_JOB_PLACEHOLDERS[item.job_type] ?? 'Describe what the customer will receive…'
+                          : 'Select a type above, then describe what the customer will receive…'
+                      }
+                      style={{ ...inputStyle, minHeight: 72, resize: 'vertical', lineHeight: 1.6 }}
+                    />
+                  </div>
+
+                  {/* Price row */}
+                  <div style={{ display: 'grid', gridTemplateColumns: isManager ? '1fr 1fr' : '1fr', gap: 10 }}>
+                    <div>
+                      <label style={labelStyle}>Retail Price ($)</label>
+                      <input
+                        type="number"
+                        step="1"
+                        min="0"
+                        value={item.retail_price}
+                        onChange={e => updateBuilderItem(item.id, 'retail_price', e.target.value)}
+                        onFocus={e => (e.target.style.borderColor = '#635BFF')}
+                        onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
+                        placeholder="0"
+                        style={inputStyle}
+                      />
+                    </div>
+                    {isManager && (
+                      <div>
+                        <label style={{ ...labelStyle, color: '#635BFF' }}>Cost Price ($)</label>
+                        <input
+                          type="number"
+                          step="1"
+                          min="0"
+                          value={item.cost_price}
+                          onChange={e => updateBuilderItem(item.id, 'cost_price', e.target.value)}
+                          onFocus={e => (e.target.style.borderColor = '#635BFF')}
+                          onBlur={e => (e.target.style.borderColor = '#C4BFFE')}
+                          placeholder="0"
+                          style={{ ...inputStyle, borderColor: '#C4BFFE' }}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Per-item multiplier badge */}
+                  {isManager && itemMult != null && itemMColour && (() => {
+                    const cs = MULT_COLOURS[itemMColour];
+                    const profit = itemRetail - itemCost;
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', borderRadius: 6, background: cs.bg, marginTop: 8 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: cs.text }}>
+                          ×{itemMult.toFixed(2)}
+                        </span>
+                        <span style={{ fontSize: 12, color: cs.text, opacity: 0.75 }}>
+                          (${profit.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} profit)
+                        </span>
+                      </div>
+                    );
+                  })()}
+                </div>
+              );
+            })}
+
+            {/* Add Item button */}
+            {builderItems.length < 10 && (
+              <button
+                onClick={() => setBuilderItems(prev => [...prev, newBuilderItem()])}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '8px 16px', borderRadius: 8, marginTop: 12,
+                  border: '1px dashed #635BFF', background: '#EEF2FF',
+                  color: '#635BFF', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                  transition: 'all .15s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#E0E7FF')}
+                onMouseLeave={e => (e.currentTarget.style.background = '#EEF2FF')}
+              >
+                + Add Item
+              </button>
+            )}
           </div>
 
           {/* Template */}
@@ -855,7 +981,6 @@ export default function QuoteBuilderPage() {
                 {showCostBreakdown && (
                   <div style={{ background: '#F9FAFB', border: '1px solid #E8E8F0', borderRadius: 8, padding: 14, marginBottom: 16, fontSize: 13 }}>
 
-                    {/* ── Cost inputs ── */}
                     {pricing.metalCost > 0 && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                         <span style={{ color: '#6B7280' }}>
@@ -907,7 +1032,6 @@ export default function QuoteBuilderPage() {
                       </div>
                     )}
 
-                    {/* ── Totals ── */}
                     <div style={{ borderTop: '1px solid #E8E8F0', marginTop: 8, paddingTop: 8 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                         <span style={{ color: '#6B7280', fontWeight: 600 }}>Total cost</span>
@@ -921,26 +1045,21 @@ export default function QuoteBuilderPage() {
                           </span>
                         </div>
                       )}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: pricing.mult != null ? 8 : 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: effectiveMult != null && effectiveMColour ? 8 : 0 }}>
                         <span style={{ color: '#6B7280' }}>Quoted price</span>
                         <span style={{ fontWeight: 600 }}>
                           ${pricing.quotedPrice.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                         </span>
                       </div>
 
-                      {/* Multiplier indicator */}
-                      {pricing.mult != null && pricing.mColour && (() => {
-                        const COLOURS = {
-                          green:  { bg: '#DCFCE7', text: '#15803D' },
-                          orange: { bg: '#FEF9C3', text: '#B45309' },
-                          red:    { bg: '#FEE2E2', text: '#DC2626' },
-                        };
-                        const cs = COLOURS[pricing.mColour];
-                        const profit = pricing.quotedPrice - pricing.totalCost;
+                      {/* Overall multiplier badge */}
+                      {effectiveMult != null && effectiveMColour && (() => {
+                        const cs = MULT_COLOURS[effectiveMColour];
+                        const profit = effectiveRetail - effectiveCost;
                         return (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', borderRadius: 6, background: cs.bg }}>
                             <span style={{ fontSize: 13, fontWeight: 700, color: cs.text }}>
-                              ×{pricing.mult.toFixed(2)}
+                              ×{effectiveMult.toFixed(2)}
                             </span>
                             <span style={{ fontSize: 12, color: cs.text, opacity: 0.75 }}>
                               (${profit.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} profit)
@@ -954,75 +1073,27 @@ export default function QuoteBuilderPage() {
               </>
             )}
 
-            {/* Price override inputs */}
-            <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {/* Cost Price — manager/admin only */}
-              {isManager && (
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#635BFF', display: 'block', marginBottom: 4 }}>
-                    Cost Price (override)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={manualCostPrice}
-                    onChange={(e) => {
-                      setManualCostPrice(e.target.value);
-                      const cost = parseFloat(e.target.value);
-                      if (!isNaN(cost) && cost > 0) {
-                        setManualRetailPrice(String(calculateRetailPrice(cost)));
-                      } else if (e.target.value === '') {
-                        setManualRetailPrice('');
-                      }
-                    }}
-                    placeholder={pricing.totalCost > 0 ? pricing.totalCost.toFixed(2) : 'Enter cost…'}
-                    style={{ ...inputStyle, borderColor: '#C4BFFE' }}
-                    onFocus={e => (e.target.style.borderColor = '#635BFF')}
-                    onBlur={e => (e.target.style.borderColor = '#C4BFFE')}
-                  />
+            {/* Item price list (when multiple items with prices) */}
+            {itemsRetailTotal > 0 && builderItems.length > 1 && (
+              <div style={{ marginBottom: 12, fontSize: 13 }}>
+                {builderItems.map((item, i) => {
+                  const p = parseFloat(item.retail_price) || 0;
+                  if (p === 0) return null;
+                  return (
+                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, color: '#6B7280' }}>
+                      <span>Item {i + 1}{item.job_type ? ` · ${item.job_type}` : ''}</span>
+                      <span style={{ fontWeight: 500, color: '#1A1A2E' }}>
+                        ${p.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+                  );
+                })}
+                <div style={{ borderTop: '1px solid #E8E8F0', paddingTop: 6, marginTop: 4, display: 'flex', justifyContent: 'space-between', fontWeight: 600, color: '#374151', fontSize: 13 }}>
+                  <span>Total</span>
+                  <span>${itemsRetailTotal.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
                 </div>
-              )}
-
-              {/* Retail Price — all roles */}
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>
-                  Retail Price
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={manualRetailPrice}
-                  onChange={(e) => setManualRetailPrice(e.target.value)}
-                  placeholder={effectiveRetail > 0 ? String(effectiveRetail) : 'Enter retail…'}
-                  style={inputStyle}
-                  onFocus={e => (e.target.style.borderColor = '#635BFF')}
-                  onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
-                />
               </div>
-
-              {/* Multiplier badge — manager/admin only */}
-              {isManager && effectiveMult != null && effectiveMColour && (() => {
-                const COLOURS = {
-                  green:  { bg: '#DCFCE7', text: '#15803D' },
-                  orange: { bg: '#FEF9C3', text: '#B45309' },
-                  red:    { bg: '#FEE2E2', text: '#DC2626' },
-                };
-                const cs = COLOURS[effectiveMColour];
-                const profit = effectiveRetail - effectiveCost;
-                return (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', borderRadius: 6, background: cs.bg }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: cs.text }}>
-                      ×{effectiveMult.toFixed(2)}
-                    </span>
-                    <span style={{ fontSize: 12, color: cs.text, opacity: 0.75 }}>
-                      (${profit.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} profit)
-                    </span>
-                  </div>
-                );
-              })()}
-            </div>
+            )}
 
             {/* Quoted price */}
             <div style={{ marginBottom: 24 }}>
@@ -1032,9 +1103,6 @@ export default function QuoteBuilderPage() {
                   ? `$${effectiveRetail.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
                   : '—'}
               </div>
-              {effectiveRetail > 0 && manualRetailPrice === '' && (
-                <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>Rounded to nearest $5</div>
-              )}
             </div>
 
             {/* Actions */}

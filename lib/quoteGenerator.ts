@@ -36,8 +36,50 @@ export function generateQuoteHTML(quote: Quote): string {
       ? `$${Number(priceNum).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       : "&nbsp;";
 
-    // ── New layout: job type heading + free-text description ─────────────────
-    if (quote.job_description) {
+    // ── New multi-item layout: qbd.items array ────────────────────────────
+    const qbdItems = (builderData as Record<string, unknown>)?.items;
+    if (Array.isArray(qbdItems) && qbdItems.length > 0) {
+      const items = qbdItems as Array<{ job_type?: string; description?: string; retail_price?: string }>;
+      const totalPrice = items.reduce((sum, item) => sum + (parseFloat(item.retail_price ?? '') || 0), 0);
+      const multiItem = items.length > 1;
+
+      let rows = "";
+      items.forEach((item) => {
+        const jobType = item.job_type ? esc(item.job_type) : null;
+        const desc = item.description ? esc(item.description).replace(/\n/g, "<br>") : null;
+        const itemPrice = parseFloat(item.retail_price ?? '') || 0;
+        const itemPriceText = `$${itemPrice.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+        if (jobType) {
+          rows += `<tr style="background:#000"><th colspan="2" style="color:#fff;font-size:10pt;letter-spacing:0.5px;padding:8px 12px;text-align:left;">${jobType}</th></tr>`;
+        }
+        if (desc) {
+          rows += `<tr style="background:#fff"><td colspan="2" style="padding:10px 12px;font-size:9.5pt;line-height:1.6;color:#222;">${desc}</td></tr>`;
+        }
+        // Show per-item price row only when multiple items and price > 0
+        if (multiItem && itemPrice > 0) {
+          rows += `<tr style="background:#f0f0f0"><td style="padding:8px 12px;font-size:9pt;color:#555;border-right:1px solid #ddd;width:80px;vertical-align:middle;">Price</td><td style="padding:10px 12px;font-size:12pt;font-weight:bold;color:#000;">${itemPriceText}</td></tr>`;
+        }
+      });
+
+      // Total row for multiple items
+      if (multiItem) {
+        const totalText = `$${totalPrice.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        rows += `<tr style="background:#000"><td style="color:#fff;font-weight:bold;padding:10px 12px;border-right:1px solid #444;width:80px;">Total</td><td style="color:#fff;font-weight:bold;font-size:14pt;padding:10px 12px;">${totalText}</td></tr>`;
+      } else {
+        // Single item — just show price row at bottom
+        rows += `<tr style="background:#f0f0f0"><td style="padding:8px 12px;font-size:9pt;color:#555;border-right:1px solid #ddd;width:80px;vertical-align:middle;">Price</td><td style="padding:10px 12px;font-size:14pt;font-weight:bold;color:#000;">${priceText}</td></tr>`;
+      }
+
+      itemsSection = `
+  <table class="line-items">
+    <tbody>
+      ${rows}
+    </tbody>
+  </table>`;
+
+    // ── Legacy layout: job type heading + free-text description ─────────────
+    } else if (quote.job_description) {
       const jobTypeText = esc(quote.job_type ?? "Custom Order");
       const descText = esc(quote.job_description).replace(/\n/g, "<br>");
 

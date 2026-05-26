@@ -266,6 +266,14 @@ export interface LineItem {
   cost_price?: string;
 }
 
+export interface BuilderItem {
+  id: string;
+  job_type: string;      // 'Engagement Ring' | 'Wedding Ring' | 'Fine Jewellery' | 'Repair' | 'Other'
+  description: string;
+  retail_price: string;  // numeric string, e.g. "1500"
+  cost_price: string;    // numeric string, manager/admin only
+}
+
 export interface Quote {
   id: string;
   created_at: string;

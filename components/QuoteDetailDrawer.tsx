@@ -335,6 +335,17 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
             </div>
           </Section>
 
+          {/* ── Mark as Job Lost — staff only (non-manager), active stages ── */}
+          {!isManager && activeStage && (
+            <button
+              onClick={() => moveToStage('job_lost')}
+              disabled={moving}
+              style={{ width: '100%', padding: '10px 0', borderRadius: 8, background: '#FEF2F2', color: '#EF4444', fontSize: 14, fontWeight: 600, border: '1px solid #FECACA', cursor: 'pointer', opacity: moving ? 0.5 : 1 }}
+            >
+              Mark as Job Lost
+            </button>
+          )}
+
           {/* ── Convert to Order (secondary — all non-converted stages except job_won handled above) ── */}
           {stage !== "job_won" && !isConverted && (
             <button
@@ -468,6 +479,49 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
             </Section>
           )}
 
+          {/* ── Builder quote items — from quote_builder_data.items ── */}
+          {(() => {
+            const qbd = local.quote_builder_data as Record<string, unknown> | null;
+            const items = (qbd?.items ?? []) as Array<{job_type: string; description: string; retail_price: string; cost_price?: string}>;
+            if (items.length === 0) return null;
+            return (
+              <Section title="Quote Items">
+                {items.map((item, i) => (
+                  <div key={i} style={{ marginBottom: i < items.length - 1 ? 12 : 0, paddingBottom: i < items.length - 1 ? 12 : 0, borderBottom: i < items.length - 1 ? '1px solid #E8E8F0' : 'none' }}>
+                    {item.job_type && (
+                      <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, background: '#EEF2FF', color: '#635BFF', fontSize: 11, fontWeight: 700, marginBottom: 4 }}>
+                        {item.job_type}
+                      </span>
+                    )}
+                    {item.description && (
+                      <p style={{ fontSize: 14, color: '#1A1A2E', margin: '4px 0', lineHeight: 1.5 }}>{item.description}</p>
+                    )}
+                    <div style={{ display: 'flex', gap: 16, marginTop: 4, flexWrap: 'wrap' }}>
+                      {item.retail_price && (
+                        <span style={{ fontSize: 13, color: '#1A1A2E', fontWeight: 600 }}>
+                          ${parseFloat(item.retail_price).toLocaleString('en-AU', { minimumFractionDigits: 2 })}
+                        </span>
+                      )}
+                      {isManager && item.cost_price && parseFloat(item.cost_price) > 0 && (
+                        <span style={{ fontSize: 13, color: '#635BFF' }}>
+                          Cost: ${parseFloat(item.cost_price).toLocaleString('en-AU', { minimumFractionDigits: 2 })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {items.length > 1 && (
+                  <div style={{ borderTop: '1px solid #E8E8F0', paddingTop: 8, marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#6B7280' }}>Total</span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>
+                      ${items.reduce((s, it) => s + (parseFloat(it.retail_price) || 0), 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )}
+              </Section>
+            );
+          })()}
+
           {/* ── Staff & Created ── */}
           <Section title="Staff & Created">
             <dl style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px' }}>
@@ -479,19 +533,21 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
             </dl>
           </Section>
 
-          {/* ── Delete ── */}
-          <div style={{ paddingBottom: 8 }}>
-            <button
-              onClick={handleDelete}
-              disabled={deleting}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, padding: '12px 0', borderRadius: 8, border: 'none', cursor: 'pointer', opacity: deleting ? 0.5 : 1 }}
-            >
-              <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-              </svg>
-              {deleting ? "Deleting…" : "Delete Quote"}
-            </button>
-          </div>
+          {/* ── Delete — manager/admin only ── */}
+          {isManager && (
+            <div style={{ paddingBottom: 8 }}>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, padding: '12px 0', borderRadius: 8, border: 'none', cursor: 'pointer', opacity: deleting ? 0.5 : 1 }}
+              >
+                <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                </svg>
+                {deleting ? "Deleting…" : "Delete Quote"}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
