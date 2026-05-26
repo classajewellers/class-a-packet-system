@@ -141,19 +141,26 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
 
   // ── Delete job ────────────────────────────────────────────────────────────
 
-  async function handleDelete() {
-    if (!confirm(`Delete workshop job ${local.reference_number ?? "for " + (local.customer_surname ?? "this customer")}? This cannot be undone.`)) return;
+  async function handleDeleteJob() {
+    if (!window.confirm("Delete this workshop job? This cannot be undone.")) return;
     setDeleting(true);
     try {
-      const res = await fetch(`/api/workshop/jobs/${local.id}`, { method: "DELETE" });
+      console.log("[delete workshop] deleting job:", job.id);
+      const res = await fetch(`/api/workshop/jobs/${job.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+      });
+      console.log("[delete workshop] response status:", res.status);
       const json = await res.json();
+      console.log("[delete workshop] response:", json);
       if (json.success) {
+        onDelete(job.id);
         onClose();
-        onDelete(local.id);
       } else {
         alert("Delete failed: " + (json.error || "Unknown error"));
       }
     } catch (err) {
+      console.error("[delete workshop] error:", err);
       alert("Delete failed: " + String(err));
     } finally {
       setDeleting(false);
@@ -430,7 +437,8 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
           {isManager && (
             <div style={{ paddingBottom: 8 }}>
               <button
-                onClick={handleDelete}
+                type="button"
+                onClick={handleDeleteJob}
                 disabled={deleting}
                 style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, padding: '12px 0', borderRadius: 8, border: 'none', cursor: deleting ? 'not-allowed' : 'pointer', opacity: deleting ? 0.5 : 1 }}
               >
