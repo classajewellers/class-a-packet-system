@@ -15,16 +15,22 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const isLoginPage = pathname === "/login";
+  // Public routes — no auth required, no app shell
+  const isPublicPage = pathname.startsWith("/claim/");
   const [aiOpen, setAiOpen] = useState(false);
 
   useEffect(() => {
     if (!hydrated) return;
+    if (isPublicPage) return; // never redirect public pages
     if (!user && !isLoginPage) {
       router.replace("/login");
     } else if (user && isLoginPage) {
       router.replace("/");
     }
-  }, [user, hydrated, isLoginPage, router]);
+  }, [user, hydrated, isLoginPage, isPublicPage, router]);
+
+  // Public pages: render immediately, no auth check, no shell
+  if (isPublicPage) return <>{children}</>;
 
   // Show nothing until localStorage is read
   if (!hydrated) return null;
