@@ -8,32 +8,40 @@ import TopBar from "@/components/TopBar";
 import AIAssistant from "@/components/AIAssistant";
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
-// Redirects unauthenticated users to /login, and logged-in users away from it.
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, hydrated } = useUser();
   const router = useRouter();
   const pathname = usePathname();
   const isLoginPage = pathname === "/login";
-  // Public routes — no auth required, no app shell
   const isPublicPage = pathname.startsWith("/claim/");
   const [aiOpen, setAiOpen] = useState(false);
 
+  // Safety net: if the Supabase session check hangs for more than 10 s,
+  // stop blocking the UI. The middleware will redirect unauthenticated users
+  // to /login server-side anyway, so this is just a client-side fallback.
+  const [forceShow, setForceShow] = useState(false);
   useEffect(() => {
-    if (!hydrated) return;
-    if (isPublicPage) return; // never redirect public pages
+    const id = setTimeout(() => setForceShow(true), 10_000);
+    return () => clearTimeout(id);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated && !forceShow) return;
+    if (isPublicPage) return;
     if (!user && !isLoginPage) {
       router.replace("/login");
     } else if (user && isLoginPage) {
       router.replace("/");
     }
-  }, [user, hydrated, isLoginPage, isPublicPage, router]);
+  }, [user, hydrated, forceShow, isLoginPage, isPublicPage, router]);
 
   // Public pages: render immediately, no auth check, no shell
   if (isPublicPage) return <>{children}</>;
 
-  // Show nothing until Supabase session is resolved
-  if (!hydrated) return null;
+  // Show nothing until session is resolved (or safety timeout fires)
+  if (!hydrated && !forceShow) return null;
+
   // Suppress content while redirect is in flight
   if (!user && !isLoginPage) return null;
   if (user && isLoginPage) return null;
@@ -41,7 +49,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   // Login page: no sidebar/topbar
   if (isLoginPage) return <>{children}</>;
 
-  // Authenticated pages: sidebar + topbar layout
+  // Authenticated pages: full app shell
   return (
     <div className="app-shell">
       <Sidebar onOpenAI={() => setAiOpen(true)} />

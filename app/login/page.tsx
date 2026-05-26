@@ -3,7 +3,6 @@
 export const dynamic = "force-dynamic";
 
 import { useState, FormEvent } from "react";
-import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -11,12 +10,16 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const supabase = createBrowserSupabaseClient();
-
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
+
+    // Lazy import — keeps createBrowserSupabaseClient out of the render phase
+    // so it never runs during SSR.
+    const { createBrowserSupabaseClient } =
+      await import("@/lib/supabase-browser");
+    const supabase = createBrowserSupabaseClient();
 
     const { error: authError } = await supabase.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
