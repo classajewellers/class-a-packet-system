@@ -15,6 +15,7 @@ import {
   Sparkles,
   ChevronDown,
   Package,
+  Tag,
 } from "lucide-react";
 import { canManage } from "@/lib/userTypes";
 
@@ -219,6 +220,30 @@ export default function Sidebar({ onOpenAI }: Props) {
             </div>
           </>
         ) : null}
+
+        {/* Trunk Show — amber highlight so staff spot it immediately */}
+        <Link
+          href="/trunk-show"
+          style={{
+            display: "flex", alignItems: "center", gap: 10,
+            padding: "10px 16px", borderRadius: 8, textDecoration: "none",
+            background: pathname.startsWith("/trunk-show") ? "rgba(245,158,11,0.25)" : "rgba(245,158,11,0.10)",
+            color: pathname.startsWith("/trunk-show") ? "#FCD34D" : "#F59E0B",
+            fontWeight: pathname.startsWith("/trunk-show") ? 600 : 500, fontSize: 14,
+            border: "1px solid rgba(245,158,11,0.3)",
+            transition: "background .15s, color .15s",
+            marginTop: 4,
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = "rgba(245,158,11,0.25)"; (e.currentTarget as HTMLAnchorElement).style.color = "#FCD34D"; }}
+          onMouseLeave={(e) => {
+            const active = pathname.startsWith("/trunk-show");
+            (e.currentTarget as HTMLAnchorElement).style.background = active ? "rgba(245,158,11,0.25)" : "rgba(245,158,11,0.10)";
+            (e.currentTarget as HTMLAnchorElement).style.color = active ? "#FCD34D" : "#F59E0B";
+          }}
+        >
+          <Tag size={20} strokeWidth={1.75} />
+          <span>Trunk Show</span>
+        </Link>
 
         {/* AI Assistant */}
         <button
