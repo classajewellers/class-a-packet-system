@@ -587,3 +587,64 @@ export interface InventoryPurchaseLine {
   created_at: string;
   variant?: InventoryVariant | null;
 }
+
+// ─────────────────────────────────────────────
+// Inventory — Designs / Pieces / Piece BOM
+// ─────────────────────────────────────────────
+export type DesignCategory =
+  | 'Engagement Ring' | 'Wedding Ring' | 'Fine Jewellery' | 'Earrings'
+  | 'Bracelet' | 'Necklace' | 'Pendant' | 'Brooch'
+  | 'Loose Stone' | 'Component' | 'Other';
+
+export type PieceStatus = 'in_stock' | 'on_order' | 'sold' | 'workshop' | 'consignment';
+export type PieceComponentType = 'casting' | 'diamond' | 'labour' | 'settings' | 'findings' | 'other';
+
+export interface InventoryDesign {
+  id: string;
+  name: string;
+  category: DesignCategory | null;
+  description: string | null;
+  notes: string | null;
+  created_at: string;
+  // joined
+  pieces?: InventoryPiece[];
+}
+
+export interface InventoryPiece {
+  id: string;
+  design_id: string;
+  sku: string;
+  metal_karat: string | null;
+  metal_colour: string | null;
+  metal_weight_grams: number | null;
+  diamond_carat: number | null;
+  diamond_colour: string | null;
+  diamond_clarity: string | null;
+  diamond_type: string | null;
+  finger_size: string | null;
+  other_specs: string | null;
+  location_id: string | null;
+  cost_price: number | null;
+  retail_price: number | null;
+  status: PieceStatus;
+  notes: string | null;
+  created_at: string;
+  // joined
+  design?: InventoryDesign | null;
+  location?: InventoryLocation | null;
+}
+
+export interface InventoryPieceBom {
+  id: string;
+  piece_id: string;
+  component_type: PieceComponentType;
+  description: string;
+  quantity: number;
+  unit: string | null;
+  unit_cost: number;
+  locked_cost: number;
+  supplier_id: string | null;
+  notes: string | null;
+  created_at: string;
+  supplier?: InventorySupplier | null;
+}
