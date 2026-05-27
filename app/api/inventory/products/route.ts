@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     const supabase = createServerSupabaseClient()
     let query = supabase
       .from('inventory_products')
-      .select(`*, inventory_variants(*)`)
+      .select(`*, inventory_variants(*, inventory_variant_stock(quantity))`)
       .order('name', { ascending: true })
     if (search) {
       query = query.or(`name.ilike.%${search}%,category.ilike.%${search}%`)
@@ -18,7 +18,14 @@ export async function GET(req: NextRequest) {
     const { data, error } = await query
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     const products = (data ?? []).map((p: Record<string, unknown>) => {
-      const variants = (p.inventory_variants as unknown[]) ?? []
+      const rawVariants = (p.inventory_variants as Record<string, unknown>[]) ?? []
+      const variants = rawVariants.map((v) => {
+        const stockRows = (v.inventory_variant_stock as { quantity: number }[] | null) ?? []
+        const total_stock = stockRows.reduce((sum, r) => sum + (r.quantity ?? 0), 0)
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { inventory_variant_stock: _s, ...rest } = v
+        return { ...rest, total_stock }
+      })
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { inventory_variants: _v, ...rest } = p
       return { ...rest, variants }

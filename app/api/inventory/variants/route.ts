@@ -10,16 +10,16 @@ export async function GET(req: NextRequest) {
     const supabase = createServerSupabaseClient()
     let query = supabase
       .from('inventory_variants')
-      .select(`*, inventory_stock(quantity)`)
+      .select(`*, inventory_variant_stock(quantity)`)
       .order('created_at', { ascending: false })
     if (product_id) query = query.eq('product_id', product_id)
     const { data, error } = await query
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     const variants = (data ?? []).map((v: Record<string, unknown>) => {
-      const stockRows = (v.inventory_stock as { quantity: number }[] | null) ?? []
+      const stockRows = (v.inventory_variant_stock as { quantity: number }[] | null) ?? []
       const total_stock = stockRows.reduce((sum, r) => sum + (r.quantity ?? 0), 0)
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { inventory_stock: _s, ...rest } = v
+      const { inventory_variant_stock: _s, ...rest } = v
       return { ...rest, total_stock }
     })
     return NextResponse.json({ variants })
