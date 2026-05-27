@@ -10,11 +10,12 @@ import {
   InventoryLocation,
   InventorySupplier,
   PieceStatus,
+  CsvImportResult,
 } from "@/lib/types";
 import { calculateMultiplier, multiplierColour, calculateRetailPrice } from "@/lib/marginCalculator";
 import { generatePieceTagHTML } from "@/lib/jewelleryTagGenerator";
 import {
-  Plus, Search, X, ChevronRight, Printer, Edit2, Trash2, AlertTriangle, Info,
+  Plus, Search, X, ChevronRight, Printer, Edit2, Trash2, AlertTriangle, Info, Upload, Download,
 } from "lucide-react";
 
 // ── constants ──────────────────────────────────────────────────────────────
@@ -166,12 +167,15 @@ export default function StockPage() {
 
   const [drawer, setDrawer] = useState<{
     mode: "new-piece" | "edit-piece";
-    design: InventoryDesign;
+    design: InventoryDesign | null;
     piece: InventoryPiece | null;
     tab: "details" | "bom";
   } | null>(null);
 
   const [showNewDesign, setShowNewDesign] = useState(false);
+  const [showImportCsv, setShowImportCsv] = useState(false);
+  const [oneOffPieces, setOneOffPieces] = useState<InventoryPiece[]>([]);
+  const [oneOffLoading, setOneOffLoading] = useState(true);
 
   const locationOptions = useMemo(() => buildLocationOptions(locations), [locations]);
   const locationLabelById = useMemo(() => {
@@ -225,12 +229,24 @@ export default function StockPage() {
     } catch { /* ignore */ }
   }, []);
 
+  const fetchOneOffPieces = useCallback(async () => {
+    setOneOffLoading(true);
+    try {
+      const res = await fetch("/api/inventory/pieces?oneoff=true");
+      const json = await res.json();
+      if (res.ok && !json.error) setOneOffPieces(json.pieces ?? []);
+    } catch { /* ignore */ } finally {
+      setOneOffLoading(false);
+    }
+  }, []);
+
   useEffect(() => { fetchDesigns(); }, [fetchDesigns]);
   useEffect(() => {
     fetchLocations();
     fetchSuppliers();
     fetchGoldPrices();
-  }, [fetchLocations, fetchSuppliers, fetchGoldPrices]);
+    fetchOneOffPieces();
+  }, [fetchLocations, fetchSuppliers, fetchGoldPrices, fetchOneOffPieces]);
 
   // ── expand / pieces cache ───────────────────────────────────────────────
   const fetchPiecesForDesign = useCallback(async (designId: string) => {
@@ -277,9 +293,31 @@ export default function StockPage() {
     setDrawer({ mode: "edit-piece", design, piece, tab: "details" });
   };
 
+  const openAddOneOff = () => {
+    setDrawer({ mode: "new-piece", design: null, piece: null, tab: "details" });
+  };
+
+  const openEditOneOff = (piece: InventoryPiece) => {
+    setDrawer({ mode: "edit-piece", design: null, piece, tab: "details" });
+  };
+
   const closeDrawer = () => setDrawer(null);
 
-  const handlePieceSaved = (designId: string, piece: InventoryPiece, isNew: boolean) => {
+  const handlePieceSaved = (designId: string | null, piece: InventoryPiece, isNew: boolean) => {
+    if (!designId) {
+      // one-off
+      setOneOffPieces((prev) => {
+        if (isNew) return [...prev, piece];
+        const idx = prev.findIndex((p) => p.id === piece.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = piece;
+          return next;
+        }
+        return [...prev, piece];
+      });
+      return;
+    }
     setPiecesCache((c) => {
       const cur = c[designId] ? [...c[designId]] : [];
       if (isNew) {
@@ -300,7 +338,11 @@ export default function StockPage() {
     });
   };
 
-  const handlePieceDeleted = (designId: string, pieceId: string) => {
+  const handlePieceDeleted = (designId: string | null, pieceId: string) => {
+    if (!designId) {
+      setOneOffPieces((prev) => prev.filter((p) => p.id !== pieceId));
+      return;
+    }
     setPiecesCache((c) => {
       const cur = (c[designId] ?? []).filter((p) => p.id !== pieceId);
       return { ...c, [designId]: cur };
@@ -345,6 +387,16 @@ export default function StockPage() {
             />
           </div>
           <button
+            onClick={() => setShowImportCsv(true)}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "8px 14px", background: "#fff", color: "#111827",
+              border: "1px solid #D1D5DB", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer",
+            }}
+          >
+            <Upload size={16} /> Import CSV
+          </button>
+          <button
             onClick={() => setShowNewDesign(true)}
             style={{
               display: "inline-flex", alignItems: "center", gap: 6,
@@ -388,11 +440,34 @@ export default function StockPage() {
         </div>
       )}
 
+      {/* One-Off Items */}
+      <OneOffSection
+        pieces={oneOffPieces}
+        loading={oneOffLoading}
+        isManager={isManager}
+        locationLabelById={locationLabelById}
+        onAdd={openAddOneOff}
+        onEdit={openEditOneOff}
+        onPrintTag={(p) => handlePrintTag(p, "One-Off")}
+      />
+
       {/* Add Design Modal */}
       {showNewDesign && (
         <NewDesignModal
           onClose={() => setShowNewDesign(false)}
           onCreated={handleDesignCreated}
+        />
+      )}
+
+      {/* Import CSV Modal */}
+      {showImportCsv && (
+        <ImportCsvModal
+          onClose={() => setShowImportCsv(false)}
+          onImported={() => {
+            void fetchDesigns();
+            void fetchOneOffPieces();
+            setPiecesCache({});
+          }}
         />
       )}
 
@@ -409,8 +484,8 @@ export default function StockPage() {
           locationOptions={locationOptions}
           suppliers={suppliers}
           goldPrices={goldPrices}
-          onSaved={(piece, isNew) => handlePieceSaved(drawer.design.id, piece, isNew)}
-          onDeleted={(pieceId) => { handlePieceDeleted(drawer.design.id, pieceId); closeDrawer(); }}
+          onSaved={(piece, isNew) => handlePieceSaved(drawer.design?.id ?? null, piece, isNew)}
+          onDeleted={(pieceId) => { handlePieceDeleted(drawer.design?.id ?? null, pieceId); closeDrawer(); }}
         />
       )}
     </div>
@@ -663,7 +738,7 @@ function PieceDrawer({
   locationOptions, suppliers, goldPrices, onSaved, onDeleted,
 }: {
   mode: "new-piece" | "edit-piece";
-  design: InventoryDesign;
+  design: InventoryDesign | null;
   piece: InventoryPiece | null;
   tab: "details" | "bom";
   onTabChange: (t: "details" | "bom") => void;
@@ -690,7 +765,7 @@ function PieceDrawer({
         <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
-              <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 2 }}>{design.name}</div>
+              <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 2 }}>{design?.name ?? "One-Off Item"}</div>
               <div style={{ fontSize: 16, fontWeight: 700 }}>
                 {mode === "new-piece" ? "New Piece" : (piece?.sku ?? "Edit Piece")}
               </div>
@@ -760,7 +835,7 @@ function PieceDetailsForm({
   mode, design, piece, isManager, locationOptions, onSaved, onDeleted,
 }: {
   mode: "new-piece" | "edit-piece";
-  design: InventoryDesign;
+  design: InventoryDesign | null;
   piece: InventoryPiece | null;
   isManager: boolean;
   locationOptions: { id: string; label: string }[];
@@ -797,7 +872,7 @@ function PieceDetailsForm({
     setError(null);
     try {
       const payload = {
-        design_id: design.id,
+        design_id: design?.id ?? null,
         sku: sku.trim(),
         metal_karat: metalKarat || null,
         metal_colour: metalColour || null,
@@ -1370,3 +1445,377 @@ const btnSecondary: React.CSSProperties = {
   fontWeight: 600,
   cursor: "pointer",
 };
+
+// ─────────────────────────────────────────────────────────────────────────
+// One-Off Items Section
+// ─────────────────────────────────────────────────────────────────────────
+function OneOffSection({
+  pieces, loading, isManager, locationLabelById, onAdd, onEdit, onPrintTag,
+}: {
+  pieces: InventoryPiece[];
+  loading: boolean;
+  isManager: boolean;
+  locationLabelById: Map<string, string>;
+  onAdd: () => void;
+  onEdit: (p: InventoryPiece) => void;
+  onPrintTag: (p: InventoryPiece) => void;
+}) {
+  const count = pieces.length;
+  return (
+    <div style={{
+      marginTop: 24,
+      border: "2px dashed #D1D5DB",
+      borderRadius: 12,
+      background: "#FAFAF9",
+      overflow: "hidden",
+    }}>
+      <div style={{
+        display: "flex", alignItems: "center", padding: "14px 16px", gap: 12,
+        borderBottom: count > 0 ? "1px solid #E5E7EB" : "none",
+      }}>
+        <div style={{ fontWeight: 700, fontSize: 15 }}>One-Off Items</div>
+        <span style={{
+          display: "inline-flex", padding: "2px 10px", borderRadius: 999,
+          fontSize: 11, fontWeight: 600, background: "#E5E7EB", color: "#374151",
+        }}>
+          {count}
+        </span>
+        <div style={{ marginLeft: "auto" }}>
+          <button
+            onClick={onAdd}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "6px 12px", border: "1px solid #D1D5DB",
+              borderRadius: 6, background: "#fff", fontSize: 13, fontWeight: 600,
+              color: "#111827", cursor: "pointer",
+            }}
+          >
+            <Plus size={14} /> Add One-Off Item
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ padding: 16, color: "#6B7280", fontSize: 13 }}>Loading one-off items…</div>
+      ) : count === 0 ? (
+        <div style={{ padding: 16, color: "#6B7280", fontSize: 13 }}>
+          No one-off items yet. Click <strong>+ Add One-Off Item</strong> to add a unique or vintage piece.
+        </div>
+      ) : (
+        <div style={{ overflowX: "auto", background: "#fff" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ textAlign: "left", color: "#6B7280" }}>
+                <th style={{ padding: "8px 12px", fontWeight: 600 }}>SKU</th>
+                <th style={{ padding: "8px 4px", fontWeight: 600 }}>Metal</th>
+                <th style={{ padding: "8px 4px", fontWeight: 600 }}>Diamond</th>
+                <th style={{ padding: "8px 4px", fontWeight: 600 }}>Specs</th>
+                <th style={{ padding: "8px 4px", fontWeight: 600 }}>Location</th>
+                <th style={{ padding: "8px 4px", fontWeight: 600 }}>Status</th>
+                <th style={{ padding: "8px 4px", fontWeight: 600 }}>Cost</th>
+                <th style={{ padding: "8px 4px", fontWeight: 600 }}>Retail</th>
+                <th style={{ padding: "8px 12px", fontWeight: 600 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {pieces.map((p) => {
+                const specs = p.finger_size ? `Size ${p.finger_size}` : (p.other_specs ?? "");
+                const locLabel = p.location_id ? (locationLabelById.get(p.location_id) ?? "—") : "—";
+                return (
+                  <tr key={p.id} style={{ borderTop: "1px solid #F3F4F6" }}>
+                    <td style={{ padding: "8px 12px", fontFamily: "monospace", fontSize: 12 }}>{p.sku}</td>
+                    <td style={{ padding: "8px 4px" }}>{metalStr(p) || "—"}</td>
+                    <td style={{ padding: "8px 4px" }}>{diamondStr(p) || "—"}</td>
+                    <td style={{ padding: "8px 4px", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{specs || "—"}</td>
+                    <td style={{ padding: "8px 4px" }}>{locLabel}</td>
+                    <td style={{ padding: "8px 4px" }}><StatusBadge status={p.status} /></td>
+                    <td style={{ padding: "8px 4px" }}>{isManager ? fmtCurrency(p.cost_price) : "—"}</td>
+                    <td style={{ padding: "8px 4px" }}>{fmtCurrency(p.retail_price)}</td>
+                    <td style={{ padding: "8px 12px" }}>
+                      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                        <button
+                          onClick={() => onPrintTag(p)}
+                          title="Print Tag"
+                          style={{ padding: 6, border: "1px solid #D1D5DB", borderRadius: 6, background: "#fff", cursor: "pointer", display: "inline-flex", alignItems: "center" }}
+                        >
+                          <Printer size={14} />
+                        </button>
+                        <button
+                          onClick={() => onEdit(p)}
+                          title="Edit"
+                          style={{ padding: 6, border: "1px solid #D1D5DB", borderRadius: 6, background: "#fff", cursor: "pointer", display: "inline-flex", alignItems: "center" }}
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Import CSV Modal
+// ─────────────────────────────────────────────────────────────────────────
+const CSV_HEADERS = [
+  "design_name", "category", "sku", "metal_karat", "metal_colour",
+  "metal_weight_grams", "diamond_type", "diamond_carat", "diamond_colour",
+  "diamond_clarity", "finger_size", "other_specs", "location_name",
+  "cost_price", "retail_price", "status", "notes",
+] as const;
+
+const CSV_EXAMPLE_ROW = [
+  "Grace Engagement Ring", "Engagement Ring", "CA001", "18K", "White",
+  "4.2", "Natural", "1.5", "D", "VS1", "L", "", "Showroom",
+  "3200", "8500", "in_stock", "",
+];
+
+type ParsedCsvRow = Record<string, string>;
+
+function parseCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; }
+        else { inQuotes = false; }
+      } else {
+        cur += ch;
+      }
+    } else {
+      if (ch === ',') { result.push(cur); cur = ""; }
+      else if (ch === '"') { inQuotes = true; }
+      else { cur += ch; }
+    }
+  }
+  result.push(cur);
+  return result;
+}
+
+function parseCsvText(text: string): ParsedCsvRow[] {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (lines.length === 0) return [];
+  const headers = parseCsvLine(lines[0]).map((h) => h.trim());
+  const rows: ParsedCsvRow[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cells = parseCsvLine(lines[i]);
+    const row: ParsedCsvRow = {};
+    for (let j = 0; j < headers.length; j++) {
+      row[headers[j]] = (cells[j] ?? "").trim();
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+function ImportCsvModal({
+  onClose, onImported,
+}: {
+  onClose: () => void;
+  onImported: () => void;
+}) {
+  const [rows, setRows] = useState<ParsedCsvRow[]>([]);
+  const [fileName, setFileName] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState<CsvImportResult | null>(null);
+
+  const handleDownloadTemplate = () => {
+    const csv = CSV_HEADERS.join(",") + "\n" + CSV_EXAMPLE_ROW.map((v) => {
+      if (v.includes(",") || v.includes('"') || v.includes("\n")) {
+        return `"${v.replace(/"/g, '""')}"`;
+      }
+      return v;
+    }).join(",") + "\n";
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "inventory_template.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleFile = async (file: File) => {
+    setError(null);
+    setResult(null);
+    setFileName(file.name);
+    try {
+      const text = await file.text();
+      const parsed = parseCsvText(text);
+      if (parsed.length === 0) {
+        setError("CSV contained no data rows.");
+        setRows([]);
+        return;
+      }
+      setRows(parsed);
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+
+  const handleImport = async () => {
+    if (rows.length === 0) return;
+    setImporting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/inventory/import-csv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) {
+        setError(json.error || `Failed (${res.status})`);
+      } else {
+        setResult(json as CsvImportResult);
+        onImported();
+      }
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const previewRows = rows.slice(0, 5);
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
+        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50,
+        padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "#fff", borderRadius: 12, width: 820, maxWidth: "95vw",
+          maxHeight: "90vh", padding: 24, boxShadow: "0 25px 50px rgba(0,0,0,0.25)",
+          display: "flex", flexDirection: "column", overflow: "hidden",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Import Inventory from CSV</h2>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}>
+            <X size={20} />
+          </button>
+        </div>
+
+        {error && (
+          <div style={{ marginBottom: 12, padding: 10, background: "#FEE2E2", color: "#991B1B", borderRadius: 8, fontSize: 13 }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <button onClick={handleDownloadTemplate} style={{ ...btnSecondary, display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Download size={14} /> Download Template
+            </button>
+            <label style={{ ...btnSecondary, display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+              <Upload size={14} /> Choose CSV File
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleFile(f);
+                }}
+                style={{ display: "none" }}
+              />
+            </label>
+            {fileName && (
+              <span style={{ fontSize: 13, color: "#6B7280" }}>{fileName} · {rows.length} row{rows.length === 1 ? "" : "s"}</span>
+            )}
+          </div>
+
+          {previewRows.length > 0 && !result && (
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 8 }}>
+                Preview (first {previewRows.length} of {rows.length} row{rows.length === 1 ? "" : "s"})
+              </div>
+              <div style={{ overflowX: "auto", border: "1px solid #E5E7EB", borderRadius: 8 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead style={{ background: "#F9FAFB" }}>
+                    <tr>
+                      {CSV_HEADERS.map((h) => (
+                        <th key={h} style={{ padding: "6px 8px", textAlign: "left", fontWeight: 600, color: "#6B7280", whiteSpace: "nowrap" }}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewRows.map((r, idx) => (
+                      <tr key={idx} style={{ borderTop: "1px solid #F3F4F6" }}>
+                        {CSV_HEADERS.map((h) => (
+                          <td key={h} style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>
+                            {r[h] ?? ""}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {result && (
+            <div style={{
+              padding: 16, borderRadius: 8,
+              background: result.failed === 0 ? "#D1FAE5" : "#FEF3C7",
+              color: result.failed === 0 ? "#065F46" : "#92400E",
+              fontSize: 13,
+            }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>
+                {result.designs_created} design{result.designs_created === 1 ? "" : "s"} created, {result.pieces_imported} piece{result.pieces_imported === 1 ? "" : "s"} imported, {result.failed} failed
+              </div>
+              {result.errors.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>Failures:</div>
+                  <ul style={{ margin: 0, paddingLeft: 20 }}>
+                    {result.errors.map((e, i) => (
+                      <li key={i}>Row {e.row}: {e.reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16, paddingTop: 16, borderTop: "1px solid #E5E7EB" }}>
+          {result ? (
+            <button onClick={onClose} style={btnPrimary}>Done</button>
+          ) : (
+            <>
+              <button onClick={onClose} style={btnSecondary}>Cancel</button>
+              <button
+                onClick={handleImport}
+                disabled={importing || rows.length === 0}
+                style={{ ...btnPrimary, opacity: importing || rows.length === 0 ? 0.6 : 1 }}
+              >
+                {importing ? "Importing…" : `Confirm Import (${rows.length})`}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

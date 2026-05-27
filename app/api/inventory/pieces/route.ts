@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 
 function buildPieceInsert(body: Record<string, unknown>) {
   return {
-    design_id: body.design_id,
+    design_id: body.design_id ?? null,
     sku: body.sku,
     metal_karat: body.metal_karat || null,
     metal_colour: body.metal_colour || null,
@@ -28,12 +28,15 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const designId = searchParams.get('design_id')
+    const oneoff = searchParams.get('oneoff') === 'true'
     const supabase = createServerSupabaseClient()
     let query = supabase
       .from('inventory_pieces')
       .select(`*, location:inventory_locations(id, name, parent_id)`)
       .order('created_at', { ascending: true })
-    if (designId) {
+    if (oneoff) {
+      query = query.is('design_id', null)
+    } else if (designId) {
       query = query.eq('design_id', designId)
     }
     const { data, error } = await query
@@ -47,7 +50,6 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    if (!body.design_id) return NextResponse.json({ error: 'design_id is required' }, { status: 400 })
     if (!body.sku || typeof body.sku !== 'string' || !body.sku.trim()) {
       return NextResponse.json({ error: 'sku is required' }, { status: 400 })
     }

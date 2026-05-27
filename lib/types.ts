@@ -610,9 +610,16 @@ export interface InventoryDesign {
   pieces?: InventoryPiece[];
 }
 
+export interface CsvImportResult {
+  designs_created: number;
+  pieces_imported: number;
+  failed: number;
+  errors: Array<{ row: number; reason: string }>;
+}
+
 export interface InventoryPiece {
   id: string;
-  design_id: string;
+  design_id: string | null;
   sku: string;
   metal_karat: string | null;
   metal_colour: string | null;
