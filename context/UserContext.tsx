@@ -51,6 +51,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
   // which prevents a slow/timed-out first call from overwriting a faster second call.
   const loadGenRef = useRef(0);
 
+  // Once the profile has been fetched successfully at least once, we never
+  // re-show skeleton bars — subsequent refreshes (TOKEN_REFRESHED etc.) happen
+  // silently in the background while keeping the existing nav visible.
+  const hasLoadedOnce = useRef(false);
+
   useEffect(() => {
     const supabase = supabaseRef.current;
     let cancelled = false;
@@ -59,7 +64,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
       // Claim a generation slot. If another call starts before this one
       // finishes, our gen will be stale and we'll discard the result.
       const gen = ++loadGenRef.current;
-      setRoleLoading(true);
+      // Only show skeleton bars on the very first load. After that, re-fetches
+      // (token refresh, window focus, etc.) update the role silently so the
+      // sidebar never flashes back to skeleton bars mid-session.
+      if (!hasLoadedOnce.current) {
+        setRoleLoading(true);
+      }
 
       let profileData: { full_name?: string | null; role?: string | null } | null = null;
 
@@ -112,6 +122,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         );
       }
 
+      hasLoadedOnce.current = true;
       setRoleLoading(false);
     }
 

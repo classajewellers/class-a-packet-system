@@ -397,6 +397,7 @@ function ProductForm({ product, onSaved }: { product: InventoryProduct | null; o
   const [department, setDepartment] = useState(product?.department ?? "");
   const [notes, setNotes] = useState(product?.notes ?? "");
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const save = async () => {
@@ -423,7 +424,11 @@ function ProductForm({ product, onSaved }: { product: InventoryProduct | null; o
         return;
       }
       if (json.product) {
-        onSaved(json.product);
+        // Show a brief success confirmation before transitioning so the
+        // user can see something happened — without this the drawer content
+        // changes silently and it looks like nothing occurred.
+        setSaved(true);
+        setTimeout(() => onSaved(json.product), 700);
       } else {
         setError("Unexpected response from server. Please try again.");
       }
@@ -433,6 +438,20 @@ function ProductForm({ product, onSaved }: { product: InventoryProduct | null; o
       setSaving(false);
     }
   };
+
+  if (saved) {
+    return (
+      <div style={{ padding: 32, display: "flex", flexDirection: "column", alignItems: "center", gap: 12, textAlign: "center" }}>
+        <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#D1FAE5", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#065F46" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        </div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: "#065F46" }}>Product created!</div>
+        <div style={{ fontSize: 13, color: "#6B7280" }}>Opening variant form…</div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
@@ -527,6 +546,12 @@ function VariantForm({ product, variant, onSaved }: { product: InventoryProduct;
 
   return (
     <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* Contextual banner when adding the first variant after product creation */}
+      {!variant && (
+        <div style={{ padding: "10px 14px", background: "#D1FAE5", color: "#065F46", borderRadius: 8, fontSize: 13, border: "1px solid #A7F3D0", fontWeight: 500 }}>
+          ✓ &ldquo;{product.name}&rdquo; created — now add your first variant below.
+        </div>
+      )}
       <FieldText label="SKU *" value={sku} onChange={setSku} />
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <FieldText label="Metal Type" value={metalType} onChange={setMetalType} />
