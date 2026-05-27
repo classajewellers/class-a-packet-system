@@ -397,9 +397,11 @@ function ProductForm({ product, onSaved }: { product: InventoryProduct | null; o
   const [department, setDepartment] = useState(product?.department ?? "");
   const [notes, setNotes] = useState(product?.notes ?? "");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const save = async () => {
-    if (!name.trim()) return alert("Name is required");
+    setError(null);
+    if (!name.trim()) { setError("Product name is required."); return; }
     setSaving(true);
     try {
       const url = product ? `/api/inventory/products/${product.id}` : "/api/inventory/products";
@@ -407,10 +409,26 @@ function ProductForm({ product, onSaved }: { product: InventoryProduct | null; o
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description, category, department, notes }),
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim() || null,
+          category: category.trim() || null,
+          department: department.trim() || null,
+          notes: notes.trim() || null,
+        }),
       });
       const json = await res.json();
-      if (json.product) onSaved(json.product);
+      if (!res.ok || json.error) {
+        setError(json.error ?? `Server error (${res.status})`);
+        return;
+      }
+      if (json.product) {
+        onSaved(json.product);
+      } else {
+        setError("Unexpected response from server. Please try again.");
+      }
+    } catch (err) {
+      setError(`Network error: ${String(err)}`);
     } finally {
       setSaving(false);
     }
@@ -419,16 +437,21 @@ function ProductForm({ product, onSaved }: { product: InventoryProduct | null; o
   return (
     <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
       <FieldText label="Name *" value={name} onChange={setName} />
-      <FieldText label="Description" value={description ?? ""} onChange={setDescription} multiline />
-      <FieldText label="Category" value={category ?? ""} onChange={setCategory} />
-      <FieldText label="Department" value={department ?? ""} onChange={setDepartment} />
-      <FieldText label="Notes" value={notes ?? ""} onChange={setNotes} multiline />
+      <FieldText label="Description" value={description} onChange={setDescription} multiline />
+      <FieldText label="Category" value={category} onChange={setCategory} />
+      <FieldText label="Department" value={department} onChange={setDepartment} />
+      <FieldText label="Notes" value={notes} onChange={setNotes} multiline />
+      {error && (
+        <div style={{ padding: "10px 14px", background: "#FEE2E2", color: "#991B1B", borderRadius: 8, fontSize: 13, border: "1px solid #FECACA" }}>
+          {error}
+        </div>
+      )}
       <button
         onClick={save}
         disabled={saving}
-        style={{ padding: "10px 16px", background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", opacity: saving ? 0.6 : 1 }}
+        style={{ padding: "10px 16px", background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.6 : 1 }}
       >
-        {saving ? "Saving..." : product ? "Save Product" : "Create & Add Variant"}
+        {saving ? "Saving…" : product ? "Save Product" : "Create & Add Variant →"}
       </button>
     </div>
   );
@@ -450,28 +473,30 @@ function VariantForm({ product, variant, onSaved }: { product: InventoryProduct;
   const [costPrice, setCostPrice] = useState(variant?.cost_price?.toString() ?? "");
   const [retailPrice, setRetailPrice] = useState(variant?.retail_price?.toString() ?? "");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const costNum = parseFloat(costPrice) || 0;
   const retailNum = parseFloat(retailPrice) || 0;
   const mult = calculateMultiplier(retailNum, costNum);
 
   const save = async () => {
-    if (!sku.trim()) return alert("SKU is required");
+    setError(null);
+    if (!sku.trim()) { setError("SKU is required."); return; }
     setSaving(true);
     try {
       const body = {
         product_id: product.id,
-        sku,
-        metal_type: metalType || null,
+        sku: sku.trim(),
+        metal_type: metalType.trim() || null,
         metal_karat: metalKarat || null,
         metal_colour: metalColour || null,
         metal_weight_grams: metalWeight ? parseFloat(metalWeight) : null,
         diamond_carat: diamondCarat ? parseFloat(diamondCarat) : null,
-        diamond_colour: diamondColour || null,
-        diamond_clarity: diamondClarity || null,
+        diamond_colour: diamondColour.trim() || null,
+        diamond_clarity: diamondClarity.trim() || null,
         diamond_type: diamondType || null,
-        finger_size: fingerSize || null,
-        other_specs: otherSpecs || null,
+        finger_size: fingerSize.trim() || null,
+        other_specs: otherSpecs.trim() || null,
         cost_price: costPrice ? parseFloat(costPrice) : null,
         retail_price: retailPrice ? parseFloat(retailPrice) : null,
         is_active: true,
@@ -484,7 +509,17 @@ function VariantForm({ product, variant, onSaved }: { product: InventoryProduct;
         body: JSON.stringify(body),
       });
       const json = await res.json();
-      if (json.variant) onSaved(json.variant);
+      if (!res.ok || json.error) {
+        setError(json.error ?? `Server error (${res.status})`);
+        return;
+      }
+      if (json.variant) {
+        onSaved(json.variant);
+      } else {
+        setError("Unexpected response from server. Please try again.");
+      }
+    } catch (err) {
+      setError(`Network error: ${String(err)}`);
     } finally {
       setSaving(false);
     }
@@ -518,12 +553,17 @@ function VariantForm({ product, variant, onSaved }: { product: InventoryProduct;
         <FieldText label="Retail Price ($)" value={retailPrice} onChange={setRetailPrice} type="number" />
         <div style={{ paddingBottom: 8 }}>{multiplierBadge(mult)}</div>
       </div>
+      {error && (
+        <div style={{ padding: "10px 14px", background: "#FEE2E2", color: "#991B1B", borderRadius: 8, fontSize: 13, border: "1px solid #FECACA" }}>
+          {error}
+        </div>
+      )}
       <button
         onClick={save}
         disabled={saving}
-        style={{ padding: "10px 16px", background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", opacity: saving ? 0.6 : 1, marginTop: 8 }}
+        style={{ padding: "10px 16px", background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.6 : 1, marginTop: 8 }}
       >
-        {saving ? "Saving..." : variant ? "Save Variant" : "Create Variant"}
+        {saving ? "Saving…" : variant ? "Save Variant" : "Create Variant"}
       </button>
     </div>
   );
@@ -676,6 +716,7 @@ function BomForm({ variant, suppliers, goldPrices, existing, onCancel, onSaved }
   const [supplierId, setSupplierId] = useState(existing?.supplier_id ?? "");
   const [notes, setNotes] = useState(existing?.notes ?? "");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Casting auto-fill from gold price
   const currentGoldPrice = useMemo(() => {
@@ -699,27 +740,35 @@ function BomForm({ variant, suppliers, goldPrices, existing, onCancel, onSaved }
   }, [componentType, currentGoldPrice]);
 
   const save = async () => {
-    if (!description.trim()) return alert("Description is required");
+    setError(null);
+    if (!description.trim()) { setError("Description is required."); return; }
     setSaving(true);
     try {
       const body = {
         variant_id: variant.id,
         component_type: componentType,
-        description,
-        quantity: parseFloat(quantity) || 0,
-        unit: unit || null,
+        description: description.trim(),
+        quantity: parseFloat(quantity) || 1,
+        unit: unit.trim() || null,
         unit_cost: parseFloat(unitCost) || 0,
         supplier_id: supplierId || null,
-        notes: notes || null,
+        notes: notes.trim() || null,
       };
       const url = existing ? `/api/inventory/bom/${existing.id}` : "/api/inventory/bom";
       const method = existing ? "PATCH" : "POST";
-      await fetch(url, {
+      const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+      const json = await res.json();
+      if (!res.ok || json.error) {
+        setError(json.error ?? `Server error (${res.status})`);
+        return;
+      }
       onSaved();
+    } catch (err) {
+      setError(`Network error: ${String(err)}`);
     } finally {
       setSaving(false);
     }
@@ -754,10 +803,15 @@ function BomForm({ variant, suppliers, goldPrices, existing, onCancel, onSaved }
       )}
       <FieldSelectMap label="Supplier" value={supplierId ?? ""} onChange={setSupplierId} options={[{ value: "", label: "—" }, ...suppliers.map((s) => ({ value: s.id, label: s.name }))]} />
       <FieldText label="Notes" value={notes ?? ""} onChange={setNotes} />
+      {error && (
+        <div style={{ padding: "8px 12px", background: "#FEE2E2", color: "#991B1B", borderRadius: 6, fontSize: 12, border: "1px solid #FECACA" }}>
+          {error}
+        </div>
+      )}
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <button onClick={onCancel} style={{ padding: "8px 14px", background: "transparent", color: "#6B7280", border: "1px solid #E5E7EB", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>Cancel</button>
-        <button onClick={save} disabled={saving} style={{ padding: "8px 14px", background: "#635BFF", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 500, cursor: "pointer", opacity: saving ? 0.6 : 1 }}>
-          {saving ? "Saving..." : "Save"}
+        <button onClick={save} disabled={saving} style={{ padding: "8px 14px", background: "#635BFF", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 500, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.6 : 1 }}>
+          {saving ? "Saving…" : "Save"}
         </button>
       </div>
     </div>
