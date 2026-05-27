@@ -487,3 +487,103 @@ export interface InventoryMovement {
   from_location?: { name: string } | null;
   to_location?: { name: string } | null;
 }
+
+// ─────────────────────────────────────────────
+// Inventory — Products / Variants / BOM / Purchases / Gold pricing
+// ─────────────────────────────────────────────
+export type MetalKarat = '9K' | '18K' | 'Platinum' | 'Silver' | 'Other';
+export type MetalColour = 'Yellow' | 'White' | 'Rose' | 'N/A';
+export type DiamondType = 'Natural' | 'Lab Grown' | 'None';
+export type BomComponentType = 'casting' | 'diamond' | 'labour' | 'settings' | 'findings' | 'other';
+export type InvoiceStatus = 'pending' | 'received' | 'partial' | 'disputed';
+
+export interface InventoryProduct {
+  id: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  department: string | null;
+  notes: string | null;
+  created_at: string;
+  // joined
+  variants?: InventoryVariant[];
+}
+
+export interface InventoryVariant {
+  id: string;
+  product_id: string;
+  sku: string;
+  metal_type: string | null;
+  metal_karat: MetalKarat | null;
+  metal_colour: MetalColour | null;
+  metal_weight_grams: number | null;
+  diamond_carat: number | null;
+  diamond_colour: string | null;
+  diamond_clarity: string | null;
+  diamond_type: DiamondType | null;
+  finger_size: string | null;
+  other_specs: string | null;
+  cost_price: number | null;
+  retail_price: number | null;
+  is_active: boolean;
+  created_at: string;
+  // joined
+  product?: InventoryProduct | null;
+  total_stock?: number;
+}
+
+export interface InventoryBomItem {
+  id: string;
+  variant_id: string;
+  component_type: BomComponentType;
+  description: string;
+  quantity: number;
+  unit: string | null;
+  unit_cost: number;
+  total_cost: number;
+  supplier_id: string | null;
+  purchase_invoice_id: string | null;
+  notes: string | null;
+  created_at: string;
+  supplier?: InventorySupplier | null;
+}
+
+export interface InventoryGoldPrice {
+  id: string;
+  karat: string;
+  price_per_gram: number;
+  supplier_id: string | null;
+  effective_date: string;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface InventoryPurchaseInvoice {
+  id: string;
+  invoice_number: string;
+  supplier_id: string | null;
+  invoice_date: string | null;
+  total_amount: number | null;
+  status: InvoiceStatus;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  supplier?: InventorySupplier | null;
+  lines?: InventoryPurchaseLine[];
+}
+
+export interface InventoryPurchaseLine {
+  id: string;
+  invoice_id: string;
+  variant_id: string | null;
+  description: string;
+  component_type: BomComponentType | null;
+  quantity: number;
+  unit_cost: number | null;
+  total_cost: number | null;
+  is_faulty: boolean;
+  faulty_notes: string | null;
+  created_at: string;
+  variant?: InventoryVariant | null;
+}

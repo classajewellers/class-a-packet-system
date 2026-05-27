@@ -196,6 +196,7 @@ export default function Sidebar({ onOpenAI }: Props) {
                   <SubLink href="/inventory/stock"     label="Stock" />
                   <SubLink href="/inventory/locations" label="Locations" />
                   <SubLink href="/inventory/suppliers" label="Suppliers" />
+                  <SubLink href="/inventory/purchases" label="Purchases" />
                 </div>
               )}
             </div>

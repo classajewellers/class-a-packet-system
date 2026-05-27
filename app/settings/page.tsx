@@ -2,16 +2,35 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
 import { STAFF_LIST, ROLE_LABELS } from "@/lib/staffList";
 import { MARGIN_BRACKETS } from "@/lib/marginCalculator";
+import { InventoryGoldPrice } from "@/lib/types";
+
+const KARATS: ("9K" | "18K" | "Platinum" | "Silver")[] = ["9K", "18K", "Platinum", "Silver"];
 
 export default function SettingsPage() {
   const { user } = useUser();
   const router = useRouter();
+  const [goldPrices, setGoldPrices] = useState<InventoryGoldPrice[]>([]);
+  const [editingKarat, setEditingKarat] = useState<string | null>(null);
+  const [editPrice, setEditPrice] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+
+  const isAdmin = user?.role === "admin";
+
+  const fetchGoldPrices = useCallback(async () => {
+    const res = await fetch("/api/inventory/gold-prices");
+    const json = await res.json();
+    setGoldPrices(json.prices ?? []);
+  }, []);
+
+  useEffect(() => {
+    if (isAdmin) fetchGoldPrices();
+  }, [isAdmin, fetchGoldPrices]);
 
   useEffect(() => {
     if (user && !canManage(user.role)) {
@@ -20,6 +39,38 @@ export default function SettingsPage() {
   }, [user, router]);
 
   if (!user || !canManage(user.role)) return null;
+
+  const latestByKarat: Record<string, InventoryGoldPrice | undefined> = {};
+  for (const p of goldPrices) {
+    if (!latestByKarat[p.karat]) latestByKarat[p.karat] = p;
+  }
+
+  const startEdit = (karat: string) => {
+    const existing = latestByKarat[karat];
+    setEditingKarat(karat);
+    setEditPrice(existing ? String(existing.price_per_gram) : "");
+    setEditNotes("");
+  };
+
+  const saveGoldPrice = async () => {
+    if (!editingKarat) return;
+    const price = parseFloat(editPrice);
+    if (!price || price <= 0) { alert("Enter a valid price"); return; }
+    await fetch("/api/inventory/gold-prices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ karat: editingKarat, price_per_gram: price, notes: editNotes }),
+    });
+    setEditingKarat(null);
+    fetchGoldPrices();
+  };
+
+  const daysSince = (iso: string | null | undefined): number | null => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return null;
+    return Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+  };
 
   const storeName = process.env.NEXT_PUBLIC_STORE_NAME ?? "Class A Jewellers";
   const storePhone = process.env.NEXT_PUBLIC_STORE_PHONE ?? "(08) 8344 7722";
@@ -145,6 +196,86 @@ export default function SettingsPage() {
             <p style={{ fontSize: 12, color: '#9CA3AF', margin: 0 }}>
               Each portion of the cost is multiplied by its bracket rate. Retail is rounded to the nearest $5.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Gold Prices — admin only */}
+      {isAdmin && (
+        <div style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ padding: '14px 24px', borderBottom: '1px solid #E8E8F0', background: '#1A1760', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <h2 style={{ fontSize: 12, fontWeight: 600, color: '#FFFFFF', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>
+              Gold Prices
+            </h2>
+            <span style={{ fontSize: 11, color: '#A5B4FC', fontStyle: 'italic' }}>Per-gram prices used for casting BOM auto-fill</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ textAlign: 'left', borderBottom: '1px solid #E8E8F0', background: '#F9FAFB' }}>
+                  <th style={{ padding: '10px 20px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Karat</th>
+                  <th style={{ padding: '10px 20px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Price / Gram</th>
+                  <th style={{ padding: '10px 20px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Effective</th>
+                  <th style={{ padding: '10px 20px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Age</th>
+                  <th style={{ padding: '10px 20px' }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {KARATS.map((karat) => {
+                  const latest = latestByKarat[karat];
+                  const age = daysSince(latest?.created_at);
+                  const stale = age != null && age > 7;
+                  const editing = editingKarat === karat;
+                  return (
+                    <tr key={karat} style={{ borderBottom: '1px solid #E8E8F0' }}>
+                      <td style={{ padding: '10px 20px', color: '#1A1A2E', fontWeight: 600 }}>{karat}</td>
+                      <td style={{ padding: '10px 20px', color: '#1A1A2E' }}>
+                        {latest ? `$${Number(latest.price_per_gram).toFixed(2)}` : <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>Not set</span>}
+                      </td>
+                      <td style={{ padding: '10px 20px', color: '#6B7280' }}>
+                        {latest?.effective_date ?? '—'}
+                      </td>
+                      <td style={{ padding: '10px 20px' }}>
+                        {age != null ? (
+                          <span style={{ display: 'inline-flex', padding: '2px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: stale ? '#FEF3C7' : '#D1FAE5', color: stale ? '#92400E' : '#065F46' }}>
+                            {age} day{age === 1 ? '' : 's'} ago{stale ? ' — refresh' : ''}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#9CA3AF' }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '10px 20px', textAlign: 'right' }}>
+                        {editing ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
+                            <input
+                              type="number"
+                              step="any"
+                              value={editPrice}
+                              onChange={(e) => setEditPrice(e.target.value)}
+                              placeholder="$/g"
+                              style={{ width: 90, padding: '4px 8px', border: '1px solid #E5E7EB', borderRadius: 4, fontSize: 12 }}
+                            />
+                            <input
+                              type="text"
+                              value={editNotes}
+                              onChange={(e) => setEditNotes(e.target.value)}
+                              placeholder="Notes (opt)"
+                              style={{ width: 120, padding: '4px 8px', border: '1px solid #E5E7EB', borderRadius: 4, fontSize: 12 }}
+                            />
+                            <button onClick={saveGoldPrice} style={{ padding: '4px 10px', background: '#635BFF', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>Save</button>
+                            <button onClick={() => setEditingKarat(null)} style={{ padding: '4px 10px', background: 'transparent', color: '#6B7280', border: '1px solid #E5E7EB', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}>Cancel</button>
+                          </div>
+                        ) : (
+                          <button onClick={() => startEdit(karat)} style={{ padding: '4px 12px', background: '#EEF2FF', color: '#4338CA', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
+                            Update Price
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
