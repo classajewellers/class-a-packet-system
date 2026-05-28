@@ -647,6 +647,24 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   {(local.gift_wrapping === true || (local.gift_wrapping as unknown) === "true") ? "✓ YES — Gift Wrap" : "NO — No Gift Wrap"}
                 </button>
               </div>
+              {(local.packet_type === 'repair' || local.packet_type === 'custom_order') && (
+                <div>
+                  <Label>Delivery Method</Label>
+                  <select
+                    value={local.delivery_method ?? 'Pickup'}
+                    onChange={(e) => {
+                      set('delivery_method', e.target.value as Packet['delivery_method']);
+                      patch({ delivery_method: e.target.value });
+                    }}
+                    style={{ width: '100%', borderRadius: 8, border: '1px solid #E8E8F0', background: '#F9FAFB', padding: '8px 12px', fontSize: 14, color: '#1A1A2E', cursor: 'pointer' }}
+                  >
+                    <option value="Pickup">Pickup</option>
+                    <option value="Standard Post">Standard Post</option>
+                    <option value="Express Post">Express Post</option>
+                    <option value="Courier">Courier</option>
+                  </select>
+                </div>
+              )}
             </div>
           </Section>
 

@@ -387,6 +387,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     staff_member:          "Online Store",
     order_number:          orderNum,
     shipping_method:       shippingMethod,
+    delivery_method:       null,          // prevent DEFAULT 'Pickup' — resolveDelivery falls through to shipping_method
     shipping_address_same: true,
     shipping_street:       null,
     shipping_suburb:       null,

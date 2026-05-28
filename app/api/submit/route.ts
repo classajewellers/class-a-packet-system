@@ -99,6 +99,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
 
   // Online order-specific columns
   if (formData.packet_type === "online_order") {
+    insertData.delivery_method       = null;                          // prevent DEFAULT 'Pickup' — resolveDelivery falls through to shipping_method
     insertData.order_number          = formData.order_number          || null;
     insertData.shipping_method       = formData.shipping_method       || null;
     insertData.shipping_address_same = formData.shipping_address_same;
