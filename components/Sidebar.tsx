@@ -14,7 +14,6 @@ import {
   Settings,
   Sparkles,
   ChevronDown,
-  Package,
 } from "lucide-react";
 import { canManage } from "@/lib/userTypes";
 
@@ -35,7 +34,7 @@ export default function Sidebar({ onOpenAI }: Props) {
   const isAdmin = user?.role === "admin";
 
   const quotesExpanded    = pathname.startsWith("/quotes");
-  const inventoryExpanded = pathname.startsWith("/inventory");
+  // const inventoryExpanded = pathname.startsWith("/inventory"); // hidden until rebuilt
   const settingsExpanded  = pathname.startsWith("/settings") ||
                             pathname.startsWith("/pricing") ||
                             pathname.startsWith("/admin/users");
@@ -185,22 +184,7 @@ export default function Sidebar({ onOpenAI }: Props) {
           <>
             <NavLink href="/workshop" icon={Wrench} label="Workshop" />
 
-            {/* Inventory — expandable */}
-            <div>
-              <ExpandLink
-                icon={Package} label="Inventory" expanded={inventoryExpanded}
-                onClick={() => router.push("/inventory/stock")}
-              />
-              {inventoryExpanded && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
-                  <SubLink href="/inventory/stock"     label="Stock" />
-                  <SubLink href="/inventory/locations" label="Locations" />
-                  <SubLink href="/inventory/suppliers" label="Suppliers" />
-                  <SubLink href="/inventory/purchases" label="Purchases" />
-                  {isAdmin && <SubLink href="/inventory/import" label="Import" />}
-                </div>
-              )}
-            </div>
+            {/* Inventory — hidden until rebuilt */}
 
             <NavLink href="/reporting" icon={BarChart2} label="Reporting" />
 
