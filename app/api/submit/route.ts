@@ -93,8 +93,10 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
 
   // Gift & Delivery (repair / custom_order)
   if (formData.packet_type === "repair" || formData.packet_type === "custom_order") {
-    insertData.gift_wrapping  = formData.gift_wrapping;
+    insertData.gift_wrapping   = formData.gift_wrapping;
     insertData.delivery_method = formData.delivery_method || "Pickup";
+    insertData.carat_weight    = formData.carat_weight ? parseFloat(formData.carat_weight) || null : null;
+    insertData.metal_colour    = formData.metal_colour    || null;
   }
 
   // Online order-specific columns
@@ -102,6 +104,8 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
     insertData.delivery_method       = null;                          // prevent DEFAULT 'Pickup' — resolveDelivery falls through to shipping_method
     insertData.order_number          = formData.order_number          || null;
     insertData.shipping_method       = formData.shipping_method       || null;
+    insertData.carat_weight          = formData.carat_weight ? parseFloat(formData.carat_weight) || null : null;
+    insertData.metal_colour          = formData.metal_colour          || null;
     insertData.shipping_address_same = formData.shipping_address_same;
     insertData.shipping_street       = formData.shipping_address_same ? null : (formData.shipping_street  || null);
     insertData.shipping_suburb       = formData.shipping_address_same ? null : (formData.shipping_suburb  || null);

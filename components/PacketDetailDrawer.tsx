@@ -665,6 +665,43 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   </select>
                 </div>
               )}
+              {(local.packet_type === 'repair' || local.packet_type === 'custom_order' || local.packet_type === 'online_order') && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <Label>Carat Weight (ct)</Label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      min="0"
+                      value={local.carat_weight ?? ""}
+                      onChange={(e) => set("carat_weight", e.target.value ? parseFloat(e.target.value) : null)}
+                      onBlur={(e) => patch({ carat_weight: e.target.value ? parseFloat(e.target.value) : null })}
+                      placeholder="e.g. 1.5"
+                      style={fieldStyle}
+                    />
+                  </div>
+                  <div>
+                    <Label>Metal Colour</Label>
+                    <select
+                      value={local.metal_colour ?? ""}
+                      onChange={(e) => {
+                        set("metal_colour", e.target.value || null);
+                        patch({ metal_colour: e.target.value || null });
+                      }}
+                      style={{ width: '100%', borderRadius: 8, border: '1px solid #E8E8F0', background: '#F9FAFB', padding: '8px 12px', fontSize: 14, color: '#1A1A2E', cursor: 'pointer' }}
+                    >
+                      <option value="">— Select —</option>
+                      <option>Yellow Gold</option>
+                      <option>White Gold</option>
+                      <option>Rose Gold</option>
+                      <option>Sterling Silver</option>
+                      <option>Platinum</option>
+                      <option>Two-Tone</option>
+                      <option>Other</option>
+                    </select>
+                  </div>
+                </div>
+              )}
             </div>
           </Section>
 

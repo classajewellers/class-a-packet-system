@@ -74,6 +74,10 @@ export interface PacketFormData {
   // Gift & Delivery (repair / custom_order)
   gift_wrapping: boolean;
   delivery_method: string;
+
+  // Jewellery details — PCN and custom orders
+  carat_weight: string;
+  metal_colour: string;
 }
 
 export const defaultFormData: PacketFormData = {
@@ -119,6 +123,8 @@ export const defaultFormData: PacketFormData = {
   order_source: "",
   gift_wrapping: false,
   delivery_method: "Pickup",
+  carat_weight: "",
+  metal_colour: "",
 };
 
 // ─────────────────────────────────────────────
@@ -191,6 +197,10 @@ export interface Packet {
   // Gift & Delivery
   gift_wrapping: boolean | null;
   delivery_method: string | null;
+
+  // Jewellery details — PCN and custom orders
+  carat_weight: number | null;
+  metal_colour: string | null;
 
   // Valuation
   item_specifications: Record<string, unknown> | null;

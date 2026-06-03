@@ -112,33 +112,47 @@ function parseLineItems(raw: any): string {
     const shouldAppendVariant  = !isDefaultVariant && !variantAlreadyInName;
     const displayName = shouldAppendVariant ? `${name} - ${variantRaw}` : name;
 
-    // Skip free gifts and product add-ons (zero-price add-ons)
+    // Skip explicit free gifts (e.g. add-on items named "Free Gift …")
     if (name.toLowerCase().includes("free gift")) continue;
 
-    // Extract price from discountedTotalSet amount — skip zero-price items
+    // Extract price from discountedTotalSet amount.
     const priceMatch = block.match(/discountedTotalSet:.*?'amount':\s*'([\d.]+)'/);
     const price = parseFloat(priceMatch?.[1] || "0");
-    if (price === 0) continue;
 
     // Extract quantity
     const qtyMatch = block.match(/^quantity:\s*(\d+)$/m);
     const qty = qtyMatch?.[1] || "1";
 
-    // Extract customAttributes — exec loop covers all personalisation fields.
-    // Use [^']* (not [^']+) so keys/values with unusual spacing still match.
-    // Values trimmed of surrounding whitespace including newlines
-    // (Zapier can send values like '\n\n Yellow Gold\n\n').
+    // Extract customAttributes — exec loop finds every key/value pair in the block.
+    // Use [^']* so keys/values with unusual spacing still match.
+    // Values are trimmed of surrounding whitespace (Zapier can send '\n\n Yellow Gold\n\n').
+    //
+    // BUG FIX (Bug 2 — carat weight / metal colour): added "charm", "charm 1–6",
+    // "carat weight", "metal colour", "ct" and other PCN-specific attribute keys
+    // that the previous list missed.
+    //
+    // BUG FIX (Bug 1 — Pendant 1 dropped): attribute parsing now runs BEFORE the
+    // price=0 guard so pendant add-on line items (Pendant 1 as a $0 add-on) are
+    // retained when they carry meaningful attributes.
     const meaningfulKeys = [
       "metal", "carat", "karat", "gold", "colour", "color",
       "stone", "gem", "diamond", "sapphire", "ruby", "emerald",
       "size", "ring size", "engraving", "personalisation", "personalization",
       "chain", "initial", "birthstone",
+      // Pendants — numbered and un-numbered
       "pendant", "pendant 1", "pendant 2", "pendant 3", "pendant 4", "pendant 5", "pendant 6",
+      // Charms — PCN products often use "Charm 1/2/3" not "Pendant 1/2/3"
+      "charm", "charm 1", "charm 2", "charm 3", "charm 4", "charm 5", "charm 6",
       "number", "font", "text", "message", "name",
       "finish", "width", "length", "weight", "alloy",
-      // Metal/material specifics — important for necklaces, bracelets, rings
+      // Metal/material specifics
       "material", "plating", "rhodium", "silver", "platinum",
       "confirmation", "style", "design",
+      // Explicit compound keys often used on PCN/necklace products
+      "carat weight", "metal colour", "metal color", "gold colour", "gold color",
+      "metal type", "gold type", "chain type", "chain metal", "chain colour",
+      // Abbreviations
+      "ct", "kt",
     ];
 
     const attrMatches: RegExpExecArray[] = [];
@@ -152,19 +166,23 @@ function parseLineItems(raw: any): string {
         const val = m[2].trim();
         // Skip empty values
         if (!val) return false;
-        // Skip internal / tracking keys (Shopify internal fields start with _)
+        // Skip internal / tracking keys (Shopify fields starting with _ or cl_)
         if (key.startsWith("_") || key.startsWith("cl_")) return false;
-        // Must match a meaningful product attribute key (case-insensitive).
-        // Note: do NOT skip based on whether the value appears in variantTitle —
-        // attributes and variant title can carry different information.
+        // Must match a meaningful product attribute key (case-insensitive substring match)
         return meaningfulKeys.some((k) => key.includes(k.toLowerCase()));
       })
       .map((m) => `  ${m[1]}: ${m[2].trim()}`)
       .join("\n");
 
+    // BUG FIX (Bug 1): Skip zero-price items ONLY when they have no meaningful
+    // attributes to capture.  Previously this fired unconditionally before attrs
+    // were parsed, silently dropping "Pendant 1" add-on line items priced at $0.
+    if (price === 0 && !attrs) continue;
+
     console.log(
       "[webhook] line item:",
       name,
+      "price:", price,
       "variantTitle:", variantRaw || "(none)",
       "appendVariant:", shouldAppendVariant,
       "attrs found:", attrMatches.length,
@@ -276,6 +294,30 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const articles       = parseLineItems(body.lineItems);
   const shippingMethod = extractShippingMethod(body.shippingLines);
   const dispatchDate   = extractDispatchDate(body.lineItems);
+
+  // ── 3a. Extract carat weight and metal colour from Shopify attributes ─────
+  // Scan the raw line items blob for any attribute whose key mentions
+  // carat/ct/weight or metal/colour/gold, and capture the first non-empty value.
+  // These cover PCN (Personalised Charm Necklace) and similar jewellery products.
+  const lineItemsRaw = typeof body.lineItems === "string" ? body.lineItems : "";
+  let caratWeightFromShopify: number | null = null;
+  let metalColourFromShopify: string | null = null;
+  if (lineItemsRaw) {
+    const allAttrRe = /'key':\s*'([^']*)',\s*'value':\s*'([^']*)'/g;
+    let m: RegExpExecArray | null;
+    while ((m = allAttrRe.exec(lineItemsRaw)) !== null) {
+      const k = m[1].toLowerCase().trim();
+      const v = m[2].trim();
+      if (!v) continue;
+      if (!caratWeightFromShopify && (k.includes("carat") || k.includes("karat") || k === "ct" || k === "kt" || k.includes("carat weight") || k.includes("diamond weight") || k.includes("stone weight"))) {
+        const parsed = parseFloat(v.replace(/[^0-9.]/g, ""));
+        if (!isNaN(parsed) && parsed > 0) caratWeightFromShopify = parsed;
+      }
+      if (!metalColourFromShopify && (k.includes("metal") || k.includes("gold") || k.includes("colour") || k.includes("color") || k.includes("chain metal") || k.includes("metal type"))) {
+        metalColourFromShopify = v;
+      }
+    }
+  }
 
   console.log("[shopify/webhook] articles:", articles);
   console.log("[shopify/webhook] shippingMethod:", shippingMethod);
@@ -395,6 +437,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     shipping_postcode:     null,
     order_source:          "Shopify",
     gift_wrapping:         hasGiftWrap || null,
+    carat_weight:          caratWeightFromShopify,
+    metal_colour:          metalColourFromShopify,
     packet_data:           {
       ...(body as unknown as Record<string, unknown>),
       original_price:  originalPrice,
