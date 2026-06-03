@@ -92,6 +92,14 @@ export default function WorkshopJobCard({ job, onClick }: Props) {
         <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, ...categoryStyle }}>
           {CATEGORY_LABELS[job.category] ?? job.category}
         </span>
+        {job.valuation_required && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A' }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01z" />
+            </svg>
+            VALUATION
+          </span>
+        )}
         {job.complexity === "complex" && (
           <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: '#FEE2E2', color: '#991B1B' }}>
             Complex

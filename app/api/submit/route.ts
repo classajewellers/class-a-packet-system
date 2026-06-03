@@ -235,6 +235,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
       stage: initialStage,
       due_date: packet.due_date ?? null,
       stage_changed_at: new Date().toISOString(),
+      valuation_required: packet.valuation_required ?? false,
     });
     if (workshopErr) {
       // workshop_jobs table may not exist yet — log but don't fail

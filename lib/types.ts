@@ -366,6 +366,8 @@ export interface WorkshopJob {
   wsjb_subcontractor_required: boolean | null;
   wsjb_subcontractor_name: string | null;
   wsjb_ready_for_jeweller: boolean | null;
+  // Valuation flag — inherited from packet at intake
+  valuation_required: boolean | null;
 }
 
 // ─────────────────────────────────────────────

@@ -29,6 +29,7 @@ export default function WorkshopPage() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<"board" | "list">("board");
   const [overdueFilter, setOverdueFilter] = useState(false);
+  const [valuationFilter, setValuationFilter] = useState(false);
   const [jewellerFilter, setJewellerFilter] = useState<string>("all");
   const [tab, setTab] = useState<"workshop" | "valuations">("workshop");
 
@@ -68,6 +69,7 @@ export default function WorkshopPage() {
 
   const filteredJobs = jobs.filter((j) => {
     if (overdueFilter && (j.due_date == null || j.due_date >= today)) return false;
+    if (valuationFilter && !j.valuation_required) return false;
     if (jewellerFilter !== "all" && j.assigned_jeweller !== jewellerFilter) return false;
     return true;
   });
@@ -93,12 +95,19 @@ export default function WorkshopPage() {
       {tab === "workshop" && (<>
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex gap-1">
+        <div className="flex gap-2">
           <button
             onClick={() => setOverdueFilter((v) => !v)}
             style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: overdueFilter ? '#EF4444' : '#F9FAFB', color: overdueFilter ? '#fff' : '#6B7280', border: `1px solid ${overdueFilter ? '#EF4444' : '#E8E8F0'}`, cursor: 'pointer', transition: 'all .15s' }}
           >
             Overdue only
+          </button>
+          <button
+            onClick={() => setValuationFilter((v) => !v)}
+            style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: valuationFilter ? '#FEF3C7' : '#F9FAFB', color: valuationFilter ? '#92400E' : '#6B7280', border: `1px solid ${valuationFilter ? '#D97706' : '#E8E8F0'}`, cursor: 'pointer', transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 5 }}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01z"/></svg>
+            Valuation
           </button>
         </div>
         {jewellers.length > 0 && (
@@ -145,7 +154,7 @@ export default function WorkshopPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ textAlign: 'left', borderBottom: '1px solid #E8E8F0', background: '#F9FAFB' }}>
-                  {['Customer','Description','Track','Jeweller','Stage','Due Date','Days In Stage'].map(h => (
+                  {['Customer','Description','Track','Jeweller','Stage','Due Date','Days In Stage','Flags'].map(h => (
                     <th key={h} style={{ padding: '12px 20px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
                   ))}
                 </tr>
@@ -167,6 +176,14 @@ export default function WorkshopPage() {
                         {formatDateAU(j.due_date) || "—"}
                       </td>
                       <td style={{ padding: '12px 20px', color: '#9CA3AF', fontSize: 12 }}>{days}d</td>
+                      <td style={{ padding: '12px 20px' }}>
+                        {j.valuation_required && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A', whiteSpace: 'nowrap' }}>
+                            <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01z"/></svg>
+                            Valuation
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}

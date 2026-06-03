@@ -702,6 +702,34 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   </div>
                 </div>
               )}
+              {/* Valuation Required toggle — shown for repair and custom orders */}
+              {(local.packet_type === 'repair' || local.packet_type === 'custom_order') && (
+                <div>
+                  <Label>Valuation Required</Label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !local.valuation_required;
+                      set("valuation_required", next);
+                      patch({ valuation_required: next });
+                    }}
+                    style={{
+                      width: '100%', borderRadius: 8, border: '1px solid',
+                      borderColor: local.valuation_required ? '#D97706' : '#E8E8F0',
+                      background: local.valuation_required ? '#FEF3C7' : '#F9FAFB',
+                      color: local.valuation_required ? '#92400E' : '#6B7280',
+                      padding: '8px 12px', fontSize: 14, fontWeight: 700, textAlign: 'left' as const,
+                      cursor: 'pointer', transition: 'all .15s',
+                      display: 'flex', alignItems: 'center', gap: 6,
+                    }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01z" />
+                    </svg>
+                    {local.valuation_required ? "YES — Valuation Required" : "NO — No Valuation"}
+                  </button>
+                </div>
+              )}
             </div>
           </Section>
 

@@ -56,6 +56,7 @@ const TRACK_FILTER_OPTIONS: { value: TrackFilter; label: string }[] = [
 export default function WorkshopBoard({ jobs, onStageChange, onRefresh, onJobDeleted }: Props) {
   const [localJobs, setLocalJobs] = useState<WorkshopJob[]>(jobs);
   const [trackFilter, setTrackFilter] = useState<TrackFilter>("all");
+  const [valuationFilter, setValuationFilter] = useState(false);
   const [addingToStage, setAddingToStage] = useState<string | null>(null);
   const [newJobForm, setNewJobForm] = useState<NewJobForm>(defaultForm);
   const [saving, setSaving] = useState(false);
@@ -68,11 +69,10 @@ export default function WorkshopBoard({ jobs, onStageChange, onRefresh, onJobDel
 
   const visibleStages = stagesForFilter(trackFilter);
 
-  // When a track filter is active, only show jobs on that track.
-  // When "all", show all jobs but only in columns that exist in their track.
-  const visibleJobs = trackFilter === "all"
-    ? localJobs
-    : localJobs.filter((j) => (j.track ?? "repair") === trackFilter);
+  // Apply track filter then valuation filter
+  const visibleJobs = localJobs
+    .filter((j) => trackFilter === "all" || (j.track ?? "repair") === trackFilter)
+    .filter((j) => !valuationFilter || j.valuation_required === true);
 
   function onDragEnd(result: DropResult) {
     const { destination, source, draggableId } = result;
@@ -138,8 +138,8 @@ export default function WorkshopBoard({ jobs, onStageChange, onRefresh, onJobDel
         />
       )}
 
-      {/* Track filter bar */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+      {/* Track + Valuation filter bar */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         {TRACK_FILTER_OPTIONS.map((opt) => {
           const active = trackFilter === opt.value;
           return (
@@ -162,6 +162,33 @@ export default function WorkshopBoard({ jobs, onStageChange, onRefresh, onJobDel
             </button>
           );
         })}
+
+        {/* Divider */}
+        <div style={{ width: 1, height: 20, background: '#E8E8F0', margin: '0 2px' }} />
+
+        {/* Valuation filter */}
+        <button
+          onClick={() => setValuationFilter((v) => !v)}
+          style={{
+            padding: '5px 12px',
+            borderRadius: 8,
+            fontSize: 12,
+            fontWeight: 700,
+            border: `1px solid ${valuationFilter ? '#D97706' : '#E8E8F0'}`,
+            background: valuationFilter ? '#FEF3C7' : '#FFFFFF',
+            color: valuationFilter ? '#92400E' : '#6B7280',
+            cursor: 'pointer',
+            transition: 'all .15s',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+          }}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01z" />
+          </svg>
+          Valuation
+        </button>
       </div>
 
       {/* Add Job Modal */}
