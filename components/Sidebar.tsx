@@ -39,7 +39,6 @@ export default function Sidebar({ onOpenAI }: Props) {
   const settingsExpanded  = pathname.startsWith("/settings") ||
                             pathname.startsWith("/pricing") ||
                             pathname.startsWith("/admin/users");
-  const vaultBrainExpanded = pathname.startsWith("/vault");
 
   const initials = (name: string) =>
     name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
@@ -188,22 +187,8 @@ export default function Sidebar({ onOpenAI }: Props) {
 
             {/* Inventory — hidden until rebuilt */}
 
-            {/* Vault Brain — expandable */}
-            <div>
-              <ExpandLink
-                icon={Brain} label="Vault Brain" expanded={vaultBrainExpanded}
-                onClick={() => router.push("/vault/ideas")}
-              />
-              {vaultBrainExpanded && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
-                  <SubLink href="/vault/ideas"         label="Ideas" />
-                  <SubLink href="/vault/bugs"          label="Bugs" />
-                  <SubLink href="/vault/decisions"     label="Decisions" />
-                  <SubLink href="/vault/conversations" label="Conversations" />
-                  <SubLink href="/vault/specs"         label="Specs" />
-                </div>
-              )}
-            </div>
+            {/* Vault Brain */}
+            <NavLink href="/vault/brain" icon={Brain} label="Vault Brain" />
 
             <NavLink href="/reporting" icon={BarChart2} label="Reporting" />
 

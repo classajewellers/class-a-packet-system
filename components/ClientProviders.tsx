@@ -6,6 +6,7 @@ import { UserProvider, useUser } from "@/context/UserContext";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import AIAssistant from "@/components/AIAssistant";
+import VaultReportButton from "@/components/VaultReportButton";
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       <AIAssistant open={aiOpen} onClose={() => setAiOpen(false)} />
+      <VaultReportButton />
     </div>
   );
 }
