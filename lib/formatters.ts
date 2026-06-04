@@ -22,11 +22,11 @@ export function parseCurrency(value: string): number {
   return isNaN(n) ? 0 : n;
 }
 
-// Compute balance
+// Compute balance: totalCharges - deposit, no clamping or rounding
 export function computeBalance(totalCharges: string, deposit: string): number {
   const total = parseCurrency(totalCharges);
   const dep = parseCurrency(deposit);
-  return Math.max(0, total - dep);
+  return total - dep;
 }
 
 // Packet type → human label
