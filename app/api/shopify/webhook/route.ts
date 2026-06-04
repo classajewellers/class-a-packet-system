@@ -7,6 +7,10 @@ import { todayISO } from "@/lib/formatters";
 
 export const dynamic = "force-dynamic";
 
+export async function GET() {
+  return NextResponse.json({ status: "ok", endpoint: "shopify webhook" }, { status: 200 });
+}
+
 // ── Zapier flat-field payload ─────────────────────────────────────────────────
 // Zapier sends Shopify order data as a flat object with camelCase keys.
 // No HMAC verification needed — Zapier authenticates with Shopify on its end.
