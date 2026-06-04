@@ -142,11 +142,18 @@ export default function Sidebar({ onOpenAI }: Props) {
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "24px 20px 20px" }}>
         <span style={{ width: 40, height: 40, borderRadius: 10, background: "#635BFF", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            <path d="M6 3h12l4 6-10 12L2 9z" />
+            <path d="M2 9h20" />
+            <path d="M6 3l4 6m4 0l4-6" />
           </svg>
         </span>
-        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", color: "#FFFFFF", lineHeight: 1.3 }}>
-          CLASS A<br />JEWELLERS
+        <div style={{ fontFamily: "Inter, sans-serif" }}>
+          <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: "0.1em", color: "#FFFFFF", lineHeight: 1 }}>
+            VAULT
+          </div>
+          <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.08em", color: "rgba(255,255,255,0.5)", marginTop: 3, textTransform: "uppercase" as const }}>
+            Jewellery Management
+          </div>
         </div>
       </div>
 

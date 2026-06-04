@@ -53,9 +53,9 @@ function validate(data: PacketFormData): Partial<Record<keyof PacketFormData, st
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="px-5 py-3 border-b border-gray-100 bg-[#A3B2A4]">
-        <h2 className="text-sm font-semibold tracking-wide text-white uppercase">
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden" style={{ fontFamily: "Inter, sans-serif" }}>
+      <div className="px-5 py-3 border-b border-gray-100" style={{ background: "#635BFF" }}>
+        <h2 className="text-sm font-semibold tracking-wide text-white uppercase" style={{ fontFamily: "Inter, sans-serif" }}>
           {title}
         </h2>
       </div>
@@ -481,7 +481,7 @@ function NewOrderPageInner() {
           <button
             type="button"
             onClick={() => setShowPreview((v) => !v)}
-            className="bg-[#A3B2A4] text-white rounded-full shadow-lg p-3"
+            className="text-white rounded-full shadow-lg p-3" style={{ background: "#635BFF" }}
             title="Toggle label preview"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -522,7 +522,7 @@ function NewOrderPageInner() {
             type="button"
             onClick={handleSubmit}
             disabled={submitting || !formData.packet_type}
-            className="w-full rounded-xl bg-black py-4 text-base font-bold text-white shadow-md hover:bg-[#222222] active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full rounded-xl py-4 text-base font-bold text-white shadow-md active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed" style={{ background: "#635BFF", fontFamily: "Inter, sans-serif" }} onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = "#4F46E5"} onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = "#635BFF"}
           >
             {submitting ? "Submitting…" : "Submit & Print"}
           </button>
