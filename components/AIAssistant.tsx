@@ -137,7 +137,7 @@ export default function AIAssistant({ open, onClose }: Props) {
               <div
                 className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
                   msg.role === "user"
-                    ? "bg-[#A3B2A4] text-white rounded-br-sm"
+                    ? "bg-[#635BFF] text-white rounded-br-sm"
                     : "bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm"
                 }`}
               >
@@ -177,13 +177,13 @@ export default function AIAssistant({ open, onClose }: Props) {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Ask a question… (Enter to send)"
-              className="flex-1 resize-none rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-[#A3B2A4] focus:bg-white transition-colors max-h-32 overflow-y-auto"
+              className="flex-1 resize-none rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-[#635BFF] focus:bg-white transition-colors max-h-32 overflow-y-auto"
               style={{ minHeight: "42px" }}
             />
             <button
               onClick={sendMessage}
               disabled={!input.trim() || loading}
-              className="flex-shrink-0 w-10 h-10 rounded-xl bg-[#A3B2A4] hover:bg-[#8fa090] text-white flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex-shrink-0 w-10 h-10 rounded-xl bg-[#635BFF] hover:bg-[#4F46E5] text-white flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />

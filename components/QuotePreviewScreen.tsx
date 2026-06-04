@@ -70,7 +70,7 @@ export default function QuotePreviewScreen({ quote, onNew }: Props) {
 
           {/* Success badge */}
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-full bg-[#A3B2A4] flex items-center justify-center flex-shrink-0">
+            <div className="w-10 h-10 rounded-full bg-[#635BFF] flex items-center justify-center flex-shrink-0">
               <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
               </svg>
@@ -122,7 +122,7 @@ export default function QuotePreviewScreen({ quote, onNew }: Props) {
             {quote.status === "pending" && (
               <button
                 onClick={handleConvert}
-                className="w-full rounded-xl bg-[#A3B2A4] text-white py-3 text-sm font-semibold hover:bg-[#8fa290] active:scale-[0.99] transition-all"
+                className="w-full rounded-xl bg-[#635BFF] text-white py-3 text-sm font-semibold hover:bg-[#4F46E5] active:scale-[0.99] transition-all"
               >
                 Convert to Order
               </button>

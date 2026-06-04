@@ -28,7 +28,7 @@ export default function QuoteSuccessScreen({ quote, onNew }: Props) {
   return (
     <div className="fixed inset-0 z-50 bg-white flex flex-col items-center justify-center px-4">
       {/* Success icon */}
-      <div className="w-20 h-20 rounded-full bg-[#A3B2A4] flex items-center justify-center mb-6">
+      <div className="w-20 h-20 rounded-full bg-[#635BFF] flex items-center justify-center mb-6">
         <svg
           className="w-10 h-10 text-white"
           fill="none"
@@ -65,7 +65,7 @@ export default function QuoteSuccessScreen({ quote, onNew }: Props) {
           <button
             type="button"
             onClick={handleConvert}
-            className="w-full rounded-xl bg-[#A3B2A4] text-white py-3.5 font-semibold text-sm hover:bg-[#8fa290] active:scale-[0.99] transition-all"
+            className="w-full rounded-xl bg-[#635BFF] text-white py-3.5 font-semibold text-sm hover:bg-[#4F46E5] active:scale-[0.99] transition-all"
           >
             Convert to Order
           </button>

@@ -1,5 +1,7 @@
 "use client";
 
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Packet, SubmissionResults } from "@/lib/types";
 import { formatDateAU } from "@/lib/formatters";
 
@@ -29,7 +31,23 @@ export default function SuccessScreen({
   onNewPacket,
   onRetry,
 }: Props) {
+  const router = useRouter();
+  const [countdown, setCountdown] = useState(3);
   const hasFailures = OUTPUT_LABELS.some((o) => results[o.key] === "failed");
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCountdown((c) => {
+        if (c <= 1) {
+          clearInterval(interval);
+          router.push("/orders");
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [router]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-white fade-in overflow-y-auto py-8">
@@ -117,6 +135,9 @@ export default function SuccessScreen({
             New Order
           </button>
         </div>
+        <p className="text-center text-xs text-gray-400 mt-3">
+          Redirecting to orders in {countdown}…
+        </p>
       </div>
     </div>
   );

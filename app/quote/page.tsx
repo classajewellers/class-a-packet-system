@@ -47,7 +47,7 @@ function validate(data: QuoteFormData): Partial<Record<keyof QuoteFormData, stri
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="px-5 py-3 border-b border-gray-100 bg-[#A3B2A4]">
+      <div className="px-5 py-3 border-b border-gray-100 bg-[#635BFF]">
         <h2 className="text-sm font-semibold tracking-wide text-white uppercase">{title}</h2>
       </div>
       <div className="px-5 py-5">{children}</div>

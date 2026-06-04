@@ -18,7 +18,7 @@ export function generateOrderConfirmationHTML(packet: Packet): string {
   .title { font-size: 22pt; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; color: #1B1F2E; margin: 16px 0 4px; }
   .ref-line { font-size: 10pt; color: #666; margin-bottom: 20px; }
   .section { margin-bottom: 18px; }
-  .section-title { font-size: 8pt; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #A3B2A4; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; margin-bottom: 10px; }
+  .section-title { font-size: 8pt; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #635BFF; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; margin-bottom: 10px; }
   .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px; }
   .field label { font-size: 8pt; color: #888; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 1px; }
   .field span { font-size: 10pt; font-weight: 500; }
@@ -34,7 +34,7 @@ export function generateOrderConfirmationHTML(packet: Packet): string {
   <div class="header">
     <div>
       <div style="font-size:18pt;font-weight:900;letter-spacing:2px;color:#1B1F2E;">CLASS A</div>
-      <div style="font-size:10pt;color:#A3B2A4;font-weight:600;letter-spacing:1px;">JEWELLERS</div>
+      <div style="font-size:10pt;color:#635BFF;font-weight:600;letter-spacing:1px;">JEWELLERS</div>
     </div>
     <div class="store-info">
       40 North East Road, Walkerville SA 5081<br>

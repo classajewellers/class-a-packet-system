@@ -58,7 +58,7 @@ export function generateValuationCertificate(packet: Packet): void {
 
   /* Header banner */
   .header-banner {
-    background: #A3B2A4;
+    background: #635BFF;
     color: #fff;
     padding: 20px 30px;
     display: flex;
@@ -75,7 +75,7 @@ export function generateValuationCertificate(packet: Packet): void {
   .cert-title {
     text-align: center;
     margin-bottom: 16px;
-    border-bottom: 2px solid #A3B2A4;
+    border-bottom: 2px solid #635BFF;
     padding-bottom: 12px;
   }
   .cert-title h1 { font-size: 17pt; font-weight: bold; letter-spacing: 1px; color: #1a1a1a; margin-bottom: 4px; }

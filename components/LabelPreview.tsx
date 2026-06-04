@@ -69,7 +69,7 @@ export default function LabelPreview({ data }: Props) {
       )}
 
       {/* Header */}
-      <div className="bg-[#A3B2A4] px-3 py-1.5 text-center">
+      <div className="bg-[#635BFF] px-3 py-1.5 text-center">
         <Image
           src="/class-a-logo.png"
           alt="Class A Jewellers"

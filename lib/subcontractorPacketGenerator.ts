@@ -18,20 +18,20 @@ export function generateSubcontractorPacketHTML(job: WorkshopJob): string {
   body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 11pt; color: #1a1a1a; }
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 3px solid #1B1F2E; }
   .store-name { font-size: 22pt; font-weight: 900; letter-spacing: 2px; color: #1B1F2E; }
-  .store-sub { font-size: 10pt; color: #A3B2A4; font-weight: 600; letter-spacing: 1px; }
+  .store-sub { font-size: 10pt; color: #635BFF; font-weight: 600; letter-spacing: 1px; }
   .store-info { text-align: right; font-size: 9pt; color: #555; line-height: 1.8; }
   .doc-title { font-size: 16pt; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; color: #1B1F2E; margin: 20px 0 4px; }
   .sub-title { font-size: 11pt; color: #555; margin-bottom: 24px; }
   .to-block { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 24px; }
-  .to-label { font-size: 8pt; text-transform: uppercase; letter-spacing: 1.5px; color: #A3B2A4; font-weight: 700; margin-bottom: 4px; }
+  .to-label { font-size: 8pt; text-transform: uppercase; letter-spacing: 1.5px; color: #635BFF; font-weight: 700; margin-bottom: 4px; }
   .to-name { font-size: 18pt; font-weight: 800; color: #1B1F2E; }
   .section { margin-bottom: 20px; }
-  .section-title { font-size: 8pt; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #A3B2A4; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; margin-bottom: 10px; }
+  .section-title { font-size: 8pt; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #635BFF; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; margin-bottom: 10px; }
   .due-block { background: #1B1F2E; color: white; border-radius: 8px; padding: 16px 24px; margin: 24px 0; display: flex; align-items: center; justify-content: space-between; }
   .due-label { font-size: 9pt; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.7; }
   .due-date { font-size: 22pt; font-weight: 900; }
-  .ref-badge { display: inline-block; background: #A3B2A4; color: white; font-size: 9pt; font-weight: 700; padding: 3px 12px; border-radius: 4px; font-family: monospace; }
-  .return-note { background: #f0f4f1; border: 1px solid #A3B2A4; border-radius: 8px; padding: 16px; font-size: 10pt; color: #1B1F2E; line-height: 1.6; margin-top: 24px; }
+  .ref-badge { display: inline-block; background: #635BFF; color: white; font-size: 9pt; font-weight: 700; padding: 3px 12px; border-radius: 4px; font-family: monospace; }
+  .return-note { background: #EEF2FF; border: 1px solid #635BFF; border-radius: 8px; padding: 16px; font-size: 10pt; color: #1B1F2E; line-height: 1.6; margin-top: 24px; }
   .signature-line { margin-top: 40px; border-top: 1px solid #ccc; padding-top: 8px; font-size: 9pt; color: #888; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style>

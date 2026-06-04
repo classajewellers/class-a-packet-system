@@ -98,7 +98,7 @@ export default function OnlineOrderFields({ data, onChange, errors }: Props) {
                 flex-1 rounded-lg border-2 py-2.5 text-sm font-semibold transition-all
                 ${
                   data.shipping_address_same === val
-                    ? "border-black bg-[#A3B2A4] text-white"
+                    ? "border-black bg-[#635BFF] text-white"
                     : "border-gray-300 bg-white text-black hover:border-black"
                 }
               `}

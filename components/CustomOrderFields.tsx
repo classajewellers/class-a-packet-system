@@ -28,40 +28,21 @@ export default function CustomOrderFields({ data, onChange }: Props) {
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-sm font-semibold text-[#1B1F3B] mb-1">
-            Carat Weight (ct)
-          </label>
-          <input
-            type="number"
-            step="0.001"
-            min="0"
-            value={data.carat_weight}
-            onChange={(e) => onChange("carat_weight", e.target.value)}
-            placeholder="e.g. 1.5"
-            className={inputClass}
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-semibold text-[#1B1F3B] mb-1">
-            Metal Colour
-          </label>
-          <select
-            value={data.metal_colour}
-            onChange={(e) => onChange("metal_colour", e.target.value)}
-            className={selectClass}
-          >
-            <option value="">— Select —</option>
-            <option>Yellow Gold</option>
-            <option>White Gold</option>
-            <option>Rose Gold</option>
-            <option>Sterling Silver</option>
-            <option>Platinum</option>
-            <option>Two-Tone</option>
-            <option>Other</option>
-          </select>
-        </div>
+      <div>
+        <label className="block text-sm font-semibold text-[#1B1F3B] mb-1">
+          Metal Carat
+        </label>
+        <select
+          value={data.metal_colour}
+          onChange={(e) => onChange("metal_colour", e.target.value)}
+          className={selectClass}
+        >
+          <option value="">— Select —</option>
+          <option>9ct</option>
+          <option>18ct</option>
+          <option>Platinum</option>
+          <option>Sterling Silver</option>
+        </select>
       </div>
     </div>
   );

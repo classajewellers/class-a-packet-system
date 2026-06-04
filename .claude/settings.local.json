@@ -92,7 +92,8 @@
       "Bash(ls app/api/vault)",
       "Bash(ls app/vault)",
       "Bash(ls lib/userTypes* lib/supabase-server*)",
-      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}, indent=2\\)\\)\")"
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}, indent=2\\)\\)\")",
+      "Bash(grep -v \"^$\")"
     ]
   }
 }

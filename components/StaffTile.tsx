@@ -8,7 +8,7 @@ interface Props {
 }
 
 const ROLE_BADGE_STYLES: Record<string, string> = {
-  manager: "bg-[#A3B2A4] text-white",
+  manager: "bg-[#635BFF] text-white",
   staff:   "bg-gray-200 text-gray-700",
 };
 
@@ -20,15 +20,15 @@ export default function StaffTile({ member, onClick }: Props) {
       className="
         flex flex-col items-center justify-center gap-3 p-5
         bg-white rounded-2xl border-2 border-gray-200
-        hover:border-[#A3B2A4] hover:shadow-md
+        hover:border-[#635BFF] hover:shadow-md
         active:scale-[0.97] active:bg-gray-50
         transition-all duration-150 min-h-[160px] w-full
-        focus:outline-none focus:ring-2 focus:ring-[#A3B2A4] focus:ring-offset-2
+        focus:outline-none focus:ring-2 focus:ring-[#635BFF] focus:ring-offset-2
       "
     >
       {/* Initials circle */}
       <div className="
-        w-16 h-16 rounded-full bg-[#A3B2A4] flex items-center justify-center
+        w-16 h-16 rounded-full bg-[#635BFF] flex items-center justify-center
         text-white text-xl font-bold tracking-wide flex-shrink-0
       ">
         {member.initials}

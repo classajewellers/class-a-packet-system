@@ -153,7 +153,7 @@ export default async function ClaimSlipPage({
           letter-spacing: 0.12em;
           text-transform: uppercase;
           line-height: 1.1;
-          color: #A3B2A4;
+          color: #635BFF;
         }
         .store-tagline {
           font-size: 10px;

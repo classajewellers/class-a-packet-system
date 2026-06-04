@@ -32,7 +32,7 @@ export default function QuoteTypeSelector({ value, onChange }: Props) {
             onClick={() => onChange(type)}
             className={`rounded-xl border-2 px-5 py-4 text-left transition-all ${
               selected
-                ? "border-black bg-[#A3B2A4] text-white"
+                ? "border-black bg-[#635BFF] text-white"
                 : "border-gray-200 bg-white text-black hover:border-gray-400"
             }`}
           >
