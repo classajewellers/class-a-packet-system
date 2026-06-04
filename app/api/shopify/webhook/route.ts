@@ -289,27 +289,6 @@ async function processOrder(body: ZapierFlatOrder): Promise<void> {
   const shippingMethod = extractShippingMethod(body.shippingLines);
   const dispatchDate   = extractDispatchDate(body.lineItems);
 
-  // ── C. Extract carat weight and metal colour from Shopify attributes ──────
-  const lineItemsRaw = typeof body.lineItems === "string" ? body.lineItems : "";
-  let caratWeightFromShopify: number | null = null;
-  let metalColourFromShopify: string | null = null;
-  if (lineItemsRaw) {
-    const allAttrRe = /'key':\s*'([^']*)',\s*'value':\s*'([^']*)'/g;
-    let m: RegExpExecArray | null;
-    while ((m = allAttrRe.exec(lineItemsRaw)) !== null) {
-      const k = m[1].toLowerCase().trim();
-      const v = m[2].trim();
-      if (!v) continue;
-      if (!caratWeightFromShopify && (k.includes("carat") || k.includes("karat") || k === "ct" || k === "kt" || k.includes("carat weight") || k.includes("diamond weight") || k.includes("stone weight"))) {
-        const parsed = parseFloat(v.replace(/[^0-9.]/g, ""));
-        if (!isNaN(parsed) && parsed > 0) caratWeightFromShopify = parsed;
-      }
-      if (!metalColourFromShopify && (k.includes("metal") || k.includes("gold") || k.includes("colour") || k.includes("color") || k.includes("chain metal") || k.includes("metal type"))) {
-        metalColourFromShopify = v;
-      }
-    }
-  }
-
   console.log("[shopify/webhook] articles:", articles);
   console.log("[shopify/webhook] shippingMethod:", shippingMethod);
   console.log("[shopify/webhook] dispatchDate:", dispatchDate);
@@ -395,8 +374,6 @@ async function processOrder(body: ZapierFlatOrder): Promise<void> {
     shipping_postcode:     null,
     order_source:          "Shopify",
     gift_wrapping:         hasGiftWrap || null,
-    carat_weight:          caratWeightFromShopify,
-    metal_colour:          metalColourFromShopify,
     packet_data:           {
       ...(body as unknown as Record<string, unknown>),
       original_price:  originalPrice,
