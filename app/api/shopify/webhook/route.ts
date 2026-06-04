@@ -237,32 +237,46 @@ function extractDispatchDate(raw: any): string | null {
   const match = raw.match(/'key':\s*'Estimated Dispatch',\s*'value':\s*'([^']+)'/);
   if (!match) return null;
 
-  const dateStr = match[1].trim(); // e.g. "Wednesday, May 13th" or "Same Day Dispatch"
+  const dateStr = match[1].trim();
+  // e.g. "Dispatch on Thursday, June 4th" or "Same Day Dispatch" or "Wednesday, May 13th"
+  console.log(`[shopify/webhook] extractDispatchDate raw value: "${dateStr}"`);
 
   // Explicit same-day check — set due_date to null so label shows "SET DUE DATE"
   // prompting staff to set the correct date after packing.
   if (/same.?day/i.test(dateStr)) {
-    console.log(`[shopify/webhook] extractDispatchDate: "${dateStr}" is same-day — returning null`);
+    console.log(`[shopify/webhook] extractDispatchDate: same-day — returning null`);
     return null;
   }
 
-  // Require both a month name AND a day number — rejects non-date strings.
-  const hasMonth = MONTH_NAMES.some((m) => dateStr.toLowerCase().includes(m));
-  const hasDay   = /\d{1,2}/.test(dateStr);
+  // Strip leading "Dispatch on " prefix (e.g. "Dispatch on Thursday, June 4th" → "Thursday, June 4th")
+  let cleaned = dateStr.replace(/^dispatch\s+on\s+/i, "").trim();
+
+  // Strip leading weekday name and optional comma/space (e.g. "Thursday, " → "")
+  cleaned = cleaned.replace(/^(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday),?\s*/i, "").trim();
+  // Now cleaned should be e.g. "June 4th"
+
+  // Require both a month name AND a day number — rejects remaining non-date strings.
+  const hasMonth = MONTH_NAMES.some((m) => cleaned.toLowerCase().includes(m));
+  const hasDay   = /\d{1,2}/.test(cleaned);
   if (!hasMonth || !hasDay) {
-    console.log(`[shopify/webhook] extractDispatchDate: "${dateStr}" is not a date — returning null`);
+    console.log(`[shopify/webhook] extractDispatchDate: "${cleaned}" is not a parseable date — returning null`);
     return null;
   }
 
   try {
-    // Strip ordinal suffixes: "13th" → "13"
-    const cleaned = dateStr.replace(/(\d+)(st|nd|rd|th)/gi, "$1");
-    const year    = new Date().getFullYear();
-    const parsed  = new Date(`${cleaned} ${year}`);
-    if (isNaN(parsed.getTime())) return null;
+    // Strip ordinal suffixes: "4th" → "4"
+    const datePart = cleaned.replace(/(\d+)(st|nd|rd|th)/gi, "$1");
+    const year     = new Date().getFullYear();
+    const parsed   = new Date(`${datePart} ${year}`);
+    if (isNaN(parsed.getTime())) {
+      console.log(`[shopify/webhook] extractDispatchDate: new Date("${datePart} ${year}") returned NaN`);
+      return null;
+    }
     // Roll forward if the date has already passed this year
     if (parsed < new Date()) parsed.setFullYear(year + 1);
-    return parsed.toISOString().split("T")[0];
+    const result = parsed.toISOString().split("T")[0];
+    console.log(`[shopify/webhook] extractDispatchDate: "${dateStr}" → ${result}`);
+    return result;
   } catch {
     return null;
   }
