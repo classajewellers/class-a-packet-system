@@ -87,7 +87,12 @@
       "Bash(cp -r '/Users/joshmucklow/Downloads/Projects/gemquote 2/.claude/worktrees/agent-a92212256cd86ff7b/app/inventory/import' '/Users/joshmucklow/Downloads/Projects/gemquote 2/app/inventory/import')",
       "Read(//Users/joshmucklow/Downloads/Projects/vault/**)",
       "Read(//Users/joshmucklow/Downloads/Projects/**)",
-      "Bash(pnpm --filter web build)"
+      "Bash(pnpm --filter web build)",
+      "Bash(mkdir -p /Users/joshmucklow/Downloads/Projects/vault/apps/web/supabase/migrations /Users/joshmucklow/Downloads/Projects/vault/apps/web/app/\\\\\\(tenant\\\\\\)/brain/ideas /Users/joshmucklow/Downloads/Projects/vault/apps/web/app/\\\\\\(tenant\\\\\\)/brain/bugs /Users/joshmucklow/Downloads/Projects/vault/apps/web/app/\\\\\\(tenant\\\\\\)/brain/decisions /Users/joshmucklow/Downloads/Projects/vault/apps/web/app/\\\\\\(tenant\\\\\\)/brain/conversations /Users/joshmucklow/Downloads/Projects/vault/apps/web/app/\\\\\\(tenant\\\\\\)/brain/feature-specs)",
+      "Bash(ls app/api/vault)",
+      "Bash(ls app/vault)",
+      "Bash(ls lib/userTypes* lib/supabase-server*)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}, indent=2\\)\\)\")"
     ]
   }
 }

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { generateReferenceNumber } from "@/lib/referenceNumber";
 import { todayISO } from "@/lib/formatters";
@@ -263,42 +264,28 @@ function extractDispatchDate(raw: any): string | null {
   }
 }
 
-// ── Handler ────────────────────────────────────────────────────────────────────
+// ── Background processing ─────────────────────────────────────────────────────
+// Called via waitUntil() so the 200 is already sent to Zapier before any
+// DB work begins. Zapier has a ~10 s response timeout — this ensures we
+// never breach it regardless of how long the insert takes.
 
-export async function POST(req: NextRequest): Promise<NextResponse> {
-  // ── 1. Parse body ─────────────────────────────────────────────────────────
-  let body: ZapierFlatOrder;
-  try {
-    body = (await req.json()) as ZapierFlatOrder;
-  } catch {
-    console.error("[shopify/webhook] Failed to parse JSON body");
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
-
-  console.log("[shopify/webhook] Received:", JSON.stringify(body));
-  console.log("[shopify/webhook] lineItems type:", typeof body.lineItems);
-  console.log("[shopify/webhook] lineItems raw:", JSON.stringify(body.lineItems));
-
-  // ── 2. Generate ON-YYYYMMDD-XXXX reference number ────────────────────────
+async function processOrder(body: ZapierFlatOrder): Promise<void> {
+  // ── A. Generate reference number ──────────────────────────────────────────
   let referenceNumber: string;
   try {
     referenceNumber = await generateReferenceNumber(new Date(), "online_order");
     console.log("[shopify/webhook] Reference:", referenceNumber);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    console.error("[shopify/webhook] Reference generation failed:", msg);
-    return NextResponse.json({ ok: false, error: "Reference generation failed" });
+    console.error("[shopify/webhook] Reference generation failed:", err instanceof Error ? err.message : err);
+    return;
   }
 
-  // ── 3. Parse line items and shipping ─────────────────────────────────────
+  // ── B. Parse line items and shipping ──────────────────────────────────────
   const articles       = parseLineItems(body.lineItems);
   const shippingMethod = extractShippingMethod(body.shippingLines);
   const dispatchDate   = extractDispatchDate(body.lineItems);
 
-  // ── 3a. Extract carat weight and metal colour from Shopify attributes ─────
-  // Scan the raw line items blob for any attribute whose key mentions
-  // carat/ct/weight or metal/colour/gold, and capture the first non-empty value.
-  // These cover PCN (Personalised Charm Necklace) and similar jewellery products.
+  // ── C. Extract carat weight and metal colour from Shopify attributes ──────
   const lineItemsRaw = typeof body.lineItems === "string" ? body.lineItems : "";
   let caratWeightFromShopify: number | null = null;
   let metalColourFromShopify: string | null = null;
@@ -323,90 +310,57 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   console.log("[shopify/webhook] shippingMethod:", shippingMethod);
   console.log("[shopify/webhook] dispatchDate:", dispatchDate);
 
-  // ── 3b. Gift wrapping detection ───────────────────────────────────────────
-  // Shopify can signal gift wrapping via order-level note attributes, line item
-  // custom attributes, or a mention in the order note.
+  // ── D. Gift wrapping detection ────────────────────────────────────────────
   const noteAttributesRaw = body.noteAttributes ?? body.note_attributes ?? [];
   const noteAttributes: Array<{ name?: string; key?: string; value?: unknown }> =
     Array.isArray(noteAttributesRaw) ? noteAttributesRaw : [];
 
-  // Find any note attribute whose key/name mentions "gift"
   const giftWrapAttr = noteAttributes.find(
     (a) =>
       a.name?.toLowerCase().includes("gift") ||
       a.key?.toLowerCase().includes("gift")
   );
 
-  // Check line items blob for gift wrap customAttributes
   const lineItemsStr =
     typeof body.lineItems === "string"
       ? body.lineItems
       : JSON.stringify(body.lineItems ?? "");
 
   const hasGiftWrap =
-    // Note attribute set to "Yes" or "true"
     giftWrapAttr?.value === "Yes" ||
     giftWrapAttr?.value === "yes" ||
     giftWrapAttr?.value === "true" ||
     giftWrapAttr?.value === true ||
-    // Gift wrap mentioned in line item custom attributes blob
     lineItemsStr.toLowerCase().includes("gift wrap") ||
     lineItemsStr.toLowerCase().includes("gift wrapping") ||
-    // Gift wrap mentioned in the free-text order note
     body.orderNote?.toLowerCase().includes("gift wrap") ||
     false;
 
-  console.log("[webhook] gift wrap detection:", {
-    noteAttributesCount: noteAttributes.length,
-    giftWrapAttr,
-    lineItemsBlobMentionsGift:
-      lineItemsStr.toLowerCase().includes("gift wrap") ||
-      lineItemsStr.toLowerCase().includes("gift wrapping"),
-    orderNoteMentionsGift: body.orderNote?.toLowerCase().includes("gift wrap") ?? false,
-    hasGiftWrap,
-  });
+  console.log("[webhook] gift wrap detection:", { noteAttributesCount: noteAttributes.length, giftWrapAttr, hasGiftWrap });
 
-  // ── 4. Map fields ─────────────────────────────────────────────────────────
+  // ── E. Map fields ─────────────────────────────────────────────────────────
   const { firstName, lastName } = resolveName(body);
-  const email    = body.customerEmail      ?? null;
-  const phone    = body.shippingPhone      ?? body.customerPhone ?? null;
-  const street   = body.shippingAddress1   ?? null;
-  const suburb   = body.shippingCity       ?? null;
+  const email    = body.customerEmail       ?? null;
+  const phone    = body.shippingPhone       ?? body.customerPhone ?? null;
+  const street   = body.shippingAddress1    ?? null;
+  const suburb   = body.shippingCity        ?? null;
   const state    = body.shippingProvinceCode ?? null;
-  const postcode = body.shippingPostalCode ?? null;
-  const orderNum = body.orderNumber ?? null;
-  const note     = body.orderNote   || null;
+  const postcode = body.shippingPostalCode  ?? null;
+  const orderNum = body.orderNumber         ?? null;
+  const note     = body.orderNote           || null;
 
-  // Use original (pre-discount) price as total_charges.
-  // subtotalPrice = line item sum before shipping/tax/discounts.
-  // totalLineItemsPrice = sum of individual item prices before order-level discounts.
-  // totalPrice = final amount charged after all discounts — we store this separately.
   const originalPrice =
     parseFloat(String(body.subtotalPrice ?? "")) ||
     parseFloat(String(body.totalLineItemsPrice ?? "")) ||
     parseFloat(String(body.totalPrice ?? "")) ||
     0;
-  const finalPrice = parseFloat(String(body.totalPrice ?? "")) || 0;
+  const finalPrice    = parseFloat(String(body.totalPrice ?? "")) || 0;
   const discountAmount = Math.max(0, originalPrice - finalPrice);
 
-  console.log("[webhook] pricing:", {
-    subtotalPrice: body.subtotalPrice,
-    totalLineItemsPrice: body.totalLineItemsPrice,
-    totalPrice: body.totalPrice,
-    originalPrice,
-    finalPrice,
-    discountAmount,
-  });
-
-  console.log("[webhook] Order note:", body.orderNote);
+  console.log("[webhook] pricing:", { originalPrice, finalPrice, discountAmount });
   console.log("[shopify/webhook] Resolved name:", { firstName, lastName });
-  console.log("[shopify/webhook] Mapped fields:", {
-    orderNumber: orderNum, email, phone, firstName, lastName,
-    originalPrice, finalPrice, discountAmount,
-    articlesLength: articles.length, shippingMethod, dispatchDate,
-  });
 
-  // ── 5. Build insert payload ───────────────────────────────────────────────
+  // ── F. Insert into Supabase ───────────────────────────────────────────────
   const insertData = {
     reference_number:      referenceNumber,
     packet_type:           "online_order",
@@ -429,7 +383,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     staff_member:          "Online Store",
     order_number:          orderNum,
     shipping_method:       shippingMethod,
-    delivery_method:       null,          // prevent DEFAULT 'Pickup' — resolveDelivery falls through to shipping_method
+    delivery_method:       null,
     shipping_address_same: true,
     shipping_street:       null,
     shipping_suburb:       null,
@@ -447,7 +401,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     },
   };
 
-  // ── 6. Insert into Supabase ───────────────────────────────────────────────
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase
     .from("packets")
@@ -457,9 +410,42 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (error) {
     console.error("[shopify/webhook] Supabase insert failed:", JSON.stringify(error));
-    return NextResponse.json({ ok: false, error: error.message, details: error });
+    return;
   }
 
   console.log("[shopify/webhook] Packet saved:", data?.reference_number);
-  return NextResponse.json({ ok: true, reference: data?.reference_number });
+}
+
+// ── Handler ────────────────────────────────────────────────────────────────────
+// Returns 200 to Zapier IMMEDIATELY after parsing the body — before any DB
+// work runs. All processing happens in processOrder() via waitUntil(), which
+// keeps the Vercel function alive until the insert completes.
+
+export async function POST(req: NextRequest): Promise<NextResponse> {
+  console.log("[shopify/webhook] received");
+
+  // Parse body first — the request stream can only be read once, and we must
+  // do it before handing off to waitUntil.
+  let body: ZapierFlatOrder;
+  try {
+    body = (await req.json()) as ZapierFlatOrder;
+  } catch {
+    // Return 200 even on parse failure so Zapier doesn't mark the hook as broken.
+    // Bad payloads will be logged but not retried.
+    console.error("[shopify/webhook] Failed to parse JSON body — returning 200 to prevent Zapier retry loop");
+    return NextResponse.json({ received: true }, { status: 200 });
+  }
+
+  console.log("[shopify/webhook] body keys:", Object.keys(body));
+  console.log("[shopify/webhook] orderNumber:", body.orderNumber);
+
+  // Register background processing — runs after response is sent.
+  waitUntil(
+    processOrder(body).catch((err) =>
+      console.error("[shopify/webhook] processOrder threw:", err)
+    )
+  );
+
+  // Return 200 immediately so Zapier doesn't timeout.
+  return NextResponse.json({ received: true }, { status: 200 });
 }
