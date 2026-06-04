@@ -25,7 +25,7 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 type NotifStep = "select" | "preview";
 type Template  = "order_confirmation" | "ready_for_pickup";
 
-interface Toast { type: "success" | "error"; message: string; }
+interface Toast { type: "success" | "error" | "warning"; message: string; }
 
 // ── SMS / Email message builders ──────────────────────────────────────────
 function buildMessage(template: Template, p: Packet): string {
@@ -67,6 +67,11 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
   const [reprintLoading, setReprintLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Mark as Collected modal state ────────────────────────────────────────────
+  const [collectOpen, setCollectOpen]         = useState(false);
+  const [collectCategory, setCollectCategory] = useState("Fine Jewellery");
+  const [collectLoading, setCollectLoading]   = useState(false);
 
   // ── Notification modal state ───────────────────────────────────────────────
   const [notifOpen, setNotifOpen]         = useState(false);
@@ -313,6 +318,75 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
     }
   }
 
+  // ── Auto-detect product category from articles text ──────────────────────────
+  function detectCategory(articles: string | null): string {
+    const text = (articles ?? "").toLowerCase();
+    if (text.includes("engagement")) return "Engagement Ring";
+    if (text.includes("wedding") || text.includes("wedder") || text.includes("wed. ring")) return "Wedding Ring";
+    if (text.includes("eternity")) return "Eternity Ring";
+    if (text.includes("dress ring")) return "Dress Ring";
+    return "Fine Jewellery";
+  }
+
+  // ── Mark as Collected handler ─────────────────────────────────────────────────
+  async function handleMarkCollected() {
+    setCollectLoading(true);
+    const today = new Date().toISOString().split("T")[0];
+    try {
+      // 1. Patch Supabase — save collected_date and product_category
+      const patchRes = await fetch(`/api/admin/packets/${local.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ collected_date: today, product_category: collectCategory }),
+      });
+      if (!patchRes.ok) throw new Error("Failed to save collected date");
+      const patchJson = await patchRes.json() as { packet: Packet };
+      if (patchJson.packet) {
+        setLocal(patchJson.packet);
+        onUpdate(patchJson.packet);
+      }
+
+      // 2. Close modal before Klaviyo call (keeps UX snappy)
+      setCollectOpen(false);
+
+      // 3. Sync to Klaviyo — failure is non-fatal
+      let klaviyoOk = false;
+      try {
+        const klaviyoRes = await fetch("/api/klaviyo/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            customer_email:      local.customer_email,
+            customer_phone:      local.customer_phone,
+            customer_first_name: local.customer_first_name,
+            customer_last_name:  local.customer_last_name,
+            product_category:    collectCategory,
+            total_charges:       local.total_charges,
+            reference_number:    local.reference_number,
+            collected_date:      today,
+            staff_member:        local.staff_member,
+          }),
+        });
+        klaviyoOk = klaviyoRes.ok;
+      } catch (klaviyoErr) {
+        console.error("[drawer] Klaviyo sync threw:", klaviyoErr);
+        klaviyoOk = false;
+      }
+
+      if (klaviyoOk) {
+        setToast({ type: "success", message: "✓ Synced to Klaviyo" });
+      } else {
+        setToast({ type: "warning", message: "Collected saved — Klaviyo sync failed" });
+      }
+    } catch (err) {
+      console.error("[drawer] handleMarkCollected:", err);
+      setCollectOpen(false);
+      setToast({ type: "error", message: "Failed to save collected date" });
+    } finally {
+      setCollectLoading(false);
+    }
+  }
+
   // Compute displayed balance
   const balance = (local.total_charges ?? 0) - (local.deposit ?? 0);
 
@@ -421,6 +495,35 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                 <p style={{ textAlign: 'center', fontSize: 12, color: '#16A34A', marginTop: 6, fontWeight: 500 }}>
                   ✓ Sent with order confirmation{local.claim_slip_sent_at ? ` · ${formatDateAU(local.claim_slip_sent_at.split("T")[0])}` : ""}
                 </p>
+              )}
+            </div>
+          )}
+
+          {/* ── Mark as Collected (custom_order only, hidden once collected) ── */}
+          {local.packet_type === "custom_order" && !local.collected_date && (
+            <button
+              onClick={() => {
+                setCollectCategory(detectCategory(local.articles));
+                setCollectOpen(true);
+              }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', background: '#10B981', color: '#fff', fontSize: 14, fontWeight: 600, padding: '12px', borderRadius: 12, border: 'none', cursor: 'pointer', transition: 'background .15s' }}
+              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = '#059669'}
+              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = '#10B981'}
+            >
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              Mark as Collected
+            </button>
+          )}
+          {local.packet_type === "custom_order" && local.collected_date && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', borderRadius: 12, background: '#ECFDF5', border: '1px solid #6EE7B7', color: '#059669', fontSize: 14, fontWeight: 600 }}>
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              Collected {formatDateAU(local.collected_date)}
+              {local.product_category && (
+                <span style={{ marginLeft: 4, fontSize: 12, color: '#6EE7B7', fontWeight: 500 }}>· {local.product_category}</span>
               )}
             </div>
           )}
@@ -1044,6 +1147,67 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
         </div>
       </div>
 
+      {/* ── Mark as Collected modal ── */}
+      {collectOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} onClick={() => { if (!collectLoading) setCollectOpen(false); }} />
+          <div style={{ position: 'relative', background: '#FFFFFF', borderRadius: 16, boxShadow: '0 18px 40px rgba(0,0,0,0.12)', width: '100%', maxWidth: 360, margin: '0 auto', padding: 24 }} className="space-y-5">
+
+            {/* Header */}
+            <div>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>Mark as Collected</h2>
+              <p style={{ fontSize: 14, color: '#6B7280' }}>
+                <span style={{ fontWeight: 600, color: '#1A1A2E' }}>
+                  {[local.customer_first_name, local.customer_last_name].filter(Boolean).join(" ") || "Unknown"}
+                </span>
+                <span style={{ marginLeft: 8, fontFamily: 'monospace', fontSize: 12, color: '#9CA3AF' }}>{local.reference_number}</span>
+              </p>
+            </div>
+
+            {/* Category picker */}
+            <div>
+              <p style={{ fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                Product Category
+              </p>
+              <select
+                value={collectCategory}
+                onChange={(e) => setCollectCategory(e.target.value)}
+                style={{ width: '100%', borderRadius: 8, border: '1px solid #E8E8F0', background: '#F9FAFB', padding: '10px 12px', fontSize: 14, color: '#1A1A2E', cursor: 'pointer', outline: 'none' }}
+              >
+                <option>Engagement Ring</option>
+                <option>Wedding Ring</option>
+                <option>Dress Ring</option>
+                <option>Eternity Ring</option>
+                <option>Fine Jewellery</option>
+              </select>
+              <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 6 }}>Auto-detected from articles — change if incorrect</p>
+            </div>
+
+            {/* Actions */}
+            <div className="space-y-2">
+              <button
+                onClick={handleMarkCollected}
+                disabled={collectLoading}
+                style={{ width: '100%', borderRadius: 12, background: '#10B981', padding: '12px', fontSize: 14, fontWeight: 700, color: '#fff', border: 'none', cursor: collectLoading ? 'not-allowed' : 'pointer', opacity: collectLoading ? 0.7 : 1, transition: 'background .15s' }}
+                onMouseEnter={e => { if (!collectLoading) (e.currentTarget as HTMLButtonElement).style.background = '#059669'; }}
+                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = '#10B981'}
+              >
+                {collectLoading ? "Saving…" : "Confirm Collection"}
+              </button>
+              <button
+                onClick={() => setCollectOpen(false)}
+                disabled={collectLoading}
+                style={{ width: '100%', borderRadius: 12, border: '1px solid #E8E8F0', padding: '10px', fontSize: 14, fontWeight: 600, color: '#6B7280', background: '#fff', cursor: collectLoading ? 'not-allowed' : 'pointer', transition: 'all .15s' }}
+                onMouseEnter={e => { if (!collectLoading) { (e.currentTarget as HTMLButtonElement).style.color = '#1A1A2E'; (e.currentTarget as HTMLButtonElement).style.background = '#F9FAFB'; } }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#6B7280'; (e.currentTarget as HTMLButtonElement).style.background = '#fff'; }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Notification modal ── */}
       {notifOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
@@ -1165,7 +1329,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
       {/* ── Toast ── */}
       {toast && (
         <div
-          style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 70, display: 'flex', alignItems: 'center', gap: 8, borderRadius: 12, padding: '12px 20px', boxShadow: '0 8px 24px rgba(0,0,0,0.15)', fontSize: 14, fontWeight: 600, color: '#fff', background: toast.type === 'success' ? '#10B981' : '#EF4444' }}
+          style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 70, display: 'flex', alignItems: 'center', gap: 8, borderRadius: 12, padding: '12px 20px', boxShadow: '0 8px 24px rgba(0,0,0,0.15)', fontSize: 14, fontWeight: 600, color: '#fff', background: toast.type === 'success' ? '#10B981' : toast.type === 'warning' ? '#D97706' : '#EF4444' }}
         >
           {toast.type === "success" ? (
             <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">

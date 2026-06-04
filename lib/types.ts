@@ -168,6 +168,7 @@ export interface Packet {
   from_date: string | null;
 
   collected_date: string | null;
+  product_category: string | null;
   signed_by: string | null;
 
   klaviyo_synced: boolean;
