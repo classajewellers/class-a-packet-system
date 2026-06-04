@@ -74,8 +74,8 @@ export default function PacketTypeSelector({ value, onChange }: Props) {
                 transition-all duration-150 min-h-[120px]
                 ${
                   selected
-                    ? "border-black bg-[#A3B2A4] text-white shadow-lg scale-[1.02]"
-                    : "border-gray-300 bg-white text-black hover:border-black hover:bg-gray-50"
+                    ? "border-[#635BFF] bg-[#635BFF] text-white shadow-lg scale-[1.02]"
+                    : "border-gray-300 bg-white text-black hover:border-[#635BFF] hover:bg-gray-50"
                 }
               `}
             >
