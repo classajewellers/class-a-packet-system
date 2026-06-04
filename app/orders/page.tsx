@@ -45,6 +45,14 @@ function OrdersPageInner() {
       setUrlFilter(f);
     }
   }, [searchParams]);
+
+  // Auto-open drawer when ?open=[reference_number] is in the URL
+  useEffect(() => {
+    const openRef = searchParams.get("open");
+    if (!openRef || loading || packets.length === 0) return;
+    const target = packets.find((p) => p.reference_number === openRef);
+    if (target) setSelectedPacket(target);
+  }, [searchParams, packets, loading]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const fetchOrders = useCallback(async (params: { search?: string; from?: string; to?: string }) => {

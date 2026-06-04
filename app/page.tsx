@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Packet, InventoryMovement, InventoryMovementType } from "@/lib/types";
 import { packetTypeLabel, formatDateAU, formatCurrency } from "@/lib/formatters";
@@ -97,6 +98,7 @@ function startOfMonthISO() {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [packets, setPackets] = useState<Packet[]>([]);
   const [loading, setLoading] = useState(true);
   const [revenueThisMonth, setRevenueThisMonth] = useState<number | null>(null);
@@ -251,6 +253,8 @@ export default function DashboardPage() {
                   return (
                     <tr
                       key={p.id}
+                      onClick={() => router.push(`/orders?open=${encodeURIComponent(p.reference_number)}`)}
+                      style={{ cursor: "pointer" }}
                       onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = "#F9FAFB"; }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = ""; }}
                     >

@@ -40,12 +40,20 @@ export default async function ClaimSlipPage({
 }) {
   const supabase = createServerSupabaseClient();
 
-  const { data: raw } = await supabase
+  // Decode in case the reference was URL-encoded (e.g. spaces → %20)
+  const ref = decodeURIComponent(params.reference);
+
+  const { data: raw, error } = await supabase
     .from("packets")
     .select("*")
-    .eq("reference_number", params.reference)
+    .eq("reference_number", ref)
     .maybeSingle();
 
+  if (error) {
+    // Surface real DB errors as 500 rather than masking them as 404
+    console.error("[claim-slip] Supabase query error:", error);
+    throw new Error(`Failed to load claim slip: ${error.message}`);
+  }
   if (!raw) notFound();
 
   const packet = raw as Packet;
