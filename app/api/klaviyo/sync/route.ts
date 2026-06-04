@@ -73,6 +73,32 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   console.log("[klaviyo/sync] Profile upserted:", profileRes.status, customer_email);
 
+  // ── Resolve profile ID for list add ──────────────────────────────────────────
+  // 201/200: ID is in the upsert response body. 409: profile exists — fetch by email.
+  let profileId: string | null = null;
+  try {
+    if (profileRes.status !== 409) {
+      const profileJson = await profileRes.json();
+      profileId = profileJson?.data?.id ?? null;
+    } else {
+      // Profile already exists — look it up by email
+      const lookupRes = await fetch(
+        `https://a.klaviyo.com/api/profiles/?filter=equals(email,"${encodeURIComponent(String(customer_email))}")`,
+        { method: "GET", headers }
+      );
+      if (lookupRes.ok) {
+        const lookupJson = await lookupRes.json();
+        profileId = lookupJson?.data?.[0]?.id ?? null;
+      } else {
+        console.warn("[klaviyo/sync] Profile lookup failed:", lookupRes.status);
+      }
+    }
+  } catch (err) {
+    console.warn("[klaviyo/sync] Could not resolve profile ID:", err);
+  }
+
+  console.log("[klaviyo/sync] Resolved profile ID:", profileId);
+
   // ── Call 2: Track In-Store Collection event ───────────────────────────────────
   const eventPayload = {
     data: {
@@ -117,6 +143,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   console.log("[klaviyo/sync] Event tracked:", reference_number, product_category);
+
+  // ── Call 3: Add profile to Showroom Customers 2026 list (non-fatal) ───────────
+  if (profileId) {
+    try {
+      const listRes = await fetch(
+        "https://a.klaviyo.com/api/lists/S4i5ms/relationships/profiles/",
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ data: [{ type: "profile", id: profileId }] }),
+        }
+      );
+      // 204 = added, 200 = already a member — both are success
+      if (listRes.ok || listRes.status === 204) {
+        console.log("[klaviyo/sync] Profile added to list S4i5ms:", profileId);
+      } else {
+        const errText = await listRes.text();
+        console.warn("[klaviyo/sync] List add non-fatal failure:", listRes.status, errText);
+      }
+    } catch (err) {
+      console.warn("[klaviyo/sync] List add threw (non-fatal):", err);
+    }
+  } else {
+    console.warn("[klaviyo/sync] Skipping list add — no profile ID resolved");
+  }
 
   return NextResponse.json({ success: true });
 }
