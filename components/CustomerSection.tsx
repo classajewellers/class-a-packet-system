@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useUser } from "@/context/UserContext";
 import { PacketFormData } from "@/lib/types";
 
 declare global {
@@ -93,6 +94,7 @@ export function Input({
 }
 
 export default function CustomerSection({ data, onChange, errors }: Props) {
+  const { user } = useUser();
   const streetInputRef = useRef<HTMLInputElement>(null);
   const shopifyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastLookedUpEmail = useRef<string>("");
@@ -115,7 +117,8 @@ export default function CustomerSection({ data, onChange, errors }: Props) {
       lastLookedUpEmail.current = email;
       try {
         const res = await fetch(
-          `/api/shopify/customer?email=${encodeURIComponent(email)}`
+          `/api/shopify/customer?email=${encodeURIComponent(email)}`,
+          { headers: { 'x-tenant-id': user?.tenantId ?? '' } }
         );
         if (!res.ok) return;
         const json = await res.json() as {

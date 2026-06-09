@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -28,7 +28,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   console.log("[reporting] section:", section, "start:", start, "end:", end);
 
-  const supabase = createServerSupabaseClient();
+  const tenantId = req.headers.get('x-tenant-id') ?? ''
+  const supabase = await createTenantSupabaseClient(tenantId);
   const today = todayISO();
   // endPlusOne used for exclusive upper-bound on date comparisons
   const endPlusOne = addDays(end, 1);

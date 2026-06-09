@@ -62,7 +62,7 @@ function OrdersPageInner() {
       if (params.search) p.set("search", params.search);
       if (params.from)   p.set("from",   params.from);
       if (params.to)     p.set("to",     params.to);
-      const res = await fetch(`/api/admin/packets?${p}`, { cache: "no-store" });
+      const res = await fetch(`/api/admin/packets?${p}`, { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       if (!res.ok) throw new Error("Failed");
       const json = await res.json();
       setPackets(json.packets ?? []);
@@ -118,7 +118,7 @@ function OrdersPageInner() {
     if (selectedIds.size === 0) return;
     if (!window.confirm(`Delete ${selectedIds.size} order${selectedIds.size !== 1 ? "s" : ""}? This cannot be undone.`)) return;
     const ids = Array.from(selectedIds);
-    await Promise.all(ids.map((id) => fetch(`/api/admin/packets/${id}`, { method: "DELETE" })));
+    await Promise.all(ids.map((id) => fetch(`/api/admin/packets/${id}`, { method: "DELETE", headers: { 'x-tenant-id': user?.tenantId ?? '' } })));
     setPackets((prev) => prev.filter((p) => !selectedIds.has(p.id)));
     setSelectedIds(new Set());
   }
@@ -126,7 +126,7 @@ function OrdersPageInner() {
   async function handleRetry(packetId: string, output: "klaviyo" | "email" | "sms" | "sheets" | "label") {
     const res = await fetch("/api/retry", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
       body: JSON.stringify({ packetId, output }),
     });
     if (res.ok) fetchOrders({ search, from, to });

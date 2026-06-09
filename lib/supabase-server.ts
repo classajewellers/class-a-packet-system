@@ -49,3 +49,21 @@ export function createServerClient(): SupabaseClient {
 
 // Alias used by API routes — same client, clearer name
 export const createServerSupabaseClient = createServerClient;
+
+/**
+ * createTenantSupabaseClient(tenantId)
+ * Creates a service-role Supabase client and sets the tenant context via RPC
+ * so that current_tenant_id() returns the correct value for this request.
+ * Use this in ALL API routes instead of createServerSupabaseClient() directly.
+ */
+export async function createTenantSupabaseClient(tenantId: string | null) {
+  const supabase = createServerClient();
+  if (tenantId) {
+    try {
+      await supabase.rpc("set_tenant_config", { tenant_id: tenantId });
+    } catch (err) {
+      console.warn("[supabase-server] set_tenant_config RPC failed:", err);
+    }
+  }
+  return supabase;
+}

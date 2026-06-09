@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +9,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const to   = searchParams.get("to")   ?? new Date().toISOString().split("T")[0];
   const type = searchParams.get("type") ?? "all"; // all | repair | custom_order | online_order
 
-  const supabase = createServerSupabaseClient();
+  const tenantId = req.headers.get('x-tenant-id') ?? ''
+  const supabase = await createTenantSupabaseClient(tenantId);
 
   // Extend `to` to end of day
   const toExtended = new Date(to);

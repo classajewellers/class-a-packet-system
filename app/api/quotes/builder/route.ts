@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createServerSupabaseClient, createTenantSupabaseClient } from '@/lib/supabase-server'
 import { generateQuoteReferenceNumber } from '@/lib/referenceNumber'
 
 export const dynamic = 'force-dynamic'
@@ -18,7 +18,9 @@ export async function POST(req: NextRequest) {
     const referenceNumber = await generateQuoteReferenceNumber()
     const now = new Date().toISOString()
 
-    const supabase = createServerSupabaseClient()
+    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+
+    const supabase = await createTenantSupabaseClient(tenantId)
     const { data, error } = await supabase
       .from('quotes')
       .insert({
@@ -39,6 +41,7 @@ export async function POST(req: NextRequest) {
         pipeline_stage: pipelineStage ?? 'Pending',
         pending_at: now,
         status_changed_at: now,
+        tenant_id: tenantId,
       })
       .select()
       .single()

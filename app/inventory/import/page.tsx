@@ -160,7 +160,7 @@ export default function ArmsImportPage() {
     try {
       const res = await fetch("/api/inventory/import-arms", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
         body: JSON.stringify({ rows }),
       });
       const json = await res.json();

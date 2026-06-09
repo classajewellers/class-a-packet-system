@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
 import { packetTypeLabel, formatDateAU, formatAustralianPhone } from "@/lib/formatters";
 
 export const dynamic = "force-dynamic";
@@ -40,7 +40,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // ── Fetch packet ────────────────────────────────────────────────────────────
-  const supabase = createServerSupabaseClient();
+  const tenantId = req.headers.get('x-tenant-id') ?? ''
+  const supabase = await createTenantSupabaseClient(tenantId);
   const { data: packet, error: fetchError } = await supabase
     .from("packets")
     .select("*")

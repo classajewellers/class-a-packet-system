@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
 import { generateReferenceNumber, generateRepairTrackerNumber } from "@/lib/referenceNumber";
 import { parseCurrency, packetTypeLabel, formatDateAU, formatAustralianPhone } from "@/lib/formatters";
 import { PacketFormData, Packet, SubmitResponse } from "@/lib/types";
@@ -119,7 +119,9 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
 
   // ── 4. Insert into Supabase ────────────────────────────────────────────────
   console.log("[submit] Inserting into packets table...");
-  const supabase = createServerSupabaseClient();
+  const tenantId = req.headers.get('x-tenant-id') ?? ''
+  insertData.tenant_id = tenantId;
+  const supabase = await createTenantSupabaseClient(tenantId);
 
   const { data: insertedPacket, error: insertError } = await supabase
     .from("packets")
@@ -213,6 +215,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
             first_name:      packet.customer_first_name || null,
             last_name:       packet.customer_last_name  || null,
             last_visit_date: new Date().toISOString().split("T")[0],
+            tenant_id:       tenantId,
           },
           { onConflict: "email" }
         );
@@ -236,6 +239,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
       due_date: packet.due_date ?? null,
       stage_changed_at: new Date().toISOString(),
       valuation_required: packet.valuation_required ?? false,
+      tenant_id: tenantId,
     });
     if (workshopErr) {
       // workshop_jobs table may not exist yet — log but don't fail

@@ -4,7 +4,8 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 export const dynamic = 'force-dynamic'
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const supabase = createServerSupabaseClient()
+  const tenantId = _req.headers.get(\'x-tenant-id\') ?? \'\'
+  const supabase = await createTenantSupabaseClient(tenantId)
   const { data, error } = await supabase
     .from('inventory_purchase_invoices')
     .select(`*, supplier:inventory_suppliers(*), lines:inventory_purchase_lines(*, variant:inventory_variants(sku, metal_type, metal_karat))`)
@@ -17,7 +18,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const body = await req.json()
-    const supabase = createServerSupabaseClient()
+    const tenantId = _req.headers.get(\'x-tenant-id\') ?? \'\'
+    const supabase = await createTenantSupabaseClient(tenantId)
     const update: Record<string, unknown> = {}
     if (body.invoice_number !== undefined) update.invoice_number = body.invoice_number
     if (body.supplier_id !== undefined) update.supplier_id = body.supplier_id || null

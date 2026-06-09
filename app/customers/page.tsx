@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { formatDateAU, formatCurrency } from "@/lib/formatters";
+import { useUser } from "@/context/UserContext";
 
 interface CustomerRow {
   email: string;
@@ -31,6 +32,7 @@ function SkeletonRow() {
 }
 
 export default function CustomersPage() {
+  const { user } = useUser();
   const router = useRouter();
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,7 +43,7 @@ export default function CustomersPage() {
     try {
       const p = new URLSearchParams();
       if (q) p.set("search", q);
-      const res = await fetch(`/api/customers?${p}`, { cache: "no-store" });
+      const res = await fetch(`/api/customers?${p}`, { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       const json = await res.json();
       setCustomers(json.customers ?? []);
     } catch {

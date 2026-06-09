@@ -35,7 +35,7 @@ export default function WorkshopPage() {
 
   const fetchJobs = useCallback(async () => {
     try {
-      const res = await fetch("/api/workshop/jobs", { cache: "no-store" });
+      const res = await fetch("/api/workshop/jobs", { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       const json = await res.json();
       setJobs(json.jobs ?? []);
     } catch {
@@ -51,7 +51,7 @@ export default function WorkshopPage() {
     setJobs((prev) => prev.map((j) => j.id === jobId ? { ...j, stage: newStage, stage_changed_at: new Date().toISOString() } : j));
     await fetch(`/api/workshop/jobs/${jobId}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
       body: JSON.stringify({ stage: newStage }),
     });
   }

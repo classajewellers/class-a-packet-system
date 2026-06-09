@@ -89,7 +89,7 @@ export default function AdminPage() {
       if (params.from)   p.set("from",   params.from);
       if (params.to)     p.set("to",     params.to);
       // Deliberately no "type" param so API returns all packet types
-      const res = await fetch(`/api/admin/packets?${p}`, { cache: "no-store" });
+      const res = await fetch(`/api/admin/packets?${p}`, { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       if (!res.ok) throw new Error("Failed to fetch orders");
       const json = await res.json();
       setPackets(json.packets ?? []);
@@ -103,7 +103,7 @@ export default function AdminPage() {
   const fetchQuotes = useCallback(async () => {
     setQuotesLoading(true);
     try {
-      const res = await fetch("/api/quotes", { cache: "no-store" });
+      const res = await fetch("/api/quotes", { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       const json = await res.json();
       console.log("Quotes fetched:", json.quotes?.length, "| ok:", res.ok, "| error:", json.error ?? null);
       if (!res.ok) {
@@ -128,7 +128,7 @@ export default function AdminPage() {
       if (search) p.set("search", search);
       if (from)   p.set("from",   from);
       if (to)     p.set("to",     to);
-      const res = await fetch(`/api/admin/packets?${p}`, { cache: "no-store" });
+      const res = await fetch(`/api/admin/packets?${p}`, { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       if (!res.ok) return;
       const json = await res.json();
       if (json.packets) setPackets(json.packets);
@@ -137,7 +137,7 @@ export default function AdminPage() {
 
   const silentRefreshQuotes = useCallback(async () => {
     try {
-      const res = await fetch("/api/quotes", { cache: "no-store" });
+      const res = await fetch("/api/quotes", { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       const json = await res.json();
       if (!res.ok) {
         console.error("[admin] silentRefreshQuotes error:", json.error);
@@ -250,7 +250,7 @@ export default function AdminPage() {
       `Are you sure you want to delete ${selectedPacketIds.size} order${selectedPacketIds.size !== 1 ? "s" : ""}? This cannot be undone.`
     )) return;
     const ids = Array.from(selectedPacketIds);
-    await Promise.all(ids.map((id) => fetch(`/api/admin/packets/${id}`, { method: "DELETE" })));
+    await Promise.all(ids.map((id) => fetch(`/api/admin/packets/${id}`, { method: "DELETE", headers: { 'x-tenant-id': user?.tenantId ?? '' } })));
     setPackets((prev) => prev.filter((p) => !selectedPacketIds.has(p.id)));
     setSelectedPacketIds(new Set());
   }
@@ -261,7 +261,7 @@ export default function AdminPage() {
       `Are you sure you want to delete ${selectedQuoteIds.size} quote${selectedQuoteIds.size !== 1 ? "s" : ""}? This cannot be undone.`
     )) return;
     const ids = Array.from(selectedQuoteIds);
-    await Promise.all(ids.map((id) => fetch(`/api/quotes/${id}`, { method: "DELETE" })));
+    await Promise.all(ids.map((id) => fetch(`/api/quotes/${id}`, { method: "DELETE", headers: { 'x-tenant-id': user?.tenantId ?? '' } })));
     setQuotes((prev) => prev.filter((q) => !selectedQuoteIds.has(q.id)));
     setSelectedQuoteIds(new Set());
   }
@@ -280,7 +280,7 @@ export default function AdminPage() {
   ) {
     const res = await fetch("/api/retry", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
       body: JSON.stringify({ packetId, output }),
     });
     if (res.ok) fetchOrders({ search, from, to });

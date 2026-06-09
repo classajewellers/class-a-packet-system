@@ -3,9 +3,10 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const supabase = createServerSupabaseClient()
+    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const supabase = await createTenantSupabaseClient(tenantId)
     const { data, error } = await supabase
       .from('inventory_gold_prices')
       .select('*')
@@ -25,7 +26,8 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const supabase = createServerSupabaseClient()
+    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const supabase = await createTenantSupabaseClient(tenantId)
     const { data, error } = await supabase
       .from('inventory_gold_prices')
       .insert({

@@ -20,6 +20,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // ── PIN session cookie — vault_auth=1 set by the PIN login page ─────────
+  const vaultAuth = request.cookies.get("vault_auth")?.value;
+  if (vaultAuth === "1") {
+    return NextResponse.next();
+  }
+
   // ── All other routes: require a valid Supabase session ────────────────────
   let response = NextResponse.next({ request });
 

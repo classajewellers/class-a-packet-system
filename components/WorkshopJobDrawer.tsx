@@ -113,7 +113,7 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
     try {
       const res = await fetch(`/api/workshop/jobs/${local.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
         body: JSON.stringify(updates),
       });
       if (!res.ok) throw new Error("Save failed");
@@ -195,7 +195,7 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
     try {
       const res = await fetch(`/api/workshop/jobs/${job.id}`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
       });
       const json = await res.json();
       if (json.success) {

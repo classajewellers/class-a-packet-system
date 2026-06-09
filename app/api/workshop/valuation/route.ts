@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const { packet_id, item_specifications } = await req.json();
-    const supabase = createServerSupabaseClient();
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
+    const supabase = await createTenantSupabaseClient(tenantId);
 
     const { data, error } = await supabase
       .from("packets")
@@ -30,7 +31,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 export async function PATCH(req: NextRequest): Promise<NextResponse> {
   try {
     const { packet_id, item_specifications, estimated_replacement_value } = await req.json();
-    const supabase = createServerSupabaseClient();
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
+    const supabase = await createTenantSupabaseClient(tenantId);
 
     // Generate certificate number: VC-YYYYMMDD-XXXX
     const { data: countData, error: countErr } = await supabase.rpc("increment_valuation_counter", {

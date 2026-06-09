@@ -13,7 +13,9 @@ export async function GET(req: NextRequest) {
     const department = searchParams.get('department') ?? ''
     const lowstock = searchParams.get('lowstock') === 'true'
 
-    const supabase = createServerSupabaseClient()
+    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+
+    const supabase = await createTenantSupabaseClient(tenantId)
     let query = supabase
       .from('inventory_items')
       .select(`
@@ -62,7 +64,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const supabase = createServerSupabaseClient()
+    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const supabase = await createTenantSupabaseClient(tenantId)
 
     const { data, error } = await supabase
       .from('inventory_items')
@@ -85,6 +88,7 @@ export async function POST(req: NextRequest) {
         location_id: body.location_id || null,
         shopify_synced: body.shopify_synced ?? false,
         notes: body.notes || null,
+        tenant_id: tenantId,
       })
       .select()
       .single()

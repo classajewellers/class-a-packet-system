@@ -96,7 +96,7 @@ export default function QuoteFormPage() {
     try {
       const res = await fetch("/api/quotes/submit", {
         method:  "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
         body:    JSON.stringify({ formData }),
       });
       const json = await res.json();

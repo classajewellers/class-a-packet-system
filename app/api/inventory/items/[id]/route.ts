@@ -4,7 +4,8 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 export const dynamic = 'force-dynamic'
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const supabase = createServerSupabaseClient()
+  const tenantId = _req.headers.get(\'x-tenant-id\') ?? \'\'
+  const supabase = await createTenantSupabaseClient(tenantId)
   const { data, error } = await supabase
     .from('inventory_items')
     .select(`*, supplier:inventory_suppliers(*), location:inventory_locations(*), inventory_stock(quantity, location_id, inventory_locations(name))`)
@@ -17,7 +18,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const body = await req.json()
-    const supabase = createServerSupabaseClient()
+    const tenantId = _req.headers.get(\'x-tenant-id\') ?? \'\'
+    const supabase = await createTenantSupabaseClient(tenantId)
     const { data, error } = await supabase
       .from('inventory_items')
       .update({
@@ -52,7 +54,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const supabase = createServerSupabaseClient()
+    const tenantId = _req.headers.get(\'x-tenant-id\') ?? \'\'
+    const supabase = await createTenantSupabaseClient(tenantId)
     const { error } = await supabase.from('inventory_items').delete().eq('id', params.id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ success: true })

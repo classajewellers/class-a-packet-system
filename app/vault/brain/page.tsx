@@ -65,7 +65,7 @@ export default function VaultBrainPage() {
   const fetchReports = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/vault/reports", { cache: "no-store" });
+      const res = await fetch("/api/vault/reports", { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       const json = await res.json();
       setReports(json.reports ?? []);
     } catch {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
 import { upsertKlaviyoProfile, fireKlaviyoEvent, sendKlaviyoConfirmationEmail } from "@/lib/klaviyo";
 import { sendPodiumSMS } from "@/lib/podium";
 import { appendToSheet } from "@/lib/sheets";
@@ -18,7 +18,8 @@ export async function POST(req: NextRequest): Promise<NextResponse<RetryResponse
     return NextResponse.json({ success: false, error: "Missing packetId or output" }, { status: 400 });
   }
 
-  const supabase = createServerSupabaseClient();
+  const tenantId = req.headers.get('x-tenant-id') ?? ''
+  const supabase = await createTenantSupabaseClient(tenantId);
   const { data, error } = await supabase
     .from("packets")
     .select()

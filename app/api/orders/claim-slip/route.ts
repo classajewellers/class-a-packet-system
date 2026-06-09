@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
 import { sendClaimSlip } from "@/lib/claimSlipSender";
 import { Packet } from "@/lib/types";
 
@@ -18,7 +18,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "packet_id is required" }, { status: 400 });
   }
 
-  const supabase = createServerSupabaseClient();
+  const tenantId = req.headers.get('x-tenant-id') ?? ''
+  const supabase = await createTenantSupabaseClient(tenantId);
 
   // Fetch the full packet
   const { data: packet, error: fetchError } = await supabase

@@ -23,7 +23,7 @@ export default function SettingsPage() {
   const isAdmin = user?.role === "admin";
 
   const fetchGoldPrices = useCallback(async () => {
-    const res = await fetch("/api/inventory/gold-prices");
+    const res = await fetch("/api/inventory/gold-prices", { headers: { 'x-tenant-id': user?.tenantId ?? '' } });
     const json = await res.json();
     setGoldPrices(json.prices ?? []);
   }, []);
@@ -58,7 +58,7 @@ export default function SettingsPage() {
     if (!price || price <= 0) { alert("Enter a valid price"); return; }
     await fetch("/api/inventory/gold-prices", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
       body: JSON.stringify({ karat: editingKarat, price_per_gram: price, notes: editNotes }),
     });
     setEditingKarat(null);

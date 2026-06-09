@@ -18,6 +18,7 @@ interface SupplierDrawerProps {
 }
 
 function SupplierDrawer({ supplier, isNew, onClose, onSaved, isAdmin }: SupplierDrawerProps) {
+  const { user } = useUser();
   const [form, setForm] = useState({ ...BLANK_FORM });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -48,7 +49,7 @@ function SupplierDrawer({ supplier, isNew, onClose, onSaved, isAdmin }: Supplier
     };
     const url = isNew ? "/api/inventory/suppliers" : `/api/inventory/suppliers/${supplier!.id}`;
     const method = isNew ? "POST" : "PATCH";
-    const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const res = await fetch(url, { method, headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' }, body: JSON.stringify(payload) });
     const json = await res.json();
     setSaving(false);
     if (json.error) { setError(json.error); return; }
@@ -58,7 +59,7 @@ function SupplierDrawer({ supplier, isNew, onClose, onSaved, isAdmin }: Supplier
   async function handleDelete() {
     if (!supplier) return;
     if (!confirm(`Delete "${supplier.name}"? This cannot be undone.`)) return;
-    await fetch(`/api/inventory/suppliers/${supplier.id}`, { method: "DELETE" });
+    await fetch(`/api/inventory/suppliers/${supplier.id}`, { method: "DELETE", headers: { 'x-tenant-id': user?.tenantId ?? '' } });
     onSaved();
   }
 
@@ -139,7 +140,7 @@ export default function InventorySuppliersPage() {
 
   const fetchSuppliers = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/inventory/suppliers", { cache: "no-store" });
+    const res = await fetch("/api/inventory/suppliers", { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } });
     const json = await res.json();
     setSuppliers(json.suppliers ?? []);
     setLoading(false);
@@ -221,7 +222,7 @@ export default function InventorySuppliersPage() {
                       <button
                         onClick={async () => {
                           if (!confirm(`Delete "${s.name}"?`)) return;
-                          await fetch(`/api/inventory/suppliers/${s.id}`, { method: "DELETE" });
+                          await fetch(`/api/inventory/suppliers/${s.id}`, { method: "DELETE", headers: { 'x-tenant-id': user?.tenantId ?? '' } });
                           fetchSuppliers();
                         }}
                         style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", background: "#FEE2E2", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, color: "#991B1B" }}

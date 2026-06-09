@@ -83,7 +83,7 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
   async function patch(body: Record<string, unknown>) {
     const res = await fetch(`/api/quotes/${local.id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
       body: JSON.stringify(body),
     });
     if (!res.ok) return;
@@ -132,7 +132,7 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
     )) return;
     setDeleting(true);
     try {
-      const res = await fetch(`/api/quotes/${local.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/quotes/${local.id}`, { method: "DELETE", headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       const json = await res.json().catch(() => ({}));
       console.log("[delete quote] Response:", json);
       if (json.success === true) {

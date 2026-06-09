@@ -17,7 +17,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { table:
     if (!id || !field) {
       return NextResponse.json({ error: 'Missing id or field' }, { status: 400 })
     }
-    const supabase = createServerSupabaseClient()
+    const tenantId = request.headers.get(\'x-tenant-id\') ?? \'\'
+    const supabase = await createTenantSupabaseClient(tenantId)
     const { error } = await supabase
       .from(table)
       .update({ [field]: value, updated_at: new Date().toISOString() })

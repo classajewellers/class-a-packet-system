@@ -1036,7 +1036,7 @@ export default function ReportingPage() {
       const url = `/api/reporting?section=${section}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
       console.log('[reporting page] fetching section:', section, 'start:', start, 'end:', end);
       console.log('[reporting page] API URL:', url);
-      const res = await fetch(url, { cache: "no-store" });
+      const res = await fetch(url, { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       console.log('[reporting page] response status:', res.status);
       const json = await res.json();
       console.log('[reporting page] response data keys:', Object.keys(json));

@@ -7,7 +7,8 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const product_id = searchParams.get('product_id') ?? ''
-    const supabase = createServerSupabaseClient()
+    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const supabase = await createTenantSupabaseClient(tenantId)
     let query = supabase
       .from('inventory_variants')
       .select(`*, inventory_variant_stock(quantity)`)
@@ -31,7 +32,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const supabase = createServerSupabaseClient()
+    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const supabase = await createTenantSupabaseClient(tenantId)
     const { data, error } = await supabase
       .from('inventory_variants')
       .insert({

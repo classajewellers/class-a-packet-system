@@ -9,7 +9,9 @@ export async function GET(req: NextRequest) {
     const pieceId = searchParams.get('piece_id')
     if (!pieceId) return NextResponse.json({ error: 'piece_id is required' }, { status: 400 })
 
-    const supabase = createServerSupabaseClient()
+    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+
+    const supabase = await createTenantSupabaseClient(tenantId)
     const { data, error } = await supabase
       .from('inventory_piece_bom')
       .select(`*, supplier:inventory_suppliers(id, name)`)
@@ -35,7 +37,9 @@ export async function POST(req: NextRequest) {
     const unit_cost = body.unit_cost != null && body.unit_cost !== '' ? Number(body.unit_cost) : 0
     const locked_cost = Math.round(quantity * unit_cost * 100) / 100
 
-    const supabase = createServerSupabaseClient()
+    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+
+    const supabase = await createTenantSupabaseClient(tenantId)
     const { data, error } = await supabase
       .from('inventory_piece_bom')
       .insert({
@@ -48,6 +52,7 @@ export async function POST(req: NextRequest) {
         locked_cost,
         supplier_id: body.supplier_id || null,
         notes: body.notes || null,
+        tenant_id: tenantId,
       })
       .select(`*, supplier:inventory_suppliers(id, name)`)
       .single()

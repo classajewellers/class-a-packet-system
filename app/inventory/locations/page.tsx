@@ -49,6 +49,7 @@ interface LocationFormProps {
 // ─── form drawer ──────────────────────────────────────────────────────────────
 
 function LocationForm({ initial, prefillParentId, parentOptions, onClose, onSaved }: LocationFormProps) {
+  const { user } = useUser();
   const isNew = !initial;
   const parentLocked = prefillParentId != null && isNew;
 
@@ -97,7 +98,7 @@ function LocationForm({ initial, prefillParentId, parentOptions, onClose, onSave
     };
     const url = isNew ? "/api/inventory/locations" : `/api/inventory/locations/${initial!.id}`;
     const method = isNew ? "POST" : "PATCH";
-    const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const res = await fetch(url, { method, headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' }, body: JSON.stringify(payload) });
     const json = await res.json();
     setSaving(false);
     if (json.error) { setError(json.error); return; }
@@ -256,7 +257,7 @@ export default function InventoryLocationsPage() {
 
   const fetchLocations = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/inventory/locations", { cache: "no-store" });
+    const res = await fetch("/api/inventory/locations", { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } });
     const json = await res.json();
     setLocations(json.locations ?? []);
     setLoading(false);
@@ -270,7 +271,7 @@ export default function InventoryLocationsPage() {
       ? `Delete "${loc.name}" and its ${childCount} sub-location${childCount > 1 ? "s" : ""}? This cannot be undone.`
       : `Delete "${loc.name}"? This cannot be undone.`;
     if (!confirm(msg)) return;
-    await fetch(`/api/inventory/locations/${loc.id}`, { method: "DELETE" });
+    await fetch(`/api/inventory/locations/${loc.id}`, { method: "DELETE", headers: { 'x-tenant-id': user?.tenantId ?? '' } });
     fetchLocations();
   }
 

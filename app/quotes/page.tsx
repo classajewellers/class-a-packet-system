@@ -11,6 +11,7 @@ import { formatDateAU } from "@/lib/formatters";
 import nextDynamic from "next/dynamic";
 import QuoteDetailDrawer from "@/components/QuoteDetailDrawer";
 import QuoteStatsBar from "@/components/QuoteStatsBar";
+import { useUser } from "@/context/UserContext";
 
 const QuotePipelineBoard = nextDynamic(
   () => import("@/components/QuotePipelineBoard"),
@@ -26,6 +27,7 @@ function startOfMonthISO() {
 }
 
 export default function QuotesPage() {
+  const { user } = useUser();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
@@ -38,7 +40,7 @@ export default function QuotesPage() {
   const fetchQuotes = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/quotes", { cache: "no-store" });
+      const res = await fetch("/api/quotes", { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       const json = await res.json();
       if (!res.ok) { setQuotes([]); return; }
       setQuotes(json.quotes ?? []);
@@ -89,7 +91,7 @@ export default function QuotesPage() {
     if (selectedIds.size === 0) return;
     if (!window.confirm(`Delete ${selectedIds.size} quote${selectedIds.size !== 1 ? "s" : ""}?`)) return;
     const ids = Array.from(selectedIds);
-    await Promise.all(ids.map((id) => fetch(`/api/quotes/${id}`, { method: "DELETE" })));
+    await Promise.all(ids.map((id) => fetch(`/api/quotes/${id}`, { method: "DELETE", headers: { 'x-tenant-id': user?.tenantId ?? '' } })));
     setQuotes((prev) => prev.filter((q) => !selectedIds.has(q.id)));
     setSelectedIds(new Set());
   }

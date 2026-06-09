@@ -94,7 +94,7 @@ function NewOrderPageInner() {
     const fromQuoteId = searchParams.get("from_quote");
     if (!fromQuoteId) return;
 
-    fetch(`/api/quotes/${fromQuoteId}`)
+    fetch(`/api/quotes/${fromQuoteId}`, { headers: { 'x-tenant-id': user?.tenantId ?? '' } })
       .then((r) => r.json())
       .then((json: { quote?: Quote }) => {
         if (!json.quote) return;
@@ -220,7 +220,7 @@ function NewOrderPageInner() {
     try {
       const res = await fetch("/api/submit", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
         body: JSON.stringify({ formData }),
       });
       const json = await res.json();

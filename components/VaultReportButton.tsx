@@ -25,7 +25,7 @@ export default function VaultReportButton() {
       fd.append("description", description.trim());
       if (image) fd.append("image", image);
       if (user?.name) fd.append("submitted_by", user.name);
-      await fetch("/api/vault/submit", { method: "POST", body: fd });
+      await fetch("/api/vault/submit", { method: "POST", body: fd, headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       setSubmitted(true);
       setTimeout(() => {
         setOpen(false);

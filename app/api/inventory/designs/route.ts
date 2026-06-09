@@ -7,7 +7,8 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const search = searchParams.get('search') ?? ''
-    const supabase = createServerSupabaseClient()
+    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const supabase = await createTenantSupabaseClient(tenantId)
     let query = supabase
       .from('inventory_designs')
       .select(`*, pieces:inventory_pieces(id, sku, status)`)
@@ -29,7 +30,8 @@ export async function POST(req: NextRequest) {
     if (!body.name || typeof body.name !== 'string' || !body.name.trim()) {
       return NextResponse.json({ error: 'name is required' }, { status: 400 })
     }
-    const supabase = createServerSupabaseClient()
+    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const supabase = await createTenantSupabaseClient(tenantId)
     const { data, error } = await supabase
       .from('inventory_designs')
       .insert({
@@ -37,6 +39,7 @@ export async function POST(req: NextRequest) {
         category: body.category || null,
         description: body.description || null,
         notes: body.notes || null,
+        tenant_id: tenantId,
       })
       .select()
       .single()

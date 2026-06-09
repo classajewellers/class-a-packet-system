@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -44,7 +44,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     let imageUrl: string | null = null;
     if (image && image.size > 0) {
       try {
-        const supabase = createServerSupabaseClient();
+        const tenantId = req.headers.get('x-tenant-id') ?? ''
+        const supabase = await createTenantSupabaseClient(tenantId);
         const bytes = await image.arrayBuffer();
         const buffer = Buffer.from(bytes);
         const ext = image.name.split(".").pop() ?? "png";
@@ -62,7 +63,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     // Insert into vault_reports
-    const supabase = createServerSupabaseClient();
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
+    const supabase = await createTenantSupabaseClient(tenantId);
     const { data, error } = await supabase.from("vault_reports").insert({
       type,
       raw_description: description,
@@ -73,6 +75,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       tags: structured.tags,
       image_url: imageUrl,
       submitted_by: submittedBy ?? null,
+      tenant_id: tenantId,
     }).select().single();
 
     if (error) {

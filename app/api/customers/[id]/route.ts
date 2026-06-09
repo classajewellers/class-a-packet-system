@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +15,8 @@ export async function GET(
   }
 
   try {
-    const supabase = createServerSupabaseClient();
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
+    const supabase = await createTenantSupabaseClient(tenantId);
 
     const [packetsResult, quotesResult, notesResult] = await Promise.all([
       supabase
@@ -85,7 +86,8 @@ export async function PATCH(
 
   try {
     const body = await req.json();
-    const supabase = createServerSupabaseClient();
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
+    const supabase = await createTenantSupabaseClient(tenantId);
 
     // Upsert notes by email into customers table
     const { error } = await supabase

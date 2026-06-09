@@ -1,12 +1,13 @@
-import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { NextRequest, NextResponse } from "next/server";
+import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
-    const supabase = createServerSupabaseClient();
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
+    const supabase = await createTenantSupabaseClient(tenantId);
     const { data, error } = await supabase
       .from("vault_reports")
       .select("*")

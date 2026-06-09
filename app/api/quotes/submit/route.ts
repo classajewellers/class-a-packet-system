@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
 import { generateQuoteReferenceNumber } from "@/lib/referenceNumber";
 import { QuoteFormData, Quote } from "@/lib/types";
 
@@ -65,12 +65,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     status_changed_at:   now,
   };
 
+  const tenantId = req.headers.get('x-tenant-id') ?? ''
+  // @ts-expect-error tenant_id added dynamically
+  insertData.tenant_id = tenantId;
   console.log("[quotes/submit] Insert payload:", JSON.stringify(insertData));
 
   // ── 5. Create Supabase server client (service role — bypasses RLS) ─────────
-  let supabase: ReturnType<typeof createServerSupabaseClient>;
+  let supabase: Awaited<ReturnType<typeof createTenantSupabaseClient>>;
   try {
-    supabase = createServerSupabaseClient();
+    supabase = await createTenantSupabaseClient(tenantId);
     console.log("[quotes/submit] Supabase server client created (service role)");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -134,6 +137,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             first_name:      insertData.customer_first_name || null,
             last_name:       insertData.customer_last_name  || null,
             last_visit_date: new Date().toISOString().split("T")[0],
+            tenant_id:       tenantId,
           },
           { onConflict: "email" }
         );

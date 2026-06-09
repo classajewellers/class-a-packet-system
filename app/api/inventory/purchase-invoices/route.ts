@@ -8,7 +8,8 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const supplier_id = searchParams.get('supplier_id') ?? ''
     const status = searchParams.get('status') ?? ''
-    const supabase = createServerSupabaseClient()
+    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const supabase = await createTenantSupabaseClient(tenantId)
     let query = supabase
       .from('inventory_purchase_invoices')
       .select(`*, supplier:inventory_suppliers(*)`)
@@ -26,7 +27,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const supabase = createServerSupabaseClient()
+    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const supabase = await createTenantSupabaseClient(tenantId)
     const { data, error } = await supabase
       .from('inventory_purchase_invoices')
       .insert({

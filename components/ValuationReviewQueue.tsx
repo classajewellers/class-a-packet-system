@@ -1,17 +1,19 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useUser } from "@/context/UserContext";
 import { Packet } from "@/lib/types";
 import { formatDateAU } from "@/lib/formatters";
 import PacketDetailDrawer from "./PacketDetailDrawer";
 
 export default function ValuationReviewQueue() {
+  const { user } = useUser();
   const [packets, setPackets] = useState<Packet[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Packet | null>(null);
 
   useEffect(() => {
-    fetch("/api/admin/packets?valuation_status=pending_review", { cache: "no-store" })
+    fetch("/api/admin/packets?valuation_status=pending_review", { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } })
       .then((r) => r.json())
       .then((json) => {
         // Filter client-side for pending_review

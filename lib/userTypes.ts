@@ -10,6 +10,8 @@ export interface LoggedInUser {
   email: string;
   initials: string;
   loggedInAt: string;
+  tenantId: string | null;
+  tenantSlug: string | null;
 }
 
 /** Returns true for roles that can access manager-level features.

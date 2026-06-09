@@ -6,8 +6,10 @@ import { useState, useEffect, useCallback } from "react";
 import { Packet } from "@/lib/types";
 import { formatDateAU } from "@/lib/formatters";
 import PacketDetailDrawer from "@/components/PacketDetailDrawer";
+import { useUser } from "@/context/UserContext";
 
 export default function OnlinePage() {
+  const { user } = useUser();
   const [packets, setPackets] = useState<Packet[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Packet | null>(null);
@@ -19,7 +21,7 @@ export default function OnlinePage() {
       const p = new URLSearchParams();
       p.set("type", "online_order");
       if (search) p.set("search", search);
-      const res = await fetch(`/api/admin/packets?${p}`, { cache: "no-store" });
+      const res = await fetch(`/api/admin/packets?${p}`, { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       const json = await res.json();
       setPackets(json.packets ?? []);
     } catch {
@@ -47,7 +49,7 @@ export default function OnlinePage() {
   async function handleRetry(packetId: string, output: "klaviyo" | "email" | "sms" | "sheets" | "label") {
     await fetch("/api/retry", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
       body: JSON.stringify({ packetId, output }),
     });
     fetchOnline();

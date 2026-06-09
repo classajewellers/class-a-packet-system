@@ -5,7 +5,8 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const supabase = createServerSupabaseClient()
+    const tenantId = _req.headers.get(\'x-tenant-id\') ?? \'\'
+    const supabase = await createTenantSupabaseClient(tenantId)
     const { data, error } = await supabase
       .from('inventory_pieces')
       .select(`*, location:inventory_locations(id, name, parent_id)`)
@@ -41,7 +42,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (body.status !== undefined) set('status', body.status || 'in_stock')
     if (body.notes !== undefined) set('notes', body.notes || null)
 
-    const supabase = createServerSupabaseClient()
+    const tenantId = _req.headers.get(\'x-tenant-id\') ?? \'\'
+
+    const supabase = await createTenantSupabaseClient(tenantId)
     const { data, error } = await supabase
       .from('inventory_pieces')
       .update(update)
@@ -57,7 +60,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const supabase = createServerSupabaseClient()
+    const tenantId = _req.headers.get(\'x-tenant-id\') ?? \'\'
+    const supabase = await createTenantSupabaseClient(tenantId)
     const { error } = await supabase.from('inventory_pieces').delete().eq('id', params.id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ success: true })

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useUser } from "@/context/UserContext";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default function AIAssistant({ open, onClose }: Props) {
+  const { user } = useUser();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -42,7 +44,7 @@ export default function AIAssistant({ open, onClose }: Props) {
     try {
       const res = await fetch("/api/assistant", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
         body: JSON.stringify({ messages: updated }),
       });
       const json = await res.json();

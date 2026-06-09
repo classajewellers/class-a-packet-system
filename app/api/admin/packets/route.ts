@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
 import { Packet, AdminPacketsQuery } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +15,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     offset: parseInt(searchParams.get("offset") ?? "0"),
   };
 
-  const supabase = createServerSupabaseClient();
+  const tenantId = req.headers.get('x-tenant-id') ?? ''
+  const supabase = await createTenantSupabaseClient(tenantId);
   let dbQuery = supabase
     .from("packets")
     .select("*")
@@ -72,7 +73,8 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
   const { id, updates } = body;
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
-  const supabase = createServerSupabaseClient();
+  const tenantId = req.headers.get('x-tenant-id') ?? ''
+  const supabase = await createTenantSupabaseClient(tenantId);
   const { data, error } = await supabase
     .from("packets")
     .update(updates)

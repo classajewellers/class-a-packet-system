@@ -12,13 +12,26 @@ import { LoggedInUser, UserRole } from "@/lib/userTypes";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
+// ── PIN session storage key ───────────────────────────────────────────────────
+const PIN_SESSION_KEY = "vault_pin_session";
+
+export interface PinSessionData {
+  name: string;
+  role: UserRole;
+  email: string;
+  initials: string;
+  tenantId: string;
+  tenantSlug: string;
+}
+
 interface UserContextType {
   user: LoggedInUser | null;
   hydrated: boolean;
-  /** True while the role is being fetched from the profiles table.
-   *  Role-gated UI should render a skeleton instead of role-dependent content. */
+  /** True while the role is being fetched from the profiles table. */
   roleLoading: boolean;
   logout: () => Promise<void>;
+  /** Called by the PIN login page after successful verification. */
+  loginWithPin: (data: PinSessionData) => void;
 }
 
 const UserContext = createContext<UserContextType>({
@@ -26,6 +39,7 @@ const UserContext = createContext<UserContextType>({
   hydrated: false,
   roleLoading: true,
   logout: async () => {},
+  loginWithPin: () => {},
 });
 
 function deriveInitials(name: string): string {
@@ -38,49 +52,80 @@ function deriveInitials(name: string): string {
     .slice(0, 2);
 }
 
+// ── Class A default tenant ID ────────────────────────────────────────────────
+const DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001";
+const DEFAULT_TENANT_SLUG = "classa";
+
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<LoggedInUser | null>(null);
   const [hydrated, setHydrated] = useState(false);
-  // True until the profile row has been read at least once.
   const [roleLoading, setRoleLoading] = useState(true);
 
   const supabaseRef = useRef(createBrowserSupabaseClient());
-
-  // Generation counter — incremented on every loadProfile call.
-  // Any completion whose gen doesn't match the latest is discarded,
-  // which prevents a slow/timed-out first call from overwriting a faster second call.
   const loadGenRef = useRef(0);
-
-  // Once the profile has been fetched successfully at least once, we never
-  // re-show skeleton bars — subsequent refreshes (TOKEN_REFRESHED etc.) happen
-  // silently in the background while keeping the existing nav visible.
   const hasLoadedOnce = useRef(false);
+
+  // ── PIN session helper ────────────────────────────────────────────────────
+
+  function loginWithPin(data: PinSessionData) {
+    const session: LoggedInUser = {
+      id: `pin-${data.email}`,
+      name: data.name,
+      role: data.role,
+      email: data.email,
+      initials: data.initials,
+      loggedInAt: new Date().toISOString(),
+      tenantId: data.tenantId,
+      tenantSlug: data.tenantSlug,
+    };
+    try {
+      localStorage.setItem(PIN_SESSION_KEY, JSON.stringify(session));
+      // Set a simple cookie the middleware can read
+      document.cookie = "vault_auth=1; path=/; max-age=86400; SameSite=Lax";
+    } catch { /* localStorage may be unavailable in some envs */ }
+    setUser(session);
+    hasLoadedOnce.current = true;
+    setRoleLoading(false);
+    setHydrated(true);
+  }
+
+  // ── Main effect ───────────────────────────────────────────────────────────
 
   useEffect(() => {
     const supabase = supabaseRef.current;
     let cancelled = false;
 
+    // 1. Check localStorage for a PIN session first
+    try {
+      const stored = localStorage.getItem(PIN_SESSION_KEY);
+      if (stored) {
+        const parsed: LoggedInUser = JSON.parse(stored);
+        if (parsed?.id && parsed?.name) {
+          setUser(parsed);
+          hasLoadedOnce.current = true;
+          setRoleLoading(false);
+          setHydrated(true);
+          return; // PIN session found — skip Supabase auth check
+        }
+      }
+    } catch { /* ignore */ }
+
+    // 2. Fall back to Supabase session
     async function loadProfile(userId: string, email: string) {
-      // Claim a generation slot. If another call starts before this one
-      // finishes, our gen will be stale and we'll discard the result.
       const gen = ++loadGenRef.current;
-      // Only show skeleton bars on the very first load. After that, re-fetches
-      // (token refresh, window focus, etc.) update the role silently so the
-      // sidebar never flashes back to skeleton bars mid-session.
       if (!hasLoadedOnce.current) {
         setRoleLoading(true);
       }
 
-      let profileData: { full_name?: string | null; role?: string | null } | null = null;
+      let profileData: { full_name?: string | null; role?: string | null; tenant_id?: string | null } | null = null;
 
       try {
         const queryPromise = supabase
           .from("profiles")
-          .select("full_name, role")
+          .select("full_name, role, tenant_id")
           .eq("id", userId)
           .single();
 
-        // 8 s timeout — generous but bounded
         const timeoutPromise = new Promise<{ data: null }>((resolve) =>
           setTimeout(() => resolve({ data: null }), 8000)
         );
@@ -91,11 +136,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
         // Network-level exception — profileData stays null
       }
 
-      // Discard stale results (another loadProfile call won the race).
       if (cancelled || gen !== loadGenRef.current) return;
 
       if (profileData) {
-        // Profile row found — use confirmed role (or "staff" if role column is empty)
         setUser({
           id: userId,
           name: profileData.full_name || email,
@@ -103,14 +146,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
           email,
           initials: deriveInitials(profileData.full_name || email),
           loggedInAt: new Date().toISOString(),
+          tenantId: profileData.tenant_id ?? DEFAULT_TENANT_ID,
+          tenantSlug: DEFAULT_TENANT_SLUG,
         });
       } else {
-        // Profile not found or timed out.
-        // Set user with null role so the sidebar knows we're still uncertain —
-        // never guess "staff" when we haven't confirmed from the DB.
         setUser((prev) =>
           prev
-            ? { ...prev } // keep existing user/role if we already had one
+            ? { ...prev }
             : {
                 id: userId,
                 name: email,
@@ -118,6 +160,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 email,
                 initials: deriveInitials(email),
                 loggedInAt: new Date().toISOString(),
+                tenantId: DEFAULT_TENANT_ID,
+                tenantSlug: DEFAULT_TENANT_SLUG,
               }
         );
       }
@@ -126,7 +170,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setRoleLoading(false);
     }
 
-    // ── Initial session check ──────────────────────────────────────────────────
     (async () => {
       try {
         const { data } = await supabase.auth.getSession();
@@ -134,7 +177,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
         if (data.session?.user) {
           await loadProfile(data.session.user.id, data.session.user.email ?? "");
         } else {
-          // No session — nothing to load
           setRoleLoading(false);
         }
       } catch (err) {
@@ -145,7 +187,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
       }
     })();
 
-    // ── Auth state listener ────────────────────────────────────────────────────
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, session: Session | null) => {
@@ -160,11 +201,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
           await loadProfile(session.user.id, session.user.email ?? "");
         }
       } else if (event === "SIGNED_OUT") {
-        loadGenRef.current++; // invalidate any in-flight loadProfile
+        loadGenRef.current++;
         setUser(null);
         setRoleLoading(false);
       }
-      // INITIAL_SESSION is ignored — getSession() handles the initial state.
     });
 
     return () => {
@@ -174,14 +214,20 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function logout() {
-    loadGenRef.current++; // invalidate in-flight loads
+    loadGenRef.current++;
+    // Clear PIN session
+    try {
+      localStorage.removeItem(PIN_SESSION_KEY);
+      document.cookie = "vault_auth=; path=/; max-age=0; SameSite=Lax";
+    } catch { /* ignore */ }
+    // Clear Supabase session
     await supabaseRef.current.auth.signOut();
     setUser(null);
     setRoleLoading(false);
   }
 
   return (
-    <UserContext.Provider value={{ user, hydrated, roleLoading, logout }}>
+    <UserContext.Provider value={{ user, hydrated, roleLoading, logout, loginWithPin }}>
       {children}
     </UserContext.Provider>
   );

@@ -33,7 +33,7 @@ export default function AdminUsersPage() {
   async function fetchUsers() {
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/users");
+      const res = await fetch("/api/admin/users", { headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       const json = await res.json();
       if (json.users) setUsers(json.users);
     } catch {
@@ -55,7 +55,7 @@ export default function AdminUsersPage() {
     try {
       const res = await fetch("/api/admin/users", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
         body: JSON.stringify({
           email: inviteEmail.trim().toLowerCase(),
           full_name: inviteName.trim(),

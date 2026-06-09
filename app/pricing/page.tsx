@@ -39,7 +39,7 @@ export default function PricingPage() {
   }, [hydrated, user, router]);
 
   useEffect(() => {
-    fetch('/api/pricing').then(r => r.json()).then(json => {
+    fetch('/api/pricing', { headers: { 'x-tenant-id': user?.tenantId ?? '' } }).then(r => r.json()).then(json => {
       setMetalRates(json.metalRates ?? []);
       setFixedCosts(json.fixedCosts ?? []);
       setMarginBrackets(json.marginBrackets ?? []);
@@ -52,7 +52,7 @@ export default function PricingPage() {
     setSaveStates(s => ({ ...s, [id]: 'saving' }));
     const res = await fetch(`/api/pricing/${tableName}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': user?.tenantId ?? '' },
       body: JSON.stringify({ id, field, value }),
     });
     if (res.ok) {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +8,8 @@ export async function GET(
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
   try {
-    const supabase = createServerSupabaseClient();
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
+    const supabase = await createTenantSupabaseClient(tenantId);
     const { data, error } = await supabase
       .from("workshop_jobs")
       .select("*")
@@ -28,7 +29,8 @@ export async function PATCH(
 ): Promise<NextResponse> {
   try {
     const body = await req.json();
-    const supabase = createServerSupabaseClient();
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
+    const supabase = await createTenantSupabaseClient(tenantId);
 
     const updates: Record<string, unknown> = { ...body };
 
@@ -57,7 +59,8 @@ export async function DELETE(
 ): Promise<NextResponse> {
   console.log("[DELETE workshop job] id:", params.id);
   try {
-    const supabase = createServerSupabaseClient();
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
+    const supabase = await createTenantSupabaseClient(tenantId);
     const { error } = await supabase
       .from("workshop_jobs")
       .delete()

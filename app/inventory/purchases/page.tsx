@@ -56,7 +56,7 @@ export default function PurchasesPage() {
       const params = new URLSearchParams();
       if (filterStatus) params.set("status", filterStatus);
       if (filterSupplier) params.set("supplier_id", filterSupplier);
-      const res = await fetch("/api/inventory/purchase-invoices?" + params.toString());
+      const res = await fetch("/api/inventory/purchase-invoices?" + params.toString(), { headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       const json = await res.json();
       setInvoices(json.invoices ?? []);
     } finally {
@@ -65,13 +65,13 @@ export default function PurchasesPage() {
   }, [filterStatus, filterSupplier]);
 
   const fetchSuppliers = useCallback(async () => {
-    const res = await fetch("/api/inventory/suppliers");
+    const res = await fetch("/api/inventory/suppliers", { headers: { 'x-tenant-id': user?.tenantId ?? '' } });
     const json = await res.json();
     setSuppliers(json.suppliers ?? []);
   }, []);
 
   const fetchVariants = useCallback(async () => {
-    const res = await fetch("/api/inventory/variants");
+    const res = await fetch("/api/inventory/variants", { headers: { 'x-tenant-id': user?.tenantId ?? '' } });
     const json = await res.json();
     setVariants(json.variants ?? []);
   }, []);
@@ -80,7 +80,7 @@ export default function PurchasesPage() {
   useEffect(() => { fetchSuppliers(); fetchVariants(); }, [fetchSuppliers, fetchVariants]);
 
   const openInvoice = async (id: string) => {
-    const res = await fetch(`/api/inventory/purchase-invoices/${id}`);
+    const res = await fetch(`/api/inventory/purchase-invoices/${id}`, { headers: { 'x-tenant-id': user?.tenantId ?? '' } });
     const json = await res.json();
     if (json.invoice) {
       setDrawerInvoice(json.invoice);
@@ -192,7 +192,7 @@ export default function PurchasesPage() {
           onClose={() => { setDrawerOpen(false); setDrawerInvoice(null); fetchInvoices(); }}
           onChanged={async () => {
             await fetchInvoices();
-            const res = await fetch(`/api/inventory/purchase-invoices/${drawerInvoice.id}`);
+            const res = await fetch(`/api/inventory/purchase-invoices/${drawerInvoice.id}`, { headers: { 'x-tenant-id': user?.tenantId ?? '' } });
             const json = await res.json();
             if (json.invoice) setDrawerInvoice(json.invoice);
           }}
@@ -204,6 +204,7 @@ export default function PurchasesPage() {
 
 // ── NewInvoiceModal ────────────────────────────────────────────────────────
 function NewInvoiceModal({ suppliers, onClose, onCreated }: { suppliers: InventorySupplier[]; onClose: () => void; onCreated: (id: string) => void }) {
+  const { user } = useUser();
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [supplierId, setSupplierId] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
@@ -217,7 +218,7 @@ function NewInvoiceModal({ suppliers, onClose, onCreated }: { suppliers: Invento
     try {
       const res = await fetch("/api/inventory/purchase-invoices", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
         body: JSON.stringify({
           invoice_number: invoiceNumber,
           supplier_id: supplierId || null,
@@ -269,12 +270,13 @@ function InvoiceDrawer({ invoice, suppliers, variants, onClose, onChanged }: {
   onClose: () => void;
   onChanged: () => void;
 }) {
+  const { user } = useUser();
   const lines = invoice.lines ?? [];
 
   const updateStatus = async (status: InvoiceStatus) => {
     await fetch(`/api/inventory/purchase-invoices/${invoice.id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
       body: JSON.stringify({ status }),
     });
     onChanged();
@@ -283,7 +285,7 @@ function InvoiceDrawer({ invoice, suppliers, variants, onClose, onChanged }: {
   const addLine = async () => {
     await fetch("/api/inventory/purchase-lines", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
       body: JSON.stringify({
         invoice_id: invoice.id,
         description: "New item",
@@ -364,6 +366,7 @@ function InvoiceDrawer({ invoice, suppliers, variants, onClose, onChanged }: {
 
 // ── LineEditor ─────────────────────────────────────────────────────────────
 function LineEditor({ line, variants, onChanged }: { line: InventoryPurchaseLine; variants: InventoryVariant[]; onChanged: () => void }) {
+  const { user } = useUser();
   const [description, setDescription] = useState(line.description ?? "");
   const [componentType, setComponentType] = useState<string>(line.component_type ?? "");
   const [quantity, setQuantity] = useState(line.quantity?.toString() ?? "1");
@@ -381,7 +384,7 @@ function LineEditor({ line, variants, onChanged }: { line: InventoryPurchaseLine
     try {
       await fetch(`/api/inventory/purchase-lines/${line.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
         body: JSON.stringify({
           description,
           component_type: componentType || null,
@@ -401,7 +404,7 @@ function LineEditor({ line, variants, onChanged }: { line: InventoryPurchaseLine
 
   const remove = async () => {
     if (!confirm("Delete this line?")) return;
-    await fetch(`/api/inventory/purchase-lines/${line.id}`, { method: "DELETE" });
+    await fetch(`/api/inventory/purchase-lines/${line.id}`, { method: "DELETE", headers: { 'x-tenant-id': user?.tenantId ?? '' } });
     onChanged();
   };
 
@@ -410,7 +413,7 @@ function LineEditor({ line, variants, onChanged }: { line: InventoryPurchaseLine
     setIsFaulty(newFaulty);
     await fetch(`/api/inventory/purchase-lines/${line.id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
       body: JSON.stringify({ is_faulty: newFaulty }),
     });
     onChanged();

@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
+import { useUser } from "@/context/UserContext";
 import { Packet, ItemSpecifications } from "@/lib/types";
 import { packetTypeLabel, formatDateAU } from "@/lib/formatters";
 import { generatePrintHTML } from "@/lib/labelGenerator";
@@ -62,6 +63,7 @@ function Label({ children, bold }: { children: React.ReactNode; bold?: boolean }
 }
 
 export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate }: Props) {
+  const { user } = useUser();
   const [local, setLocal] = useState<Packet>(packet);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [reprintLoading, setReprintLoading] = useState(false);
@@ -99,7 +101,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
     try {
       const res = await fetch(`/api/admin/packets/${local.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
         body: JSON.stringify(updates),
       });
       if (!res.ok) {
@@ -136,7 +138,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
     try {
       const res = await fetch(`/api/admin/packets/${local.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
         body: JSON.stringify({ [field]: value }),
       });
       const json = await res.json() as { packet?: Packet };
@@ -158,7 +160,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
     try {
       const url = `/api/admin/packets/${local.id}`
       console.log('[handleDelete] DELETE', url)
-      const res = await fetch(url, { method: 'DELETE' })
+      const res = await fetch(url, { method: 'DELETE', headers: { 'x-tenant-id': user?.tenantId ?? '' } })
       console.log('[handleDelete] Response status:', res.status)
       const json = await res.json()
       console.log('[handleDelete] Response body:', json)
@@ -201,7 +203,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
     try {
       const res = await fetch("/api/notifications/send", {
         method:  "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
         body:    JSON.stringify({ packet_id: local.id, template: notifTemplate, channel }),
       });
       const json = await res.json();
@@ -232,7 +234,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
       console.log("[save] Saving articles:", local.articles);
       await fetch(`/api/admin/packets/${local.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
         body: JSON.stringify({
           articles:         local.articles,
           instructions:     local.instructions,
@@ -248,7 +250,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
       // ── Step 2: Fetch completely fresh data (timestamp busts any CDN/edge cache) ──
       const res = await fetch(
         `/api/admin/packets/${local.id}?t=${Date.now()}`,
-        { cache: "no-store", headers: { "Cache-Control": "no-cache", "Pragma": "no-cache" } }
+        { cache: "no-store", headers: { "Cache-Control": "no-cache", "Pragma": "no-cache", 'x-tenant-id': user?.tenantId ?? '' } }
       );
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
       const json = await res.json();
@@ -290,7 +292,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
   async function handleSubmitForReview(specs: ItemSpecifications) {
     await fetch("/api/workshop/valuation", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
       body: JSON.stringify({ packet_id: local.id, item_specifications: specs }),
     });
     setLocal((prev) => ({ ...prev, valuation_status: "pending_review", item_specifications: specs as unknown as Record<string, unknown> }));
@@ -300,7 +302,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
     console.log("[PacketDetailDrawer] handleApproveValuation called", { packetId: local.id, erv });
     const res = await fetch("/api/workshop/valuation", {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
       body: JSON.stringify({ packet_id: local.id, item_specifications: specs, estimated_replacement_value: erv }),
     });
     const json = await res.json() as { packet: typeof local; error?: string };
@@ -336,7 +338,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
       // 1. Patch Supabase — save collected_date and product_category
       const patchRes = await fetch(`/api/admin/packets/${local.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
         body: JSON.stringify({ collected_date: today, product_category: collectCategory }),
       });
       if (!patchRes.ok) throw new Error("Failed to save collected date");
@@ -354,7 +356,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
       try {
         const klaviyoRes = await fetch("/api/klaviyo/sync", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
           body: JSON.stringify({
             customer_email:      local.customer_email,
             customer_phone:      local.customer_phone,

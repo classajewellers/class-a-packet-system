@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useUser } from "@/context/UserContext";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { WorkshopJob } from "@/lib/types";
 import { WorkshopTrack, TRACK_LABELS, TRACK_STAGES, STAGE_LABELS, STAGE_COLOURS, stagesForFilter, trackFromJobType } from "@/lib/workshopConfig";
@@ -54,6 +55,7 @@ const TRACK_FILTER_OPTIONS: { value: TrackFilter; label: string }[] = [
 ];
 
 export default function WorkshopBoard({ jobs, onStageChange, onRefresh, onJobDeleted }: Props) {
+  const { user } = useUser();
   const [localJobs, setLocalJobs] = useState<WorkshopJob[]>(jobs);
   const [trackFilter, setTrackFilter] = useState<TrackFilter>("all");
   const [valuationFilter, setValuationFilter] = useState(false);
@@ -92,7 +94,7 @@ export default function WorkshopBoard({ jobs, onStageChange, onRefresh, onJobDel
     try {
       await fetch("/api/workshop/jobs", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
         body: JSON.stringify({ ...newJobForm, stage }),
       });
       setAddingToStage(null);

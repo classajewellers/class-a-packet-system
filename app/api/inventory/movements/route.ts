@@ -42,7 +42,8 @@ async function updateStock(
     const { error } = await supabase
       .from('inventory_stock')
       .insert({ item_id, location_id, quantity: delta, updated_at: new Date().toISOString() })
-    return error?.message ?? null
+    return error?.message ?? null,
+    tenant_id: tenantId,
   }
 }
 
@@ -58,7 +59,9 @@ export async function GET(req: NextRequest) {
     const to_date       = searchParams.get('to_date')
     const limit         = Math.min(200, parseInt(searchParams.get('limit') ?? '50'))
 
-    const supabase = createServerSupabaseClient()
+    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+
+    const supabase = await createTenantSupabaseClient(tenantId)
 
     let query = supabase
       .from('inventory_movements')
@@ -101,7 +104,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'item_id, movement_type and quantity are required' }, { status: 400 })
     }
 
-    const supabase = createServerSupabaseClient()
+    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+
+    const supabase = await createTenantSupabaseClient(tenantId)
 
     // 1. Insert the movement record
     const { data: movement, error: movErr } = await supabase
@@ -114,6 +119,7 @@ export async function POST(req: NextRequest) {
         movement_type,
         reference: reference || null,
         notes:     notes     || null,
+        tenant_id: tenantId,
       })
       .select()
       .single()

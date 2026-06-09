@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useUser } from "@/context/UserContext";
 import {
   DragDropContext,
   Droppable,
@@ -44,6 +45,7 @@ function sortCards(cards: Quote[]): Quote[] {
 }
 
 export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate, showConverted = true }: Props) {
+  const { user } = useUser();
   // Local copy for optimistic updates during drag
   const [localQuotes, setLocalQuotes] = useState<Quote[]>(quotes ?? []);
   // Track whether we currently have a pending PATCH (prevents parent sync overwriting optimistic state)
@@ -95,7 +97,7 @@ export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate, sho
     try {
       const res = await fetch(`/api/quotes/${draggableId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
         body: JSON.stringify({ status: newStage }),
       });
 

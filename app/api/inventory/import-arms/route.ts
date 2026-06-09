@@ -78,7 +78,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'rows is required' }, { status: 400 })
     }
 
-    const supabase = createServerSupabaseClient()
+    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+
+    const supabase = await createTenantSupabaseClient(tenantId)
 
     // Step 1: Load existing data
     const [designsRes, suppliersRes, locationsRes] = await Promise.all([
@@ -145,6 +147,7 @@ export async function POST(req: NextRequest) {
             category,
             description,
             notes: null,
+            tenant_id: tenantId,
           })
           .select('id')
           .single()
@@ -178,6 +181,7 @@ export async function POST(req: NextRequest) {
           other_specs: otherSpecs,
           status: 'in_stock',
           notes,
+          tenant_id: tenantId,
         })
         .select('id')
         .single()
@@ -235,6 +239,7 @@ export async function POST(req: NextRequest) {
           locked_cost: lockedCost,
           supplier_id: supplierId,
           notes: null,
+          tenant_id: tenantId,
         })
 
       if (bomErr) {

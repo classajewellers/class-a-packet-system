@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const search = (searchParams.get("search") ?? "").toLowerCase().trim();
 
   try {
-    const supabase = createServerSupabaseClient();
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
+    const supabase = await createTenantSupabaseClient(tenantId);
 
     // Fetch packets — only columns needed for aggregation
     const { data: packets, error: pErr } = await supabase

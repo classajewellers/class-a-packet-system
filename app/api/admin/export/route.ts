@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
 import { Packet, AdminPacketsQuery } from "@/lib/types";
 import { formatDateAU, formatCurrency, packetTypeLabel } from "@/lib/formatters";
 
@@ -80,7 +80,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     to: searchParams.get("to") ?? undefined,
   };
 
-  const supabase = createServerSupabaseClient();
+  const tenantId = req.headers.get('x-tenant-id') ?? ''
+  const supabase = await createTenantSupabaseClient(tenantId);
   let dbQuery = supabase
     .from("packets")
     .select("*")

@@ -190,7 +190,7 @@ export default function StockPage() {
     setPageError(null);
     try {
       const url = "/api/inventory/designs" + (search ? `?search=${encodeURIComponent(search)}` : "");
-      const res = await fetch(url);
+      const res = await fetch(url, { headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       const json = await res.json();
       if (!res.ok || json.error) {
         setPageError(json.error || `Failed to load designs (${res.status})`);
@@ -207,7 +207,7 @@ export default function StockPage() {
 
   const fetchLocations = useCallback(async () => {
     try {
-      const res = await fetch("/api/inventory/locations");
+      const res = await fetch("/api/inventory/locations", { headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       const json = await res.json();
       if (res.ok && !json.error) setLocations(json.locations ?? []);
     } catch { /* ignore */ }
@@ -215,7 +215,7 @@ export default function StockPage() {
 
   const fetchSuppliers = useCallback(async () => {
     try {
-      const res = await fetch("/api/inventory/suppliers");
+      const res = await fetch("/api/inventory/suppliers", { headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       const json = await res.json();
       if (res.ok && !json.error) setSuppliers(json.suppliers ?? []);
     } catch { /* ignore */ }
@@ -223,7 +223,7 @@ export default function StockPage() {
 
   const fetchGoldPrices = useCallback(async () => {
     try {
-      const res = await fetch("/api/inventory/gold-prices");
+      const res = await fetch("/api/inventory/gold-prices", { headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       const json = await res.json();
       if (res.ok && !json.error) setGoldPrices(json.latest ?? {});
     } catch { /* ignore */ }
@@ -232,7 +232,7 @@ export default function StockPage() {
   const fetchOneOffPieces = useCallback(async () => {
     setOneOffLoading(true);
     try {
-      const res = await fetch("/api/inventory/pieces?oneoff=true");
+      const res = await fetch("/api/inventory/pieces?oneoff=true", { headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       const json = await res.json();
       if (res.ok && !json.error) setOneOffPieces(json.pieces ?? []);
     } catch { /* ignore */ } finally {
@@ -251,7 +251,7 @@ export default function StockPage() {
   // ── expand / pieces cache ───────────────────────────────────────────────
   const fetchPiecesForDesign = useCallback(async (designId: string) => {
     try {
-      const res = await fetch(`/api/inventory/pieces?design_id=${encodeURIComponent(designId)}`);
+      const res = await fetch(`/api/inventory/pieces?design_id=${encodeURIComponent(designId)}`, { headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       const json = await res.json();
       if (!res.ok || json.error) {
         setPageError(json.error || "Failed to load pieces");
@@ -629,6 +629,7 @@ function NewDesignModal({
   onClose: () => void;
   onCreated: (d: InventoryDesign) => void;
 }) {
+  const { user } = useUser();
   const [name, setName] = useState("");
   const [category, setCategory] = useState<string>("");
   const [description, setDescription] = useState("");
@@ -643,7 +644,7 @@ function NewDesignModal({
     try {
       const res = await fetch("/api/inventory/designs", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
         body: JSON.stringify({ name, category: category || null, description, notes }),
       });
       const json = await res.json();
@@ -842,6 +843,7 @@ function PieceDetailsForm({
   onSaved: (piece: InventoryPiece, isNew: boolean) => void;
   onDeleted: (pieceId: string) => void;
 }) {
+  const { user } = useUser();
   const [sku, setSku] = useState(piece?.sku ?? "");
   const [metalKarat, setMetalKarat] = useState(piece?.metal_karat ?? "");
   const [metalColour, setMetalColour] = useState(piece?.metal_colour ?? "");
@@ -894,7 +896,7 @@ function PieceDetailsForm({
         : `/api/inventory/pieces/${piece!.id}`;
       const res = await fetch(url, {
         method: mode === "new-piece" ? "POST" : "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
         body: JSON.stringify(payload),
       });
       const json = await res.json();
@@ -915,7 +917,7 @@ function PieceDetailsForm({
     if (!confirm(`Delete piece ${piece.sku}?`)) return;
     setSaving(true);
     try {
-      const res = await fetch(`/api/inventory/pieces/${piece.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/inventory/pieces/${piece.id}`, { method: "DELETE", headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || json.error) {
         setError(json.error || `Failed (${res.status})`);
@@ -1051,6 +1053,7 @@ function PieceBomPanel({
   isManager: boolean;
   onPieceUpdated: (p: InventoryPiece) => void;
 }) {
+  const { user } = useUser();
   const [items, setItems] = useState<InventoryPieceBom[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1061,7 +1064,7 @@ function PieceBomPanel({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/inventory/piece-bom?piece_id=${piece.id}`);
+      const res = await fetch(`/api/inventory/piece-bom?piece_id=${piece.id}`, { headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       const json = await res.json();
       if (!res.ok || json.error) {
         setError(json.error || `Failed (${res.status})`);
@@ -1085,7 +1088,7 @@ function PieceBomPanel({
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this component?")) return;
     try {
-      const res = await fetch(`/api/inventory/piece-bom/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/inventory/piece-bom/${id}`, { method: "DELETE", headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || json.error) {
         setError(json.error || `Failed (${res.status})`);
@@ -1101,7 +1104,7 @@ function PieceBomPanel({
     try {
       const res = await fetch(`/api/inventory/pieces/${piece.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
         body: JSON.stringify({ retail_price: suggestedRetail, cost_price: totalBomCost }),
       });
       const json = await res.json();
@@ -1263,6 +1266,7 @@ function BomItemForm({
   onClose: () => void;
   onSaved: (item: InventoryPieceBom) => void;
 }) {
+  const { user } = useUser();
   const [componentType, setComponentType] = useState(existing?.component_type ?? "casting");
   const [description, setDescription] = useState(existing?.description ?? "");
   const [quantity, setQuantity] = useState(existing?.quantity != null ? String(existing.quantity) : "1");
@@ -1298,7 +1302,7 @@ function BomItemForm({
         : `/api/inventory/piece-bom`;
       const res = await fetch(url, {
         method: existing ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
         body: JSON.stringify(payload),
       });
       const json = await res.json();
@@ -1623,6 +1627,7 @@ function ImportCsvModal({
   onClose: () => void;
   onImported: () => void;
 }) {
+  const { user } = useUser();
   const [rows, setRows] = useState<ParsedCsvRow[]>([]);
   const [fileName, setFileName] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -1672,7 +1677,7 @@ function ImportCsvModal({
     try {
       const res = await fetch("/api/inventory/import-csv", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
         body: JSON.stringify({ rows }),
       });
       const json = await res.json();

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
 import { Quote } from "@/lib/types";
 import { PIPELINE_STAGES, PipelineStage } from "@/lib/pipeline";
 
@@ -9,7 +9,8 @@ export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
-  const supabase = createServerSupabaseClient();
+  const tenantId = req.headers.get('x-tenant-id') ?? ''
+  const supabase = await createTenantSupabaseClient(tenantId);
   const { data, error } = await supabase
     .from("quotes")
     .select("*")
@@ -74,7 +75,8 @@ export async function PATCH(
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });
   }
 
-  const supabase = createServerSupabaseClient();
+  const tenantId = req.headers.get('x-tenant-id') ?? ''
+  const supabase = await createTenantSupabaseClient(tenantId);
   const { data, error } = await supabase
     .from("quotes")
     .update(updates)
@@ -97,7 +99,8 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
   console.log("[DELETE quote] id:", params.id);
-  const supabase = createServerSupabaseClient();
+  const tenantId = req.headers.get('x-tenant-id') ?? ''
+  const supabase = await createTenantSupabaseClient(tenantId);
 
   // Clear FK reference on packets before deleting to avoid constraint errors
   const { error: clearErr } = await supabase

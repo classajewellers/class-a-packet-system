@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useUser } from "@/context/UserContext";
 import { ItemSpecifications, StoneSpec } from "@/lib/types";
 
 const METAL_TYPES = ["9ct Yellow Gold","9ct White Gold","9ct Rose Gold","18ct Yellow Gold","18ct White Gold","18ct Rose Gold","Platinum 950","Sterling Silver","Other"];
@@ -54,6 +55,7 @@ interface Props {
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export default function ItemSpecificationsForm({ packetId: _packetId, specs: initialSpecs, valuationStatus, onSave, onSubmitForReview, onApprove, isSam }: Props) {
+  const { user } = useUser();
   const [open, setOpen] = useState(false);
   const [specs, setSpecs] = useState<ItemSpecifications>(() => normalizeSpecs(initialSpecs));
   const [generatingDesc, setGeneratingDesc] = useState(false);
@@ -107,7 +109,7 @@ export default function ItemSpecificationsForm({ packetId: _packetId, specs: ini
 
       const res = await fetch("/api/assistant/generate-description", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
         body: JSON.stringify({ prompt }),
       });
       const json = await res.json();

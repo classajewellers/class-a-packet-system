@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from "react";
 import { Packet, Quote } from "@/lib/types";
 import { packetTypeLabel, formatDateAU, formatCurrency } from "@/lib/formatters";
 import PacketDetailDrawer from "@/components/PacketDetailDrawer";
+import { useUser } from "@/context/UserContext";
 
 type Tab = "orders" | "quotes" | "timeline" | "notes";
 
@@ -81,6 +82,7 @@ function TabButton({ label, active, onClick, count }: { label: string; active: b
 }
 
 export default function CustomerProfilePage({ params }: { params: { id: string } }) {
+  const { user } = useUser();
   const email = decodeURIComponent(params.id);
 
   const [customer, setCustomer] = useState<CustomerData | null>(null);
@@ -94,7 +96,7 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    fetch(`/api/customers/${encodeURIComponent(email)}`, { cache: "no-store" })
+    fetch(`/api/customers/${encodeURIComponent(email)}`, { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } })
       .then((r) => r.json())
       .then((json) => {
         setCustomer(json.customer ?? null);
@@ -113,7 +115,7 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
       try {
         await fetch(`/api/customers/${encodeURIComponent(email)}`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
           body: JSON.stringify({ notes: value }),
         });
       } finally {

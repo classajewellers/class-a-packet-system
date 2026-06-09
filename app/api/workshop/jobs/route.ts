@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
 import { trackFromJobType } from "@/lib/workshopConfig";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +9,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const stage = searchParams.get("stage");
 
   try {
-    const supabase = createServerSupabaseClient();
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
+    const supabase = await createTenantSupabaseClient(tenantId);
     let query = supabase
       .from("workshop_jobs")
       .select("*")
@@ -41,7 +42,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const body = await req.json();
-    const supabase = createServerSupabaseClient();
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
+    const supabase = await createTenantSupabaseClient(tenantId);
 
     // Auto-derive track from job_type if not explicitly provided
     const track = body.track ?? trackFromJobType(body.job_type ?? "repair");
@@ -56,6 +58,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         stage,
         track,
         stage_changed_at: new Date().toISOString(),
+        tenant_id: tenantId,
       })
       .select()
       .single();

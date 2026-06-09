@@ -57,7 +57,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No rows provided' }, { status: 400 })
     }
 
-    const supabase = createServerSupabaseClient()
+    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+
+    const supabase = await createTenantSupabaseClient(tenantId)
 
     // Preload designs and locations
     const [designsRes, locationsRes] = await Promise.all([
@@ -131,7 +133,8 @@ export async function POST(req: NextRequest) {
           }
           designId = String(newDesign.id)
           designByName.set(key, designId)
-          designsCreated++
+          designsCreated++,
+          tenant_id: tenantId,
         }
 
         // Resolve location

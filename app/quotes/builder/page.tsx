@@ -113,7 +113,7 @@ export default function QuoteBuilderPage() {
   const [showCostBreakdown, setShowCostBreakdown] = useState(false);
 
   useEffect(() => {
-    fetch('/api/pricing').then(r => r.json()).then(json => {
+    fetch('/api/pricing', { headers: { 'x-tenant-id': user?.tenantId ?? '' } }).then(r => r.json()).then(json => {
       setMetalRates(json.metalRates ?? []);
       setFixedCosts(json.fixedCosts ?? []);
       setMarginBrackets(json.marginBrackets ?? []);
@@ -241,7 +241,7 @@ export default function QuoteBuilderPage() {
       };
       const res = await fetch('/api/quotes/builder', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-tenant-id': user?.tenantId ?? '' },
         body: JSON.stringify({
           firstName, lastName, email, phone,
           assignedTo: user?.name ?? null,

@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Packet, InventoryMovement, InventoryMovementType } from "@/lib/types";
+import { useUser } from "@/context/UserContext";
 import { packetTypeLabel, formatDateAU, formatCurrency } from "@/lib/formatters";
 
 // ── Movement helpers ──────────────────────────────────────────────────────────
@@ -98,6 +99,7 @@ function startOfMonthISO() {
 }
 
 export default function DashboardPage() {
+  const { user } = useUser();
   const router = useRouter();
   const [packets, setPackets] = useState<Packet[]>([]);
   const [loading, setLoading] = useState(true);
@@ -106,7 +108,7 @@ export default function DashboardPage() {
   const [recentMovements, setRecentMovements] = useState<InventoryMovement[]>([]);
 
   useEffect(() => {
-    fetch("/api/admin/packets?limit=200", { cache: "no-store" })
+    fetch("/api/admin/packets?limit=200", { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } })
       .then((r) => r.json())
       .then((json) => {
         setPackets(json.packets ?? []);
@@ -116,7 +118,7 @@ export default function DashboardPage() {
 
     const monthStart = startOfMonthISO();
     const today = todayISO();
-    fetch(`/api/revenue?from=${monthStart}&to=${today}`, { cache: "no-store" })
+    fetch(`/api/revenue?from=${monthStart}&to=${today}`, { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } })
       .then((r) => r.json())
       .then((json) => {
         if (typeof json.totalRevenue === "number") setRevenueThisMonth(json.totalRevenue);
@@ -128,13 +130,13 @@ export default function DashboardPage() {
       .catch(() => {});
 
     // Inventory: low stock count
-    fetch("/api/inventory/items?lowstock=true", { cache: "no-store" })
+    fetch("/api/inventory/items?lowstock=true", { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } })
       .then((r) => r.json())
       .then((json) => setLowStockCount((json.items ?? []).length))
       .catch(() => {});
 
     // Inventory: recent movements
-    fetch("/api/inventory/movements?limit=5", { cache: "no-store" })
+    fetch("/api/inventory/movements?limit=5", { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } })
       .then((r) => r.json())
       .then((json) => setRecentMovements(json.movements ?? []))
       .catch(() => {});

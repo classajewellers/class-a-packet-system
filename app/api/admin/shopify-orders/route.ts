@@ -1,15 +1,16 @@
-import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { NextRequest, NextResponse } from "next/server";
+import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
 import { Packet } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(req: NextRequest): Promise<NextResponse> {
   console.log("[shopify-orders] GET request received");
 
+  const tenantId = req.headers.get('x-tenant-id') ?? ''
   let supabase;
   try {
-    supabase = createServerSupabaseClient();
+    supabase = await createTenantSupabaseClient(tenantId);
     console.log("[shopify-orders] Supabase client created successfully");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
