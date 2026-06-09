@@ -4,7 +4,7 @@ import { createTenantSupabaseClient } from '@/lib/supabase-server'
 export const dynamic = 'force-dynamic'
 
 export async function DELETE(
-  request: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   console.log('[DELETE /api/admin/packets/[id]] id:', params.id)
@@ -54,7 +54,7 @@ export async function DELETE(
 }
 
 export async function GET(
-  request: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const tenantId = req.headers.get('x-tenant-id') ?? ''
@@ -69,12 +69,12 @@ export async function GET(
 }
 
 export async function PATCH(
-  request: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const tenantId = req.headers.get('x-tenant-id') ?? ''
   const supabase = await createTenantSupabaseClient(tenantId)
-  const body = await request.json()
+  const body = await req.json()
   const { data, error } = await supabase
     .from('packets')
     .update(body)
