@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createServerSupabaseClient, createTenantSupabaseClient } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
           }
           const { data: newDesign, error: designErr } = await supabase
             .from('inventory_designs')
-            .insert({ name: designName, category })
+            .insert({ name: designName, category, tenant_id: tenantId })
             .select('id, name')
             .single()
           if (designErr || !newDesign) {
@@ -133,8 +133,7 @@ export async function POST(req: NextRequest) {
           }
           designId = String(newDesign.id)
           designByName.set(key, designId)
-          designsCreated++,
-          tenant_id: tenantId,
+          designsCreated++
         }
 
         // Resolve location
@@ -210,6 +209,7 @@ export async function POST(req: NextRequest) {
           retail_price: parseNum(row.retail_price),
           status,
           notes: (row.notes ?? '').trim() || null,
+          tenant_id: tenantId,
         }
 
         const { error: pieceErr } = await supabase

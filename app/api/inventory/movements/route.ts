@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createServerSupabaseClient, createTenantSupabaseClient } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,13 +11,14 @@ async function updateStock(
   item_id: string,
   location_id: string,
   delta: number,
-  isAbsolute = false
+  isAbsolute = false,
+  tenantId = ''
 ): Promise<string | null> {
   if (isAbsolute) {
     const { error } = await supabase
       .from('inventory_stock')
       .upsert(
-        { item_id, location_id, quantity: delta, updated_at: new Date().toISOString() },
+        { item_id, location_id, quantity: delta, updated_at: new Date().toISOString(), tenant_id: tenantId },
         { onConflict: 'item_id,location_id' }
       )
     return error?.message ?? null
@@ -41,9 +42,8 @@ async function updateStock(
   } else {
     const { error } = await supabase
       .from('inventory_stock')
-      .insert({ item_id, location_id, quantity: delta, updated_at: new Date().toISOString() })
-    return error?.message ?? null,
-    tenant_id: tenantId,
+      .insert({ item_id, location_id, quantity: delta, updated_at: new Date().toISOString(), tenant_id: tenantId })
+    return error?.message ?? null
   }
 }
 
@@ -130,24 +130,24 @@ export async function POST(req: NextRequest) {
     let stockErr: string | null = null
     switch (movement_type) {
       case 'receive':
-        stockErr = await updateStock(supabase, item_id, to_location_id, quantity)
+        stockErr = await updateStock(supabase, item_id, to_location_id, quantity, false, tenantId)
         break
       case 'transfer':
-        stockErr = await updateStock(supabase, item_id, from_location_id, -quantity)
-        if (!stockErr) stockErr = await updateStock(supabase, item_id, to_location_id, quantity)
+        stockErr = await updateStock(supabase, item_id, from_location_id, -quantity, false, tenantId)
+        if (!stockErr) stockErr = await updateStock(supabase, item_id, to_location_id, quantity, false, tenantId)
         break
       case 'sale':
       case 'workshop_in':
-        stockErr = await updateStock(supabase, item_id, from_location_id, -quantity)
+        stockErr = await updateStock(supabase, item_id, from_location_id, -quantity, false, tenantId)
         break
       case 'return':
       case 'workshop_out':
-        stockErr = await updateStock(supabase, item_id, to_location_id, quantity)
+        stockErr = await updateStock(supabase, item_id, to_location_id, quantity, false, tenantId)
         break
       case 'adjustment':
       case 'stocktake':
         // Absolute quantity set at to_location
-        stockErr = await updateStock(supabase, item_id, to_location_id, quantity, true)
+        stockErr = await updateStock(supabase, item_id, to_location_id, quantity, true, tenantId)
         break
     }
 
