@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createBrowserClient } from '@supabase/ssr'
 
 export const dynamic = 'force-dynamic'
@@ -98,6 +99,15 @@ export default function LoginPage() {
         <p style={{ textAlign: 'center', marginTop: '16px', fontSize: '12px', color: '#9CA3AF' }}>
           Access issues? Contact your administrator.
         </p>
+
+        <div style={{ borderTop: '1px solid #F3F4F6', marginTop: '20px', paddingTop: '20px', textAlign: 'center' }}>
+          <p style={{ fontSize: '13px', color: '#6B7280', margin: 0 }}>
+            New to Vault?{' '}
+            <Link href="/signup" style={{ color: '#635BFF', textDecoration: 'none', fontWeight: '600' }}>
+              Start your free trial →
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   )

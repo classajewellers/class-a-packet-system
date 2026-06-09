@@ -4,7 +4,10 @@ import { NextRequest, NextResponse } from "next/server";
 // Exact paths that bypass all auth checks
 const PUBLIC_ROUTES = new Set([
   "/login",
+  "/signup",
+  "/onboarding",
   "/api/auth/callback",
+  "/api/auth/signup",
   "/api/auth/verify-pin",
   "/api/shopify/webhook",
   "/api/shopify/customer",
