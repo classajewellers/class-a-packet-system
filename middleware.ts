@@ -15,6 +15,16 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // ── Vault operator admin — separate auth via vault_operator_auth cookie ───
+  if (pathname.startsWith("/vault-admin")) {
+    if (pathname === "/vault-admin/login") return NextResponse.next();
+    const operatorAuth = request.cookies.get("vault_operator_auth")?.value;
+    if (operatorAuth !== "1") {
+      return NextResponse.redirect(new URL("/vault-admin/login", request.url));
+    }
+    return NextResponse.next();
+  }
+
   // ── API routes: let through — they use the service-role key server-side ────
   if (pathname.startsWith("/api/")) {
     return NextResponse.next();
