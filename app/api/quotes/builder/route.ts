@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient, createTenantSupabaseClient } from '@/lib/supabase-server'
+import { createTenantSupabaseClient } from '@/lib/supabase-server'
 import { generateQuoteReferenceNumber } from '@/lib/referenceNumber'
 
 export const dynamic = 'force-dynamic'

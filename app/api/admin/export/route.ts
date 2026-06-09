@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
+import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { Packet, AdminPacketsQuery } from "@/lib/types";
 import { formatDateAU, formatCurrency, packetTypeLabel } from "@/lib/formatters";
 

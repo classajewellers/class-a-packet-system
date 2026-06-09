@@ -14,12 +14,6 @@ interface Tenant {
   created_at: string;
 }
 
-const STATUS_COLOURS: Record<string, string> = {
-  active:    "background: #d1fae5; color: #065f46;",
-  inactive:  "background: #f3f4f6; color: #6b7280;",
-  suspended: "background: #fee2e2; color: #991b1b;",
-};
-
 export default function TenantsSettingsPage() {
   const { user } = useUser();
   const router = useRouter();

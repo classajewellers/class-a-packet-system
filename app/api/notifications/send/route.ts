@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
+import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { packetTypeLabel, formatDateAU, formatAustralianPhone } from "@/lib/formatters";
 
 export const dynamic = "force-dynamic";

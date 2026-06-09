@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
+import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { upsertKlaviyoProfile, fireKlaviyoEvent, sendKlaviyoConfirmationEmail } from "@/lib/klaviyo";
 import { sendPodiumSMS } from "@/lib/podium";
 import { appendToSheet } from "@/lib/sheets";

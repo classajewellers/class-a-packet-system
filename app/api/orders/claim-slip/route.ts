@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
+import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { sendClaimSlip } from "@/lib/claimSlipSender";
 import { Packet } from "@/lib/types";
 

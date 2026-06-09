@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient, createTenantSupabaseClient } from '@/lib/supabase-server'
+import { createTenantSupabaseClient } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 
 /** Add delta to stock (or set absolute if isAbsolute=true). Never throws — returns error or null. */
 async function updateStock(
-  supabase: ReturnType<typeof createServerSupabaseClient>,
+  supabase: Awaited<ReturnType<typeof createTenantSupabaseClient>>,
   item_id: string,
   location_id: string,
   delta: number,

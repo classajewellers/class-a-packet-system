@@ -1,12 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient, createTenantSupabaseClient } from "@/lib/supabase-server";
+import { NextResponse } from "next/server";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 // Public route — not tenant-scoped, returns the list of active stores
 // Used by the login page store selector.
-export async function GET(req: NextRequest): Promise<NextResponse> {
+export async function GET(): Promise<NextResponse> {
   try {
     const supabase = createServerSupabaseClient();
     const { data, error } = await supabase
