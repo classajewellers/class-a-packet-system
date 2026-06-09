@@ -1,23 +1,32 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
 
+// Exact paths that bypass all auth checks
+const PUBLIC_ROUTES = new Set([
+  "/login",
+  "/api/auth/callback",
+  "/api/auth/verify-pin",
+  "/api/shopify/webhook",
+  "/api/shopify/customer",
+  "/vault-admin/login",
+]);
+
+// Prefix-based public paths
+const PUBLIC_PREFIXES = ["/claim/"];
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // ── Always-public routes — no auth required ────────────────────────────────
+  // 1. Completely public — return immediately, no Supabase client created
   if (
-    pathname.startsWith("/claim/") ||
-    pathname.startsWith("/api/shopify") ||
-    pathname.startsWith("/_next") ||
-    pathname === "/favicon.ico" ||
-    pathname === "/login"
+    PUBLIC_ROUTES.has(pathname) ||
+    PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))
   ) {
     return NextResponse.next();
   }
 
-  // ── Vault operator admin — separate auth via vault_operator_auth cookie ───
+  // 2. Vault operator admin — cookie-based auth, no Supabase session needed
   if (pathname.startsWith("/vault-admin")) {
-    if (pathname === "/vault-admin/login") return NextResponse.next();
     const operatorAuth = request.cookies.get("vault_operator_auth")?.value;
     if (operatorAuth !== "1") {
       return NextResponse.redirect(new URL("/vault-admin/login", request.url));
@@ -25,12 +34,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── API routes: let through — they use the service-role key server-side ────
+  // 3. API routes — pass through (service-role key used server-side)
   if (pathname.startsWith("/api/")) {
     return NextResponse.next();
   }
 
-  // ── All other routes: require a valid Supabase session ────────────────────
+  // 4. All other routes — require a valid Supabase session
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -54,14 +63,12 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // getUser() validates the session token server-side (no local JWT trust)
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
-    const loginUrl = new URL("/login", request.url);
-    return NextResponse.redirect(loginUrl);
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   return response;
