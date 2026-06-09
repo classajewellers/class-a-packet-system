@@ -524,7 +524,7 @@ export function generatePrintHTML(packet: Packet): string {
 <html>
 <head>
 <meta charset="utf-8">
-<title>Class A Jewellers — ${esc(packet.reference_number)}</title>
+<title>Vault — ${esc(packet.reference_number)}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   @page { size: 105mm 148mm portrait; margin: 4mm; }

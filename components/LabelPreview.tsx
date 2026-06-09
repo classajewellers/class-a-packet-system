@@ -72,7 +72,7 @@ export default function LabelPreview({ data }: Props) {
       <div className="bg-[#635BFF] px-3 py-1.5 text-center">
         <Image
           src="/class-a-logo.png"
-          alt="Class A Jewellers"
+          alt="Vault"
           width={112}
           height={28}
           className="h-[28px] w-auto mx-auto object-contain"

@@ -72,7 +72,7 @@ export default function SettingsPage() {
     return Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
   };
 
-  const storeName = process.env.NEXT_PUBLIC_STORE_NAME ?? "Class A Jewellers";
+  const storeName = process.env.NEXT_PUBLIC_STORE_NAME ?? "Vault";
   const storePhone = process.env.NEXT_PUBLIC_STORE_PHONE ?? "(08) 8344 7722";
   const storeEmail = process.env.NEXT_PUBLIC_STORE_EMAIL ?? "customercare@classa.com.au";
   const storeAddress = process.env.NEXT_PUBLIC_STORE_ADDRESS ?? "40 North East Road, Walkerville SA 5081";
@@ -283,8 +283,8 @@ export default function SettingsPage() {
       {/* About */}
       <div style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, padding: 24 }}>
         <p style={{ fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>About</p>
-        <p style={{ fontSize: 14, fontWeight: 500, color: '#1A1A2E' }}>Class A Order System v1.0</p>
-        <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>Internal repair and order management system for Class A Jewellers</p>
+        <p style={{ fontSize: 14, fontWeight: 500, color: '#1A1A2E' }}>Vault v1.0</p>
+        <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>Internal repair and order management system for Vault</p>
       </div>
     </div>
   );

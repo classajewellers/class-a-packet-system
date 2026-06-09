@@ -20,7 +20,7 @@ function getPageTitle(pathname: string): string {
   for (const [prefix, title] of Object.entries(PAGE_TITLES)) {
     if (prefix !== "/" && pathname.startsWith(prefix)) return title;
   }
-  return "Class A Order System";
+  return "Vault";
 }
 
 export default function TopBar() {

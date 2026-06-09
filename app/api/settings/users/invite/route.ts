@@ -34,20 +34,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     // Pre-create the profile so it appears in the users list immediately
-    // auth_user_id will be set when they accept the invite via the callback route
+    // auth_user_id will be linked when they accept the invite via the callback route
     const { error: profileError } = await supabase
       .from("profiles")
-      .upsert(
-        {
-          email:     email.toLowerCase().trim(),
-          full_name: name.trim(),
-          role,
-          tenant_id: tenantId,
-          // Set auth_user_id now if available from invite response
-          ...(inviteData?.user?.id ? { auth_user_id: inviteData.user.id } : {}),
-        },
-        { onConflict: "email" }
-      );
+      .insert({
+        full_name: name.trim(),
+        role,
+        email:     email.toLowerCase().trim(),
+        tenant_id: tenantId,
+      });
 
     if (profileError) {
       console.warn("[invite] profile upsert failed (non-fatal):", profileError.message);

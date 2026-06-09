@@ -112,7 +112,7 @@ export default function LaybyFields({ data, onChange, errors }: Props) {
                 Terms Accepted<span className="text-[#C9A84C] ml-0.5">*</span>
               </p>
               <p className="text-xs text-gray-600 mt-0.5">
-                Customer agrees to Class A Jewellers layby terms. No article can be picked up without this receipt.
+                Customer agrees to Vault layby terms. No article can be picked up without this receipt.
               </p>
             </div>
           </div>

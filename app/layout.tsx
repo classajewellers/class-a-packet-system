@@ -4,8 +4,8 @@ import "./globals.css";
 import { ClientProviders } from "@/components/ClientProviders";
 
 export const metadata: Metadata = {
-  title: "Class A Order System",
-  description: "Internal repair and order system for Class A Jewellers",
+  title: "Vault",
+  description: "Internal repair and order system for Vault",
   robots: "noindex, nofollow",
 };
 

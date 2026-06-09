@@ -436,7 +436,7 @@ export function generateQuoteHTML(quote: Quote): string {
   <!-- Header -->
   <div class="header">
     <div>
-      <img class="wordmark-logo" src="${BLACK_LOGO_DATA_URI}" alt="Class A Jewellers">
+      <img class="wordmark-logo" src="${BLACK_LOGO_DATA_URI}" alt="Vault">
     </div>
     <div class="header-right">
       <div class="quotation-title">Quotation</div>

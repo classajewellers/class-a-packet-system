@@ -340,7 +340,7 @@ export default function TenantsSettingsPage() {
               <input
                 value={newName}
                 onChange={(e) => handleNameChange(e.target.value)}
-                placeholder="e.g. Class A Jewellers"
+                placeholder="e.g. Vault"
                 style={{
                   width: "100%",
                   border: "1px solid #d1d5db",

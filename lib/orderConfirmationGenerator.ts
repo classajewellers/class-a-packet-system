@@ -88,7 +88,7 @@ export function generateOrderConfirmationHTML(packet: Packet): string {
   </div>
 
   <div class="footer">
-    Class A Jewellers &bull; 40 North East Road, Walkerville SA 5081 &bull; (08) 8344 7722 &bull; customercare@classa.com.au
+    Vault &bull; 40 North East Road, Walkerville SA 5081 &bull; (08) 8344 7722 &bull; customercare@classa.com.au
   </div>
 </body>
 </html>`;

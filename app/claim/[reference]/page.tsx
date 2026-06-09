@@ -468,7 +468,7 @@ export default async function ClaimSlipPage({
 
           {/* Footer */}
           <div className="slip-footer">
-            Class A Jewellers &nbsp;|&nbsp; 40 North East Road Walkerville SA 5081 &nbsp;|&nbsp; +61 8 8344 7722
+            Vault &nbsp;|&nbsp; 40 North East Road Walkerville SA 5081 &nbsp;|&nbsp; +61 8 8344 7722
           </div>
 
         </div>

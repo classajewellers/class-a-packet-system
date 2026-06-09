@@ -93,7 +93,19 @@
       "Bash(ls app/vault)",
       "Bash(ls lib/userTypes* lib/supabase-server*)",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}, indent=2\\)\\)\")",
-      "Bash(grep -v \"^$\")"
+      "Bash(grep -v \"^$\")",
+      "Bash(python3)",
+      "Bash(grep -rn 'fetch\\(`/api/' \"/Users/joshmucklow/Downloads/Projects/gemquote 2/app\" \"/Users/joshmucklow/Downloads/Projects/gemquote 2/components\" --include=\"*.tsx\" --include=\"*.ts\")",
+      "Bash(grep -n \"fetch\\('/api/\\\\|fetch\\(\\\\`/api/\" \"/Users/joshmucklow/Downloads/Projects/gemquote 2/app/inventory/import/page.tsx\")",
+      "Bash(grep -rn \"fetch\\('/api/\\\\|fetch\\(\\\\`/api/\" --include=\"*.tsx\" app/ components/)",
+      "Bash(grep -A5 \"fetch\\('/api/\\\\|fetch\\(\\\\`/api/\" app/customers/\\\\[id\\\\]/page.tsx app/workshop/page.tsx app/quotes/builder/page.tsx app/pricing/page.tsx)",
+      "Bash(grep -A8 \"fetch\\(\\\\`/api/customers/\\\\${encodeURIComponent\\(email\\)}\\\\`\" app/customers/\\\\[id\\\\]/page.tsx)",
+      "Bash(grep -A8 \"fetch\\(\\\\`/api/workshop/jobs/\\\\${jobId}\\\\`\" app/workshop/page.tsx)",
+      "Bash(grep -A8 \"fetch\\(\\\\`/api/pricing/\\\\${tableName}\\\\`\" app/pricing/page.tsx)",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -)",
+      "Bash(node -e \"require\\('@supabase/auth-helpers-nextjs'\\); console.log\\('installed ok'\\)\")",
+      "Bash(npm uninstall *)"
     ]
   }
 }

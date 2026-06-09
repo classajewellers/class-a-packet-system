@@ -167,7 +167,7 @@ export function generateValuationCertificate(packet: Packet): void {
         <h3>Prepared By</h3>
         <strong>Sam Mucklow</strong><br>
         Licensed Jewellery Valuer<br>
-        Class A Jewellers<br>
+        Vault<br>
         40 North East Road, Walkerville SA 5081<br>
         T: +61 8 8344 7722 &bull; E: sam@classa.com.au
       </div>
@@ -220,8 +220,8 @@ export function generateValuationCertificate(packet: Packet): void {
     <!-- Footer -->
     <div class="footer">
       This certificate is valid for 3 years from the date of issue.<br>
-      Class A Jewellers recommends updating your valuation every 3 years.<br>
-      Class A Jewellers &bull; 40 North East Road Walkerville SA 5081 &bull; www.classa.com.au
+      Vault recommends updating your valuation every 3 years.<br>
+      Vault &bull; 40 North East Road Walkerville SA 5081 &bull; www.classa.com.au
     </div>
 
   </div>

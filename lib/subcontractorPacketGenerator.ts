@@ -50,7 +50,7 @@ export function generateSubcontractorPacketHTML(job: WorkshopJob): string {
   </div>
 
   <div class="doc-title">Subcontractor Work Order</div>
-  <div class="sub-title">Please complete the work described below and return to Class A Jewellers.</div>
+  <div class="sub-title">Please complete the work described below and return to Vault.</div>
 
   <div class="to-block">
     <div class="to-label">To</div>
@@ -78,7 +78,7 @@ export function generateSubcontractorPacketHTML(job: WorkshopJob): string {
 
   <div class="return-note">
     <strong>Please return completed work to:</strong><br>
-    Class A Jewellers, 40 North East Road, Walkerville SA 5081<br>
+    Vault, 40 North East Road, Walkerville SA 5081<br>
     Phone: (08) 8344 7722 &bull; Email: customercare@classa.com.au
   </div>
 

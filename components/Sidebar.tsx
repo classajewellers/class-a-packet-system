@@ -251,7 +251,7 @@ export default function Sidebar({ onOpenAI }: Props) {
           </div>
         )}
         <div style={{ fontSize: 11, color: "#4A4A8A", textAlign: "center", paddingTop: 4 }}>
-          © 2026 Class A Jewellers
+          © 2026 Vault
         </div>
       </div>
     </aside>

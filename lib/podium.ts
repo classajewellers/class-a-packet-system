@@ -11,19 +11,19 @@ function buildMessage(packet: Packet): string {
   switch (packet.packet_type as PacketType) {
     case "repair":
     case "custom_order":
-      return `Hi ${firstName}, thanks for visiting Class A Jewellers! Your job ref is ${ref}. We'll have it ready by ${due}. Any questions, call us on +61 8 8344 7722. - Class A Team`;
+      return `Hi ${firstName}, thanks for visiting Vault! Your job ref is ${ref}. We'll have it ready by ${due}. Any questions, call us on +61 8 8344 7722. - Class A Team`;
 
     case "layby":
       return `Hi ${firstName}, your layby ref is ${ref}. Next payment due ${due}. Questions? Call +61 8 8344 7722. - Class A Team`;
 
     case "client_intake":
-      return `Hi ${firstName}, thanks for visiting Class A Jewellers! We've noted your preferences and will be in touch when we find something perfect for you. - Class A Team`;
+      return `Hi ${firstName}, thanks for visiting Vault! We've noted your preferences and will be in touch when we find something perfect for you. - Class A Team`;
 
     case "online_order":
-      return `Hi ${firstName}, thanks for your online order with Class A Jewellers! Your order ref is ${ref}. We'll be in touch shortly with shipping details. Questions? Call +61 8 8344 7722. - Class A Team`;
+      return `Hi ${firstName}, thanks for your online order with Vault! Your order ref is ${ref}. We'll be in touch shortly with shipping details. Questions? Call +61 8 8344 7722. - Class A Team`;
 
     default:
-      return `Hi ${firstName}, thanks for visiting Class A Jewellers! Your ref is ${ref}. - Class A Team`;
+      return `Hi ${firstName}, thanks for visiting Vault! Your ref is ${ref}. - Class A Team`;
   }
 }
 

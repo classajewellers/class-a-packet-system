@@ -107,7 +107,7 @@ export default function ClientIntakeFields({ data, onChange }: Props) {
             <div>
               <p className="text-sm font-semibold text-[#1B1F3B]">Consent to Marketing</p>
               <p className="text-xs text-gray-600">
-                Customer agrees to receive marketing communications from Class A Jewellers.
+                Customer agrees to receive marketing communications from Vault.
               </p>
             </div>
           </div>

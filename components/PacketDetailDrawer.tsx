@@ -38,9 +38,9 @@ function buildMessage(template: Template, p: Packet): string {
   const due          = formatDateAU(p.due_date) || "TBD";
 
   if (template === "order_confirmation") {
-    return `Hi ${firstName}, thanks for visiting Class A Jewellers! Your ${orderType} ref is ${ref}. Items: ${articles}. Instructions: ${instructions}. Est. ready by ${due}. Any questions call 08 8344 7722. - Class A Team`;
+    return `Hi ${firstName}, thanks for visiting Vault! Your ${orderType} ref is ${ref}. Items: ${articles}. Instructions: ${instructions}. Est. ready by ${due}. Any questions call 08 8344 7722. - Class A Team`;
   }
-  return `Hi ${firstName}, great news! Your ${orderType} is ready for collection at Class A Jewellers, 40 North East Road Walkerville. Items: ${articles}. Ref: ${ref}. See you soon! - Class A Team`;
+  return `Hi ${firstName}, great news! Your ${orderType} is ready for collection at Vault, 40 North East Road Walkerville. Items: ${articles}. Ref: ${ref}. See you soon! - Class A Team`;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

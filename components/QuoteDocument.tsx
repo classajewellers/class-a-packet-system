@@ -55,7 +55,7 @@ export default function QuoteDocument({ quote }: { quote: Quote }) {
       >
         <img
           src={BLACK_LOGO_DATA_URI}
-          alt="Class A Jewellers"
+          alt="Vault"
           style={{ maxHeight: "60px", width: "auto", display: "block" }}
         />
         <div style={{ textAlign: "right" }}>

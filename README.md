@@ -1,8 +1,8 @@
 # Class A Packet System
 
-Internal iPad-facing staff tool for Class A Jewellers that digitises paper repair/order packets.
+Internal iPad-facing staff tool for Vault that digitises paper repair/order packets.
 
-**Store:** Class A Jewellers, 40 North East Road, Walkerville SA 5081  
+**Store:** Vault, 40 North East Road, Walkerville SA 5081  
 **Contact:** +61 8 8344 7722 | customercare@classa.com.au  
 **Stack:** Next.js 14 · TypeScript · Tailwind CSS · Supabase · Vercel
 
@@ -126,7 +126,7 @@ Have the Klaviyo marketing team create a **Flow** triggered by the metric **"Pac
 | `deposit` | $50.00 |
 | `balance` | $200.00 |
 | `staff_member` | Josh Mucklow |
-| `store_name` | Class A Jewellers |
+| `store_name` | Vault |
 | `store_phone` | +61 8 8344 7722 |
 
 ---

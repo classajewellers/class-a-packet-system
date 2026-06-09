@@ -182,7 +182,7 @@ export async function sendKlaviyoConfirmationEmail(packet: Packet): Promise<void
           deposit: formatCurrency(packet.deposit),
           balance: formatCurrency(packet.balance),
           staff_member: packet.staff_member,
-          store_name: "Class A Jewellers",
+          store_name: "Vault",
           store_phone: "+61 8 8344 7722",
           store_email: "customercare@classa.com.au",
           store_address: "40 North East Road, Walkerville SA 5081",
