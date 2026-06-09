@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
     const to_date       = searchParams.get('to_date')
     const limit         = Math.min(200, parseInt(searchParams.get('limit') ?? '50'))
 
-    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
 
     const supabase = await createTenantSupabaseClient(tenantId)
 
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'item_id, movement_type and quantity are required' }, { status: 400 })
     }
 
-    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
 
     const supabase = await createTenantSupabaseClient(tenantId)
 

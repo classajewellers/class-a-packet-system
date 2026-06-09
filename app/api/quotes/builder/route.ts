@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     const referenceNumber = await generateQuoteReferenceNumber()
     const now = new Date().toISOString()
 
-    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
 
     const supabase = await createTenantSupabaseClient(tenantId)
     const { data, error } = await supabase

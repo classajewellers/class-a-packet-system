@@ -4,7 +4,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+  const tenantId = req.headers.get('x-tenant-id') ?? ''
   const supabase = await createTenantSupabaseClient(tenantId)
   const { data, error } = await supabase
     .from('inventory_locations')
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
     const supabase = await createTenantSupabaseClient(tenantId)
     const { data, error } = await supabase
       .from('inventory_locations')

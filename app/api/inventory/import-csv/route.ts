@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No rows provided' }, { status: 400 })
     }
 
-    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
 
     const supabase = await createTenantSupabaseClient(tenantId)
 

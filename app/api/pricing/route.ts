@@ -6,7 +6,7 @@ export const revalidate = 0
 
 export async function GET(req: NextRequest) {
   try {
-    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
     const supabase = await createTenantSupabaseClient(tenantId)
     const [metalRates, fixedCosts, marginBrackets, meleeStones, templates] = await Promise.all([
       supabase.from('pricing_metal_rates').select('*'),

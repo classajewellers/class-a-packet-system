@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
     const department = searchParams.get('department') ?? ''
     const lowstock = searchParams.get('lowstock') === 'true'
 
-    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
 
     const supabase = await createTenantSupabaseClient(tenantId)
     let query = supabase
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
     const supabase = await createTenantSupabaseClient(tenantId)
 
     const { data, error } = await supabase

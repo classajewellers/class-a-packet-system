@@ -6,7 +6,7 @@ export const revalidate = 0
 
 export async function GET(req: NextRequest) {
   try {
-    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
     const supabase = await createTenantSupabaseClient(tenantId)
     const { data, error } = await supabase
       .from('quotes')

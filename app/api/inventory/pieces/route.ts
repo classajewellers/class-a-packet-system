@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const designId = searchParams.get('design_id')
     const oneoff = searchParams.get('oneoff') === 'true'
-    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
     const supabase = await createTenantSupabaseClient(tenantId)
     let query = supabase
       .from('inventory_pieces')
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     if (!body.sku || typeof body.sku !== 'string' || !body.sku.trim()) {
       return NextResponse.json({ error: 'sku is required' }, { status: 400 })
     }
-    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
     const supabase = await createTenantSupabaseClient(tenantId)
     const { data, error } = await supabase
       .from('inventory_pieces')

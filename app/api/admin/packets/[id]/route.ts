@@ -9,7 +9,7 @@ export async function DELETE(
 ) {
   console.log('[DELETE /api/admin/packets/[id]] id:', params.id)
   try {
-    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
     const supabase = await createTenantSupabaseClient(tenantId)
 
     // Step 1: Remove foreign key references from quotes table
@@ -57,7 +57,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+  const tenantId = req.headers.get('x-tenant-id') ?? ''
   const supabase = await createTenantSupabaseClient(tenantId)
   const { data, error } = await supabase
     .from('packets')
@@ -72,7 +72,7 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+  const tenantId = req.headers.get('x-tenant-id') ?? ''
   const supabase = await createTenantSupabaseClient(tenantId)
   const body = await request.json()
   const { data, error } = await supabase

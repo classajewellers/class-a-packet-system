@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
     const pieceId = searchParams.get('piece_id')
     if (!pieceId) return NextResponse.json({ error: 'piece_id is required' }, { status: 400 })
 
-    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
 
     const supabase = await createTenantSupabaseClient(tenantId)
     const { data, error } = await supabase
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     const unit_cost = body.unit_cost != null && body.unit_cost !== '' ? Number(body.unit_cost) : 0
     const locked_cost = Math.round(quantity * unit_cost * 100) / 100
 
-    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
 
     const supabase = await createTenantSupabaseClient(tenantId)
     const { data, error } = await supabase

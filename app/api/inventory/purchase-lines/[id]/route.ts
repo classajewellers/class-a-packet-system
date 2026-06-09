@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const body = await req.json()
-    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
     const supabase = await createTenantSupabaseClient(tenantId)
     const update: Record<string, unknown> = {}
     if (body.variant_id !== undefined) update.variant_id = body.variant_id || null
@@ -31,7 +31,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const tenantId = req.headers.get(\'x-tenant-id\') ?? \'\'
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
     const supabase = await createTenantSupabaseClient(tenantId)
     const { error } = await supabase.from('inventory_purchase_lines').delete().eq('id', params.id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
