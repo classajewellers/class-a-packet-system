@@ -4,34 +4,47 @@ export const dynamic = "force-dynamic";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 export default function LoginPage() {
-  const router  = useRouter();
-  const supabase = createBrowserSupabaseClient();
+  const router = useRouter();
 
-  const [email, setEmail]     = useState("");
+  const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError]     = useState("");
-  const [loading, setLoading] = useState(false);
+  const [error, setError]       = useState<string | null>(null);
+  const [loading, setLoading]   = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    console.log("[login] handleSignIn fired");
     setLoading(true);
+    setError(null);
+
     try {
-      const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      const supabase = createClientComponentClient();
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
       if (authError) {
-        setError("Invalid email or password");
-        setLoading(false);
+        console.error("[login] signInWithPassword error:", authError.message);
+        setError(authError.message);
         return;
       }
-      router.push("/orders");
-    } catch {
+
+      console.log("[login] session established:", !!data.session);
+      if (data.session) {
+        router.push("/orders");
+        router.refresh();
+      }
+    } catch (err) {
+      console.error("[login] unexpected error:", err);
       setError("Something went wrong. Please try again.");
+    } finally {
       setLoading(false);
     }
-  }
+  };
 
   const inputStyle: React.CSSProperties = {
     width: "100%",
@@ -82,7 +95,7 @@ export default function LoginPage() {
           <p style={{ fontSize: 13, color: "#9ca3af", margin: 0 }}>Enter your email and password to continue</p>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <form onSubmit={handleSignIn} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
             <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
               Email
