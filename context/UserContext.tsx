@@ -9,7 +9,6 @@ import {
   ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import { createBrowserClient } from "@supabase/ssr";
 import { LoggedInUser, UserRole } from "@/lib/userTypes";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
@@ -43,67 +42,85 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated]       = useState(false);
   const [roleLoading, setRoleLoading] = useState(true);
 
-  const router      = useRouter();
-  const supabaseRef = useRef(createBrowserSupabaseClient());
+  const router       = useRouter();
+  const supabaseRef  = useRef(createBrowserSupabaseClient());
+  const fetchingRef  = useRef(false);
+
+  const fallbackUser = (userId: string, userEmail: string): LoggedInUser => ({
+    id:         userId,
+    name:       userEmail.split("@")[0],
+    role:       "manager" as UserRole,
+    email:      userEmail,
+    tenantId:   "00000000-0000-0000-0000-000000000001",
+    tenantSlug: "classa",
+    initials:   userEmail.substring(0, 2).toUpperCase(),
+    loggedInAt: new Date().toISOString(),
+  });
 
   const loadProfile = async (userId: string, userEmail: string) => {
-    try {
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      );
+    // Prevent concurrent fetches — SIGNED_IN can fire twice on login
+    if (fetchingRef.current) {
+      console.log("[UserContext] fetch already in progress, skipping");
+      return;
+    }
+    fetchingRef.current = true;
 
+    try {
       console.log("[UserContext] fetching profile for:", userId);
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("auth_user_id", userId)
-        .single();
+      // Raw REST fetch with 5s AbortController timeout —
+      // bypasses the Supabase JS client which can hang indefinitely
+      const controller = new AbortController();
+      const timeoutId  = setTimeout(() => controller.abort(), 5000);
 
-      console.log("[UserContext] profile result:", JSON.stringify({ data, error }));
+      let data: Record<string, unknown> | null = null;
 
-      if (error || !data) {
-        // Fallback: use auth session data directly so login never hangs
-        console.log("[UserContext] using auth fallback");
-        setUser({
-          id:         userId,
-          name:       userEmail.split("@")[0],
-          role:       "manager" as UserRole,
-          email:      userEmail,
-          tenantId:   "00000000-0000-0000-0000-000000000001",
-          tenantSlug: "classa",
-          initials:   userEmail.substring(0, 2).toUpperCase(),
-          loggedInAt: new Date().toISOString(),
-        });
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/profiles?auth_user_id=eq.${encodeURIComponent(userId)}&select=*&limit=1`,
+          {
+            signal: controller.signal,
+            headers: {
+              "apikey":        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+              "Authorization": `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,
+              "Content-Type":  "application/json",
+            },
+          }
+        );
+        clearTimeout(timeoutId);
+        const rows = await response.json();
+        console.log("[UserContext] profile raw fetch result:", rows);
+        data = Array.isArray(rows) ? (rows[0] ?? null) : null;
+      } catch (fetchErr) {
+        clearTimeout(timeoutId);
+        console.warn("[UserContext] raw fetch failed (timeout or network):", fetchErr);
+        // data stays null → fallback below
+      }
+
+      if (!data) {
+        console.log("[UserContext] no profile data — using auth fallback");
+        setUser(fallbackUser(userId, userEmail));
         setRoleLoading(false);
         return;
       }
 
       setUser({
-        id:         data.id,
-        name:       data.full_name ?? userEmail,
-        role:       data.role as UserRole,
-        email:      data.email ?? userEmail,
-        tenantId:   data.tenant_id,
+        id:         String(data.id ?? userId),
+        name:       String(data.full_name ?? userEmail),
+        role:       (data.role as UserRole) ?? "manager",
+        email:      String(data.email ?? userEmail),
+        tenantId:   data.tenant_id ? String(data.tenant_id) : "00000000-0000-0000-0000-000000000001",
         tenantSlug: "classa",
-        initials:   (data.full_name ?? userEmail).substring(0, 2).toUpperCase(),
+        initials:   String(data.full_name ?? userEmail).substring(0, 2).toUpperCase(),
         loggedInAt: new Date().toISOString(),
       });
       setRoleLoading(false);
     } catch (err) {
-      console.error("[UserContext] error:", err);
-      setUser({
-        id:         userId,
-        name:       userEmail.split("@")[0],
-        role:       "manager" as UserRole,
-        email:      userEmail,
-        tenantId:   "00000000-0000-0000-0000-000000000001",
-        tenantSlug: "classa",
-        initials:   userEmail.substring(0, 2).toUpperCase(),
-        loggedInAt: new Date().toISOString(),
-      });
+      console.error("[UserContext] loadProfile unexpected error:", err);
+      setUser(fallbackUser(userId, userEmail));
       setRoleLoading(false);
+    } finally {
+      fetchingRef.current = false;
     }
   };
 
