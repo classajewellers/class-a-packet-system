@@ -9,6 +9,7 @@ import {
   ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
+import { createBrowserClient } from "@supabase/ssr";
 import { LoggedInUser, UserRole } from "@/lib/userTypes";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
@@ -37,9 +38,6 @@ function deriveInitials(name: string): string {
     .slice(0, 2);
 }
 
-const DEFAULT_TENANT_ID   = "00000000-0000-0000-0000-000000000001";
-const DEFAULT_TENANT_SLUG = "classa";
-
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser]               = useState<LoggedInUser | null>(null);
   const [hydrated, setHydrated]       = useState(false);
@@ -47,80 +45,47 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const router      = useRouter();
   const supabaseRef = useRef(createBrowserSupabaseClient());
-  const loadGenRef  = useRef(0);
 
-  async function loadProfile(userId: string, email: string) {
-    const gen = ++loadGenRef.current;
-    setRoleLoading(true);
+  const loadProfile = async (userId: string, email: string) => {
+    try {
+      // Fresh client per call — avoids any singleton auth-state caching issues
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      );
 
-    console.log("[UserContext] loadProfile start — userId:", userId, "email:", email);
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, role, tenant_id, email")
+        .eq("auth_user_id", userId)
+        .single();
 
-    // Timeout: if profile fetch hangs for 8s, give up cleanly (no redirect)
-    let timedOut = false;
-    const timeoutId = setTimeout(() => {
-      if (gen === loadGenRef.current) {
-        console.warn("[UserContext] loadProfile timed out after 8s — clearing user, not redirecting");
-        timedOut = true;
+      console.log("[UserContext] profile query result:", { data, error });
+
+      if (error || !data) {
+        console.error("[UserContext] profile not found:", error);
         setUser(null);
         setRoleLoading(false);
-      }
-    }, 8000);
-
-    try {
-      // Query profiles WHERE auth_user_id = userId (invite flow)
-      const { data, error } = await supabaseRef.current
-        .from("profiles")
-        .select("id, full_name, role, email, tenant_id")
-        .eq("auth_user_id", userId)
-        .maybeSingle();
-
-      console.log("[UserContext] profile query result — data:", data, "error:", error);
-
-      if (timedOut || gen !== loadGenRef.current) {
-        console.log("[UserContext] stale or timed-out generation, ignoring result");
-        clearTimeout(timeoutId);
         return;
       }
-
-      if (error) {
-        // Don't sign out or redirect — just leave user as null so the page
-        // renders in a logged-out state without breaking the redirect loop.
-        console.error("[UserContext] profile fetch error (not signing out):", error.message);
-        setUser(null);
-        return;
-      }
-
-      if (!data) {
-        // Profile row missing — don't redirect; let the app render as guest.
-        // The user can try signing in again; middleware will protect other routes.
-        console.warn("[UserContext] no profile found for auth_user_id:", userId, "— setting user null, not redirecting");
-        setUser(null);
-        return;
-      }
-
-      console.log("[UserContext] profile loaded — role:", data.role, "tenant_id:", data.tenant_id);
 
       setUser({
-        id:         userId,
-        name:       data.full_name || email,
+        id:         data.id,
+        name:       data.full_name ?? email,
         role:       (data.role ?? "staff") as UserRole,
-        email:      data.email || email,
-        initials:   deriveInitials(data.full_name || email),
+        email:      data.email ?? email,
+        initials:   deriveInitials(data.full_name ?? email),
         loggedInAt: new Date().toISOString(),
-        tenantId:   data.tenant_id ?? DEFAULT_TENANT_ID,
-        tenantSlug: DEFAULT_TENANT_SLUG,
+        tenantId:   data.tenant_id,
+        tenantSlug: "classa",
       });
+      setRoleLoading(false);
     } catch (err) {
-      // Network/unexpected error — don't sign out or redirect, just clear user.
-      console.error("[UserContext] loadProfile threw (not signing out):", err);
-      if (gen === loadGenRef.current && !timedOut) {
-        setUser(null);
-      }
-    } finally {
-      clearTimeout(timeoutId);
-      if (gen === loadGenRef.current && !timedOut) setRoleLoading(false);
+      console.error("[UserContext] loadProfile error:", err);
+      setUser(null);
+      setRoleLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
     const supabase = supabaseRef.current;
@@ -128,7 +93,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       try {
-        // getUser() validates against the server — not stale localStorage
         console.log("[UserContext] calling getUser()...");
         const { data, error } = await supabase.auth.getUser();
 
@@ -164,7 +128,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
           }
         } else if (event === "SIGNED_OUT") {
           console.log("[UserContext] SIGNED_OUT event, clearing user");
-          loadGenRef.current++;
           setUser(null);
           setRoleLoading(false);
         }
@@ -178,10 +141,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Explicit logout: sign out + redirect. Only called by user action, not on errors.
+  // Explicit logout — only called by user action
   async function logout() {
     console.log("[UserContext] logout called");
-    loadGenRef.current++;
     setUser(null);
     setRoleLoading(false);
     await supabaseRef.current.auth.signOut();
