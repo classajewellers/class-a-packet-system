@@ -12,26 +12,11 @@ import { LoggedInUser, UserRole } from "@/lib/userTypes";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
-// ── PIN session storage key ───────────────────────────────────────────────────
-const PIN_SESSION_KEY = "vault_pin_session";
-
-export interface PinSessionData {
-  name: string;
-  role: UserRole;
-  email: string;
-  initials: string;
-  tenantId: string;
-  tenantSlug: string;
-}
-
 interface UserContextType {
   user: LoggedInUser | null;
   hydrated: boolean;
-  /** True while the role is being fetched from the profiles table. */
   roleLoading: boolean;
   logout: () => Promise<void>;
-  /** Called by the PIN login page after successful verification. */
-  loginWithPin: (data: PinSessionData) => void;
 }
 
 const UserContext = createContext<UserContextType>({
@@ -39,7 +24,6 @@ const UserContext = createContext<UserContextType>({
   hydrated: false,
   roleLoading: true,
   logout: async () => {},
-  loginWithPin: () => {},
 });
 
 function deriveInitials(name: string): string {
@@ -52,123 +36,77 @@ function deriveInitials(name: string): string {
     .slice(0, 2);
 }
 
-// ── Class A default tenant ID ────────────────────────────────────────────────
-const DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001";
+const DEFAULT_TENANT_ID   = "00000000-0000-0000-0000-000000000001";
 const DEFAULT_TENANT_SLUG = "classa";
 
 export function UserProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<LoggedInUser | null>(null);
-  const [hydrated, setHydrated] = useState(false);
+  const [user, setUser]               = useState<LoggedInUser | null>(null);
+  const [hydrated, setHydrated]       = useState(false);
   const [roleLoading, setRoleLoading] = useState(true);
 
   const supabaseRef = useRef(createBrowserSupabaseClient());
-  const loadGenRef = useRef(0);
-  const hasLoadedOnce = useRef(false);
+  const loadGenRef  = useRef(0);
 
-  // ── PIN session helper ────────────────────────────────────────────────────
+  async function loadProfile(userId: string, email: string) {
+    const gen = ++loadGenRef.current;
+    setRoleLoading(true);
 
-  function loginWithPin(data: PinSessionData) {
-    const session: LoggedInUser = {
-      id: `pin-${data.email}`,
-      name: data.name,
-      role: data.role,
-      email: data.email,
-      initials: data.initials,
-      loggedInAt: new Date().toISOString(),
-      tenantId: data.tenantId,
-      tenantSlug: data.tenantSlug,
-    };
     try {
-      localStorage.setItem(PIN_SESSION_KEY, JSON.stringify(session));
-      // Set a simple cookie the middleware can read
-      document.cookie = "vault_auth=1; path=/; max-age=86400; SameSite=Lax";
-    } catch { /* localStorage may be unavailable in some envs */ }
-    setUser(session);
-    hasLoadedOnce.current = true;
-    setRoleLoading(false);
-    setHydrated(true);
-  }
+      // Query by auth_user_id first (invite flow); fall back to id (legacy direct-auth)
+      let { data } = await supabaseRef.current
+        .from("profiles")
+        .select("full_name, role, tenant_id, tenant:tenants(slug)")
+        .eq("auth_user_id", userId)
+        .maybeSingle();
 
-  // ── Main effect ───────────────────────────────────────────────────────────
+      if (!data) {
+        const fallback = await supabaseRef.current
+          .from("profiles")
+          .select("full_name, role, tenant_id, tenant:tenants(slug)")
+          .eq("id", userId)
+          .maybeSingle();
+        data = fallback.data;
+      }
+
+      if (gen !== loadGenRef.current) return;
+
+      const tenantRow  = data?.tenant;
+      const tenantSlug =
+        tenantRow && !Array.isArray(tenantRow)
+          ? (tenantRow as { slug?: string }).slug ?? DEFAULT_TENANT_SLUG
+          : DEFAULT_TENANT_SLUG;
+
+      setUser({
+        id:         userId,
+        name:       data?.full_name || email,
+        role:       ((data?.role) ?? "staff") as UserRole,
+        email,
+        initials:   deriveInitials(data?.full_name || email),
+        loggedInAt: new Date().toISOString(),
+        tenantId:   data?.tenant_id ?? DEFAULT_TENANT_ID,
+        tenantSlug,
+      });
+    } catch (err) {
+      console.error("[UserContext] loadProfile failed:", err);
+      if (gen !== loadGenRef.current) return;
+      setUser({
+        id:         userId,
+        name:       email,
+        role:       "staff" as UserRole,
+        email,
+        initials:   deriveInitials(email),
+        loggedInAt: new Date().toISOString(),
+        tenantId:   DEFAULT_TENANT_ID,
+        tenantSlug: DEFAULT_TENANT_SLUG,
+      });
+    } finally {
+      if (gen === loadGenRef.current) setRoleLoading(false);
+    }
+  }
 
   useEffect(() => {
     const supabase = supabaseRef.current;
-    let cancelled = false;
-
-    // 1. Check localStorage for a PIN session first
-    try {
-      const stored = localStorage.getItem(PIN_SESSION_KEY);
-      if (stored) {
-        const parsed: LoggedInUser = JSON.parse(stored);
-        if (parsed?.id && parsed?.name) {
-          setUser(parsed);
-          hasLoadedOnce.current = true;
-          setRoleLoading(false);
-          setHydrated(true);
-          return; // PIN session found — skip Supabase auth check
-        }
-      }
-    } catch { /* ignore */ }
-
-    // 2. Fall back to Supabase session
-    async function loadProfile(userId: string, email: string) {
-      const gen = ++loadGenRef.current;
-      if (!hasLoadedOnce.current) {
-        setRoleLoading(true);
-      }
-
-      let profileData: { full_name?: string | null; role?: string | null; tenant_id?: string | null } | null = null;
-
-      try {
-        const queryPromise = supabase
-          .from("profiles")
-          .select("full_name, role, tenant_id")
-          .eq("id", userId)
-          .single();
-
-        const timeoutPromise = new Promise<{ data: null }>((resolve) =>
-          setTimeout(() => resolve({ data: null }), 8000)
-        );
-
-        const result = await Promise.race([queryPromise, timeoutPromise]);
-        profileData = result.data;
-      } catch {
-        // Network-level exception — profileData stays null
-      }
-
-      if (cancelled || gen !== loadGenRef.current) return;
-
-      if (profileData) {
-        setUser({
-          id: userId,
-          name: profileData.full_name || email,
-          role: ((profileData.role) ?? "staff") as UserRole,
-          email,
-          initials: deriveInitials(profileData.full_name || email),
-          loggedInAt: new Date().toISOString(),
-          tenantId: profileData.tenant_id ?? DEFAULT_TENANT_ID,
-          tenantSlug: DEFAULT_TENANT_SLUG,
-        });
-      } else {
-        setUser((prev) =>
-          prev
-            ? { ...prev }
-            : {
-                id: userId,
-                name: email,
-                role: null,
-                email,
-                initials: deriveInitials(email),
-                loggedInAt: new Date().toISOString(),
-                tenantId: DEFAULT_TENANT_ID,
-                tenantSlug: DEFAULT_TENANT_SLUG,
-              }
-        );
-      }
-
-      hasLoadedOnce.current = true;
-      setRoleLoading(false);
-    }
+    let cancelled  = false;
 
     (async () => {
       try {
@@ -187,47 +125,41 @@ export function UserProvider({ children }: { children: ReactNode }) {
       }
     })();
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, session: Session | null) => {
-      if (cancelled) return;
-
-      if (
-        event === "SIGNED_IN" ||
-        event === "TOKEN_REFRESHED" ||
-        event === "USER_UPDATED"
-      ) {
-        if (session?.user) {
-          await loadProfile(session.user.id, session.user.email ?? "");
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event: AuthChangeEvent, session: Session | null) => {
+        if (cancelled) return;
+        if (
+          event === "SIGNED_IN" ||
+          event === "TOKEN_REFRESHED" ||
+          event === "USER_UPDATED"
+        ) {
+          if (session?.user) {
+            await loadProfile(session.user.id, session.user.email ?? "");
+          }
+        } else if (event === "SIGNED_OUT") {
+          loadGenRef.current++;
+          setUser(null);
+          setRoleLoading(false);
         }
-      } else if (event === "SIGNED_OUT") {
-        loadGenRef.current++;
-        setUser(null);
-        setRoleLoading(false);
       }
-    });
+    );
 
     return () => {
       cancelled = true;
       subscription.unsubscribe();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function logout() {
     loadGenRef.current++;
-    // Clear PIN session
-    try {
-      localStorage.removeItem(PIN_SESSION_KEY);
-      document.cookie = "vault_auth=; path=/; max-age=0; SameSite=Lax";
-    } catch { /* ignore */ }
-    // Clear Supabase session
     await supabaseRef.current.auth.signOut();
     setUser(null);
     setRoleLoading(false);
   }
 
   return (
-    <UserContext.Provider value={{ user, hydrated, roleLoading, logout, loginWithPin }}>
+    <UserContext.Provider value={{ user, hydrated, roleLoading, logout }}>
       {children}
     </UserContext.Provider>
   );

@@ -207,10 +207,11 @@ export default function Sidebar({ onOpenAI }: Props) {
               />
               {settingsExpanded && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
-                  <SubLink href="/settings"          label="Preferences" />
-                  <SubLink href="/pricing"           label="Pricing" />
-                  {isAdmin && <SubLink href="/admin/users"      label="Users" />}
+                  <SubLink href="/settings"            label="Preferences" />
+                  <SubLink href="/pricing"             label="Pricing" />
+                  {isManager && <SubLink href="/settings/users"   label="Users" />}
                   {isManager && <SubLink href="/settings/tenants" label="Stores" />}
+                  {isAdmin   && <SubLink href="/admin/users"      label="Admin Users" />}
                 </div>
               )}
             </div>
