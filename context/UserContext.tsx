@@ -45,12 +45,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated]       = useState(false);
   const [roleLoading, setRoleLoading] = useState(true);
 
-  const router       = useRouter();
-  const supabaseRef  = useRef(createBrowserSupabaseClient());
-  const loadGenRef   = useRef(0);
+  const router      = useRouter();
+  const supabaseRef = useRef(createBrowserSupabaseClient());
+  const loadGenRef  = useRef(0);
 
-  // Bug 2 fix: sign out and redirect to /login cleanly
   async function forceSignOut() {
+    console.log("[UserContext] forceSignOut called");
     loadGenRef.current++;
     setUser(null);
     setRoleLoading(false);
@@ -63,61 +63,61 @@ export function UserProvider({ children }: { children: ReactNode }) {
     const gen = ++loadGenRef.current;
     setRoleLoading(true);
 
-    // Bug 2 fix: 5-second timeout — if profile fetch hangs, sign out
+    console.log("[UserContext] loadProfile start — userId:", userId, "email:", email);
+
+    // 5-second timeout: if profile fetch hangs, sign out
     const timeoutId = setTimeout(async () => {
       if (gen === loadGenRef.current) {
-        console.warn("[UserContext] loadProfile timed out, signing out");
+        console.warn("[UserContext] loadProfile timed out after 5s, signing out");
         await forceSignOut();
       }
     }, 5000);
 
     try {
-      // Query by auth_user_id first (invite flow); fall back to id (legacy direct-auth)
-      let { data, error: err1 } = await supabaseRef.current
+      // Query profiles WHERE auth_user_id = userId (invite flow)
+      const { data, error } = await supabaseRef.current
         .from("profiles")
-        .select("full_name, role, tenant_id, tenant:tenants(slug)")
+        .select("id, full_name, role, email, tenant_id")
         .eq("auth_user_id", userId)
         .maybeSingle();
 
-      if (!data) {
-        const fallback = await supabaseRef.current
-          .from("profiles")
-          .select("full_name, role, tenant_id, tenant:tenants(slug)")
-          .eq("id", userId)
-          .maybeSingle();
-        data = fallback.data;
+      console.log("[UserContext] profile query result — data:", data, "error:", error);
+
+      if (gen !== loadGenRef.current) {
+        console.log("[UserContext] stale generation, ignoring result");
+        clearTimeout(timeoutId);
+        return;
       }
 
-      if (gen !== loadGenRef.current) return;
-
-      // Bug 2 fix: if profile not found at all, sign out rather than leaving app broken
-      if (!data) {
-        console.warn("[UserContext] no profile found for user, signing out");
+      if (error) {
+        console.error("[UserContext] profile fetch error:", error.message);
         clearTimeout(timeoutId);
         await forceSignOut();
         return;
       }
 
-      const tenantRow  = data.tenant;
-      const tenantSlug =
-        tenantRow && !Array.isArray(tenantRow)
-          ? (tenantRow as { slug?: string }).slug ?? DEFAULT_TENANT_SLUG
-          : DEFAULT_TENANT_SLUG;
+      if (!data) {
+        console.warn("[UserContext] no profile found for auth_user_id:", userId, "— signing out");
+        clearTimeout(timeoutId);
+        await forceSignOut();
+        return;
+      }
+
+      console.log("[UserContext] profile loaded — role:", data.role, "tenant_id:", data.tenant_id);
 
       setUser({
         id:         userId,
         name:       data.full_name || email,
-        role:       ((data.role) ?? "staff") as UserRole,
-        email,
+        role:       (data.role ?? "staff") as UserRole,
+        email:      data.email || email,
         initials:   deriveInitials(data.full_name || email),
         loggedInAt: new Date().toISOString(),
         tenantId:   data.tenant_id ?? DEFAULT_TENANT_ID,
-        tenantSlug,
+        tenantSlug: DEFAULT_TENANT_SLUG,
       });
     } catch (err) {
-      console.error("[UserContext] loadProfile failed:", err);
+      console.error("[UserContext] loadProfile threw:", err);
       if (gen !== loadGenRef.current) return;
-      // Bug 2 fix: on fetch error, sign out rather than falling back to broken defaults
       clearTimeout(timeoutId);
       await forceSignOut();
       return;
@@ -133,15 +133,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       try {
-        const { data } = await supabase.auth.getSession();
+        // Use getUser() — validates against the server, not stale local storage
+        console.log("[UserContext] calling getUser()...");
+        const { data, error } = await supabase.auth.getUser();
+
+        console.log("[UserContext] getUser result — user:", data?.user?.id, "error:", error?.message);
+
         if (cancelled) return;
-        if (data.session?.user) {
-          await loadProfile(data.session.user.id, data.session.user.email ?? "");
+
+        if (data?.user) {
+          await loadProfile(data.user.id, data.user.email ?? "");
         } else {
+          console.log("[UserContext] no authenticated user, hydrating as guest");
           setRoleLoading(false);
         }
       } catch (err) {
-        console.error("[UserContext] getSession failed:", err);
+        console.error("[UserContext] getUser failed:", err);
         if (!cancelled) setRoleLoading(false);
       } finally {
         if (!cancelled) setHydrated(true);
@@ -150,6 +157,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event: AuthChangeEvent, session: Session | null) => {
+        console.log("[UserContext] onAuthStateChange event:", event, "session user:", session?.user?.id);
         if (cancelled) return;
         if (
           event === "SIGNED_IN" ||
@@ -160,6 +168,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             await loadProfile(session.user.id, session.user.email ?? "");
           }
         } else if (event === "SIGNED_OUT") {
+          console.log("[UserContext] SIGNED_OUT event, clearing user");
           loadGenRef.current++;
           setUser(null);
           setRoleLoading(false);
@@ -174,8 +183,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Bug 2 fix: logout clears all state and redirects immediately
   async function logout() {
+    console.log("[UserContext] logout called");
     loadGenRef.current++;
     setUser(null);
     setRoleLoading(false);

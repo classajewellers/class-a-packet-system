@@ -31,8 +31,11 @@ export default function Sidebar({ onOpenAI }: Props) {
   const { user, roleLoading, logout } = useUser();
   const router = useRouter();
 
-  const isManager = canManage(user?.role);
-  const isAdmin = user?.role === "admin";
+  // While user is still loading (roleLoading or no user yet), optimistically show
+  // manager nav items rather than skeleton bars. Once the profile resolves, we
+  // apply the real role check and hide items for non-managers.
+  const isManager = roleLoading ? true : canManage(user?.role);
+  const isAdmin   = roleLoading ? false : user?.role === "admin";
 
   const quotesExpanded    = pathname.startsWith("/quotes");
   // const inventoryExpanded = pathname.startsWith("/inventory"); // hidden until rebuilt
@@ -123,16 +126,6 @@ export default function Sidebar({ onOpenAI }: Props) {
     );
   }
 
-  /** Skeleton bar shown while role is loading */
-  function SkeletonItem() {
-    return (
-      <div style={{ padding: "10px 16px", display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{ width: 20, height: 20, borderRadius: 4, background: "rgba(255,255,255,0.08)" }} />
-        <div style={{ height: 12, width: 80, borderRadius: 4, background: "rgba(255,255,255,0.08)" }} />
-      </div>
-    );
-  }
-
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
@@ -181,14 +174,8 @@ export default function Sidebar({ onOpenAI }: Props) {
 
         <NavLink href="/customers" icon={Users} label="Customers" />
 
-        {/* Manager-only top-level items — show skeleton while role loads */}
-        {roleLoading ? (
-          <>
-            <SkeletonItem />
-            <SkeletonItem />
-            <SkeletonItem />
-          </>
-        ) : isManager ? (
+        {/* Manager-only top-level items — shown optimistically while loading, hidden for non-managers once role resolves */}
+        {isManager ? (
           <>
             <NavLink href="/workshop" icon={Wrench} label="Workshop" />
 
@@ -249,15 +236,11 @@ export default function Sidebar({ onOpenAI }: Props) {
                 {user.name}
               </div>
               <div style={{ fontSize: 11, color: DEFAULT_COLOR, textTransform: "capitalize" }}>
-                {roleLoading ? (
-                  <span style={{ display: "inline-block", width: 40, height: 10, borderRadius: 3, background: "rgba(255,255,255,0.12)" }} />
-                ) : (
-                  user.role ?? "…"
-                )}
+                {user.role ?? "…"}
               </div>
             </div>
             <button
-              onClick={async () => { await logout(); router.push("/login"); }}
+              onClick={logout}
               title="Sign out"
               style={{ background: "rgba(99,91,255,0.2)", border: "none", color: "#A5B4FC", cursor: "pointer", padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 500, flexShrink: 0, transition: "background .15s" }}
               onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "rgba(99,91,255,0.35)")}
