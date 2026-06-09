@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
-import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
-// Shopify webhook is called by Zapier (no user session) — use Class A tenant ID directly
-const SHOPIFY_TENANT_ID = "00000000-0000-0000-0000-000000000001";
+// Shopify webhook is called by Zapier (no user session) — hardcode Class A tenant ID
+const CLASSA_TENANT_ID = "00000000-0000-0000-0000-000000000001";
 import { generateReferenceNumber } from "@/lib/referenceNumber";
 import { todayISO } from "@/lib/formatters";
 
@@ -399,10 +399,10 @@ async function processOrder(body: ZapierFlatOrder): Promise<void> {
     },
   };
 
-  const supabase = await createTenantSupabaseClient(SHOPIFY_TENANT_ID);
+  const supabase = createServerSupabaseClient();
   const { data, error } = await supabase
     .from("packets")
-    .insert({ ...insertData, tenant_id: SHOPIFY_TENANT_ID })
+    .insert({ ...insertData, tenant_id: CLASSA_TENANT_ID })
     .select("reference_number, id")
     .single();
 
