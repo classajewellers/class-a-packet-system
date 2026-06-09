@@ -49,29 +49,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const supabaseRef = useRef(createBrowserSupabaseClient());
   const loadGenRef  = useRef(0);
 
-  async function forceSignOut() {
-    console.log("[UserContext] forceSignOut called");
-    loadGenRef.current++;
-    setUser(null);
-    setRoleLoading(false);
-    setHydrated(true);
-    await supabaseRef.current.auth.signOut();
-    router.push("/login");
-  }
-
   async function loadProfile(userId: string, email: string) {
     const gen = ++loadGenRef.current;
     setRoleLoading(true);
 
     console.log("[UserContext] loadProfile start — userId:", userId, "email:", email);
 
-    // 5-second timeout: if profile fetch hangs, sign out
-    const timeoutId = setTimeout(async () => {
+    // Timeout: if profile fetch hangs for 8s, give up cleanly (no redirect)
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
       if (gen === loadGenRef.current) {
-        console.warn("[UserContext] loadProfile timed out after 5s, signing out");
-        await forceSignOut();
+        console.warn("[UserContext] loadProfile timed out after 8s — clearing user, not redirecting");
+        timedOut = true;
+        setUser(null);
+        setRoleLoading(false);
       }
-    }, 5000);
+    }, 8000);
 
     try {
       // Query profiles WHERE auth_user_id = userId (invite flow)
@@ -83,23 +76,25 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
       console.log("[UserContext] profile query result — data:", data, "error:", error);
 
-      if (gen !== loadGenRef.current) {
-        console.log("[UserContext] stale generation, ignoring result");
+      if (timedOut || gen !== loadGenRef.current) {
+        console.log("[UserContext] stale or timed-out generation, ignoring result");
         clearTimeout(timeoutId);
         return;
       }
 
       if (error) {
-        console.error("[UserContext] profile fetch error:", error.message);
-        clearTimeout(timeoutId);
-        await forceSignOut();
+        // Don't sign out or redirect — just leave user as null so the page
+        // renders in a logged-out state without breaking the redirect loop.
+        console.error("[UserContext] profile fetch error (not signing out):", error.message);
+        setUser(null);
         return;
       }
 
       if (!data) {
-        console.warn("[UserContext] no profile found for auth_user_id:", userId, "— signing out");
-        clearTimeout(timeoutId);
-        await forceSignOut();
+        // Profile row missing — don't redirect; let the app render as guest.
+        // The user can try signing in again; middleware will protect other routes.
+        console.warn("[UserContext] no profile found for auth_user_id:", userId, "— setting user null, not redirecting");
+        setUser(null);
         return;
       }
 
@@ -116,14 +111,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
         tenantSlug: DEFAULT_TENANT_SLUG,
       });
     } catch (err) {
-      console.error("[UserContext] loadProfile threw:", err);
-      if (gen !== loadGenRef.current) return;
-      clearTimeout(timeoutId);
-      await forceSignOut();
-      return;
+      // Network/unexpected error — don't sign out or redirect, just clear user.
+      console.error("[UserContext] loadProfile threw (not signing out):", err);
+      if (gen === loadGenRef.current && !timedOut) {
+        setUser(null);
+      }
     } finally {
       clearTimeout(timeoutId);
-      if (gen === loadGenRef.current) setRoleLoading(false);
+      if (gen === loadGenRef.current && !timedOut) setRoleLoading(false);
     }
   }
 
@@ -133,7 +128,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       try {
-        // Use getUser() — validates against the server, not stale local storage
+        // getUser() validates against the server — not stale localStorage
         console.log("[UserContext] calling getUser()...");
         const { data, error } = await supabase.auth.getUser();
 
@@ -183,6 +178,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Explicit logout: sign out + redirect. Only called by user action, not on errors.
   async function logout() {
     console.log("[UserContext] logout called");
     loadGenRef.current++;
