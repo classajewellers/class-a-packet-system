@@ -6,18 +6,18 @@ export const revalidate = 0
 
 const ALLOWED_TABLES = ['pricing_metal_rates', 'pricing_fixed_costs', 'pricing_melee_stones']
 
-export async function PATCH(request: NextRequest, { params }: { params: { table: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: { table: string } }) {
   try {
     const { table } = params
     if (!ALLOWED_TABLES.includes(table)) {
       return NextResponse.json({ error: 'Table not allowed' }, { status: 400 })
     }
-    const body = await request.json()
+    const body = await req.json()
     const { id, field, value } = body
     if (!id || !field) {
       return NextResponse.json({ error: 'Missing id or field' }, { status: 400 })
     }
-    const tenantId = request.headers.get('x-tenant-id') ?? ''
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
     const supabase = await createTenantSupabaseClient(tenantId)
     const { error } = await supabase
       .from(table)

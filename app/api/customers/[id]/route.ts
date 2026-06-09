@@ -4,7 +4,7 @@ import { createTenantSupabaseClient } from "@/lib/supabase-server";
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
   // id is URL-encoded customer email

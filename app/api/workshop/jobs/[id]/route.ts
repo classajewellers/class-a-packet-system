@@ -4,7 +4,7 @@ import { createTenantSupabaseClient } from "@/lib/supabase-server";
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
   try {
@@ -54,7 +54,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
   console.log("[DELETE workshop job] id:", params.id);

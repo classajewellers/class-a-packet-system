@@ -95,7 +95,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
   console.log("[DELETE quote] id:", params.id);
