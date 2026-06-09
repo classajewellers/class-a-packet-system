@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
 
@@ -12,6 +12,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Bug 1 fix: always reset stale loading state on mount
+  useEffect(() => {
+    setLoading(false)
+  }, [])
 
   const handleSignIn = async () => {
     setLoading(true)
@@ -34,6 +39,8 @@ export default function LoginPage() {
     }
 
     if (data.session) {
+      // Allow session cookie to be set before navigating
+      await new Promise(resolve => setTimeout(resolve, 500))
       router.push('/orders')
       router.refresh()
     }
