@@ -14,8 +14,8 @@ const PUBLIC_ROUTES = new Set([
   "/vault-admin/login",
 ]);
 
-// Prefix-based public paths
-const PUBLIC_PREFIXES = ["/claim/"];
+// Prefix-based public paths (trailing-slash and query-string safe)
+const PUBLIC_PREFIXES = ["/claim/", "/api/shopify/"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
