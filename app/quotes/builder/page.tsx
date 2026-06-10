@@ -1078,7 +1078,7 @@ export default function QuoteBuilderPage() {
                   <span style={{ color: '#6B7280' }}>Quoted price</span>
                   <span style={{ fontWeight: 600 }}>
                     {effectiveRetail > 0
-                      ? `$${effectiveRetail.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                      ? `$${effectiveRetail.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                       : '—'}
                   </span>
                 </div>
@@ -1126,7 +1126,7 @@ export default function QuoteBuilderPage() {
               <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>Quoted Price (incl. GST)</div>
               <div style={{ fontSize: 40, fontWeight: 800, color: '#1A1A2E', lineHeight: 1 }}>
                 {effectiveRetail > 0
-                  ? `$${effectiveRetail.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                  ? `$${effectiveRetail.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                   : '—'}
               </div>
             </div>
