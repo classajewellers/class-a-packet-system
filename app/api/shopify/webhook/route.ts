@@ -430,6 +430,8 @@ function extractDispatchDateZapier(raw: any): string | null {
 // Called via waitUntil() so the 200 is already sent before any DB work begins.
 
 async function processOrder(rawBody: Record<string, unknown>): Promise<void> {
+  console.log("[shopify/webhook] processOrder started");
+  try {
   // ── A. Generate reference number ──────────────────────────────────────────
   let referenceNumber: string;
   try {
@@ -437,12 +439,15 @@ async function processOrder(rawBody: Record<string, unknown>): Promise<void> {
     console.log("[shopify/webhook] Reference:", referenceNumber);
   } catch (err) {
     console.error("[shopify/webhook] Reference generation failed:", err instanceof Error ? err.message : err);
+    console.error("[shopify/webhook] Reference generation stack:", err instanceof Error ? err.stack : String(err));
     return;
   }
 
   // ── B. Detect format ──────────────────────────────────────────────────────
   const isNative = isNativeShopifyFormat(rawBody);
   console.log("[shopify/webhook] format detected:", isNative ? "native Shopify" : "Zapier flat");
+  console.log("[shopify/webhook] body keys:", Object.keys(rawBody));
+  console.log("[shopify/webhook] body sample:", JSON.stringify(rawBody).slice(0, 500));
 
   // ── C. Extract fields from the appropriate format ─────────────────────────
 
@@ -464,6 +469,9 @@ async function processOrder(rawBody: Record<string, unknown>): Promise<void> {
     const resolved = resolveNameNative(order);
     firstName = resolved.firstName;
     lastName  = resolved.lastName;
+    console.log("[shopify/webhook] [native] resolved name:", { firstName, lastName });
+    console.log("[shopify/webhook] [native] shipping_address:", JSON.stringify(order.shipping_address ?? null));
+    console.log("[shopify/webhook] [native] line_items count:", order.line_items?.length ?? 0);
 
     articles       = buildArticles(order.line_items ?? []);
     shippingMethod = extractShippingMethodNative(order.shipping_lines);
@@ -503,6 +511,11 @@ async function processOrder(rawBody: Record<string, unknown>): Promise<void> {
     const resolved = resolveNameZapier(body);
     firstName = resolved.firstName;
     lastName  = resolved.lastName;
+    console.log("[shopify/webhook] [zapier] resolved name:", { firstName, lastName });
+    console.log("[shopify/webhook] [zapier] orderNumber:", body.orderNumber);
+    console.log("[shopify/webhook] [zapier] shippingFirstName:", body.shippingFirstName);
+    console.log("[shopify/webhook] [zapier] customerFirstName:", body.customerFirstName, "customerLastName:", body.customerLastName);
+    console.log("[shopify/webhook] [zapier] lineItems type:", typeof body.lineItems, "length:", typeof body.lineItems === "string" ? (body.lineItems as string).length : "N/A");
 
     articles       = parseLineItems(body.lineItems);
     shippingMethod = extractShippingMethodZapier(body.shippingLines);
@@ -546,13 +559,12 @@ async function processOrder(rawBody: Record<string, unknown>): Promise<void> {
     console.log("[webhook] gift wrap detection:", { noteAttributesCount: noteAttributes.length, giftWrapAttr, hasGiftWrap });
   }
 
+  // ── D. Insert into Supabase ───────────────────────────────────────────────
   console.log("[shopify/webhook] articles:", articles);
   console.log("[shopify/webhook] shippingMethod:", shippingMethod);
   console.log("[shopify/webhook] dispatchDate:", dispatchDate);
-  console.log("[webhook] pricing:", { originalPrice, finalPrice, discountAmount });
-  console.log("[shopify/webhook] Resolved name:", { firstName, lastName });
+  console.log("[shopify/webhook] pricing:", { originalPrice, finalPrice, discountAmount });
 
-  // ── D. Insert into Supabase ───────────────────────────────────────────────
   const insertData = {
     reference_number:      referenceNumber,
     packet_type:           "online_order",
@@ -591,19 +603,31 @@ async function processOrder(rawBody: Record<string, unknown>): Promise<void> {
     },
   };
 
+  console.log("[shopify/webhook] insertData (pre-insert):", JSON.stringify({ ...insertData, packet_data: "[omitted]" }, null, 2));
+
   const supabase = createServerSupabaseClient();
+  console.log("[shopify/webhook] calling supabase.from(packets).insert — tenant_id:", CLASSA_TENANT_ID);
+
   const { data, error } = await supabase
     .from("packets")
     .insert({ ...insertData, tenant_id: CLASSA_TENANT_ID })
     .select("reference_number, id")
     .single();
 
+  console.log("[shopify/webhook] insert result — data:", JSON.stringify(data));
+  console.log("[shopify/webhook] insert result — error:", JSON.stringify(error));
+
   if (error) {
-    console.error("[shopify/webhook] Supabase insert failed:", JSON.stringify(error));
+    console.error("[shopify/webhook] INSERT FAILED — code:", error.code, "| message:", error.message, "| details:", error.details, "| hint:", error.hint);
     return;
   }
 
-  console.log("[shopify/webhook] Packet saved:", data?.reference_number);
+  console.log("[shopify/webhook] Packet saved successfully:", data?.reference_number, "id:", data?.id);
+
+  } catch (unexpectedErr) {
+    console.error("[shopify/webhook] UNEXPECTED ERROR in processOrder:", unexpectedErr instanceof Error ? unexpectedErr.message : String(unexpectedErr));
+    console.error("[shopify/webhook] UNEXPECTED ERROR stack:", unexpectedErr instanceof Error ? unexpectedErr.stack : "(no stack)");
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
