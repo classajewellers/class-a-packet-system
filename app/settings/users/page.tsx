@@ -47,10 +47,16 @@ function InviteModal({
         body: JSON.stringify({ name: form.name, email: form.email, role: form.role }),
       });
       const json = await res.json();
-      if (!res.ok) { setError(json.error ?? "Failed to send invite"); return; }
-      onSuccess(form.email);
+      if (res.ok && json.success) {
+        onSuccess(form.email);
+        return;
+      }
+      const msg = typeof json?.error === "string" && json.error.trim()
+        ? json.error
+        : "Failed to send invite. Please try again.";
+      setError(msg);
     } catch (e) {
-      setError(String(e));
+      setError(e instanceof Error ? e.message : "Failed to send invite. Please try again.");
     } finally {
       setSaving(false);
     }
