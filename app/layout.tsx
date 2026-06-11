@@ -7,6 +7,13 @@ export const metadata: Metadata = {
   title: "Vault",
   description: "Internal repair and order system for Vault",
   robots: "noindex, nofollow",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Vault",
+  },
+  themeColor: "#635BFF",
 };
 
 export const viewport: Viewport = {
