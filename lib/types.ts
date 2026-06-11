@@ -44,6 +44,8 @@ export interface PacketFormData {
 
   // Repair / Custom Order
   from_date: string;
+  arms_tracker_number: string;
+  cad_required: boolean;
 
   // Quote conversion
   from_quote_id?: string;
@@ -104,6 +106,8 @@ export const defaultFormData: PacketFormData = {
   occasion: "",
   staff_member: "",
   from_date: new Date().toISOString().split("T")[0],
+  arms_tracker_number: "",
+  cad_required: false,
   layby_schedule: "",
   number_of_payments: "",
   terms_accepted: false,

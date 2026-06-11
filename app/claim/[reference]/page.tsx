@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { Packet } from "@/lib/types";
@@ -361,7 +362,9 @@ export default async function ClaimSlipPage({
       <div className="claim-page">
         {/* ── Print button ── */}
         <div className="print-btn-wrap">
-          <PrintButton />
+          <Suspense fallback={null}>
+            <PrintButton />
+          </Suspense>
         </div>
 
         {/* ── Claim slip document ── */}

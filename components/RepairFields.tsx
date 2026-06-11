@@ -23,6 +23,19 @@ export default function RepairFields({ data, onChange, repairTrackerNumber }: Pr
         />
       </div>
 
+      <div>
+        <label className="block text-sm font-semibold text-[#1B1F3B] mb-1">
+          ARMS Repair Tracker No.
+        </label>
+        <input
+          type="text"
+          value={data.arms_tracker_number}
+          onChange={(e) => onChange("arms_tracker_number", e.target.value)}
+          placeholder="e.g. ARM-12345"
+          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-[#1B1F3B] focus:outline-none focus:ring-2 focus:ring-[#C9A84C] focus:border-[#C9A84C]"
+        />
+      </div>
+
       {repairTrackerNumber && (
         <div>
           <label className="block text-sm font-semibold text-[#1B1F3B] mb-1">

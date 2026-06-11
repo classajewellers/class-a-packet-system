@@ -4,7 +4,7 @@ import { PacketFormData } from "@/lib/types";
 
 interface Props {
   data: PacketFormData;
-  onChange: (field: keyof PacketFormData, value: string) => void;
+  onChange: (field: keyof PacketFormData, value: string | boolean) => void;
 }
 
 const inputClass =
@@ -43,6 +43,19 @@ export default function CustomOrderFields({ data, onChange }: Props) {
           <option>Platinum</option>
           <option>Sterling Silver</option>
         </select>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <input
+          type="checkbox"
+          id="cad_required"
+          checked={data.cad_required}
+          onChange={(e) => onChange("cad_required", e.target.checked)}
+          className="w-5 h-5 rounded border-gray-300 text-[#635BFF] focus:ring-[#635BFF] cursor-pointer"
+        />
+        <label htmlFor="cad_required" className="text-sm font-semibold text-[#1B1F3B] cursor-pointer select-none">
+          CAD Required
+        </label>
       </div>
     </div>
   );

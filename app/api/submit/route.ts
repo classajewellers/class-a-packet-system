@@ -98,6 +98,12 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
     insertData.carat_weight    = formData.carat_weight ? parseFloat(formData.carat_weight) || null : null;
     insertData.metal_colour    = formData.metal_colour    || null;
   }
+  if (formData.packet_type === "repair") {
+    insertData.arms_tracker_number = formData.arms_tracker_number || null;
+  }
+  if (formData.packet_type === "custom_order") {
+    insertData.cad_required = formData.cad_required ?? false;
+  }
 
   // Online order-specific columns
   if (formData.packet_type === "online_order") {

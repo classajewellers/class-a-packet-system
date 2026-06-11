@@ -346,13 +346,15 @@ function NewOrderPageInner() {
                   />
                 </Card>
 
-                <Card title="Valuation & Contact">
-                  <ValueContactSection
-                    data={formData}
-                    onChange={(f, v) => handleChange(f, v as boolean | string[])}
-                    errors={errors}
-                  />
-                </Card>
+                {(formData.packet_type === "repair" || formData.packet_type === "custom_order") && (
+                  <Card title="Valuation & Contact">
+                    <ValueContactSection
+                      data={formData}
+                      onChange={(f, v) => handleChange(f, v as boolean | string[])}
+                      errors={errors}
+                    />
+                  </Card>
+                )}
 
                 {formData.packet_type !== "online_order" && (
                   <Card title="Articles & Instructions">
