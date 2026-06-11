@@ -330,6 +330,9 @@ export interface Quote {
   job_type?: string | null;
   /** Free-text description printed on customer PDFs exactly as typed. */
   job_description?: string | null;
+  ai_description?: string | null;
+  finger_size?: string | null;
+  stock_sku?: string | null;
 }
 
 // ─────────────────────────────────────────────

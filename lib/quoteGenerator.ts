@@ -36,10 +36,111 @@ export function generateQuoteHTML(quote: Quote): string {
       ? `$${Number(priceNum).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       : "&nbsp;";
 
-    // ── New multi-item layout: qbd.items array ────────────────────────────
-    const qbdItems = (builderData as Record<string, unknown>)?.items;
-    if (Array.isArray(qbdItems) && qbdItems.length > 0) {
-      const items = qbdItems as Array<{ job_type?: string; description?: string; retail_price?: string }>;
+    const qbd = builderData as Record<string, unknown>;
+
+    // ── New detailed builder layout (metals array present) ────────────────
+    if (Array.isArray(qbd.metals)) {
+      const heading = esc(
+        (qbd.subcategory as string | null) ||
+        (qbd.item_type as string | null) ||
+        "Custom Order"
+      );
+
+      const aiDesc = (quote.ai_description as string | null | undefined) ||
+        (qbd.ai_description as string | null) ||
+        (qbd.design as string | null);
+
+      const fingerSize = (quote.finger_size as string | null | undefined) || (qbd.finger_size as string | null);
+      const stockSku = (quote.stock_sku as string | null | undefined) || (qbd.stock_sku as string | null);
+
+      const metals = qbd.metals as Array<{ type?: string; weight?: number }>;
+
+      const rawMs = qbd.main_stone;
+      const mainStones: Array<Record<string, unknown>> = Array.isArray(rawMs)
+        ? rawMs as Array<Record<string, unknown>>
+        : rawMs != null ? [rawMs as Record<string, unknown>] : [];
+
+      const rawMelee = qbd.melee_stones;
+      const meleeStones: Array<Record<string, unknown>> = Array.isArray(rawMelee)
+        ? rawMelee as Array<Record<string, unknown>> : [];
+
+      const addons = qbd.addons as Record<string, unknown> | null | undefined;
+      const addonLines: string[] = [];
+      if (addons) {
+        if (addons.hand_engraving) addonLines.push("Hand Engraving");
+        if (addons.laser_engraving) addonLines.push("Laser Engraving");
+        if (addons.butterflies) addonLines.push("Butterfly Earring Backs");
+        if (addons.chain) addonLines.push("Chain");
+        if ((addons.additional_labour as number) > 0) addonLines.push("Additional Labour");
+      }
+
+      const tdLabel = `padding:7px 12px;font-size:9pt;color:#555;border-right:1px solid #e8e8e8;width:110px;vertical-align:top;`;
+      const tdValue = `padding:7px 12px;font-size:9pt;color:#222;`;
+      const rowBg = `background:#f9f9f9;`;
+
+      let rows = "";
+
+      rows += `<tr style="background:#000"><th colspan="2" style="color:#fff;font-size:10pt;letter-spacing:0.5px;padding:8px 12px;text-align:left;">${heading}</th></tr>`;
+
+      if (aiDesc) {
+        rows += `<tr style="background:#fff"><td colspan="2" style="padding:12px 12px 10px;font-size:10pt;line-height:1.7;color:#111;font-style:italic;">${esc(aiDesc)}</td></tr>`;
+      }
+
+      rows += `<tr><td colspan="2" style="padding:0;height:1px;background:#e0e0e0;"></td></tr>`;
+
+      metals.filter(m => m.type).forEach((m) => {
+        const weightStr = m.weight ? `${m.weight}g` : "";
+        rows += `<tr style="${rowBg}"><td style="${tdLabel}">Metal</td><td style="${tdValue}">${esc(m.type ?? "")}${weightStr ? ` &mdash; ${esc(weightStr)}` : ""}</td></tr>`;
+      });
+
+      mainStones.forEach((s, i) => {
+        const parts = [
+          s.carat_weight != null ? `${s.carat_weight}ct` : null,
+          s.colour, s.clarity, s.origin, s.shape,
+        ].map(v => (v != null && v !== "" ? String(v) : null)).filter(Boolean).join(" ");
+        const lbl = mainStones.length === 1 ? "Stone" : `Stone ${i + 1}`;
+        if (parts) {
+          rows += `<tr style="${rowBg}"><td style="${tdLabel}">${lbl}</td><td style="${tdValue}">${esc(parts)}</td></tr>`;
+        }
+      });
+
+      meleeStones.filter(r => r.stone_type).forEach((r) => {
+        const qty = (r.qty as number) || 1;
+        const parts = [
+          qty > 1 ? `${qty}×` : null,
+          r.stone_type,
+          r.shape,
+          r.carat_weight ? `(${r.carat_weight}ct each)` : null,
+        ].map(v => (v != null && v !== "" ? String(v) : null)).filter(Boolean).join(" ");
+        if (parts) {
+          rows += `<tr style="${rowBg}"><td style="${tdLabel}">Melee</td><td style="${tdValue}">${esc(parts)}</td></tr>`;
+        }
+      });
+
+      if (addonLines.length > 0) {
+        rows += `<tr style="${rowBg}"><td style="${tdLabel}">Inclusions</td><td style="${tdValue}">${addonLines.map(esc).join(", ")}</td></tr>`;
+      }
+
+      if (fingerSize) {
+        rows += `<tr style="${rowBg}"><td style="${tdLabel}">Finger Size</td><td style="${tdValue}">${esc(fingerSize)}</td></tr>`;
+      }
+
+      if (stockSku) {
+        rows += `<tr style="${rowBg}"><td style="${tdLabel}">Stock Ref</td><td style="${tdValue};font-family:monospace;">${esc(stockSku)}</td></tr>`;
+      }
+
+      rows += `<tr style="background:#000"><td style="color:#fff;font-weight:bold;padding:10px 12px;border-right:1px solid #444;width:110px;font-size:9pt;">Price (incl. GST)</td><td style="color:#fff;font-weight:bold;font-size:15pt;padding:10px 12px;">${priceText}</td></tr>`;
+
+      itemsSection = `
+  <table class="line-items">
+    <tbody>
+      ${rows}
+    </tbody>
+  </table>`;
+
+    // ── Legacy multi-item layout: qbd.items array (no metals key) ─────────
+    } else if (Array.isArray(qbd.items) && (qbd.items as unknown[]).length > 0) {
+      const items = qbd.items as Array<{ job_type?: string; description?: string; retail_price?: string }>;
       const totalPrice = items.reduce((sum, item) => sum + (parseFloat(item.retail_price ?? '') || 0), 0);
       const multiItem = items.length > 1;
 
@@ -56,18 +157,15 @@ export function generateQuoteHTML(quote: Quote): string {
         if (desc) {
           rows += `<tr style="background:#fff"><td colspan="2" style="padding:10px 12px;font-size:9.5pt;line-height:1.6;color:#222;">${desc}</td></tr>`;
         }
-        // Show per-item price row only when multiple items and price > 0
         if (multiItem && itemPrice > 0) {
           rows += `<tr style="background:#f0f0f0"><td style="padding:8px 12px;font-size:9pt;color:#555;border-right:1px solid #ddd;width:80px;vertical-align:middle;">Price</td><td style="padding:10px 12px;font-size:12pt;font-weight:bold;color:#000;">${itemPriceText}</td></tr>`;
         }
       });
 
-      // Total row for multiple items
       if (multiItem) {
         const totalText = `$${totalPrice.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         rows += `<tr style="background:#000"><td style="color:#fff;font-weight:bold;padding:10px 12px;border-right:1px solid #444;width:80px;">Total</td><td style="color:#fff;font-weight:bold;font-size:14pt;padding:10px 12px;">${totalText}</td></tr>`;
       } else {
-        // Single item — just show price row at bottom
         rows += `<tr style="background:#f0f0f0"><td style="padding:8px 12px;font-size:9pt;color:#555;border-right:1px solid #ddd;width:80px;vertical-align:middle;">Price</td><td style="padding:10px 12px;font-size:14pt;font-weight:bold;color:#000;">${priceText}</td></tr>`;
       }
 

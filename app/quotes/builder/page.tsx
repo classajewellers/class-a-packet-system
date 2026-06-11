@@ -112,6 +112,10 @@ export default function QuoteBuilderPage() {
   const [aiGenerating, setAiGenerating] = useState(false);
   const aiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Extra fields
+  const [fingerSize, setFingerSize] = useState("");
+  const [stockSku, setStockSku] = useState("");
+
   // Description & notes
   const [internalNotes, setInternalNotes] = useState("");
 
@@ -378,6 +382,8 @@ export default function QuoteBuilderPage() {
           laser_engraving_cost: pricing.laserEngravingCost,
         },
         ai_description: aiDesc || null,
+        finger_size: fingerSize || null,
+        stock_sku: stockSku || null,
         total_cost: pricing.totalCost,
         multiplier: pricing.activeMultiplier,
         raw_price: pricing.rawPrice,
@@ -404,6 +410,9 @@ export default function QuoteBuilderPage() {
           quoteBuilderData: qbd,
           quoteType,
           pipelineStage: "Pending",
+          aiDescription: aiDesc || null,
+          fingerSize: fingerSize || null,
+          stockSku: stockSku || null,
         }),
       });
       const json = await res.json();
@@ -613,13 +622,35 @@ export default function QuoteBuilderPage() {
           {/* ── Section 3: Design Description ── */}
           <div style={card}>
             <div style={heading}>Design Description</div>
-            <label style={label}>Design Description</label>
-            <input
-              style={input} type="text" value={design}
-              onChange={e => setDesign(e.target.value)}
-              onFocus={focus} onBlur={blur}
-              placeholder="e.g. Stella Trilogy with split shank"
-            />
+            <div style={{ marginBottom: 12 }}>
+              <label style={label}>Design Description</label>
+              <input
+                style={input} type="text" value={design}
+                onChange={e => setDesign(e.target.value)}
+                onFocus={focus} onBlur={blur}
+                placeholder="e.g. Stella Trilogy with split shank"
+              />
+            </div>
+            <div style={row2}>
+              <div>
+                <label style={label}>Finger Size</label>
+                <input
+                  style={input} type="text" value={fingerSize}
+                  onChange={e => setFingerSize(e.target.value)}
+                  onFocus={focus} onBlur={blur}
+                  placeholder="e.g. N, O½, 7"
+                />
+              </div>
+              <div>
+                <label style={label}>Stock SKU <span style={{ fontWeight: 400, color: "#9CA3AF" }}>(if quoting from existing inventory)</span></label>
+                <input
+                  style={input} type="text" value={stockSku}
+                  onChange={e => setStockSku(e.target.value)}
+                  onFocus={focus} onBlur={blur}
+                  placeholder="e.g. SKU-1234"
+                />
+              </div>
+            </div>
           </div>
 
           {/* ── Section 4: Metal Selection ── */}

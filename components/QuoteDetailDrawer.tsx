@@ -479,43 +479,135 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
             </Section>
           )}
 
-          {/* ── Builder quote items — from quote_builder_data.items ── */}
+          {/* ── Builder quote details — from quote_builder_data ── */}
           {(() => {
             const qbd = local.quote_builder_data as Record<string, unknown> | null;
-            const items = (qbd?.items ?? []) as Array<{job_type: string; description: string; retail_price: string; cost_price?: string}>;
-            if (items.length === 0) return null;
+            if (!qbd || !Array.isArray(qbd.metals)) return null;
+
+            const metals = qbd.metals as Array<{ type?: string; weight?: number; cost?: number }>;
+            const rawMs = qbd.main_stone;
+            const mainStones: Array<Record<string, unknown>> = Array.isArray(rawMs)
+              ? rawMs as Array<Record<string, unknown>>
+              : rawMs != null ? [rawMs as Record<string, unknown>] : [];
+            const rawMelee = qbd.melee_stones;
+            const meleeStones: Array<Record<string, unknown>> = Array.isArray(rawMelee)
+              ? rawMelee as Array<Record<string, unknown>> : [];
+            const addons = qbd.addons as Record<string, unknown> | null | undefined;
+
+            const aiDesc = local.ai_description || (qbd.ai_description as string | null);
+            const fingerSize = local.finger_size || (qbd.finger_size as string | null);
+            const stockSku = local.stock_sku || (qbd.stock_sku as string | null);
+            const quotedPrice = (qbd.quoted_price as number | null) ?? local.quoted_price ?? local.total;
+            const totalCost = qbd.total_cost as number | null;
+            const mult = qbd.multiplier as number | null;
+
+            const rowStyle: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', paddingBottom: 6, marginBottom: 6, borderBottom: '1px solid #F3F4F6', gap: 12 };
+            const keyStyle: React.CSSProperties = { fontSize: 13, color: '#6B7280', flexShrink: 0 };
+            const valStyle: React.CSSProperties = { fontSize: 13, color: '#1A1A2E', textAlign: 'right', fontWeight: 500 };
+
+            const filteredMetals = metals.filter(m => m.type);
+
             return (
-              <Section title="Quote Items">
-                {items.map((item, i) => (
-                  <div key={i} style={{ marginBottom: i < items.length - 1 ? 12 : 0, paddingBottom: i < items.length - 1 ? 12 : 0, borderBottom: i < items.length - 1 ? '1px solid #E8E8F0' : 'none' }}>
-                    {item.job_type && (
-                      <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, background: '#EEF2FF', color: '#635BFF', fontSize: 11, fontWeight: 700, marginBottom: 4 }}>
-                        {item.job_type}
-                      </span>
-                    )}
-                    {item.description && (
-                      <p style={{ fontSize: 14, color: '#1A1A2E', margin: '4px 0', lineHeight: 1.5 }}>{item.description}</p>
-                    )}
-                    <div style={{ display: 'flex', gap: 16, marginTop: 4, flexWrap: 'wrap' }}>
-                      {item.retail_price && (
-                        <span style={{ fontSize: 13, color: '#1A1A2E', fontWeight: 600 }}>
-                          ${parseFloat(item.retail_price).toLocaleString('en-AU', { minimumFractionDigits: 2 })}
-                        </span>
-                      )}
-                      {isManager && item.cost_price && parseFloat(item.cost_price) > 0 && (
-                        <span style={{ fontSize: 13, color: '#635BFF' }}>
-                          Cost: ${parseFloat(item.cost_price).toLocaleString('en-AU', { minimumFractionDigits: 2 })}
-                        </span>
-                      )}
-                    </div>
+              <Section title="Builder Details">
+                {aiDesc && (
+                  <div style={{ marginBottom: 12, padding: '10px 12px', background: '#F9FAFB', borderRadius: 8, border: '1px solid #E8E8F0' }}>
+                    <p style={{ fontSize: 11, fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>AI Description</p>
+                    <p style={{ fontSize: 14, color: '#1A1A2E', margin: 0, fontStyle: 'italic', lineHeight: 1.5 }}>{aiDesc}</p>
                   </div>
-                ))}
-                {items.length > 1 && (
-                  <div style={{ borderTop: '1px solid #E8E8F0', paddingTop: 8, marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#6B7280' }}>Total</span>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>
-                      ${items.reduce((s, it) => s + (parseFloat(it.retail_price) || 0), 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}
-                    </span>
+                )}
+
+                <div>
+                  {fingerSize && (
+                    <div style={rowStyle}>
+                      <span style={keyStyle}>Finger Size</span>
+                      <span style={valStyle}>{fingerSize}</span>
+                    </div>
+                  )}
+                  {stockSku && (
+                    <div style={rowStyle}>
+                      <span style={keyStyle}>Stock SKU</span>
+                      <span style={{ ...valStyle, fontFamily: 'monospace', fontSize: 12 }}>{stockSku}</span>
+                    </div>
+                  )}
+
+                  {filteredMetals.map((m, i) => (
+                    <div key={i} style={rowStyle}>
+                      <span style={keyStyle}>Metal{filteredMetals.length > 1 ? ` ${i + 1}` : ""}</span>
+                      <span style={valStyle}>
+                        {m.type}{m.weight ? ` — ${m.weight}g` : ""}
+                        {isManager && m.cost ? <span style={{ color: '#635BFF', fontWeight: 400, marginLeft: 6 }}>(${(m.cost as number).toFixed(2)})</span> : null}
+                      </span>
+                    </div>
+                  ))}
+
+                  {mainStones.map((s, i) => {
+                    const parts = [
+                      s.carat_weight != null ? `${s.carat_weight}ct` : null,
+                      s.colour, s.clarity, s.origin, s.shape,
+                    ].map(v => (v != null && v !== "" ? String(v) : null)).filter(Boolean).join(" ");
+                    return (
+                      <div key={i} style={rowStyle}>
+                        <span style={keyStyle}>Stone{mainStones.length > 1 ? ` ${i + 1}` : ""}</span>
+                        <span style={valStyle}>
+                          {parts || "—"}
+                          {isManager && (s.cost as number) > 0 ? <span style={{ color: '#635BFF', fontWeight: 400, marginLeft: 6 }}>(${(s.cost as number).toFixed(2)})</span> : null}
+                        </span>
+                      </div>
+                    );
+                  })}
+
+                  {meleeStones.filter(r => r.stone_type).map((r, i) => {
+                    const qty = (r.qty as number) || 1;
+                    const parts = [qty > 1 ? `${qty}×` : null, r.stone_type, r.shape].map(v => (v != null && v !== "" ? String(v) : null)).filter(Boolean).join(" ");
+                    const rowTotal = r.row_total as number | null;
+                    const filteredMelee = meleeStones.filter(x => x.stone_type);
+                    return (
+                      <div key={i} style={rowStyle}>
+                        <span style={keyStyle}>Melee{filteredMelee.length > 1 ? ` ${i + 1}` : ""}</span>
+                        <span style={valStyle}>
+                          {parts || "—"}
+                          {isManager && rowTotal && rowTotal > 0 ? <span style={{ color: '#635BFF', fontWeight: 400, marginLeft: 6 }}>(${(rowTotal as number).toFixed(2)})</span> : null}
+                        </span>
+                      </div>
+                    );
+                  })}
+
+                  {addons && (
+                    <>
+                      {addons.hand_engraving && <div style={rowStyle}><span style={keyStyle}>Hand Engraving</span><span style={valStyle}>{isManager && (addons.hand_engraving_cost as number) > 0 ? `$${(addons.hand_engraving_cost as number).toFixed(2)}` : "Included"}</span></div>}
+                      {addons.laser_engraving && <div style={rowStyle}><span style={keyStyle}>Laser Engraving</span><span style={valStyle}>{isManager && (addons.laser_engraving_cost as number) > 0 ? `$${(addons.laser_engraving_cost as number).toFixed(2)}` : "Included"}</span></div>}
+                      {addons.butterflies && <div style={rowStyle}><span style={keyStyle}>Butterfly Backs</span><span style={valStyle}>Included</span></div>}
+                      {addons.chain && <div style={rowStyle}><span style={keyStyle}>Chain</span><span style={valStyle}>Included</span></div>}
+                      {(addons.additional_labour as number) > 0 && <div style={rowStyle}><span style={keyStyle}>Additional Labour</span><span style={valStyle}>{isManager ? `$${(addons.additional_labour as number).toFixed(2)}` : "Included"}</span></div>}
+                    </>
+                  )}
+                </div>
+
+                {isManager && totalCost != null && (
+                  <div style={{ marginTop: 12, padding: '10px 12px', background: '#EEF2FF', borderRadius: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontSize: 12, color: '#635BFF' }}>Total Cost</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#635BFF' }}>${(totalCost as number).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    {mult != null && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, color: '#635BFF' }}>Multiplier</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#635BFF' }}>×{(mult as number).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {quotedPrice != null && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: 12, color: '#635BFF' }}>Quoted Price</span>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>${Number(quotedPrice).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!isManager && quotedPrice != null && (
+                  <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#6B7280' }}>Quoted Price</span>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E' }}>${Number(quotedPrice).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</span>
                   </div>
                 )}
               </Section>

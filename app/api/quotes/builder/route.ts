@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
       quotedPrice,
       quoteBuilderData, quoteType,
       pipelineStage,
+      aiDescription, fingerSize, stockSku,
     } = body
 
     const referenceNumber = await generateQuoteReferenceNumber()
@@ -42,6 +43,9 @@ export async function POST(req: NextRequest) {
         pending_at: now,
         status_changed_at: now,
         tenant_id: tenantId,
+        ai_description: aiDescription || null,
+        finger_size: fingerSize || null,
+        stock_sku: stockSku || null,
       })
       .select()
       .single()
