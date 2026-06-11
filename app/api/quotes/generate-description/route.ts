@@ -7,39 +7,32 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const body = await req.json();
     const { itemType, subcategory, design, metals, mainStones, meleeStones, engraving } = body;
 
-    const parts: string[] = [];
-    if (itemType) parts.push(`Item type: ${subcategory || itemType}`);
-    if (design) parts.push(`Design description: ${design}`);
-    if (metals?.length) {
-      const metalStr = metals
-        .filter((m: { type: string; weight: string }) => m.type)
-        .map((m: { type: string; weight: string }) => `${m.weight || "?"}g ${m.type}`)
-        .join(" + ");
-      if (metalStr) parts.push(`Metal: ${metalStr}`);
-    }
-    if (mainStones?.length) {
-      const stoneStr = mainStones
-        .filter((s: { caratWeight: string; shape: string; colour: string; clarity: string; origin: string }) => s.caratWeight)
-        .map((s: { caratWeight: string; shape: string; colour: string; clarity: string; origin: string }) =>
-          `${s.caratWeight}ct ${s.colour || ""} ${s.clarity || ""} ${s.origin || ""} ${s.shape || ""}`.replace(/\s+/g, " ").trim()
-        )
-        .join(", ");
-      if (stoneStr) parts.push(`Main stone(s): ${stoneStr}`);
-    }
-    if (meleeStones?.length) {
-      const meleeStr = meleeStones
-        .filter((m: { stoneType: string; qty: string }) => m.stoneType && m.qty)
-        .map((m: { stoneType: string; shape: string; quality: string; caratWeight: string; qty: string }) =>
-          `${m.qty}× ${m.caratWeight || ""}ct ${m.shape || ""} ${m.stoneType} ${m.quality || ""}`.replace(/\s+/g, " ").trim()
-        )
-        .join(", ");
-      if (meleeStr) parts.push(`Melee stones: ${meleeStr}`);
-    }
-    if (engraving?.hand) parts.push("Hand engraving");
-    if (engraving?.laser) parts.push("Laser engraving");
+    // Build structured data strings — no gram weights, no pricing
+    const metalStr = (metals ?? [])
+      .filter((m: { type: string }) => m.type)
+      .map((m: { type: string }) => m.type)
+      .join(" and ");
 
-    const prompt = parts.join(". ");
-    if (!prompt.trim()) {
+    const itemLabel = subcategory || itemType || "";
+
+    type Stone = { caratWeight: string; shape: string; colour: string; clarity: string; origin: string };
+    const mainStoneStr = (mainStones ?? [])
+      .filter((s: Stone) => s.caratWeight)
+      .map((s: Stone) =>
+        `${s.caratWeight}ct${s.colour ? ` ${s.colour}` : ""}${s.clarity ? `/${s.clarity}` : ""} ${s.shape || ""} ${s.origin || ""}`.replace(/\s+/g, " ").trim()
+      )
+      .join(", ");
+
+    type Melee = { stoneType: string; shape: string; quality: string; caratWeight: string; qty: string };
+    const meleeStr = (meleeStones ?? [])
+      .filter((m: Melee) => m.stoneType)
+      .map((m: Melee) =>
+        `${m.qty && m.qty !== "1" ? `${m.qty}× ` : ""}${m.caratWeight ? `${m.caratWeight}ct ` : ""}${m.shape ? `${m.shape} ` : ""}${m.stoneType}${m.quality ? ` ${m.quality}` : ""}`.replace(/\s+/g, " ").trim()
+      )
+      .join(", ");
+
+    const hasContent = metalStr || itemLabel || mainStoneStr || design;
+    if (!hasContent) {
       console.log("[generate-description] No content to generate from — returning empty");
       return NextResponse.json({ description: "" });
     }
@@ -50,7 +43,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "ANTHROPIC_API_KEY not configured" }, { status: 500 });
     }
 
-    console.log("[generate-description] Calling Anthropic API, prompt preview:", prompt.slice(0, 200));
+    const systemPrompt = `You write jewellery product descriptions for quote documents.
+
+Output format: [Metal] [Design Name] [Item Type] set with a [carat]ct [colour]/[clarity] [shape] [Lab Grown / Natural] Diamond
+- If two metals: "[Metal 1] and [Metal 2]"
+- If multiple main stones: list main stone first, then "accented with [melee description]"
+- If no stone: [Metal] [Design Name] [Item Type]
+- If no metal name given: omit metal
+- Capitalise metal type, stone shape, and item type
+- Never mention gram weights, setting costs, labour, or pricing
+- Never use adjectives like stunning, exquisite, featuring, boasting, beautiful
+- One sentence, maximum 25 words
+- Output the description only — no preamble, no explanation, no punctuation at the end`;
+
+    const userPrompt = [
+      metalStr        && `Metal: ${metalStr}`,
+      itemLabel       && `Item: ${itemLabel}`,
+      design          && `Design name or notes: ${design}`,
+      mainStoneStr    && `Main stone: ${mainStoneStr}`,
+      meleeStr        && `Accent stones: ${meleeStr}`,
+    ].filter(Boolean).join("\n");
+
+    console.log("[generate-description] Calling Anthropic, data:\n", userPrompt);
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -61,15 +75,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 200,
-        system:
-          "You are a jewellery sales consultant writing descriptions for custom jewellery quotes. Write a single polished sentence in the style of a high-end jewellery description. Use correct jewellery terminology. Be specific and evocative but concise. Output one sentence only — no full stops at the end.",
-        messages: [
-          {
-            role: "user",
-            content: `Write a single polished jewellery description sentence for this quote:\n${prompt}`,
-          },
-        ],
+        max_tokens: 80,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
       }),
     });
 
