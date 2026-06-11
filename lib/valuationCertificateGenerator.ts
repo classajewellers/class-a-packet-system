@@ -14,7 +14,7 @@ function formatCurrencyAU(value: number | null | undefined): string {
   return new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(value);
 }
 
-export function generateValuationCertificate(packet: Packet): void {
+export function generateValuationCertificate(packet: Packet, photoUrl?: string | null): void {
   const specs = (packet.item_specifications ?? {}) as Partial<ItemSpecifications>;
   const mainStone: Partial<StoneSpec> | undefined = (specs.stones ?? [])[0];
   const certNumber = packet.valuation_certificate_number;
@@ -109,6 +109,11 @@ export function generateValuationCertificate(packet: Packet): void {
   .spec-table td { padding: 6px 10px; border: 1px solid #e0e0e0; vertical-align: top; }
   .spec-table td:first-child { background: #f7f7f7; font-weight: 600; width: 35%; color: #555; text-transform: uppercase; font-size: 8pt; letter-spacing: 0.5px; }
 
+  /* Valuation photo */
+  .photo-section { text-align: center; margin-bottom: 16px; }
+  .photo-section img { max-width: 220px; max-height: 220px; object-fit: contain; border: 1px solid #e0e0e0; border-radius: 6px; }
+  .photo-section p { font-family: Arial, sans-serif; font-size: 7.5pt; color: #888; margin-top: 4px; font-style: italic; }
+
   /* Valuation box */
   .valuation-box {
     border: 2px solid #1a1a1a;
@@ -197,6 +202,13 @@ export function generateValuationCertificate(packet: Packet): void {
         </tr>`).join("")}
       </tbody>
     </table>` : ""}
+
+    ${photoUrl ? `
+    <!-- Finished ring photo -->
+    <div class="photo-section">
+      <img src="${photoUrl}" alt="Finished item photograph" />
+      <p>Photograph of the item as presented for valuation</p>
+    </div>` : ""}
 
     <!-- Valuation -->
     <div class="valuation-box">

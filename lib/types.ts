@@ -219,6 +219,26 @@ export interface Packet {
   claim_slip_sent?: boolean | null;
   claim_slip_url?: string | null;
   claim_slip_sent_at?: string | null;
+
+  // Valuation photo (stored as storage path)
+  valuation_photo_url?: string | null;
+}
+
+// ─────────────────────────────────────────────
+// Attachments
+// ─────────────────────────────────────────────
+export interface Attachment {
+  id: string;
+  tenant_id: string;
+  entity_type: string;
+  entity_id: string;
+  file_name: string;
+  file_url: string;
+  file_type: string;
+  file_size: number | null;
+  uploaded_by: string | null;
+  created_at: string;
+  signed_url?: string | null;
 }
 
 // ─────────────────────────────────────────────

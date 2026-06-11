@@ -10,6 +10,7 @@ import { printOrderConfirmation } from "@/lib/orderConfirmationGenerator";
 import ItemSpecificationsForm from "./ItemSpecificationsForm";
 import { generateValuationCertificate } from "@/lib/valuationCertificateGenerator";
 import { STAFF_NAMES } from "@/lib/staffList";
+import AttachmentsSection from "./AttachmentsSection";
 
 interface Props {
   packet: Packet;
@@ -83,6 +84,19 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
   const [toast, setToast]                 = useState<Toast | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ── Valuation photo ───────────────────────────────────────────────────────
+  const [valPhotoUploading, setValPhotoUploading] = useState(false);
+  const [valPhotoProgress, setValPhotoProgress]   = useState(0);
+  const [valPhotoSignedUrl, setValPhotoSignedUrl] = useState<string | null>(null);
+  const valPhotoInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!local.valuation_photo_url || !user?.tenantId) return;
+    fetch(`/api/attachments/signed-url?path=${encodeURIComponent(local.valuation_photo_url)}`, {
+      headers: { "x-tenant-id": user.tenantId },
+    }).then(r => r.json()).then(j => setValPhotoSignedUrl(j.signedUrl ?? null)).catch(() => {});
+  }, [local.valuation_photo_url, user?.tenantId]);
+
   // Auto-dismiss toast after 4 s
   useEffect(() => {
     if (!toast) return;
@@ -150,6 +164,55 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
     } catch (err) {
       console.error("[drawer] handleFieldUpdate failed for", field, err);
     }
+  }
+
+  // ── Valuation photo upload ────────────────────────────────────────────────
+  async function handleValPhotoUpload(file: File) {
+    setValPhotoUploading(true);
+    setValPhotoProgress(0);
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("entity_type", "valuation_photo");
+    formData.append("entity_id", local.id);
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) setValPhotoProgress(Math.round((e.loaded / e.total) * 100));
+      });
+      xhr.addEventListener("load", async () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const json = JSON.parse(xhr.responseText);
+            if (json.attachment?.file_url) {
+              await patch({ valuation_photo_url: json.attachment.file_url });
+            }
+          } catch {}
+          resolve();
+        } else reject(new Error("Upload failed"));
+      });
+      xhr.addEventListener("error", () => reject(new Error("Network error")));
+      xhr.open("POST", "/api/attachments/upload");
+      xhr.setRequestHeader("x-tenant-id", user?.tenantId ?? "");
+      xhr.send(formData);
+    }).catch(console.error);
+    setValPhotoUploading(false);
+    setValPhotoProgress(0);
+  }
+
+  // ── Print valuation certificate (fetches fresh photo URL first) ───────────
+  async function handlePrintCertificate() {
+    let photoUrl: string | null = null;
+    if (local.valuation_photo_url) {
+      try {
+        const res = await fetch(
+          `/api/attachments/signed-url?path=${encodeURIComponent(local.valuation_photo_url)}`,
+          { headers: { "x-tenant-id": user?.tenantId ?? "" } }
+        );
+        const json = await res.json();
+        photoUrl = json.signedUrl ?? null;
+      } catch {}
+    }
+    generateValuationCertificate(local, photoUrl);
   }
 
   // ── Delete ────────────────────────────────────────────────────────────────
@@ -316,7 +379,8 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
       setLocal(json.packet);
       onUpdate(json.packet);
       setToast({ type: "success", message: "✓ Valuation approved — opening certificate…" });
-      generateValuationCertificate(json.packet);
+      setLocal(json.packet);
+      generateValuationCertificate(json.packet, null);
     }
   }
 
@@ -558,7 +622,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
 
           {local.valuation_status === "approved" && (
             <button
-              onClick={() => generateValuationCertificate(local)}
+              onClick={handlePrintCertificate}
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', border: '1px solid #635BFF', color: '#635BFF', fontSize: 14, fontWeight: 600, padding: '10px', borderRadius: 12, background: '#fff', cursor: 'pointer', transition: 'all .15s' }}
               onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = '#EEF2FF'}
               onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = '#fff'}
@@ -1137,6 +1201,61 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
               </dl>
             </Section>
           )}
+
+          {/* ── Valuation Photo ── */}
+          {local.valuation_required && (
+            <Section title="Valuation Photo">
+              <input
+                ref={valPhotoInputRef}
+                type="file"
+                accept="image/*,.heic,.heif"
+                style={{ display: "none" }}
+                onChange={(e) => { if (e.target.files?.[0]) { handleValPhotoUpload(e.target.files[0]); e.target.value = ""; } }}
+              />
+
+              {valPhotoUploading ? (
+                <div style={{ padding: "12px 0" }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "#635BFF", marginBottom: 6 }}>Uploading… {valPhotoProgress}%</div>
+                  <div style={{ height: 4, background: "#E8E8F0", borderRadius: 999 }}>
+                    <div style={{ height: "100%", width: `${valPhotoProgress}%`, background: "#635BFF", borderRadius: 999, transition: "width .1s" }} />
+                  </div>
+                </div>
+              ) : local.valuation_photo_url ? (
+                <div>
+                  {valPhotoSignedUrl && (
+                    <img
+                      src={valPhotoSignedUrl}
+                      alt="Valuation photo"
+                      style={{ width: "100%", borderRadius: 10, border: "1px solid #E8E8F0", marginBottom: 8, objectFit: "cover", maxHeight: 220 }}
+                    />
+                  )}
+                  <button
+                    onClick={() => valPhotoInputRef.current?.click()}
+                    style={{ fontSize: 12, color: "#635BFF", background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 500 }}
+                  >
+                    Replace photo
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => valPhotoInputRef.current?.click()}
+                  style={{ width: "100%", border: "2px dashed #D1D5DB", borderRadius: 10, padding: "16px 12px", textAlign: "center", background: "#FAFAFA", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}
+                >
+                  <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#9CA3AF" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+                  </svg>
+                  <span style={{ fontSize: 13, color: "#6B7280" }}>
+                    <span style={{ fontWeight: 600, color: "#635BFF" }}>Upload valuation photo</span> for certificate
+                  </span>
+                  <span style={{ fontSize: 11, color: "#9CA3AF" }}>Photo will appear on the printed certificate</span>
+                </button>
+              )}
+            </Section>
+          )}
+
+          {/* ── Attachments ── */}
+          <AttachmentsSection entityType="packet" entityId={local.id} />
 
           <p style={{ fontSize: 12, color: '#9CA3AF' }}>
             Created {new Date(local.created_at).toLocaleString("en-AU")}

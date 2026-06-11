@@ -29,6 +29,7 @@ export async function GET(
         .from("quotes")
         .select("*")
         .ilike("customer_email", email)
+        .is("converted_to_packet_id", null)
         .order("created_at", { ascending: false }),
 
       // Fetch notes from customers table (may not exist — handle gracefully)

@@ -14,6 +14,7 @@ import {
   isOverdue,
   quoteStage,
 } from "@/lib/pipeline";
+import AttachmentsSection from "./AttachmentsSection";
 
 const STAFF_MEMBERS = [
   "Aisha Scott", "Arissa Michos", "Ben Mucklow", "Brad Mucklow",
@@ -624,6 +625,9 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
               )}
             </dl>
           </Section>
+
+          {/* ── Attachments ── */}
+          <AttachmentsSection entityType="quote" entityId={local.id} />
 
           {/* ── Delete — manager/admin only ── */}
           {isManager && (
