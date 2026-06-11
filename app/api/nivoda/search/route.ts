@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const NIVODA_ENDPOINT = "https://intg-customer-staging.nivodaapi.net/api/diamonds";
+const NIVODA_ENDPOINT = "https://integrations.nivoda.net/api/diamonds";
 
 const COLORS    = ["D", "E", "F", "G", "H", "I", "J", "K"] as const;
 const CLARITIES = ["FL", "IF", "VVS1", "VVS2", "VS1", "VS2", "SI1", "SI2"] as const;

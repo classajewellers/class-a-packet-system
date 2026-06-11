@@ -1,21 +1,14 @@
 /**
  * Nivoda token management.
  *
- * STAGING  endpoint: https://intg-customer-staging.nivodaapi.net/api/diamonds
- * PRODUCTION endpoint: https://integrations.nivoda.net/api/diamonds
- *
- * To switch to production:
- *  1. Update NIVODA_EMAIL and NIVODA_PASSWORD in Vercel environment variables
- *     to the real Nivoda account credentials.
- *  2. Update NIVODA_ENDPOINT below to the production URL.
- *  3. Re-deploy.
+ * Endpoint: https://integrations.nivoda.net/api/diamonds (production)
  */
 
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const NIVODA_ENDPOINT = "https://intg-customer-staging.nivodaapi.net/api/diamonds";
+const NIVODA_ENDPOINT = "https://integrations.nivoda.net/api/diamonds";
 
 // In-memory token cache — survives across requests within the same serverless instance.
 let cache: { token: string; expiresAt: number } | null = null;
