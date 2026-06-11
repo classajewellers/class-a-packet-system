@@ -163,39 +163,42 @@ export default function QuoteBuilderPage() {
     setShowDropdown(false);
   }
 
-  // ── AI description (debounced) ─────────────────────────────────────────────
+  // ── AI description ─────────────────────────────────────────────────────────
 
-  const triggerAI = useCallback(() => {
-    if (aiTimerRef.current) clearTimeout(aiTimerRef.current);
-    aiTimerRef.current = setTimeout(async () => {
-      const hasContent = itemType || design || metals.some(m => m.type) || (includeMainStone && stones.some(s => s.caratWeight)) || meleeRows.some(m => m.stoneType);
-      if (!hasContent) return;
-      setAiGenerating(true);
-      try {
-        const res = await fetch("/api/quotes/generate-description", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            itemType,
-            subcategory: subcategory === "Other" ? subcategoryOther : subcategory,
-            design,
-            metals: metals.filter(m => m.type),
-            mainStones: includeMainStone ? stones : [],
-            meleeStones: meleeRows.filter(m => m.stoneType),
-            engraving: { hand: handEngraving, laser: laserEngraving },
-          }),
-        });
-        const json = await res.json();
-        if (json.description) setAiDesc(json.description);
-      } catch {
-        // silent fail — user can regenerate manually
-      } finally {
-        setAiGenerating(false);
-      }
-    }, 1500);
+  const generateDescription = useCallback(async () => {
+    const hasContent = itemType || design || metals.some(m => m.type) || (includeMainStone && stones.some(s => s.caratWeight)) || meleeRows.some(m => m.stoneType);
+    if (!hasContent) return;
+    setAiGenerating(true);
+    try {
+      const res = await fetch("/api/quotes/generate-description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemType,
+          subcategory: subcategory === "Other" ? subcategoryOther : subcategory,
+          design,
+          metals: metals.filter(m => m.type),
+          mainStones: includeMainStone ? stones : [],
+          meleeStones: meleeRows.filter(m => m.stoneType),
+          engraving: { hand: handEngraving, laser: laserEngraving },
+        }),
+      });
+      const json = await res.json();
+      console.log("[quote-builder] AI response:", json);
+      if (json.description) setAiDesc(json.description);
+    } catch (e) {
+      console.error("[quote-builder] AI fetch error:", e);
+    } finally {
+      setAiGenerating(false);
+    }
   }, [itemType, subcategory, subcategoryOther, design, metals, includeMainStone, stones, meleeRows, handEngraving, laserEngraving]);
 
-  // Trigger AI whenever key fields change
+  // Debounced auto-trigger on field changes
+  const triggerAI = useCallback(() => {
+    if (aiTimerRef.current) clearTimeout(aiTimerRef.current);
+    aiTimerRef.current = setTimeout(() => { generateDescription(); }, 1500);
+  }, [generateDescription]);
+
   useEffect(() => { triggerAI(); }, [triggerAI]);
 
   // ── Nivoda stone selection ─────────────────────────────────────────────────
@@ -903,7 +906,7 @@ export default function QuoteBuilderPage() {
             <div style={{ ...heading, marginBottom: 0, paddingBottom: 0, borderBottom: "none", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span>Quote Description</span>
               <button
-                onClick={() => triggerAI()}
+                onClick={() => generateDescription()}
                 disabled={aiGenerating}
                 style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid #635BFF", background: "#EEF2FF", color: "#635BFF", fontSize: 12, fontWeight: 600, cursor: aiGenerating ? "wait" : "pointer", display: "flex", alignItems: "center", gap: 6 }}
               >

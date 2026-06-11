@@ -60,7 +60,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 200,
         system:
           "You are a jewellery sales consultant writing descriptions for custom jewellery quotes. Write a single polished sentence in the style of a high-end jewellery description. Use correct jewellery terminology. Be specific and evocative but concise. Output one sentence only — no full stops at the end.",
