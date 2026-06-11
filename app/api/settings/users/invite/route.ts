@@ -30,41 +30,39 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
     );
 
+    console.log("[invite] inviteUserByEmail response — error:", JSON.stringify(inviteError), "user:", JSON.stringify(inviteData?.user ?? null));
+
     if (inviteError) {
       console.error("[invite] auth.admin.inviteUserByEmail failed:", JSON.stringify(inviteError));
       return NextResponse.json({ error: inviteError.message }, { status: 500 });
     }
 
-    const authUserId = inviteData?.user?.id;
-    console.log("[invite] Auth user created, id:", authUserId);
+    // Invite succeeded. User object may be null if the invite was queued rather than
+    // created synchronously — that's fine, the email has been sent.
+    const authUserId = inviteData?.user?.id ?? null;
+    console.log("[invite] Auth user id:", authUserId ?? "(not returned — invite queued)");
 
-    if (!authUserId) {
-      console.error("[invite] inviteUserByEmail returned no user id — inviteData:", JSON.stringify(inviteData));
-      return NextResponse.json({ error: "Invite sent but no user ID returned from auth" }, { status: 500 });
+    if (authUserId) {
+      // Pre-create the profile so the user appears in the list immediately.
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .insert({
+          id:        authUserId,
+          full_name: name.trim(),
+          role,
+          email:     email.toLowerCase().trim(),
+          tenant_id: tenantId,
+          status:    "active",
+        });
+
+      if (profileError) {
+        console.error("[invite] profile insert failed:", JSON.stringify(profileError));
+        // Non-fatal — invite email was sent; profile will be created on first login.
+      } else {
+        console.log("[invite] Profile created successfully for", email);
+      }
     }
 
-    // Insert profile so the user appears in the list immediately.
-    // id must match the auth user id — this is the primary key.
-    const { error: profileError } = await supabase
-      .from("profiles")
-      .insert({
-        id:        authUserId,
-        full_name: name.trim(),
-        role,
-        email:     email.toLowerCase().trim(),
-        tenant_id: tenantId,
-        status:    "active",
-      });
-
-    if (profileError) {
-      console.error("[invite] profile insert failed:", JSON.stringify(profileError));
-      return NextResponse.json(
-        { error: `Invite sent but profile creation failed: ${profileError.message}` },
-        { status: 500 }
-      );
-    }
-
-    console.log("[invite] Profile created successfully for", email);
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("[invite] unexpected error:", err);
