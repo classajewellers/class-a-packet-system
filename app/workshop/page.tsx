@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
-import { canManage } from "@/lib/userTypes";
+import { canManage, hasPermission } from "@/lib/userTypes";
 import { WorkshopJob } from "@/lib/types";
 import { formatDateAU } from "@/lib/formatters";
 import nextDynamic from "next/dynamic";
@@ -15,15 +15,12 @@ const WorkshopBoard = nextDynamic(() => import("@/components/WorkshopBoard"), { 
 const ValuationReviewQueue = nextDynamic(() => import("@/components/ValuationReviewQueue"), { ssr: false });
 
 export default function WorkshopPage() {
-  const { user } = useUser();
+  const { user, hydrated } = useUser();
   const router = useRouter();
 
-  // Manager-only guard
   useEffect(() => {
-    if (user && !canManage(user.role)) {
-      router.replace("/orders");
-    }
-  }, [user, router]);
+    if (hydrated && user && !hasPermission(user, "workshop")) router.replace("/");
+  }, [user, hydrated, router]);
 
   const [jobs, setJobs] = useState<WorkshopJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +57,7 @@ export default function WorkshopPage() {
     setJobs((prev) => prev.filter((j) => j.id !== id));
   }
 
-  if (!user || !canManage(user.role)) return null;
+  if (!user || !hasPermission(user, "workshop")) return null;
 
   const today = new Date().toISOString().split("T")[0];
 

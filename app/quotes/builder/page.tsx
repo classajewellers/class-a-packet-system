@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
-import { canManage } from "@/lib/userTypes";
+import { canManage, hasPermission } from "@/lib/userTypes";
 import Link from "next/link";
 import { generateQuoteHTML } from "@/lib/quoteGenerator";
 import { calculateRetailPrice, calculateMultiplier, multiplierColour } from "@/lib/marginCalculator";
@@ -58,6 +58,10 @@ export default function QuoteBuilderPage() {
   const { user, hydrated } = useUser();
   const router = useRouter();
   const isManager = canManage(user?.role);
+
+  useEffect(() => {
+    if (hydrated && user && !hasPermission(user, "quotes")) router.replace("/");
+  }, [user, hydrated, router]);
 
   // Pricing data
   const [metalRates, setMetalRates] = useState<MetalRate[]>([]);

@@ -8,7 +8,7 @@ export const revalidate = 0;
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const body = await req.json();
-    const { name, email, role } = body as { name: string; email: string; role: "manager" | "staff" };
+    const { name, email, role, permissions } = body as { name: string; email: string; role: "manager" | "staff"; permissions?: Record<string, boolean> | null };
     const tenantId = req.headers.get("x-tenant-id") ?? "";
     const fullName = name?.trim();
     const normalizedEmail = email?.toLowerCase().trim();
@@ -47,12 +47,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const { error: profileError } = await supabase
       .from("profiles")
       .insert({
-        id:        profileId,
-        full_name: fullName,
+        id:          profileId,
+        full_name:   fullName,
         role,
-        email:     normalizedEmail,
-        tenant_id: tenantId,
-        status:    "active",
+        email:       normalizedEmail,
+        tenant_id:   tenantId,
+        status:      "active",
+        ...(permissions !== undefined && permissions !== null ? { permissions } : {}),
       });
 
     if (profileError) {

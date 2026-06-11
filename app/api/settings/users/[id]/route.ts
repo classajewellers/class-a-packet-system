@@ -34,7 +34,52 @@ export async function DELETE(
   }
 }
 
-// GET — list all profiles for a tenant (used by the users settings page)
+// PATCH — update role and/or permissions for a profile
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+): Promise<NextResponse> {
+  try {
+    const tenantId = req.headers.get("x-tenant-id") ?? "";
+    if (!tenantId) {
+      return NextResponse.json({ error: "x-tenant-id header required" }, { status: 400 });
+    }
+
+    const body = await req.json();
+    const { full_name, role, permissions } = body as {
+      full_name?: string;
+      role?: string;
+      permissions?: Record<string, boolean>;
+    };
+
+    const updates: Record<string, unknown> = {};
+    if (full_name !== undefined) updates.full_name = full_name;
+    if (role !== undefined)      updates.role = role;
+    if (permissions !== undefined) updates.permissions = permissions;
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
+    }
+
+    const supabase = await createTenantSupabaseClient(tenantId);
+    const { error } = await supabase
+      .from("profiles")
+      .update(updates)
+      .eq("id", params.id)
+      .eq("tenant_id", tenantId);
+
+    if (error) {
+      console.error("[settings/users PATCH]", error.message);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 });
+  }
+}
+
+// GET — single profile
 export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
     const tenantId = req.headers.get("x-tenant-id") ?? "";
@@ -45,7 +90,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const supabase = await createTenantSupabaseClient(tenantId);
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, full_name, email, role, auth_user_id, created_at")
+      .select("id, full_name, email, role, auth_user_id, created_at, permissions")
       .eq("tenant_id", tenantId)
       .order("full_name", { ascending: true });
 

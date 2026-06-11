@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
-import { canManage } from "@/lib/userTypes";
+import { hasPermission } from "@/lib/userTypes";
 
 interface MetalRate { id: string; metal_type: string; price_per_gram: number; updated_at: string; }
 interface FixedCost { id: string; key: string; label: string; amount: number; updated_at: string; }
@@ -33,9 +33,7 @@ export default function PricingPage() {
   const [saveStates, setSaveStates] = useState<SaveState>({});
 
   useEffect(() => {
-    if (hydrated && !canManage(user?.role)) {
-      router.replace('/');
-    }
+    if (hydrated && user && !hasPermission(user, "pricing")) router.replace("/");
   }, [hydrated, user, router]);
 
   useEffect(() => {
@@ -74,7 +72,7 @@ export default function PricingPage() {
   }
 
   if (!hydrated || !user) return null;
-  if (!canManage(user.role)) return null;
+  if (!hasPermission(user, "pricing")) return null;
 
   const card: React.CSSProperties = { background: '#fff', border: '1px solid #E8E8F0', borderRadius: 12, overflow: 'hidden' };
   const thStyle: React.CSSProperties = { padding: '10px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', background: '#F9FAFB', textAlign: 'left', borderBottom: '1px solid #E8E8F0' };

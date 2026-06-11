@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback, ReactNode, Component } from "react";
 import React from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
-import { canManage } from "@/lib/userTypes";
+import { hasPermission } from "@/lib/userTypes";
 import {
   BarChart,
   Bar,
@@ -1005,14 +1005,12 @@ const NAV_ITEMS = [
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ReportingPage() {
-  const { user } = useUser();
+  const { user, hydrated } = useUser();
   const router = useRouter();
 
   useEffect(() => {
-    if (user && !canManage(user.role)) {
-      router.replace("/");
-    }
-  }, [user, router]);
+    if (hydrated && user && !hasPermission(user, "reporting")) router.replace("/");
+  }, [user, hydrated, router]);
 
   const [section, setSection] = useState("sales");
   const [start, setStart] = useState(startOfMonthISO());
@@ -1061,7 +1059,7 @@ export default function ReportingPage() {
     if (preset === "year") { setStart(startOfYearISO()); setEnd(todayISO()); }
   }
 
-  if (user && !canManage(user.role)) return null;
+  if (user && !hasPermission(user, "reporting")) return null;
 
   const QUICK_BTNS = [
     { label: "Today", preset: "today" },

@@ -105,7 +105,10 @@
       "Bash(python3 -c ' *)",
       "Bash(python3 -)",
       "Bash(node -e \"require\\('@supabase/auth-helpers-nextjs'\\); console.log\\('installed ok'\\)\")",
-      "Bash(npm uninstall *)"
+      "Bash(npm uninstall *)",
+      "Bash(git -C \"/Users/joshmucklow/Downloads/Projects/gemquote 2\" log --oneline -5)",
+      "Bash(node -e \"require\\('next-pwa'\\); console.log\\('ok'\\)\")",
+      "Bash(node -e ' *)"
     ]
   }
 }

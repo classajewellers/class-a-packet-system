@@ -9,7 +9,7 @@ import {
   ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import { LoggedInUser, UserRole } from "@/lib/userTypes";
+import { LoggedInUser, UserRole, UserPermissions, DEFAULT_STAFF_PERMISSIONS } from "@/lib/userTypes";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
@@ -47,14 +47,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const fetchingRef  = useRef(false);
 
   const fallbackUser = (userId: string, userEmail: string): LoggedInUser => ({
-    id:         userId,
-    name:       userEmail.split("@")[0],
-    role:       "manager" as UserRole,
-    email:      userEmail,
-    tenantId:   "00000000-0000-0000-0000-000000000001",
-    tenantSlug: "classa",
-    initials:   userEmail.substring(0, 2).toUpperCase(),
-    loggedInAt: new Date().toISOString(),
+    id:          userId,
+    name:        userEmail.split("@")[0],
+    role:        "manager" as UserRole,
+    email:       userEmail,
+    tenantId:    "00000000-0000-0000-0000-000000000001",
+    tenantSlug:  "classa",
+    initials:    userEmail.substring(0, 2).toUpperCase(),
+    loggedInAt:  new Date().toISOString(),
+    permissions: null,
   });
 
   const loadProfile = async (userId: string, userEmail: string) => {
@@ -104,15 +105,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      const rawPerms = data.permissions as Record<string, boolean> | null | undefined;
+      const permissions: UserPermissions = {
+        ...DEFAULT_STAFF_PERMISSIONS,
+        ...(rawPerms ?? {}),
+      };
+
       setUser({
-        id:         String(data.id ?? userId),
-        name:       String(data.full_name ?? userEmail),
-        role:       (data.role as UserRole) ?? "manager",
-        email:      String(data.email ?? userEmail),
-        tenantId:   data.tenant_id ? String(data.tenant_id) : "00000000-0000-0000-0000-000000000001",
-        tenantSlug: "classa",
-        initials:   String(data.full_name ?? userEmail).substring(0, 2).toUpperCase(),
-        loggedInAt: new Date().toISOString(),
+        id:          String(data.id ?? userId),
+        name:        String(data.full_name ?? userEmail),
+        role:        (data.role as UserRole) ?? "manager",
+        email:       String(data.email ?? userEmail),
+        tenantId:    data.tenant_id ? String(data.tenant_id) : "00000000-0000-0000-0000-000000000001",
+        tenantSlug:  "classa",
+        initials:    String(data.full_name ?? userEmail).substring(0, 2).toUpperCase(),
+        loggedInAt:  new Date().toISOString(),
+        permissions,
       });
       setRoleLoading(false);
     } catch (err) {

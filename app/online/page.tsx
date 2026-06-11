@@ -3,13 +3,20 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Packet } from "@/lib/types";
 import { formatDateAU } from "@/lib/formatters";
 import PacketDetailDrawer from "@/components/PacketDetailDrawer";
 import { useUser } from "@/context/UserContext";
+import { hasPermission } from "@/lib/userTypes";
 
 export default function OnlinePage() {
-  const { user } = useUser();
+  const { user, hydrated } = useUser();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (hydrated && user && !hasPermission(user, "online")) router.replace("/");
+  }, [user, hydrated, router]);
   const [packets, setPackets] = useState<Packet[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Packet | null>(null);

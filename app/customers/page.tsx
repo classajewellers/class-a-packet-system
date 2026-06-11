@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { formatDateAU, formatCurrency } from "@/lib/formatters";
 import { useUser } from "@/context/UserContext";
+import { hasPermission } from "@/lib/userTypes";
 
 interface CustomerRow {
   email: string;
@@ -32,8 +33,13 @@ function SkeletonRow() {
 }
 
 export default function CustomersPage() {
-  const { user } = useUser();
+  const { user, hydrated } = useUser();
   const router = useRouter();
+
+  useEffect(() => {
+    if (hydrated && user && !hasPermission(user, "customers")) router.replace("/");
+  }, [user, hydrated, router]);
+
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");

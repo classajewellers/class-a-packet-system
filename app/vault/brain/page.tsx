@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
-import { canManage } from "@/lib/userTypes";
+import { hasPermission } from "@/lib/userTypes";
 
 interface VaultReport {
   id: string;
@@ -51,11 +51,11 @@ function timeAgo(iso: string): string {
 }
 
 export default function VaultBrainPage() {
-  const { user } = useUser();
+  const { user, hydrated } = useUser();
   const router = useRouter();
   useEffect(() => {
-    if (user && !canManage(user.role)) router.replace("/orders");
-  }, [user, router]);
+    if (hydrated && user && !hasPermission(user, "vault_brain")) router.replace("/");
+  }, [user, hydrated, router]);
 
   const [reports, setReports] = useState<VaultReport[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,7 +77,7 @@ export default function VaultBrainPage() {
 
   useEffect(() => { fetchReports(); }, [fetchReports]);
 
-  if (!user || !canManage(user.role)) return null;
+  if (!user || !hasPermission(user, "vault_brain")) return null;
 
   const filtered = filter === "All" ? reports : reports.filter((r) => r.type === filter);
 

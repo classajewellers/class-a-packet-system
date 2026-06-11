@@ -7,6 +7,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Packet, PacketType } from "@/lib/types";
 import { getSupabaseClient } from "@/lib/supabase";
 import { useUser } from "@/context/UserContext";
+import { hasPermission } from "@/lib/userTypes";
 import AdminTable from "@/components/AdminTable";
 import PacketDetailDrawer from "@/components/PacketDetailDrawer";
 
@@ -24,10 +25,14 @@ const ORDER_FILTERS: { value: OrderFilter; label: string }[] = [
 ];
 
 function OrdersPageInner() {
-  const { user } = useUser();
+  const { user, hydrated } = useUser();
   const canDelete = user?.role !== "staff";
   const searchParams = useSearchParams();
   const router = useRouter();
+
+  useEffect(() => {
+    if (hydrated && user && !hasPermission(user, "orders")) router.replace("/");
+  }, [user, hydrated, router]);
 
   const [packets, setPackets] = useState<Packet[]>([]);
   const [loading, setLoading] = useState(true);

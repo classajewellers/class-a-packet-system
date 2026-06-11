@@ -12,6 +12,8 @@ import nextDynamic from "next/dynamic";
 import QuoteDetailDrawer from "@/components/QuoteDetailDrawer";
 import QuoteStatsBar from "@/components/QuoteStatsBar";
 import { useUser } from "@/context/UserContext";
+import { useRouter } from "next/navigation";
+import { hasPermission } from "@/lib/userTypes";
 
 const QuotePipelineBoard = nextDynamic(
   () => import("@/components/QuotePipelineBoard"),
@@ -27,7 +29,13 @@ function startOfMonthISO() {
 }
 
 export default function QuotesPage() {
-  const { user } = useUser();
+  const { user, hydrated } = useUser();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (hydrated && user && !hasPermission(user, "quotes")) router.replace("/");
+  }, [user, hydrated, router]);
+
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
