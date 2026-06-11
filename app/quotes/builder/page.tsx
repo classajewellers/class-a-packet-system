@@ -189,6 +189,8 @@ export default function QuoteBuilderPage() {
           mainStones: includeMainStone ? stones : [],
           meleeStones: meleeRows.filter(m => m.stoneType),
           engraving: { hand: handEngraving, laser: laserEngraving },
+          fingerSize: fingerSize || null,
+          stockSku: stockSku || null,
         }),
       });
       const json = await res.json();
@@ -1178,22 +1180,6 @@ export default function QuoteBuilderPage() {
         <div style={{ position: "sticky", top: 24 }}>
           <div style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, padding: 24 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 16 }}>Live Price</div>
-
-            {/* Manager multiplier badge */}
-            {isManager && pricing.mult != null && pricing.mColour && (() => {
-              const cs = MULT_COLOURS[pricing.mColour];
-              return (
-                <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 8, background: cs.bg, marginBottom: 12, fontSize: 13 }}>
-                  <span style={{ fontWeight: 700, color: cs.text }}>×{pricing.mult.toFixed(2)}</span>
-                  <span style={{ fontSize: 12, color: cs.text, opacity: 0.8 }}>
-                    ${(pricing.finalPrice - pricing.totalCost).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} profit
-                  </span>
-                  {pricing.finalPrice !== pricing.quotedPrice && (
-                    <span style={{ fontSize: 11, color: "#D97706", marginLeft: "auto", fontWeight: 600 }}>overridden</span>
-                  )}
-                </div>
-              );
-            })()}
 
             {/* Quoted price — visible to all */}
             <div style={{ marginBottom: 24 }}>

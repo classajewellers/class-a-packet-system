@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const body = await req.json();
-    const { itemType, subcategory, design, metals, mainStones, meleeStones, engraving } = body;
+    const { itemType, subcategory, design, metals, mainStones, meleeStones, engraving, fingerSize, stockSku } = body;
 
     // Build structured data strings — no gram weights, no pricing
     const metalStr = (metals ?? [])
@@ -53,8 +53,10 @@ Output format: [Metal] [Design Name] [Item Type] set with a [carat]ct [colour]/[
 - Capitalise metal type, stone shape, and item type
 - Never mention gram weights, setting costs, labour, or pricing
 - Never use adjectives like stunning, exquisite, featuring, boasting, beautiful
-- One sentence, maximum 25 words
-- Output the description only — no preamble, no explanation, no punctuation at the end`;
+- If finger size is provided, append ", finger size [X]" at the end of the main description (before any stock SKU)
+- If stock SKU is provided, append " — Ref: [SKU]" at the very end
+- Only append finger size or stock SKU if they have values — omit entirely if empty
+- One sentence maximum, output the description only — no preamble, no explanation, no punctuation at the end`;
 
     const userPrompt = [
       metalStr        && `Metal: ${metalStr}`,
@@ -62,6 +64,8 @@ Output format: [Metal] [Design Name] [Item Type] set with a [carat]ct [colour]/[
       design          && `Design name or notes: ${design}`,
       mainStoneStr    && `Main stone: ${mainStoneStr}`,
       meleeStr        && `Accent stones: ${meleeStr}`,
+      fingerSize      && `Finger size: ${fingerSize}`,
+      stockSku        && `Stock SKU: ${stockSku}`,
     ].filter(Boolean).join("\n");
 
     console.log("[generate-description] Calling Anthropic, data:\n", userPrompt);
