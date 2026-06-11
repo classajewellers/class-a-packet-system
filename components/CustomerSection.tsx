@@ -219,7 +219,7 @@ export default function CustomerSection({ data, onChange, errors }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <Field label="First Name" required error={errors.customer_first_name}>
           <Input
             value={data.customer_first_name}
@@ -249,7 +249,7 @@ export default function CustomerSection({ data, onChange, errors }: Props) {
         />
       </Field>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Field label="Suburb" className="col-span-1" error={errors.customer_suburb}>
           <input
             type="text"

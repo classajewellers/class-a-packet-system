@@ -585,7 +585,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
 
           {/* ── Customer ── */}
           <Section title="Customer">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <Label>First Name</Label>
                 <input
@@ -657,7 +657,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   style={fieldStyle}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <div>
                   <Label>State</Label>
                   <input
@@ -840,7 +840,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
 
           {/* ── Other Dates ── */}
           <Section title="Other Dates">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <Label>In Date</Label>
                 <input
@@ -882,7 +882,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
 
           {/* ── Pricing ── */}
           <Section title="Pricing">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
                 <Label>Total ($)</Label>
                 <input
@@ -920,7 +920,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
 
           {/* ── Staff & Referral ── */}
           <Section title="Staff & Referral">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="col-span-2">
                 <Label>Staff Member</Label>
                 <select
@@ -996,7 +996,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
           {/* ── Online Order ── */}
           {isOnline && (
             <Section title="Online Order">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <Label>Order #</Label>
                   <input
@@ -1079,7 +1079,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                         style={fieldStyle}
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       <div>
                         <Label>State</Label>
                         <input
@@ -1110,7 +1110,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
           {/* ── Additional packet_data (read-only) ── */}
           {local.packet_data && Object.keys(local.packet_data).length > 0 && (
             <Section title="Additional Details">
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+              <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
                 {Object.entries(local.packet_data).map(([k, v]) => (
                   <div key={k}>
                     <dt style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 500 }}>

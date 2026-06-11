@@ -197,7 +197,7 @@ export default function DashboardPage() {
     <div style={{ padding: 24, maxWidth: 1200, margin: "0 auto" }}>
 
       {/* ── Stat cards ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0,1fr))", gap: 14, marginBottom: 24 }}>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         {loading ? (
           Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
         ) : (
@@ -223,7 +223,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Main content ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 20 }}>
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5">
 
         {/* Recent Orders */}
         <div style={card}>
@@ -238,40 +238,71 @@ export default function DashboardPage() {
           ) : recentOrders.length === 0 ? (
             <div style={{ padding: "32px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>No orders yet</div>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  <th style={thStyle}>Ref</th>
-                  <th style={thStyle}>Type</th>
-                  <th style={thStyle}>Customer</th>
-                  <th style={thStyle}>Due</th>
-                  <th style={thStyle}>Created</th>
-                </tr>
-              </thead>
-              <tbody>
+            <>
+              {/* Mobile: stacked cards */}
+              <div className="md:hidden divide-y divide-gray-100">
                 {recentOrders.map((p) => {
                   const customerName = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
                   const badgeStyle = { ...BADGE_BASE, ...(TYPE_BADGE_STYLE[p.packet_type] ?? { background: "#F3F4F6", color: "#374151" }) };
                   return (
-                    <tr
+                    <div
                       key={p.id}
                       onClick={() => router.push(`/orders?open=${encodeURIComponent(p.reference_number)}`)}
-                      style={{ cursor: "pointer" }}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = "#F9FAFB"; }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = ""; }}
+                      className="px-4 py-3 cursor-pointer active:bg-gray-50"
                     >
-                      <td style={{ ...tdStyle, fontFamily: "monospace", fontSize: 12, color: "#6B7280" }}>{p.reference_number}</td>
-                      <td style={tdStyle}>
-                        <span style={badgeStyle}>{packetTypeLabel(p.packet_type)}</span>
-                      </td>
-                      <td style={{ ...tdStyle, fontWeight: 500 }}>{customerName}</td>
-                      <td style={{ ...tdStyle, color: "#6B7280" }}>{formatDateAU(p.due_date) || "—"}</td>
-                      <td style={{ ...tdStyle, fontSize: 12, color: "#9CA3AF" }}>{formatDateAU(p.created_at?.split("T")[0]) || "—"}</td>
-                    </tr>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div style={{ fontWeight: 500, color: "#1A1A2E", fontSize: 14 }}>{customerName}</div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span style={badgeStyle}>{packetTypeLabel(p.packet_type)}</span>
+                            <span style={{ fontFamily: "monospace", fontSize: 11, color: "#9CA3AF" }}>{p.reference_number}</span>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 12, color: "#6B7280", textAlign: "right", flexShrink: 0 }}>
+                          <div>{formatDateAU(p.due_date) || "—"}</div>
+                        </div>
+                      </div>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
+              </div>
+
+              {/* Desktop: full table */}
+              <table style={{ width: "100%", borderCollapse: "collapse" }} className="hidden md:table">
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Ref</th>
+                    <th style={thStyle}>Type</th>
+                    <th style={thStyle}>Customer</th>
+                    <th style={thStyle}>Due</th>
+                    <th style={thStyle}>Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentOrders.map((p) => {
+                    const customerName = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
+                    const badgeStyle = { ...BADGE_BASE, ...(TYPE_BADGE_STYLE[p.packet_type] ?? { background: "#F3F4F6", color: "#374151" }) };
+                    return (
+                      <tr
+                        key={p.id}
+                        onClick={() => router.push(`/orders?open=${encodeURIComponent(p.reference_number)}`)}
+                        style={{ cursor: "pointer" }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = "#F9FAFB"; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = ""; }}
+                      >
+                        <td style={{ ...tdStyle, fontFamily: "monospace", fontSize: 12, color: "#6B7280" }}>{p.reference_number}</td>
+                        <td style={tdStyle}>
+                          <span style={badgeStyle}>{packetTypeLabel(p.packet_type)}</span>
+                        </td>
+                        <td style={{ ...tdStyle, fontWeight: 500 }}>{customerName}</td>
+                        <td style={{ ...tdStyle, color: "#6B7280" }}>{formatDateAU(p.due_date) || "—"}</td>
+                        <td style={{ ...tdStyle, fontSize: 12, color: "#9CA3AF" }}>{formatDateAU(p.created_at?.split("T")[0]) || "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </>
           )}
         </div>
 

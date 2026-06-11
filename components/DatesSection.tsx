@@ -10,7 +10,7 @@ interface Props {
 
 export default function DatesSection({ data, onChange, errors }: Props) {
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
       <div>
         <label className="block text-sm font-semibold text-[#1B1F3B] mb-1">
           In Date

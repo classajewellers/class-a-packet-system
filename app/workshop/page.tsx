@@ -150,7 +150,40 @@ export default function WorkshopPage() {
           <div style={{ padding: '12px 20px', borderBottom: '1px solid #E8E8F0' }}>
             <h2 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', margin: 0 }}>{mainJobs.length} job{mainJobs.length !== 1 ? "s" : ""}</h2>
           </div>
-          <div className="overflow-x-auto">
+          {/* Mobile: stacked cards */}
+          <div className="md:hidden divide-y divide-gray-100">
+            {mainJobs.map((j) => {
+              const isOverdue = j.due_date != null && j.due_date < today;
+              return (
+                <div key={j.id} className="px-4 py-3 active:bg-gray-50">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div style={{ fontWeight: 600, color: '#1A1A2E', fontSize: 14 }}>{j.customer_surname || "—"}</div>
+                      <div style={{ fontSize: 13, color: '#374151', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{j.description || "—"}</div>
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <span style={{ fontSize: 12, color: '#6B7280', textTransform: 'capitalize' }}>{j.stage.replace(/_/g, " ")}</span>
+                        {j.assigned_jeweller && <span style={{ fontSize: 12, color: '#9CA3AF' }}>· {j.assigned_jeweller}</span>}
+                        {j.valuation_required && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A' }}>
+                            <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01z"/></svg>
+                            Valuation
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div style={{ fontSize: 14, color: isOverdue ? '#EF4444' : '#6B7280', fontWeight: isOverdue ? 600 : 400 }}>
+                        {formatDateAU(j.due_date) || "—"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop: full table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ textAlign: 'left', borderBottom: '1px solid #E8E8F0', background: '#F9FAFB' }}>

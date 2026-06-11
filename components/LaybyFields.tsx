@@ -50,7 +50,7 @@ export default function LaybyFields({ data, onChange, errors }: Props) {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
           <label className="block text-sm font-semibold text-[#1B1F3B] mb-1">
             Number of Payments<span className="text-[#C9A84C] ml-0.5">*</span>

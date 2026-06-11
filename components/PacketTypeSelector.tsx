@@ -60,8 +60,8 @@ export default function PacketTypeSelector({ value, onChange }: Props) {
         )}
       </button>
 
-      {/* Standard types — 2 columns */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Standard types — 2 columns on md+, 1 column on mobile */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {STANDARD_TYPES.map((t) => {
           const selected = value === t.value;
           return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { UserProvider, useUser } from "@/context/UserContext";
 import Sidebar from "@/components/Sidebar";
@@ -17,6 +17,13 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const isLoginPage = pathname === "/login";
   const isPublicPage = pathname.startsWith("/claim/");
   const [aiOpen, setAiOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Close sidebar whenever the route changes (user tapped a nav link)
+  useEffect(() => { setSidebarOpen(false); }, [pathname]);
+
+  const openSidebar  = useCallback(() => setSidebarOpen(true),  []);
+  const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
   // Safety net: if the Supabase session check hangs for more than 10 s,
   // stop blocking the UI. The middleware will redirect unauthenticated users
@@ -53,9 +60,9 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   // Authenticated pages: full app shell
   return (
     <div className="app-shell">
-      <Sidebar onOpenAI={() => setAiOpen(true)} />
+      <Sidebar onOpenAI={() => setAiOpen(true)} mobileOpen={sidebarOpen} onClose={closeSidebar} />
       <div className="app-main">
-        <TopBar />
+        <TopBar onOpenSidebar={openSidebar} />
         <main className="app-content">
           {children}
         </main>

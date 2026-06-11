@@ -257,7 +257,39 @@ export default function QuotesPage() {
                 </div>
               </div>
             )}
-            <div className="overflow-x-auto">
+            {/* Mobile: stacked cards */}
+            <div className="md:hidden divide-y divide-gray-100">
+              {filteredListQuotes.map((q) => {
+                const name = [q.customer_first_name, q.customer_last_name].filter(Boolean).join(" ") || "—";
+                return (
+                  <div
+                    key={q.id}
+                    onClick={() => setSelectedQuote(q)}
+                    className="px-4 py-3 cursor-pointer active:bg-gray-50"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div style={{ fontWeight: 600, color: '#1A1A2E', fontSize: 14 }}>{name}</div>
+                        <div style={{ fontFamily: 'monospace', fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>{q.reference_number}</div>
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                          <span style={{ fontSize: 12, color: '#374151', textTransform: 'capitalize' }}>{q.status?.replace(/_/g, " ") || "—"}</span>
+                          {q.assigned_to && <span style={{ fontSize: 12, color: '#9CA3AF' }}>· {q.assigned_to}</span>}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        {q.follow_up_date && (
+                          <div style={{ fontSize: 12, color: '#6B7280' }}>{formatDateAU(q.follow_up_date)}</div>
+                        )}
+                        <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{formatDateAU(q.created_at?.split("T")[0]) || "—"}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop: full table */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ borderBottom: '1px solid #E8E8F0', textAlign: 'left', background: '#F9FAFB' }}>

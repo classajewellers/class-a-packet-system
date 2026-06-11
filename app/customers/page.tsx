@@ -102,7 +102,44 @@ export default function CustomersPage() {
               : `${customers.length} customer${customers.length !== 1 ? "s" : ""}${search ? ` matching "${search}"` : ""}`}
           </h2>
         </div>
-        <div className="overflow-x-auto">
+        {/* Mobile: stacked cards */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {loading ? (
+            <div style={{ padding: '48px 20px', textAlign: 'center', color: '#6B7280', fontSize: 14 }}>Loading…</div>
+          ) : customers.length === 0 ? (
+            <div style={{ padding: '48px 20px', textAlign: 'center', color: '#6B7280', fontSize: 14 }}>
+              {search ? `No customers found matching "${search}"` : "No customer records yet."}
+            </div>
+          ) : customers.map((c) => {
+            const name = [c.first_name, c.last_name].filter(Boolean).join(" ") || "—";
+            return (
+              <div
+                key={c.email}
+                onClick={() => openProfile(c.email)}
+                className="flex items-center justify-between gap-3 px-4 py-3 cursor-pointer active:bg-gray-50"
+              >
+                <div className="min-w-0">
+                  <div style={{ fontWeight: 600, color: '#1A1A2E', fontSize: 14 }}>{name}</div>
+                  <div style={{ color: '#6B7280', fontSize: 13, marginTop: 2 }}>{c.phone || c.email || "—"}</div>
+                  <div style={{ color: '#9CA3AF', fontSize: 12, marginTop: 2 }}>
+                    Last visit: {formatDateAU(c.last_visit?.split("T")[0]) || "—"}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  {c.total_spend > 0 && (
+                    <span style={{ fontWeight: 600, color: '#1A1A2E', fontSize: 14 }}>{formatCurrency(c.total_spend)}</span>
+                  )}
+                  <svg className="w-4 h-4" fill="none" stroke="#D1D5DB" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                  </svg>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Desktop: full table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr style={{ textAlign: 'left', borderBottom: '1px solid #E8E8F0', background: '#F9FAFB' }}>

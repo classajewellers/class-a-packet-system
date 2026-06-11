@@ -25,7 +25,7 @@ export default function ReferralStaffSection({ data, onChange, errors }: Props) 
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
           <label className="block text-sm font-semibold text-black mb-1">
             How did you find us?

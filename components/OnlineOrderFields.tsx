@@ -33,7 +33,7 @@ const textareaClass =
 export default function OnlineOrderFields({ data, onChange, errors }: Props) {
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
           <label className="block text-sm font-semibold text-black mb-1">
             Order Number<span className="text-black ml-0.5">*</span>
@@ -120,7 +120,7 @@ export default function OnlineOrderFields({ data, onChange, errors }: Props) {
             placeholder="Street address"
             className={inputClass}
           />
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             <input
               type="text"
               value={data.shipping_suburb}
@@ -147,7 +147,7 @@ export default function OnlineOrderFields({ data, onChange, errors }: Props) {
       )}
 
       {/* Jewellery details — required for PCN / charm necklace orders */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
           <label className="block text-sm font-semibold text-black mb-1">
             Carat Weight (ct)

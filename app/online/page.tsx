@@ -101,57 +101,90 @@ export default function OnlinePage() {
               {loading ? "Loading…" : `${packets.length} online order${packets.length !== 1 ? "s" : ""}`}
             </h2>
           </div>
-          <div className="overflow-x-auto">
-            {loading ? (
-              <div style={{ padding: '48px 0', textAlign: 'center', color: '#6B7280', fontSize: 14 }}>Loading…</div>
-            ) : packets.length === 0 ? (
-              <div style={{ padding: '48px 0', textAlign: 'center', color: '#6B7280', fontSize: 14 }}>No online orders found</div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr style={{ textAlign: 'left', borderBottom: '1px solid #E8E8F0', background: '#F9FAFB' }}>
-                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ref</th>
-                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Customer</th>
-                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Source</th>
-                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Order #</th>
-                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Items</th>
-                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Due Date</th>
-                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Label</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {packets.map((p) => {
-                    const name = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
-                    return (
-                      <tr
-                        key={p.id}
-                        onClick={() => setSelected(p)}
-                        style={{ borderBottom: '1px solid #E8E8F0', cursor: 'pointer', transition: 'background .12s' }}
-                        onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = '#F9FAFB'}
-                        onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}
-                      >
-                        <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: 12, color: '#6B7280' }}>{p.reference_number}</td>
-                        <td style={{ padding: '12px 16px', fontWeight: 500, color: '#1A1A2E' }}>{name}</td>
-                        <td style={{ padding: '12px 16px' }}>
-                          <span style={{ display: 'inline-flex', padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 500, background: (p.order_source ?? "").toLowerCase().includes("shopify") ? '#DCFCE7' : '#F3F4F6', color: (p.order_source ?? "").toLowerCase().includes("shopify") ? '#166534' : '#374151' }}>
-                            {p.order_source || "—"}
-                          </span>
-                        </td>
-                        <td style={{ padding: '12px 16px', color: '#374151' }}>{p.order_number || "—"}</td>
-                        <td style={{ padding: '12px 16px', color: '#6B7280', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.items_ordered || "—"}</td>
-                        <td style={{ padding: '12px 16px', color: '#6B7280' }}>{formatDateAU(p.due_date) || "—"}</td>
-                        <td style={{ padding: '12px 16px' }}>
+          {loading ? (
+            <div style={{ padding: '48px 0', textAlign: 'center', color: '#6B7280', fontSize: 14 }}>Loading…</div>
+          ) : packets.length === 0 ? (
+            <div style={{ padding: '48px 0', textAlign: 'center', color: '#6B7280', fontSize: 14 }}>No online orders found</div>
+          ) : (
+            <>
+              {/* Mobile: stacked cards */}
+              <div className="md:hidden divide-y divide-gray-100">
+                {packets.map((p) => {
+                  const name = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => setSelected(p)}
+                      className="px-4 py-3 cursor-pointer active:bg-gray-50"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div style={{ fontWeight: 600, color: '#1A1A2E', fontSize: 14 }}>{name}</div>
+                          <div style={{ fontFamily: 'monospace', fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>{p.reference_number}</div>
+                          {p.items_ordered && (
+                            <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.items_ordered}</div>
+                          )}
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
                           <span style={{ display: 'inline-flex', padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 500, background: p.label_printed ? '#DCFCE7' : '#FEF3C7', color: p.label_printed ? '#166534' : '#92400E' }}>
                             {p.label_printed ? "Printed" : "Unprinted"}
                           </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
+                          <span style={{ fontSize: 12, color: '#9CA3AF' }}>{formatDateAU(p.due_date) || "—"}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop: full table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ textAlign: 'left', borderBottom: '1px solid #E8E8F0', background: '#F9FAFB' }}>
+                      <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ref</th>
+                      <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Customer</th>
+                      <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Source</th>
+                      <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Order #</th>
+                      <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Items</th>
+                      <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Due Date</th>
+                      <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Label</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {packets.map((p) => {
+                      const name = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
+                      return (
+                        <tr
+                          key={p.id}
+                          onClick={() => setSelected(p)}
+                          style={{ borderBottom: '1px solid #E8E8F0', cursor: 'pointer', transition: 'background .12s' }}
+                          onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = '#F9FAFB'}
+                          onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}
+                        >
+                          <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: 12, color: '#6B7280' }}>{p.reference_number}</td>
+                          <td style={{ padding: '12px 16px', fontWeight: 500, color: '#1A1A2E' }}>{name}</td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <span style={{ display: 'inline-flex', padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 500, background: (p.order_source ?? "").toLowerCase().includes("shopify") ? '#DCFCE7' : '#F3F4F6', color: (p.order_source ?? "").toLowerCase().includes("shopify") ? '#166534' : '#374151' }}>
+                              {p.order_source || "—"}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 16px', color: '#374151' }}>{p.order_number || "—"}</td>
+                          <td style={{ padding: '12px 16px', color: '#6B7280', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.items_ordered || "—"}</td>
+                          <td style={{ padding: '12px 16px', color: '#6B7280' }}>{formatDateAU(p.due_date) || "—"}</td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <span style={{ display: 'inline-flex', padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 500, background: p.label_printed ? '#DCFCE7' : '#FEF3C7', color: p.label_printed ? '#166534' : '#92400E' }}>
+                              {p.label_printed ? "Printed" : "Unprinted"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </>
