@@ -25,7 +25,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const { data: inviteData, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(
       email.toLowerCase().trim(),
       {
-        data: { name: name.trim(), role, tenant_id: tenantId },
+        data: { full_name: name.trim(), role, tenant_id: tenantId },
         redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://jewelleryvault.com.au"}/api/auth/callback`,
       }
     );
