@@ -19,6 +19,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const supabase = createServerSupabaseClient();
 
+    console.log("[invite] Sending invite to:", email, "role:", role, "tenant:", tenantId);
+
     // Send Supabase invite email
     const { data: inviteData, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(
       email.toLowerCase().trim(),
@@ -29,25 +31,40 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
 
     if (inviteError) {
-      console.error("[invite] auth.admin.inviteUserByEmail failed:", inviteError.message);
+      console.error("[invite] auth.admin.inviteUserByEmail failed:", JSON.stringify(inviteError));
       return NextResponse.json({ error: inviteError.message }, { status: 500 });
     }
 
-    // Pre-create the profile so it appears in the users list immediately
-    // auth_user_id will be linked when they accept the invite via the callback route
+    const authUserId = inviteData?.user?.id;
+    console.log("[invite] Auth user created, id:", authUserId);
+
+    if (!authUserId) {
+      console.error("[invite] inviteUserByEmail returned no user id — inviteData:", JSON.stringify(inviteData));
+      return NextResponse.json({ error: "Invite sent but no user ID returned from auth" }, { status: 500 });
+    }
+
+    // Insert profile so the user appears in the list immediately.
+    // id must match the auth user id — this is the primary key.
     const { error: profileError } = await supabase
       .from("profiles")
       .insert({
+        id:        authUserId,
         full_name: name.trim(),
         role,
         email:     email.toLowerCase().trim(),
         tenant_id: tenantId,
+        status:    "active",
       });
 
     if (profileError) {
-      console.warn("[invite] profile upsert failed (non-fatal):", profileError.message);
+      console.error("[invite] profile insert failed:", JSON.stringify(profileError));
+      return NextResponse.json(
+        { error: `Invite sent but profile creation failed: ${profileError.message}` },
+        { status: 500 }
+      );
     }
 
+    console.log("[invite] Profile created successfully for", email);
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("[invite] unexpected error:", err);
