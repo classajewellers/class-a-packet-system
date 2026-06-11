@@ -9,6 +9,7 @@ import { canManage } from "@/lib/userTypes";
 import Link from "next/link";
 import { generateQuoteHTML } from "@/lib/quoteGenerator";
 import { calculateRetailPrice, calculateMultiplier, multiplierColour } from "@/lib/marginCalculator";
+import NivodaModal, { type NivodaStone } from "@/components/NivodaModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -20,6 +21,7 @@ interface MetalRow { id: string; type: string; weight: string; }
 interface StoneEntry {
   id: string; caratWeight: string; shape: string; colour: string;
   clarity: string; origin: "Lab Grown" | "Natural"; cost: string;
+  nivodaId?: string;
 }
 interface MeleeRow {
   id: string; stoneType: string; quality: string; shape: string;
@@ -195,6 +197,23 @@ export default function QuoteBuilderPage() {
 
   // Trigger AI whenever key fields change
   useEffect(() => { triggerAI(); }, [triggerAI]);
+
+  // ── Nivoda stone selection ─────────────────────────────────────────────────
+
+  const handleSelectNivodaStone = useCallback((stone: NivodaStone) => {
+    const formatted: StoneEntry = {
+      id: uid(),
+      caratWeight: String(stone.carats),
+      shape: stone.shape.charAt(0) + stone.shape.slice(1).toLowerCase(),
+      colour: stone.color,
+      clarity: stone.clarity,
+      origin: stone.labgrown ? "Lab Grown" : "Natural",
+      cost: stone.price > 0 ? String(Math.round(stone.price / 100)) : "",
+      nivodaId: stone.id,
+    };
+    setIncludeMainStone(true);
+    setStones([formatted]);
+  }, []);
 
   // ── Pricing computation ────────────────────────────────────────────────────
 
@@ -673,7 +692,12 @@ export default function QuoteBuilderPage() {
                 {stones.map((stone, idx) => (
                   <div key={stone.id} style={{ marginBottom: 16, padding: "14px 14px 12px", borderRadius: 10, border: "1px solid #E8E8F0", background: "#FAFAFA" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>Stone {idx + 1}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>Stone {idx + 1}</span>
+                        {stone.nivodaId && (
+                          <span style={{ fontSize: 11, fontWeight: 600, background: "#EEF2FF", color: "#635BFF", border: "1px solid #C7D2FE", borderRadius: 20, padding: "2px 8px" }}>Sourced from Nivoda</span>
+                        )}
+                      </div>
                       {stones.length > 1 && (
                         <button onClick={() => setStones(prev => prev.filter(s => s.id !== stone.id))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 18, color: "#9CA3AF", lineHeight: 1, padding: "0 2px" }}>×</button>
                       )}
@@ -1170,29 +1194,12 @@ export default function QuoteBuilderPage() {
       </div>
 
       {/* ── Nivoda Modal ── */}
-      {showNivodaModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setShowNivodaModal(false)}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 32, maxWidth: 440, width: "90%", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-              <div style={{ width: 44, height: 44, borderRadius: 10, background: "#EEF2FF", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#635BFF" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path strokeLinecap="round" d="m21 21-4.35-4.35" /></svg>
-              </div>
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: "#1A1A2E" }}>Browse Stones</div>
-                <div style={{ fontSize: 13, color: "#6B7280" }}>Nivoda Stone Marketplace</div>
-              </div>
-            </div>
-            <div style={{ background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 10, padding: "14px 16px", marginBottom: 20 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "#92400E", marginBottom: 4 }}>Coming Soon</div>
-              <div style={{ fontSize: 13, color: "#78350F" }}>Nivoda integration coming soon. Enter stone details manually below.</div>
-            </div>
-            <button
-              onClick={() => setShowNivodaModal(false)}
-              style={{ width: "100%", padding: "11px 0", borderRadius: 10, background: "#635BFF", color: "#fff", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 600 }}
-            >Close</button>
-          </div>
-        </div>
-      )}
+      <NivodaModal
+        open={showNivodaModal}
+        onClose={() => setShowNivodaModal(false)}
+        onSelectStone={handleSelectNivodaStone}
+        tenantId={user?.tenantId ?? ""}
+      />
 
       {/* Toast */}
       {toast && (
