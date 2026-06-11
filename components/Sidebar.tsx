@@ -219,7 +219,6 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
                 />
                 {settingsExpanded && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
-                    <SubLink href="/settings"            label="Preferences" />
                     <SubLink href="/pricing"             label="Pricing" />
                     {isManager && <SubLink href="/settings/users"   label="Users" />}
                     {isManager && <SubLink href="/settings/tenants" label="Stores" />}
