@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { randomUUID } from "crypto";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -9,8 +10,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const body = await req.json();
     const { name, email, role } = body as { name: string; email: string; role: "manager" | "staff" };
     const tenantId = req.headers.get("x-tenant-id") ?? "";
+    const fullName = name?.trim();
+    const normalizedEmail = email?.toLowerCase().trim();
 
-    if (!name?.trim() || !email?.trim() || !role) {
+    if (!fullName || !normalizedEmail || !role) {
       return NextResponse.json({ error: "name, email, and role are required" }, { status: 400 });
     }
     if (!tenantId) {
@@ -19,53 +22,65 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const supabase = createServerSupabaseClient();
 
-    console.log("[invite] Sending invite to:", email, "role:", role, "tenant:", tenantId);
+    console.log("[invite] Creating user:", normalizedEmail, "role:", role, "tenant:", tenantId);
 
-    // Send Supabase invite email
-    const { data: inviteData, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(
-      email.toLowerCase().trim(),
-      {
-        data: { full_name: name.trim(), role, tenant_id: tenantId },
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://jewelleryvault.com.au"}/api/auth/callback`,
-      }
-    );
+    // ── Step 1: Create auth user ───────────────────────────────────────────────
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      email: normalizedEmail,
+      email_confirm: false,
+      user_metadata: { full_name: fullName, role, tenant_id: tenantId },
+    });
 
-    console.log("[invite] inviteUserByEmail response — error:", JSON.stringify(inviteError), "user:", JSON.stringify(inviteData?.user ?? null));
+    console.log("[invite] createUser response — error:", JSON.stringify(authError), "user:", JSON.stringify(authData?.user ?? null));
 
-    if (inviteError) {
-      console.error("[invite] auth.admin.inviteUserByEmail failed:", JSON.stringify(inviteError));
-      return NextResponse.json({ error: inviteError.message }, { status: 500 });
+    if (authError) {
+      console.error("[invite] createUser failed:", JSON.stringify(authError));
+      return NextResponse.json({ error: authError.message }, { status: 500 });
     }
 
-    // Invite succeeded. User object may be null if the invite was queued rather than
-    // created synchronously — that's fine, the email has been sent.
-    const authUserId = inviteData?.user?.id ?? null;
-    console.log("[invite] Auth user id:", authUserId ?? "(not returned — invite queued)");
+    const authUserId = authData?.user?.id ?? null;
+    console.log("[invite] Auth user created, id:", authUserId ?? "(not returned)");
 
-    if (authUserId) {
-      // Pre-create the profile so the user appears in the list immediately.
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .insert({
-          id:        authUserId,
-          full_name: name.trim(),
-          role,
-          email:     email.toLowerCase().trim(),
-          tenant_id: tenantId,
-          status:    "active",
-        });
+    // ── Step 2: Insert profile ────────────────────────────────────────────────
+    const profileId = authUserId ?? randomUUID();
 
-      if (profileError) {
-        console.error("[invite] profile insert failed:", JSON.stringify(profileError));
-        // Non-fatal — invite email was sent; profile will be created on first login.
-      } else {
-        console.log("[invite] Profile created successfully for", email);
-      }
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .insert({
+        id:        profileId,
+        full_name: fullName,
+        role,
+        email:     normalizedEmail,
+        tenant_id: tenantId,
+        status:    "active",
+      });
+
+    if (profileError) {
+      console.error("[invite] profile insert failed:", JSON.stringify(profileError));
+      // Non-fatal — auth user was created; profile will be created on first login.
+    } else {
+      console.log("[invite] Profile created for", normalizedEmail, "id:", profileId);
+    }
+
+    // ── Step 3: Generate invite link so the user can set their password ────────
+    const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+      type: "invite",
+      email: normalizedEmail,
+      options: {
+        data: { full_name: fullName, role, tenant_id: tenantId },
+      },
+    });
+
+    if (linkError) {
+      console.error("[invite] generateLink failed:", JSON.stringify(linkError));
+      // Non-fatal — user exists; they can use password reset to gain access.
+    } else {
+      console.log("[invite] Invite link generated:", JSON.stringify(linkData?.properties ?? null));
     }
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("[invite] unexpected error:", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    console.error("[invite] unexpected error:", JSON.stringify(err));
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
 }
