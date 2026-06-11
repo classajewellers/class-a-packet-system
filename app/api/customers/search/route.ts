@@ -14,10 +14,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     const { data, error } = await supabase
       .from("customers")
-      .select("id, first_name, last_name, email, phone")
-      .or(
-        `first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`
-      )
+      .select("first_name, last_name, email, phone")
+      .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`)
       .limit(8);
 
     if (error) return NextResponse.json({ results: [] });

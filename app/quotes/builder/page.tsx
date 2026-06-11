@@ -25,7 +25,7 @@ interface MeleeRow {
   id: string; stoneType: string; quality: string; shape: string;
   caratWeight: string; individualCost: string; qty: string;
 }
-interface CustomerResult { id: string; first_name: string | null; last_name: string | null; email: string | null; phone: string | null; }
+interface CustomerResult { first_name: string | null; last_name: string | null; email: string | null; phone: string | null; }
 
 function uid() { return Math.random().toString(36).slice(2); }
 function newStone(): StoneEntry { return { id: uid(), caratWeight: "", shape: "", colour: "", clarity: "", origin: "Lab Grown", cost: "" }; }
@@ -494,7 +494,7 @@ export default function QuoteBuilderPage() {
                 <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50, background: "#fff", border: "1px solid #E8E8F0", borderRadius: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", overflow: "hidden" }}>
                   {customerResults.map(c => (
                     <button
-                      key={c.id}
+                      key={c.email ?? `${c.first_name}-${c.last_name}`}
                       type="button"
                       onMouseDown={() => selectCustomer(c)}
                       style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 14, borderBottom: "1px solid #F3F4F6" }}
