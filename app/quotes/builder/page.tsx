@@ -275,7 +275,7 @@ export default function QuoteBuilderPage() {
     const mColour = mult != null ? multiplierColour(mult) : null;
 
     return {
-      metalCost, mainStoneCost, meleeCost, mainStoneSettingCost,
+      metalCost, mainStoneCost, meleeCost, mainStoneSettingCost, mainStoneSettingRate,
       addonsCost, totalCost, bracket, rawPrice, quotedPrice, finalPrice,
       suggestedRetail, mult, mColour, costMap, extraLabour, activeMultiplier,
       handEngravingCost, laserEngravingCost,
@@ -922,69 +922,165 @@ export default function QuoteBuilderPage() {
             <div style={card}>
               <div style={heading}>Price Override</div>
 
-              {/* Cost summary panel */}
+              {/* Full line-by-line cost breakdown */}
               <div style={{ background: "#F9FAFB", border: "1px solid #E8E8F0", borderRadius: 10, padding: 14, marginBottom: 16, fontSize: 13 }}>
-                <div style={{ fontWeight: 600, color: "#374151", marginBottom: 10 }}>Cost Summary</div>
-                {pricing.metalCost > 0 && (
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                    <span style={{ color: "#6B7280" }}>Metal cost</span>
-                    <span style={{ fontWeight: 500 }}>${pricing.metalCost.toFixed(2)}</span>
-                  </div>
-                )}
-                {pricing.mainStoneCost > 0 && (
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                    <span style={{ color: "#6B7280" }}>Stone cost</span>
-                    <span style={{ fontWeight: 500 }}>${pricing.mainStoneCost.toFixed(2)}</span>
-                  </div>
-                )}
-                {pricing.meleeCost > 0 && (
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                    <span style={{ color: "#6B7280" }}>Melee stones</span>
-                    <span style={{ fontWeight: 500 }}>${pricing.meleeCost.toFixed(2)}</span>
-                  </div>
-                )}
-                {pricing.addonsCost > 0 && (
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                    <span style={{ color: "#6B7280" }}>Add-ons / Labour</span>
-                    <span style={{ fontWeight: 500 }}>${pricing.addonsCost.toFixed(2)}</span>
-                  </div>
-                )}
-                <div style={{ borderTop: "1px solid #E8E8F0", paddingTop: 8, marginTop: 4, display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ fontWeight: 600, color: "#1A1A2E" }}>Total Cost</span>
-                  <span style={{ fontWeight: 700, color: "#1A1A2E" }}>${pricing.totalCost.toFixed(2)}</span>
-                </div>
-                {pricing.totalCost > 0 && (
-                  <>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-                      <span style={{ color: "#6B7280" }}>Active multiplier</span>
-                      <span style={{ fontWeight: 500 }}>×{pricing.activeMultiplier?.toFixed(2) ?? "—"}</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-                      <span style={{ color: "#6B7280" }}>Raw price</span>
-                      <span style={{ fontWeight: 500 }}>${pricing.rawPrice.toFixed(2)}</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-                      <span style={{ color: "#6B7280" }}>Suggested retail</span>
-                      <span style={{ fontWeight: 500, color: "#635BFF" }}>${pricing.suggestedRetail.toLocaleString("en-AU")}</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-                      <span style={{ color: "#6B7280" }}>Final quoted price</span>
-                      <span style={{ fontWeight: 700, color: pricing.finalPrice !== pricing.suggestedRetail ? "#D97706" : "#1A1A2E" }}>
-                        ${pricing.finalPrice.toLocaleString("en-AU")}
-                        {pricing.finalPrice !== pricing.quotedPrice && <span style={{ fontSize: 11, color: "#D97706", marginLeft: 4 }}>overridden</span>}
+                <div style={{ fontWeight: 600, color: "#374151", marginBottom: 10 }}>Cost Breakdown</div>
+
+                {/* ── Metals ── */}
+                {metals.filter(m => m.type).map((m, idx) => {
+                  const rate = metalRates.find(r => r.metal_type === m.type);
+                  const cost = rate ? (parseFloat(m.weight) || 0) * rate.price_per_gram : 0;
+                  return (
+                    <div key={m.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                      <span style={{ color: "#6B7280" }}>
+                        Metal {idx + 1}: {m.type} — {m.weight || "0"}g × ${rate?.price_per_gram.toFixed(2) ?? "0.00"}/g
                       </span>
+                      <span style={{ fontWeight: 500 }}>${cost.toFixed(2)}</span>
                     </div>
-                    {pricing.mult != null && pricing.mColour && (() => {
-                      const cs = MULT_COLOURS[pricing.mColour];
-                      return (
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", borderRadius: 6, background: cs.bg, marginTop: 8 }}>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: cs.text }}>×{pricing.mult.toFixed(2)}</span>
-                          <span style={{ fontSize: 12, color: cs.text, opacity: 0.75 }}>(${(pricing.finalPrice - pricing.totalCost).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} profit)</span>
-                        </div>
-                      );
-                    })()}
-                  </>
+                  );
+                })}
+
+                {/* ── Main stones ── */}
+                {includeMainStone && stones.map((s, idx) => {
+                  const cost = parseFloat(s.cost) || 0;
+                  const parts = [
+                    s.caratWeight && `${s.caratWeight}ct`,
+                    s.shape,
+                    (s.colour || s.clarity) && `${s.colour}${s.colour && s.clarity ? "/" : ""}${s.clarity}`,
+                    s.origin,
+                  ].filter(Boolean).join(" ");
+                  return (
+                    <div key={s.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                      <span style={{ color: "#6B7280" }}>Stone {idx + 1}: {parts || "—"}</span>
+                      <span style={{ fontWeight: 500 }}>${cost.toFixed(2)}</span>
+                    </div>
+                  );
+                })}
+
+                {/* ── Stone settings ── */}
+                {includeMainStone && stones.length > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                    <span style={{ color: "#6B7280" }}>
+                      Stone Settings: {stones.length} stone{stones.length !== 1 ? "s" : ""} × ${pricing.mainStoneSettingRate.toFixed(2)}
+                    </span>
+                    <span style={{ fontWeight: 500 }}>${pricing.mainStoneSettingCost.toFixed(2)}</span>
+                  </div>
                 )}
+
+                {/* ── Melee rows ── */}
+                {meleeRows.filter(r => r.stoneType).map((r, idx) => {
+                  const rowTotal = (parseFloat(r.individualCost) || 0) * (parseInt(r.qty) || 0);
+                  const desc = `${r.qty || 1}× ${r.stoneType}${r.shape ? ` ${r.shape}` : ""}`;
+                  return (
+                    <div key={r.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                      <span style={{ color: "#6B7280" }}>Melee {idx + 1}: {desc}</span>
+                      <span style={{ fontWeight: 500 }}>${rowTotal.toFixed(2)}</span>
+                    </div>
+                  );
+                })}
+
+                {/* ── Melee settings ── */}
+                {smallSettings && (parseInt(smallSettingsQty) || 0) > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                    <span style={{ color: "#6B7280" }}>
+                      Melee Settings: {smallSettingsQty} stone{parseInt(smallSettingsQty) !== 1 ? "s" : ""} × $30.00
+                    </span>
+                    <span style={{ fontWeight: 500 }}>${(pricing.costMap.smallSettings ?? 0).toFixed(2)}</span>
+                  </div>
+                )}
+
+                {/* ── Labour (always) ── */}
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                  <span style={{ color: "#6B7280" }}>Labour</span>
+                  <span style={{ fontWeight: 500 }}>${(pricing.costMap.labour ?? 0).toFixed(2)}</span>
+                </div>
+
+                {/* ── Butterflies ── */}
+                {butterflies && (pricing.costMap.butterflies ?? 0) > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                    <span style={{ color: "#6B7280" }}>Butterflies (earrings)</span>
+                    <span style={{ fontWeight: 500 }}>${(pricing.costMap.butterflies ?? 0).toFixed(2)}</span>
+                  </div>
+                )}
+
+                {/* ── Chain ── */}
+                {chain && (pricing.costMap.chain ?? 0) > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                    <span style={{ color: "#6B7280" }}>Chain</span>
+                    <span style={{ fontWeight: 500 }}>${(pricing.costMap.chain ?? 0).toFixed(2)}</span>
+                  </div>
+                )}
+
+                {/* ── Additional labour ── */}
+                {additionalLabour && pricing.extraLabour > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                    <span style={{ color: "#6B7280" }}>Additional Labour</span>
+                    <span style={{ fontWeight: 500 }}>${pricing.extraLabour.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {/* ── Hand engraving ── */}
+                {handEngraving && pricing.handEngravingCost > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                    <span style={{ color: "#6B7280" }}>Hand Engraving</span>
+                    <span style={{ fontWeight: 500 }}>${pricing.handEngravingCost.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {/* ── Laser engraving ── */}
+                {laserEngraving && pricing.laserEngravingCost > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                    <span style={{ color: "#6B7280" }}>Laser Engraving</span>
+                    <span style={{ fontWeight: 500 }}>${pricing.laserEngravingCost.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {/* ── Divider ── */}
+                <div style={{ borderTop: "1px solid #D1D5DB", margin: "10px 0" }} />
+
+                {/* ── Subtotal ── */}
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                  <span style={{ fontWeight: 600, color: "#374151" }}>Subtotal</span>
+                  <span style={{ fontWeight: 700, color: "#374151" }}>${pricing.totalCost.toFixed(2)}</span>
+                </div>
+
+                {/* ── Multiplier ── */}
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                  <span style={{ color: "#6B7280" }}>
+                    Multiplier{marginMultiplierOverride ? " (override)" : ""}
+                  </span>
+                  <span style={{ fontWeight: 500, color: marginMultiplierOverride ? "#D97706" : "#374151" }}>
+                    ×{pricing.activeMultiplier?.toFixed(2) ?? "—"}
+                  </span>
+                </div>
+
+                {/* ── Raw price ── */}
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                  <span style={{ color: "#6B7280" }}>Raw Price</span>
+                  <span style={{ fontWeight: 500 }}>${pricing.rawPrice.toFixed(2)}</span>
+                </div>
+
+                {/* ── Rounded price ── */}
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                  <span style={{ color: "#6B7280" }}>Rounded Price (nearest $50)</span>
+                  <span style={{ fontWeight: 500 }}>${pricing.quotedPrice.toLocaleString("en-AU")}</span>
+                </div>
+
+                {/* ── Retail override (if set) ── */}
+                {retailPriceOverride && parseFloat(retailPriceOverride) > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                    <span style={{ color: "#D97706", fontWeight: 500 }}>Retail Override</span>
+                    <span style={{ fontWeight: 500, color: "#D97706" }}>${parseFloat(retailPriceOverride).toLocaleString("en-AU")}</span>
+                  </div>
+                )}
+
+                {/* ── Final quoted price ── */}
+                <div style={{ borderTop: "1px solid #D1D5DB", margin: "8px 0 8px", paddingTop: 8, display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontWeight: 700, color: "#1A1A2E", fontSize: 14 }}>Final Quoted Price</span>
+                  <span style={{ fontWeight: 800, color: "#635BFF", fontSize: 14 }}>
+                    ${pricing.finalPrice.toLocaleString("en-AU")}
+                  </span>
+                </div>
               </div>
 
               {/* Override inputs */}
@@ -1021,39 +1117,21 @@ export default function QuoteBuilderPage() {
           <div style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, padding: 24 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 16 }}>Live Price</div>
 
-            {/* Manager cost panel */}
-            {isManager && pricing.totalCost > 0 && (
-              <div style={{ background: "#F9FAFB", border: "1px solid #E8E8F0", borderRadius: 8, padding: 12, marginBottom: 16, fontSize: 13 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ color: "#6B7280" }}>Total cost</span>
-                  <span style={{ fontWeight: 600 }}>${pricing.totalCost.toFixed(2)}</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ color: "#6B7280" }}>Suggested retail</span>
-                  <span style={{ fontWeight: 500, color: "#635BFF" }}>
-                    {pricing.suggestedRetail > 0 ? `$${pricing.suggestedRetail.toLocaleString("en-AU")}` : "—"}
+            {/* Manager multiplier badge */}
+            {isManager && pricing.mult != null && pricing.mColour && (() => {
+              const cs = MULT_COLOURS[pricing.mColour];
+              return (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 8, background: cs.bg, marginBottom: 12, fontSize: 13 }}>
+                  <span style={{ fontWeight: 700, color: cs.text }}>×{pricing.mult.toFixed(2)}</span>
+                  <span style={{ fontSize: 12, color: cs.text, opacity: 0.8 }}>
+                    ${(pricing.finalPrice - pricing.totalCost).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} profit
                   </span>
+                  {pricing.finalPrice !== pricing.quotedPrice && (
+                    <span style={{ fontSize: 11, color: "#D97706", marginLeft: "auto", fontWeight: 600 }}>overridden</span>
+                  )}
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: pricing.mult != null ? 8 : 0 }}>
-                  <span style={{ color: "#6B7280" }}>Quoted price</span>
-                  <span style={{ fontWeight: 600 }}>
-                    {pricing.finalPrice > 0 ? `$${pricing.finalPrice.toLocaleString("en-AU")}` : "—"}
-                    {pricing.finalPrice !== pricing.quotedPrice && <span style={{ fontSize: 11, color: "#D97706", marginLeft: 4 }}>↑override</span>}
-                  </span>
-                </div>
-                {pricing.mult != null && pricing.mColour && (() => {
-                  const cs = MULT_COLOURS[pricing.mColour];
-                  return (
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", borderRadius: 6, background: cs.bg }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: cs.text }}>×{pricing.mult.toFixed(2)}</span>
-                      <span style={{ fontSize: 12, color: cs.text, opacity: 0.75 }}>
-                        (${(pricing.finalPrice - pricing.totalCost).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} profit)
-                      </span>
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
+              );
+            })()}
 
             {/* Quoted price — visible to all */}
             <div style={{ marginBottom: 24 }}>

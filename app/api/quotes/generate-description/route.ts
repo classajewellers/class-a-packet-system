@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 
 export const dynamic = "force-dynamic";
-
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
@@ -43,27 +40,54 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const prompt = parts.join(". ");
     if (!prompt.trim()) {
+      console.log("[generate-description] No content to generate from — returning empty");
       return NextResponse.json({ description: "" });
     }
 
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 200,
-      system:
-        "You are a jewellery sales consultant writing descriptions for custom jewellery quotes. Write a single polished sentence in the style of a high-end jewellery description. Use correct jewellery terminology. Be specific and evocative but concise. Output one sentence only — no full stops at the end.",
-      messages: [
-        {
-          role: "user",
-          content: `Write a single polished jewellery description sentence for this quote:\n${prompt}`,
-        },
-      ],
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      console.error("[generate-description] ANTHROPIC_API_KEY is not set");
+      return NextResponse.json({ error: "ANTHROPIC_API_KEY not configured" }, { status: 500 });
+    }
+
+    console.log("[generate-description] Calling Anthropic API, prompt preview:", prompt.slice(0, 200));
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 200,
+        system:
+          "You are a jewellery sales consultant writing descriptions for custom jewellery quotes. Write a single polished sentence in the style of a high-end jewellery description. Use correct jewellery terminology. Be specific and evocative but concise. Output one sentence only — no full stops at the end.",
+        messages: [
+          {
+            role: "user",
+            content: `Write a single polished jewellery description sentence for this quote:\n${prompt}`,
+          },
+        ],
+      }),
     });
 
-    const description =
-      response.content[0].type === "text" ? response.content[0].text.trim().replace(/\.$/, "") : "";
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("[generate-description] Anthropic API error:", response.status, errText);
+      return NextResponse.json({ error: `Anthropic API error ${response.status}: ${errText}` }, { status: 500 });
+    }
+
+    const data = await response.json();
+    console.log("[generate-description] Raw response content:", JSON.stringify(data.content));
+
+    const description = data.content?.[0]?.text?.trim().replace(/\.$/, "") ?? "";
+    console.log("[generate-description] Generated description:", description.slice(0, 150));
+
     return NextResponse.json({ description });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error("[generate-description] Caught error:", err);
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
 }
