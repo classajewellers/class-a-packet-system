@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getNivodaToken, NIVODA_ENDPOINT } from "@/lib/nivoda-auth";
 
 export const dynamic = "force-dynamic";
-
-const NIVODA_ENDPOINT = "https://integrations.nivoda.net/api/diamonds";
 
 const COLORS    = ["D", "E", "F", "G", "H", "I", "J", "K"] as const;
 const CLARITIES = ["FL", "IF", "VVS1", "VVS2", "VS1", "VS2", "SI1", "SI2"] as const;
@@ -16,14 +15,6 @@ function expandRange(arr: readonly string[], from: string, to: string): string[]
   return [...arr.slice(Math.min(a, b), Math.max(a, b) + 1)];
 }
 
-async function getNivodaToken(): Promise<string> {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const res = await fetch(`${base}/api/nivoda/auth`, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Auth route returned ${res.status}`);
-  const json = await res.json();
-  if (!json.token) throw new Error(json.error ?? "No token returned from auth route");
-  return json.token;
-}
 
 export interface NivodaResult {
   id: string;
@@ -73,9 +64,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     let token: string;
     try {
       token = await getNivodaToken();
+      console.log("[nivoda/search] Got token (first 20 chars):", token.slice(0, 20) + "…");
     } catch (e) {
       console.error("[nivoda/search] Failed to get token:", e);
-      return NextResponse.json({ error: "Authentication failed" }, { status: 502 });
+      return NextResponse.json(
+        { error: "Authentication failed", detail: e instanceof Error ? e.message : String(e) },
+        { status: 502 }
+      );
     }
 
     const budgetFilter = budget ? `\n        max_price: { amount: ${Number(budget)}, currency: AUD }` : "";
