@@ -4,7 +4,7 @@
 // Dashboard → Settings → Environment Variables → add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
 // The Maps script is loaded globally in app/layout.tsx.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export interface AddressResult {
   full_address: string;
@@ -25,7 +25,7 @@ interface Props {
   style?: React.CSSProperties;
 }
 
-// ── Type stubs for the new Places API ─────────────────────────────────────
+// ── Type stubs for the new Places API ────────────────────────────────────────
 
 interface GmpAddressComponent {
   longText: string;
@@ -67,8 +67,7 @@ declare global {
   }
 }
 
-// ── Global CSS injection (once per page) ──────────────────────────────────
-// Styles the inner <input> via CSS shadow parts and direct element rules.
+// ── Global CSS injection (once per page) ─────────────────────────────────────
 
 let stylesInjected = false;
 function ensureStyles() {
@@ -81,7 +80,6 @@ function ensureStyles() {
       display: block;
       width: 100%;
     }
-    /* Style the input via shadow parts (Chrome 73+, Firefox 72+, Safari 13.1+) */
     gmp-placeautocomplete::part(input) {
       width: 100%;
       box-sizing: border-box;
@@ -100,20 +98,31 @@ function ensureStyles() {
       border-color: #635BFF;
       box-shadow: 0 0 0 2px rgba(99, 91, 255, 0.15);
     }
-    /* Error state — toggled via data-error attribute on the element */
     gmp-placeautocomplete[data-error]::part(input) {
       border-color: #EF4444;
       background: #FEF2F2;
-    }
-    /* Tailwind-context variant (form pages) */
-    gmp-placeautocomplete::part(input) {
-      /* already covered above */
     }
   `;
   document.head.appendChild(s);
 }
 
-// ── Component ──────────────────────────────────────────────────────────────
+// ── Shared input style for manual-entry fields ────────────────────────────────
+
+const manualInputStyle: React.CSSProperties = {
+  width: "100%",
+  border: "1px solid #E8E8F0",
+  borderRadius: 8,
+  padding: "0 12px",
+  height: 40,
+  fontSize: 14,
+  color: "#1A1A2E",
+  background: "#fff",
+  outline: "none",
+  fontFamily: "inherit",
+  boxSizing: "border-box",
+};
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function AddressAutocomplete({
   value,
@@ -127,7 +136,7 @@ export default function AddressAutocomplete({
   const containerRef = useRef<HTMLDivElement>(null);
   const elementRef = useRef<GmpPlaceAutocompleteElement | null>(null);
 
-  // Keep callbacks in refs so the closure inside useEffect is always current
+  // Keep callbacks in refs so closures inside useEffect are always current
   const onChangeRef = useRef(onChange);
   const onSelectRef = useRef(onSelect);
   const onBlurRef = useRef(onBlur);
@@ -135,24 +144,24 @@ export default function AddressAutocomplete({
   useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
   useEffect(() => { onBlurRef.current = onBlur; }, [onBlur]);
 
-  // Sync controlled value into the element's input
+  // Manual entry state
+  const [manualMode, setManualMode] = useState(false);
+  const [manual, setManual] = useState({ street: "", suburb: "", state: "", postcode: "" });
+
+  // ── Sync controlled value into the gmp element ──────────────────────────────
   useEffect(() => {
     const el = elementRef.current;
     if (el && el.value !== value) el.value = value;
   }, [value]);
 
-  // Toggle error styling on the element
+  // ── Toggle error attribute on the gmp element ────────────────────────────────
   useEffect(() => {
     const el = elementRef.current;
     if (!el) return;
-    if (hasError) {
-      el.setAttribute("data-error", "true");
-    } else {
-      el.removeAttribute("data-error");
-    }
+    hasError ? el.setAttribute("data-error", "true") : el.removeAttribute("data-error");
   }, [hasError]);
 
-  // Create and mount the PlaceAutocompleteElement once
+  // ── Mount PlaceAutocompleteElement once ──────────────────────────────────────
   useEffect(() => {
     ensureStyles();
     const container = containerRef.current;
@@ -162,8 +171,8 @@ export default function AddressAutocomplete({
     let intervalId: ReturnType<typeof setInterval> | null = null;
 
     async function mount(): Promise<void> {
-      // Get PlaceAutocompleteElement — try the namespace first, fall back to importLibrary
       let PAE = window.google?.maps?.places?.PlaceAutocompleteElement;
+
       if (!PAE && window.google?.maps?.importLibrary) {
         try {
           const lib = await window.google.maps.importLibrary("places");
@@ -175,7 +184,6 @@ export default function AddressAutocomplete({
       }
 
       if (!PAE || destroyed) return;
-
       console.log("[AddressAutocomplete] mounting PlaceAutocompleteElement");
 
       const el = new PAE({
@@ -183,7 +191,6 @@ export default function AddressAutocomplete({
         types: ["address"],
       });
 
-      // Set placeholder and initial value
       el.setAttribute("placeholder", placeholder);
       el.value = value;
       if (hasError) el.setAttribute("data-error", "true");
@@ -191,11 +198,13 @@ export default function AddressAutocomplete({
       elementRef.current = el;
       container!.appendChild(el);
 
-      // ── gmp-placeselect handler ──────────────────────────────────────
+      // ── gmp-placeselect ──────────────────────────────────────────────────────
       const handleSelect = async (e: GmpPlaceSelectEvent) => {
         try {
           const place = e.place;
           await place.fetchFields({ fields: ["addressComponents", "formattedAddress"] });
+
+          console.log("[AddressAutocomplete] raw addressComponents:", place.addressComponents);
 
           const components = place.addressComponents ?? [];
 
@@ -205,12 +214,14 @@ export default function AddressAutocomplete({
           };
 
           const street = [get("street_number"), get("route")].filter(Boolean).join(" ");
-          const suburb = get("locality") || get("sublocality");
-          const state = get("administrative_area_level_1", true);
+          const suburb = get("locality") || get("sublocality_level_1") || get("sublocality");
+          const state = get("administrative_area_level_1", true); // shortText → SA, VIC, etc.
           const postcode = get("postal_code");
           const full_address =
             place.formattedAddress ??
             [street, suburb, state, postcode].filter(Boolean).join(", ");
+
+          console.log("[AddressAutocomplete] parsed →", { street, suburb, state, postcode, full_address });
 
           if (street) onChangeRef.current(street);
           onSelectRef.current({ full_address, street, suburb, state, postcode });
@@ -221,11 +232,11 @@ export default function AddressAutocomplete({
 
       el.addEventListener("gmp-placeselect", handleSelect);
 
-      // Forward blur from the element's inner input for saveOnBlur in drawers
+      // Forward blur from the inner input for saveOnBlur in drawers
       el.addEventListener("blur", (e: Event) => {
         const target = e.target as HTMLInputElement | null;
         onBlurRef.current?.(target?.value ?? el.value);
-      }, true); // capture phase catches inner input blur
+      }, true); // capture so inner input blur is caught
     }
 
     function tryMount() {
@@ -253,10 +264,106 @@ export default function AddressAutocomplete({
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Manual entry helpers ─────────────────────────────────────────────────────
+
+  function switchToManual() {
+    // Seed street from the current controlled value
+    const seeded = { street: value, suburb: "", state: "", postcode: "" };
+    setManual(seeded);
+    setManualMode(true);
+  }
+
+  function switchToSearch() {
+    setManualMode(false);
+    // Sync the gmp element's displayed value with what the user typed in manual mode
+    requestAnimationFrame(() => {
+      const el = elementRef.current;
+      if (el) el.value = manual.street;
+    });
+  }
+
+  function updateManual(field: keyof typeof manual, val: string) {
+    const next = { ...manual, [field]: val };
+    setManual(next);
+    if (field === "street") onChangeRef.current(val);
+    onSelectRef.current({
+      full_address: [next.street, next.suburb, next.state, next.postcode].filter(Boolean).join(", "),
+      street: next.street,
+      suburb: next.suburb,
+      state: next.state,
+      postcode: next.postcode,
+    });
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────────
+
   return (
-    <div
-      ref={containerRef}
-      style={{ width: "100%", ...style }}
-    />
+    <div style={{ width: "100%", ...style }}>
+      {/* Autocomplete input — always mounted, hidden in manual mode so the gmp element isn't destroyed */}
+      <div
+        ref={containerRef}
+        style={{ display: manualMode ? "none" : "block" }}
+      />
+
+      {/* Manual entry fields */}
+      {manualMode && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <input
+            type="text"
+            placeholder="Street Address"
+            value={manual.street}
+            onChange={(e) => updateManual("street", e.target.value)}
+            onBlur={() => onBlurRef.current?.(manual.street)}
+            style={manualInputStyle}
+            autoComplete="off"
+          />
+          <input
+            type="text"
+            placeholder="Suburb"
+            value={manual.suburb}
+            onChange={(e) => updateManual("suburb", e.target.value)}
+            style={manualInputStyle}
+            autoComplete="off"
+          />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+            <input
+              type="text"
+              placeholder="State (e.g. SA)"
+              value={manual.state}
+              onChange={(e) => updateManual("state", e.target.value)}
+              style={manualInputStyle}
+              autoComplete="off"
+            />
+            <input
+              type="text"
+              placeholder="Postcode"
+              value={manual.postcode}
+              onChange={(e) => updateManual("postcode", e.target.value)}
+              style={manualInputStyle}
+              autoComplete="off"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Toggle link */}
+      <div style={{ marginTop: 4 }}>
+        <button
+          type="button"
+          onClick={manualMode ? switchToSearch : switchToManual}
+          style={{
+            fontSize: 12,
+            color: "#9CA3AF",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: 0,
+            textDecoration: "underline",
+          }}
+        >
+          {manualMode ? "Use address search" : "Enter address manually"}
+        </button>
+      </div>
+    </div>
   );
 }
