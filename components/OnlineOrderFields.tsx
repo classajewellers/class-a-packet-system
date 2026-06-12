@@ -1,6 +1,7 @@
 "use client";
 
 import { PacketFormData } from "@/lib/types";
+import AddressAutocomplete from "./AddressAutocomplete";
 
 interface Props {
   data: PacketFormData;
@@ -113,10 +114,15 @@ export default function OnlineOrderFields({ data, onChange, errors }: Props) {
       {!data.shipping_address_same && (
         <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Shipping Address</p>
-          <input
-            type="text"
+          <AddressAutocomplete
             value={data.shipping_street}
-            onChange={(e) => onChange("shipping_street", e.target.value)}
+            onChange={(v) => onChange("shipping_street", v)}
+            onSelect={({ street, suburb, state, postcode }) => {
+              if (street)   onChange("shipping_street",   street);
+              if (suburb)   onChange("shipping_suburb",   suburb);
+              if (state)    onChange("shipping_state",    state);
+              if (postcode) onChange("shipping_postcode", postcode);
+            }}
             placeholder="Street address"
             className={inputClass}
           />

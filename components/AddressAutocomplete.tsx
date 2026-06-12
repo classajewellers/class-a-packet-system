@@ -70,6 +70,8 @@ export default function AddressAutocomplete({
   useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
 
   useEffect(() => {
+    console.log("[AddressAutocomplete] mount — window.google exists:", !!(typeof window !== "undefined" && window.google?.maps?.places?.Autocomplete));
+
     const el = inputRef.current;
     if (!el || typeof window === "undefined") return;
 
