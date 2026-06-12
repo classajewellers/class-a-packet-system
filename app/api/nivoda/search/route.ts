@@ -121,7 +121,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 }`;
 
-    console.log("[nivoda/search] Querying Nivoda:", { shape: shapeStr, caratFrom, caratTo, labgrown, limit, offset });
+    console.log("[nivoda/search] Endpoint:", NIVODA_ENDPOINT);
+    console.log("[nivoda/search] Params:", { shape: shapeStr, caratFrom, caratTo, labgrown, limit, offset, colors, clarities });
+    console.log("[nivoda/search] Full GraphQL query:\n" + query);
 
     const res = await fetch(NIVODA_ENDPOINT, {
       method: "POST",
@@ -129,26 +131,54 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       body: JSON.stringify({ query }),
     });
 
+    // Read body as text first so we can always log the full raw response.
+    const rawBody = await res.text();
+
+    console.log("[nivoda/search] Response status:", res.status, res.statusText);
+    console.log("[nivoda/search] Raw response body:", rawBody);
+
     if (!res.ok) {
-      const text = await res.text();
-      console.error("[nivoda/search] HTTP error:", res.status, text.slice(0, 300));
-      return NextResponse.json({ error: `Nivoda API error ${res.status}` }, { status: 502 });
+      console.error("[nivoda/search] Non-2xx from Nivoda — full body above");
+      return NextResponse.json(
+        { error: `Nivoda API error ${res.status} ${res.statusText}`, nivoda_response: rawBody },
+        { status: 502 }
+      );
     }
 
-    const json = await res.json();
-
-    if (json.errors?.length) {
-      console.error("[nivoda/search] GraphQL errors:", json.errors);
-      return NextResponse.json({ error: json.errors[0].message }, { status: 502 });
+    let json: unknown;
+    try {
+      json = JSON.parse(rawBody);
+    } catch {
+      console.error("[nivoda/search] Response is not valid JSON");
+      return NextResponse.json(
+        { error: "Nivoda returned non-JSON response", nivoda_response: rawBody },
+        { status: 502 }
+      );
     }
 
-    const raw = json.data?.as?.diamonds_by_query;
+    const j = json as {
+      errors?: Array<{ message: string; [k: string]: unknown }>;
+      data?: { as?: { diamonds_by_query?: unknown } };
+    };
+
+    if (j.errors?.length) {
+      console.error("[nivoda/search] GraphQL errors:", JSON.stringify(j.errors, null, 2));
+      return NextResponse.json(
+        { error: j.errors[0].message, graphql_errors: j.errors },
+        { status: 502 }
+      );
+    }
+
+    const raw = (j.data?.as as { diamonds_by_query?: { total_count?: number; items?: unknown[] } } | undefined)?.diamonds_by_query;
     if (!raw) {
-      console.error("[nivoda/search] Unexpected response shape:", JSON.stringify(json).slice(0, 300));
-      return NextResponse.json({ results: [], total_count: 0 });
+      console.error("[nivoda/search] Unexpected response shape — full JSON:", JSON.stringify(j, null, 2));
+      return NextResponse.json(
+        { error: "Unexpected response shape from Nivoda", nivoda_response: j },
+        { status: 502 }
+      );
     }
 
-    const results: NivodaResult[] = (raw.items ?? []).map((item: {
+    type RawItem = {
       id: string;
       price: number;
       diamond: {
@@ -166,7 +196,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           symmetry?: string;
         };
       };
-    }) => ({
+    };
+    const results: NivodaResult[] = ((raw.items ?? []) as RawItem[]).map((item) => ({
       id:         item.id,
       price:      item.price,
       carats:     item.diamond?.certificate?.carats ?? 0,
