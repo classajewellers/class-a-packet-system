@@ -6,8 +6,9 @@
 
 export const NIVODA_ENDPOINT = "https://integrations.nivoda.net/api/diamonds";
 
-const TEN_MINUTES = 10 * 60 * 1000;
-const SIX_HOURS   =  6 * 60 * 60 * 1000;
+const TEN_MINUTES  = 10 * 60 * 1000;
+const SIX_HOURS    =  6 * 60 * 60 * 1000;
+const FETCH_TIMEOUT = 10_000; // 10 s — fail fast rather than hanging
 
 // In-memory cache — survives across requests within the same serverless instance.
 let cache: { token: string; expiresAt: number } | null = null;
@@ -17,11 +18,13 @@ async function fetchFreshToken(): Promise<string> {
   const password = process.env.NIVODA_PASSWORD;
 
   if (!email || !password) {
-    throw new Error("NIVODA_EMAIL or NIVODA_PASSWORD environment variable not set");
+    const missing = [!email && "NIVODA_EMAIL", !password && "NIVODA_PASSWORD"].filter(Boolean).join(", ");
+    throw new Error(`Nivoda auth: missing environment variable(s): ${missing}`);
   }
 
-  console.log("[nivoda/auth] Endpoint :", NIVODA_ENDPOINT);
-  console.log("[nivoda/auth] Username :", email);
+  console.log("[nivoda/auth] Endpoint   :", NIVODA_ENDPOINT);
+  console.log("[nivoda/auth] Username   :", email);
+  console.log("[nivoda/auth] Timeout    :", FETCH_TIMEOUT, "ms");
 
   const query = `{
     authenticate {
@@ -34,19 +37,49 @@ async function fetchFreshToken(): Promise<string> {
     }
   }`;
 
-  const res = await fetch(NIVODA_ENDPOINT, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query }),
-  });
+  const controller = new AbortController();
+  const timeout    = setTimeout(() => {
+    controller.abort();
+    console.error(`[nivoda/auth] Fetch aborted — no response within ${FETCH_TIMEOUT}ms`);
+  }, FETCH_TIMEOUT);
 
-  const rawBody = await res.text();
+  let res: Response;
+  try {
+    res = await fetch(NIVODA_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent":   "VaultJewellery/1.0",
+      },
+      body:   JSON.stringify({ query }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeout);
+    const isAbort = err instanceof Error && err.name === "AbortError";
+    console.error("[nivoda/auth] Network error:", err);
+    throw new Error(
+      isAbort
+        ? `Nivoda auth: request timed out after ${FETCH_TIMEOUT}ms (no response from ${NIVODA_ENDPOINT})`
+        : `Nivoda auth: network error — ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+  clearTimeout(timeout);
+
+  // Read body as text first so every failure path can log the full response.
+  let rawBody: string;
+  try {
+    rawBody = await res.text();
+  } catch (err) {
+    console.error("[nivoda/auth] Failed to read response body:", err);
+    throw new Error(`Nivoda auth: could not read response body (HTTP ${res.status})`);
+  }
 
   console.log("[nivoda/auth] Response status :", res.status, res.statusText);
   console.log("[nivoda/auth] Response body   :", rawBody);
 
   if (!res.ok) {
-    console.error("[nivoda/auth] Non-2xx from Nivoda — full body above");
+    console.error("[nivoda/auth] Non-2xx from Nivoda");
     throw new Error(`Nivoda auth HTTP ${res.status} ${res.statusText}: ${rawBody}`);
   }
 
