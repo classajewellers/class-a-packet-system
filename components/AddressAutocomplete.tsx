@@ -144,6 +144,11 @@ export default function AddressAutocomplete({
   useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
   useEffect(() => { onBlurRef.current = onBlur; }, [onBlur]);
 
+  // mounted gates all client-only rendering — server and the first client
+  // render produce identical output (the placeholder), so React hydrates cleanly.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   // Manual entry state
   const [manualMode, setManualMode] = useState(false);
   const [manual, setManual] = useState({ street: "", suburb: "", state: "", postcode: "" });
@@ -161,11 +166,14 @@ export default function AddressAutocomplete({
     hasError ? el.setAttribute("data-error", "true") : el.removeAttribute("data-error");
   }, [hasError]);
 
-  // ── Mount PlaceAutocompleteElement once ──────────────────────────────────────
+  // ── Mount PlaceAutocompleteElement (client-only, runs after mounted=true) ────
+  // Depends on `mounted` so it re-runs once the containerRef div is in the DOM.
   useEffect(() => {
+    if (!mounted || typeof window === "undefined") return;
+
     ensureStyles();
     const container = containerRef.current;
-    if (!container || typeof window === "undefined") return;
+    if (!container) return;
 
     let destroyed = false;
     let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -198,7 +206,7 @@ export default function AddressAutocomplete({
       elementRef.current = el;
       container!.appendChild(el);
 
-      // ── gmp-placeselect ──────────────────────────────────────────────────────
+      // ── gmp-placeselect ────────────────────────────────────────────────────
       const handleSelect = async (e: GmpPlaceSelectEvent) => {
         try {
           const place = e.place;
@@ -262,12 +270,11 @@ export default function AddressAutocomplete({
       if (el && container.contains(el)) container.removeChild(el);
       elementRef.current = null;
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mounted]); // re-runs when mounted flips true so containerRef is available
 
-  // ── Manual entry helpers ─────────────────────────────────────────────────────
+  // ── Manual entry helpers ──────────────────────────────────────────────────────
 
   function switchToManual() {
-    // Seed street from the current controlled value
     const seeded = { street: value, suburb: "", state: "", postcode: "" };
     setManual(seeded);
     setManualMode(true);
@@ -275,7 +282,6 @@ export default function AddressAutocomplete({
 
   function switchToSearch() {
     setManualMode(false);
-    // Sync the gmp element's displayed value with what the user typed in manual mode
     requestAnimationFrame(() => {
       const el = elementRef.current;
       if (el) el.value = manual.street;
@@ -295,62 +301,78 @@ export default function AddressAutocomplete({
     });
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────────
+  //
+  // Server render + initial client render (before useEffect): show a visual
+  // placeholder that matches the component's unloaded appearance so React
+  // hydrates without a mismatch, then the real UI appears after mount.
 
   return (
     <div style={{ width: "100%", ...style }}>
-      {/* Autocomplete input — always mounted, hidden in manual mode so the gmp element isn't destroyed */}
-      <div
-        ref={containerRef}
-        style={{ display: manualMode ? "none" : "block" }}
-      />
+      {mounted ? (
+        <>
+          {/* Autocomplete container — always in DOM so the gmp element survives mode toggle */}
+          <div
+            ref={containerRef}
+            style={{ display: manualMode ? "none" : "block" }}
+          />
 
-      {/* Manual entry fields */}
-      {manualMode && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <input
-            type="text"
-            placeholder="Street Address"
-            value={manual.street}
-            onChange={(e) => updateManual("street", e.target.value)}
-            onBlur={() => onBlurRef.current?.(manual.street)}
-            style={manualInputStyle}
-            autoComplete="off"
-          />
-          <input
-            type="text"
-            placeholder="Suburb"
-            value={manual.suburb}
-            onChange={(e) => updateManual("suburb", e.target.value)}
-            style={manualInputStyle}
-            autoComplete="off"
-          />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-            <input
-              type="text"
-              placeholder="State (e.g. SA)"
-              value={manual.state}
-              onChange={(e) => updateManual("state", e.target.value)}
-              style={manualInputStyle}
-              autoComplete="off"
-            />
-            <input
-              type="text"
-              placeholder="Postcode"
-              value={manual.postcode}
-              onChange={(e) => updateManual("postcode", e.target.value)}
-              style={manualInputStyle}
-              autoComplete="off"
-            />
-          </div>
-        </div>
+          {/* Manual entry fields */}
+          {manualMode && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <input
+                type="text"
+                placeholder="Street Address"
+                value={manual.street}
+                onChange={(e) => updateManual("street", e.target.value)}
+                onBlur={() => onBlurRef.current?.(manual.street)}
+                style={manualInputStyle}
+                autoComplete="off"
+              />
+              <input
+                type="text"
+                placeholder="Suburb"
+                value={manual.suburb}
+                onChange={(e) => updateManual("suburb", e.target.value)}
+                style={manualInputStyle}
+                autoComplete="off"
+              />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                <input
+                  type="text"
+                  placeholder="State (e.g. SA)"
+                  value={manual.state}
+                  onChange={(e) => updateManual("state", e.target.value)}
+                  style={manualInputStyle}
+                  autoComplete="off"
+                />
+                <input
+                  type="text"
+                  placeholder="Postcode"
+                  value={manual.postcode}
+                  onChange={(e) => updateManual("postcode", e.target.value)}
+                  style={manualInputStyle}
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        // SSR / pre-hydration placeholder — same visual shape, no gmp element
+        <div style={{
+          height: 40,
+          border: "1px solid #E8E8F0",
+          borderRadius: 8,
+          background: "#fff",
+        }} />
       )}
 
-      {/* Toggle link */}
+      {/* Toggle link — rendered on both server and client for consistent hydration */}
       <div style={{ marginTop: 4 }}>
         <button
           type="button"
-          onClick={manualMode ? switchToSearch : switchToManual}
+          onClick={mounted ? (manualMode ? switchToSearch : switchToManual) : undefined}
           style={{
             fontSize: 12,
             color: "#9CA3AF",
