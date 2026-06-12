@@ -8,7 +8,8 @@ export const NIVODA_ENDPOINT = "https://integrations.nivoda.net/api/diamonds";
 
 const TEN_MINUTES  = 10 * 60 * 1000;
 const SIX_HOURS    =  6 * 60 * 60 * 1000;
-const FETCH_TIMEOUT = 10_000; // 10 s — fail fast rather than hanging
+const FETCH_TIMEOUT = 30_000; // 30 s — Nivoda can be slow to respond
+const NIVODA_FALLBACK = "https://integrations.nivoda.net/graphql";
 
 // In-memory cache — survives across requests within the same serverless instance.
 let cache: { token: string; expiresAt: number } | null = null;
@@ -37,34 +38,54 @@ async function fetchFreshToken(): Promise<string> {
     }
   }`;
 
-  const controller = new AbortController();
-  const timeout    = setTimeout(() => {
-    controller.abort();
-    console.error(`[nivoda/auth] Fetch aborted — no response within ${FETCH_TIMEOUT}ms`);
-  }, FETCH_TIMEOUT);
+  const requestBody = JSON.stringify({ query });
+  console.log("[nivoda/auth] Request body:", requestBody);
 
+  async function attemptFetch(endpoint: string): Promise<Response> {
+    const controller = new AbortController();
+    const timeout    = setTimeout(() => {
+      controller.abort();
+      console.error(`[nivoda/auth] Fetch aborted — no response within ${FETCH_TIMEOUT}ms (${endpoint})`);
+    }, FETCH_TIMEOUT);
+
+    try {
+      const r = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent":   "VaultJewellery/1.0",
+        },
+        body:   requestBody,
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      return r;
+    } catch (err) {
+      clearTimeout(timeout);
+      const isAbort = err instanceof Error && err.name === "AbortError";
+      console.error(`[nivoda/auth] Network error (${endpoint}):`, err);
+      throw new Error(
+        isAbort
+          ? `Nivoda auth: request timed out after ${FETCH_TIMEOUT}ms (no response from ${endpoint})`
+          : `Nivoda auth: network error — ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+
+  console.log("[nivoda/auth] Trying primary endpoint:", NIVODA_ENDPOINT);
   let res: Response;
   try {
-    res = await fetch(NIVODA_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent":   "VaultJewellery/1.0",
-      },
-      body:   JSON.stringify({ query }),
-      signal: controller.signal,
-    });
-  } catch (err) {
-    clearTimeout(timeout);
-    const isAbort = err instanceof Error && err.name === "AbortError";
-    console.error("[nivoda/auth] Network error:", err);
-    throw new Error(
-      isAbort
-        ? `Nivoda auth: request timed out after ${FETCH_TIMEOUT}ms (no response from ${NIVODA_ENDPOINT})`
-        : `Nivoda auth: network error — ${err instanceof Error ? err.message : String(err)}`
-    );
+    res = await attemptFetch(NIVODA_ENDPOINT);
+  } catch (primaryErr) {
+    console.warn("[nivoda/auth] Primary endpoint failed, trying fallback:", NIVODA_FALLBACK);
+    try {
+      res = await attemptFetch(NIVODA_FALLBACK);
+      console.log("[nivoda/auth] Fallback endpoint responded");
+    } catch (fallbackErr) {
+      // Throw the primary error — it's the canonical endpoint
+      throw primaryErr;
+    }
   }
-  clearTimeout(timeout);
 
   // Read body as text first so every failure path can log the full response.
   let rawBody: string;
