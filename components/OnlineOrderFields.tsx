@@ -124,7 +124,6 @@ export default function OnlineOrderFields({ data, onChange, errors }: Props) {
               if (postcode) onChange("shipping_postcode", postcode);
             }}
             placeholder="Street address"
-            className={inputClass}
           />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             <input

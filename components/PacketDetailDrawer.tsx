@@ -727,7 +727,6 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                     if (state)  { set("customer_state",  state);  saveOnBlur("customer_state",  state); }
                     if (postcode) { set("customer_postcode", postcode); saveOnBlur("customer_postcode", postcode); }
                   }}
-                  style={fieldStyle}
                 />
               </div>
               <div>
@@ -1154,7 +1153,6 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                           if (state)    { set("shipping_state",    state);    saveOnBlur("shipping_state",    state); }
                           if (postcode) { set("shipping_postcode", postcode); saveOnBlur("shipping_postcode", postcode); }
                         }}
-                        style={fieldStyle}
                       />
                     </div>
                     <div>
