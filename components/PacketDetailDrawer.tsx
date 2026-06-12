@@ -11,6 +11,7 @@ import ItemSpecificationsForm from "./ItemSpecificationsForm";
 import { generateValuationCertificate } from "@/lib/valuationCertificateGenerator";
 import { STAFF_NAMES } from "@/lib/staffList";
 import AttachmentsSection from "./AttachmentsSection";
+import AddressAutocomplete from "./AddressAutocomplete";
 
 interface Props {
   packet: Packet;
@@ -716,11 +717,16 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
               </div>
               <div className="col-span-2">
                 <Label>Street</Label>
-                <input
-                  type="text"
+                <AddressAutocomplete
                   value={local.customer_street ?? ""}
-                  onChange={(e) => set("customer_street", e.target.value)}
-                  onBlur={(e) => saveOnBlur("customer_street", e.target.value || null)}
+                  onChange={(v) => set("customer_street", v)}
+                  onBlur={(v) => saveOnBlur("customer_street", v || null)}
+                  onSelect={({ street, suburb, state, postcode }) => {
+                    if (street) { set("customer_street", street); saveOnBlur("customer_street", street); }
+                    if (suburb) { set("customer_suburb", suburb); saveOnBlur("customer_suburb", suburb); }
+                    if (state)  { set("customer_state",  state);  saveOnBlur("customer_state",  state); }
+                    if (postcode) { set("customer_postcode", postcode); saveOnBlur("customer_postcode", postcode); }
+                  }}
                   style={fieldStyle}
                 />
               </div>
@@ -1138,11 +1144,16 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   <>
                     <div className="col-span-2">
                       <Label>Shipping Street</Label>
-                      <input
-                        type="text"
+                      <AddressAutocomplete
                         value={local.shipping_street ?? ""}
-                        onChange={(e) => set("shipping_street", e.target.value)}
-                        onBlur={(e) => saveOnBlur("shipping_street", e.target.value || null)}
+                        onChange={(v) => set("shipping_street", v)}
+                        onBlur={(v) => saveOnBlur("shipping_street", v || null)}
+                        onSelect={({ street, suburb, state, postcode }) => {
+                          if (street)   { set("shipping_street",   street);   saveOnBlur("shipping_street",   street); }
+                          if (suburb)   { set("shipping_suburb",   suburb);   saveOnBlur("shipping_suburb",   suburb); }
+                          if (state)    { set("shipping_state",    state);    saveOnBlur("shipping_state",    state); }
+                          if (postcode) { set("shipping_postcode", postcode); saveOnBlur("shipping_postcode", postcode); }
+                        }}
                         style={fieldStyle}
                       />
                     </div>

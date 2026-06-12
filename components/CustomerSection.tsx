@@ -3,30 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { PacketFormData } from "@/lib/types";
-
-declare global {
-  interface Window {
-    google?: {
-      maps?: {
-        places?: {
-          Autocomplete?: new (
-            el: HTMLInputElement,
-            opts: object
-          ) => {
-            addListener: (event: string, cb: () => void) => void;
-            getPlace: () => {
-              address_components?: Array<{
-                long_name: string;
-                short_name: string;
-                types: string[];
-              }>;
-            };
-          };
-        };
-      };
-    };
-  }
-}
+import AddressAutocomplete from "./AddressAutocomplete";
 
 interface Props {
   data: PacketFormData;
@@ -95,7 +72,6 @@ export function Input({
 
 export default function CustomerSection({ data, onChange, errors }: Props) {
   const { user } = useUser();
-  const streetInputRef = useRef<HTMLInputElement>(null);
   const shopifyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastLookedUpEmail = useRef<string>("");
   const [shopifyFound, setShopifyFound] = useState(false);
@@ -163,57 +139,6 @@ export default function CustomerSection({ data, onChange, errors }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.customer_email]);
 
-  useEffect(() => {
-    const el = streetInputRef.current;
-    if (!el || typeof window === "undefined") return;
-
-    const tryAttach = () => {
-      const Autocomplete = window.google?.maps?.places?.Autocomplete;
-      if (!Autocomplete) return;
-
-      const autocomplete = new Autocomplete(el, {
-        componentRestrictions: { country: "au" },
-        types: ["address"],
-        fields: ["address_components"],
-      });
-
-      autocomplete.addListener("place_changed", () => {
-        const place = autocomplete.getPlace();
-        const components = place.address_components ?? [];
-
-        const get = (type: string, short = false) => {
-          const c = components.find((comp) => comp.types.includes(type));
-          return c ? (short ? c.short_name : c.long_name) : "";
-        };
-
-        const streetNumber = get("street_number");
-        const route = get("route");
-        const street = [streetNumber, route].filter(Boolean).join(" ");
-        const suburb = get("locality") || get("sublocality");
-        const state = get("administrative_area_level_1", true);
-        const postcode = get("postal_code");
-
-        if (street) onChange("customer_street", street);
-        if (suburb) onChange("customer_suburb", suburb);
-        if (state) onChange("customer_state", state);
-        if (postcode) onChange("customer_postcode", postcode);
-      });
-    };
-
-    // Google Maps may not be loaded yet — poll until available
-    if (window.google?.maps?.places?.Autocomplete) {
-      tryAttach();
-    } else {
-      const interval = setInterval(() => {
-        if (window.google?.maps?.places?.Autocomplete) {
-          clearInterval(interval);
-          tryAttach();
-        }
-      }, 300);
-      return () => clearInterval(interval);
-    }
-  }, [onChange]);
-
   const inputClass =
     "w-full rounded-lg border px-3 py-2.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-black border-gray-300 bg-white";
 
@@ -240,11 +165,15 @@ export default function CustomerSection({ data, onChange, errors }: Props) {
 
       {/* Street with Google Places Autocomplete */}
       <Field label="Street Address" error={errors.customer_street}>
-        <Input
-          inputRef={streetInputRef}
+        <AddressAutocomplete
           value={data.customer_street}
           onChange={(v) => onChange("customer_street", v)}
-          placeholder="Start typing address…"
+          onSelect={({ street, suburb, state, postcode }) => {
+            if (street) onChange("customer_street", street);
+            if (suburb) onChange("customer_suburb", suburb);
+            if (state) onChange("customer_state", state);
+            if (postcode) onChange("customer_postcode", postcode);
+          }}
           hasError={!!errors.customer_street}
         />
       </Field>
