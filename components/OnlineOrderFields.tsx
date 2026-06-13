@@ -118,10 +118,12 @@ export default function OnlineOrderFields({ data, onChange, errors }: Props) {
             value={data.shipping_street}
             onChange={(v) => onChange("shipping_street", v)}
             onSelect={({ street, suburb, state, postcode }) => {
-              if (street)   onChange("shipping_street",   street);
-              if (suburb)   onChange("shipping_suburb",   suburb);
-              if (state)    onChange("shipping_state",    state);
-              if (postcode) onChange("shipping_postcode", postcode);
+              console.log("[OnlineOrderFields] onSelect called:", { street, suburb, state, postcode });
+              if (street) onChange("shipping_street", street);
+              // Always set suburb/state/postcode even if empty so autocomplete clears stale values
+              onChange("shipping_suburb", suburb);
+              onChange("shipping_state", state);
+              onChange("shipping_postcode", postcode);
             }}
             placeholder="Street address"
           />

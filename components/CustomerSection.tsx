@@ -169,10 +169,12 @@ export default function CustomerSection({ data, onChange, errors }: Props) {
           value={data.customer_street}
           onChange={(v) => onChange("customer_street", v)}
           onSelect={({ street, suburb, state, postcode }) => {
+            console.log("[CustomerSection] onSelect called:", { street, suburb, state, postcode });
             if (street) onChange("customer_street", street);
-            if (suburb) onChange("customer_suburb", suburb);
-            if (state) onChange("customer_state", state);
-            if (postcode) onChange("customer_postcode", postcode);
+            // Always set suburb/state/postcode even if empty so autocomplete clears stale values
+            onChange("customer_suburb", suburb);
+            onChange("customer_state", state);
+            onChange("customer_postcode", postcode);
           }}
           hasError={!!errors.customer_street}
         />

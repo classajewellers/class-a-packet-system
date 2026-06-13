@@ -196,7 +196,6 @@ export default function AddressAutocomplete({
 
       const el = new PAE({
         componentRestrictions: { country: "au" },
-        types: ["address"],
       });
 
       el.setAttribute("placeholder", placeholder);
@@ -208,11 +207,19 @@ export default function AddressAutocomplete({
 
       // ── gmp-placeselect ────────────────────────────────────────────────────
       const handleSelect = async (e: GmpPlaceSelectEvent) => {
+        console.log("[AddressAutocomplete] gmp-placeselect event fired");
         try {
-          const place = e.place;
-          await place.fetchFields({ fields: ["addressComponents", "formattedAddress"] });
+          const eventPlace = e.place;
+
+          // Use the place returned by fetchFields — some implementations don't
+          // mutate the event's place object in-place.
+          const result = await eventPlace.fetchFields({
+            fields: ["addressComponents", "formattedAddress"],
+          });
+          const place = result.place ?? eventPlace;
 
           console.log("[AddressAutocomplete] raw addressComponents:", place.addressComponents);
+          console.log("[AddressAutocomplete] formattedAddress:", place.formattedAddress);
 
           const components = place.addressComponents ?? [];
 
@@ -231,7 +238,12 @@ export default function AddressAutocomplete({
 
           console.log("[AddressAutocomplete] parsed →", { street, suburb, state, postcode, full_address });
 
+          // Update the street field value
           if (street) onChangeRef.current(street);
+
+          // Fire onSelect with all parsed fields — parent is responsible for
+          // setting suburb / state / postcode in form state.
+          console.log("[AddressAutocomplete] calling onSelect with:", { full_address, street, suburb, state, postcode });
           onSelectRef.current({ full_address, street, suburb, state, postcode });
         } catch (err) {
           console.error("[AddressAutocomplete] fetchFields error:", err);

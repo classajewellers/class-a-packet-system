@@ -722,10 +722,11 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   onChange={(v) => set("customer_street", v)}
                   onBlur={(v) => saveOnBlur("customer_street", v || null)}
                   onSelect={({ street, suburb, state, postcode }) => {
+                    console.log("[PacketDetailDrawer] customer onSelect:", { street, suburb, state, postcode });
                     if (street) { set("customer_street", street); saveOnBlur("customer_street", street); }
-                    if (suburb) { set("customer_suburb", suburb); saveOnBlur("customer_suburb", suburb); }
-                    if (state)  { set("customer_state",  state);  saveOnBlur("customer_state",  state); }
-                    if (postcode) { set("customer_postcode", postcode); saveOnBlur("customer_postcode", postcode); }
+                    set("customer_suburb", suburb); saveOnBlur("customer_suburb", suburb || null);
+                    set("customer_state",  state);  saveOnBlur("customer_state",  state  || null);
+                    set("customer_postcode", postcode); saveOnBlur("customer_postcode", postcode || null);
                   }}
                 />
               </div>
@@ -1148,10 +1149,11 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                         onChange={(v) => set("shipping_street", v)}
                         onBlur={(v) => saveOnBlur("shipping_street", v || null)}
                         onSelect={({ street, suburb, state, postcode }) => {
-                          if (street)   { set("shipping_street",   street);   saveOnBlur("shipping_street",   street); }
-                          if (suburb)   { set("shipping_suburb",   suburb);   saveOnBlur("shipping_suburb",   suburb); }
-                          if (state)    { set("shipping_state",    state);    saveOnBlur("shipping_state",    state); }
-                          if (postcode) { set("shipping_postcode", postcode); saveOnBlur("shipping_postcode", postcode); }
+                          console.log("[PacketDetailDrawer] shipping onSelect:", { street, suburb, state, postcode });
+                          if (street) { set("shipping_street", street); saveOnBlur("shipping_street", street); }
+                          set("shipping_suburb",   suburb);   saveOnBlur("shipping_suburb",   suburb   || null);
+                          set("shipping_state",    state);    saveOnBlur("shipping_state",    state    || null);
+                          set("shipping_postcode", postcode); saveOnBlur("shipping_postcode", postcode || null);
                         }}
                       />
                     </div>
