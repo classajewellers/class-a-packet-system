@@ -335,6 +335,20 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
         win.document.close();
         setTimeout(() => win.print(), 500);
       }
+
+      // ── Step 4: Mark label as printed ───────────────────────────────────────
+      try {
+        await fetch(`/api/admin/packets/${local.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", "x-tenant-id": user?.tenantId ?? "" },
+          body: JSON.stringify({ label_printed: true }),
+        });
+        const updatedPacket: Packet = { ...freshPacket, label_printed: true };
+        setLocal(updatedPacket);
+        onUpdate(updatedPacket);
+      } catch (patchErr) {
+        console.warn("[reprint] Could not update label_printed:", patchErr);
+      }
     } catch (err) {
       console.error("[reprint] Error:", err);
       alert("Reprint failed: " + String(err));

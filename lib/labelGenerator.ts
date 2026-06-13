@@ -612,7 +612,7 @@ export function generatePrintHTML(packet: Packet): string {
     border-color: #cc0000;
   }
   .due-label {
-    font-size: 5.5pt;
+    font-size: 8pt;
     display: block;
     font-weight: 700;
     letter-spacing: 1px;
@@ -623,12 +623,12 @@ export function generatePrintHTML(packet: Packet): string {
 
   /* Grid for details */
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8mm 2mm; margin-bottom: 2mm; }
-  .field { font-size: 7.5pt; }
-  .field-label { font-weight: 700; font-size: 6pt; color: #555; text-transform: uppercase; letter-spacing: 0.3px; }
+  .field { font-size: 10pt; }
+  .field-label { font-weight: 700; font-size: 8pt; color: #555; text-transform: uppercase; letter-spacing: 0.3px; }
   .full-width { grid-column: 1 / -1; }
-  .articles-text { font-size: 8pt; font-weight: 600; white-space: pre-wrap; }
-  .components-text { font-size: 7.5pt; font-weight: 600; white-space: pre-wrap; color: #000; }
-  .instructions-text { font-size: 7pt; color: #222; white-space: pre-wrap; }
+  .articles-text { font-size: 10pt; font-weight: 600; white-space: pre-wrap; }
+  .components-text { font-size: 10pt; font-weight: 600; white-space: pre-wrap; color: #000; }
+  .instructions-text { font-size: 10pt; color: #222; white-space: pre-wrap; }
 
   /* Separator */
   .sep { border: none; border-top: 0.5pt solid #999; margin: 1.5mm 0; }
@@ -643,17 +643,17 @@ export function generatePrintHTML(packet: Packet): string {
     margin: 1.5mm 0;
   }
   .price-item { text-align: center; flex: 1; }
-  .price-label { font-size: 5.5pt; color: #555; text-transform: uppercase; }
-  .price-val { font-size: 9pt; font-weight: bold; }
+  .price-label { font-size: 8pt; color: #555; text-transform: uppercase; }
+  .price-val { font-size: 10pt; font-weight: bold; }
 
   /* Staff / bottom */
-  .bottom { font-size: 7pt; color: #333; margin-top: 1mm; }
+  .bottom { font-size: 8pt; color: #333; margin-top: 1mm; }
   .collected-row { margin-top: 1mm; }
 
   /* Disclaimer — black */
   .disclaimer {
     margin-top: 2mm;
-    font-size: 5.5pt;
+    font-size: 7.5pt;
     color: #000;
     text-align: center;
     font-weight: bold;
@@ -687,7 +687,7 @@ export function generatePrintHTML(packet: Packet): string {
   <div class="grid">
     ${addressLine ? `<div class="field full-width"><div class="field-label">Address</div>${esc(addressLine)}</div>` : ""}
     ${packet.customer_phone ? `<div class="field"><div class="field-label">Phone</div>${esc(packet.customer_phone)}</div>` : ""}
-    ${packet.customer_email ? `<div class="field"><div class="field-label">Email</div><span style="font-size:6.5pt">${esc(packet.customer_email)}</span></div>` : ""}
+    ${packet.customer_email ? `<div class="field"><div class="field-label">Email</div><span style="font-size:9pt">${esc(packet.customer_email)}</span></div>` : ""}
   </div>
 
   <hr class="sep">
