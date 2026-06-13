@@ -9,7 +9,6 @@ import { getSupabaseClient } from "@/lib/supabase";
 import { STAFF_EMAIL_MAP } from "@/lib/staffEmails";
 import { formatDateAU } from "@/lib/formatters";
 import nextDynamic from "next/dynamic";
-import QuoteDetailDrawer from "@/components/QuoteDetailDrawer";
 import QuoteStatsBar from "@/components/QuoteStatsBar";
 import { useUser } from "@/context/UserContext";
 import { useRouter } from "next/navigation";
@@ -38,7 +37,6 @@ export default function QuotesPage() {
 
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
   const [quoteView, setQuoteView] = useState<"board" | "list">("board");
   const [showConverted, setShowConverted] = useState(false);
   const [quoteListFilter, setQuoteListFilter] = useState<"active" | "all" | "converted">("active");
@@ -78,7 +76,6 @@ export default function QuotesPage() {
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "quotes" }, (payload) => {
         const row = payload.new as Quote;
         setQuotes((prev) => prev.map((q) => q.id === row.id ? row : q));
-        setSelectedQuote((cur) => cur?.id === row.id ? row : cur);
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -86,13 +83,11 @@ export default function QuotesPage() {
 
   function handleUpdate(updated: Quote) {
     setQuotes((prev) => prev.map((q) => q.id === updated.id ? updated : q));
-    setSelectedQuote(updated);
   }
 
   function handleDelete(id: string) {
     setQuotes((prev) => prev.filter((q) => q.id !== id));
     setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
-    setSelectedQuote(null);
   }
 
   async function handleBulkDelete() {
@@ -130,15 +125,6 @@ export default function QuotesPage() {
 
   return (
     <>
-      {selectedQuote && (
-        <QuoteDetailDrawer
-          quote={selectedQuote}
-          onClose={() => setSelectedQuote(null)}
-          onUpdate={handleUpdate}
-          onDelete={handleDelete}
-        />
-      )}
-
       <div className="max-w-7xl mx-auto space-y-4">
         {/* Page header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -250,7 +236,7 @@ export default function QuotesPage() {
         ) : quoteView === "board" ? (
           <QuotePipelineBoard
             quotes={staffFilteredQuotes}
-            onQuoteClick={setSelectedQuote}
+            onQuoteClick={(q) => router.push(`/quotes/${q.id}`)}
             onUpdate={handleUpdate}
             showConverted={showConverted}
           />
@@ -272,7 +258,7 @@ export default function QuotesPage() {
                 return (
                   <div
                     key={q.id}
-                    onClick={() => setSelectedQuote(q)}
+                    onClick={() => router.push(`/quotes/${q.id}`)}
                     className="px-4 py-3 cursor-pointer active:bg-gray-50"
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -326,7 +312,7 @@ export default function QuotesPage() {
                     return (
                       <tr
                         key={q.id}
-                        onClick={() => setSelectedQuote(q)}
+                        onClick={() => router.push(`/quotes/${q.id}`)}
                         style={{ borderBottom: '1px solid #E8E8F0', cursor: 'pointer', transition: 'background .12s' }}
                         onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = '#F9FAFB'}
                         onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}

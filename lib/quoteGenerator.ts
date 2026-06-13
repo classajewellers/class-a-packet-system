@@ -38,8 +38,101 @@ export function generateQuoteHTML(quote: Quote): string {
 
     const qbd = builderData as Record<string, unknown>;
 
+    // ── NEW: Multi-item builder format (builder_items array) ──────────────
+    if (Array.isArray(qbd.builder_items)) {
+      const builderItems = qbd.builder_items as Array<Record<string, unknown>>;
+      const multiItem = builderItems.length > 1;
+
+      const tdLbl = `padding:7px 12px;font-size:9pt;color:#555;border-right:1px solid #e8e8e8;width:110px;vertical-align:top;`;
+      const tdVal = `padding:7px 12px;font-size:9pt;color:#222;`;
+      const rowBg = `background:#f9f9f9;`;
+
+      let rows = "";
+
+      builderItems.forEach((item, itemIdx) => {
+        const heading = esc((item.subcategory as string | null) || (item.item_type as string | null) || "Custom Order");
+        const itemAiDesc = item.ai_description as string | null | undefined;
+        const itemMetals = Array.isArray(item.metals) ? item.metals as Array<{ type?: string; weight?: number }> : [];
+        const stoneOptions = Array.isArray(item.stone_options) ? item.stone_options as Array<Record<string, unknown>> : [];
+        const meleeStones = Array.isArray(item.melee_stones) ? item.melee_stones as Array<Record<string, unknown>> : [];
+        const addons = item.addons as Record<string, unknown> | null | undefined;
+        const fingerSize = item.finger_size as string | null | undefined;
+        const stockSku = item.stock_sku as string | null | undefined;
+        const itemPrice = typeof item.quoted_price === "number" ? item.quoted_price : null;
+
+        if (itemIdx > 0) rows += `<tr><td colspan="2" style="padding:0;height:8px;background:#fff;"></td></tr>`;
+        rows += `<tr style="background:#000"><th colspan="2" style="color:#fff;font-size:10pt;letter-spacing:0.5px;padding:8px 12px;text-align:left;">${multiItem ? `${itemIdx + 1}. ` : ""}${heading}</th></tr>`;
+
+        if (itemAiDesc) {
+          rows += `<tr style="background:#fff"><td colspan="2" style="padding:12px 12px 10px;font-size:10pt;line-height:1.7;color:#111;font-style:italic;">${esc(itemAiDesc)}</td></tr>`;
+        }
+        rows += `<tr><td colspan="2" style="padding:0;height:1px;background:#e0e0e0;"></td></tr>`;
+
+        itemMetals.filter(m => m.type).forEach(m => {
+          const w = m.weight ? ` &mdash; ${m.weight}g` : "";
+          rows += `<tr style="${rowBg}"><td style="${tdLbl}">Metal</td><td style="${tdVal}">${esc(m.type ?? "")}${w}</td></tr>`;
+        });
+
+        if (stoneOptions.length > 1) {
+          let optRows = "";
+          stoneOptions.forEach((opt, oi) => {
+            const stones = Array.isArray(opt.stones) ? opt.stones as Array<Record<string, unknown>> : [];
+            const specsText = stones.map(s =>
+              [s.carat_weight != null ? `${s.carat_weight}ct` : null, s.colour, s.clarity, s.origin, s.shape]
+                .map(v => (v != null && v !== "" ? String(v) : null)).filter(Boolean).join(" ")
+            ).filter(Boolean).join("; ");
+            const optPrice = typeof opt.quoted_price === "number"
+              ? `$${opt.quoted_price.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              : "";
+            optRows += `<tr style="background:${oi % 2 === 0 ? "#fff" : "#f5f5f5"}"><td style="padding:5px 8px;font-size:8.5pt;font-weight:600;color:#222;border-right:1px solid #ddd;width:70px;">${esc(String(opt.label || `Option ${oi + 1}`))}</td><td style="padding:5px 8px;font-size:8.5pt;color:#444;border-right:1px solid #ddd;">${esc(specsText)}</td><td style="padding:5px 8px;font-size:8.5pt;font-weight:700;color:#000;text-align:right;white-space:nowrap;">${optPrice}</td></tr>`;
+          });
+          rows += `<tr style="${rowBg}"><td style="${tdLbl};padding-top:9px;">Stone Options</td><td style="padding:6px 12px;"><table style="width:100%;border-collapse:collapse;border:1px solid #e0e0e0;"><thead><tr style="background:#444;"><th style="padding:5px 8px;font-size:7.5pt;color:#fff;text-align:left;border-right:1px solid #666;">Option</th><th style="padding:5px 8px;font-size:7.5pt;color:#fff;text-align:left;border-right:1px solid #666;">Specifications</th><th style="padding:5px 8px;font-size:7.5pt;color:#fff;text-align:right;">Price</th></tr></thead><tbody>${optRows}</tbody></table></td></tr>`;
+        } else if (stoneOptions.length === 1) {
+          const opt = stoneOptions[0];
+          const stones = Array.isArray(opt.stones) ? opt.stones as Array<Record<string, unknown>> : [];
+          stones.forEach((s, si) => {
+            const parts = [s.carat_weight != null ? `${s.carat_weight}ct` : null, s.colour, s.clarity, s.origin, s.shape]
+              .map(v => (v != null && v !== "" ? String(v) : null)).filter(Boolean).join(" ");
+            const lbl = stones.length === 1 ? "Stone" : `Stone ${si + 1}`;
+            if (parts) rows += `<tr style="${rowBg}"><td style="${tdLbl}">${lbl}</td><td style="${tdVal}">${esc(parts)}</td></tr>`;
+          });
+        }
+
+        meleeStones.filter(r => r.stone_type).forEach(r => {
+          const qty = (r.qty as number) || 1;
+          const parts = [qty > 1 ? `${qty}×` : null, r.stone_type, r.shape, r.carat_weight ? `(${r.carat_weight}ct each)` : null]
+            .map(v => (v != null && v !== "" ? String(v) : null)).filter(Boolean).join(" ");
+          if (parts) rows += `<tr style="${rowBg}"><td style="${tdLbl}">Melee</td><td style="${tdVal}">${esc(parts)}</td></tr>`;
+        });
+
+        if (addons) {
+          const addonLines: string[] = [];
+          if (addons.hand_engraving) addonLines.push("Hand Engraving");
+          if (addons.laser_engraving) addonLines.push("Laser Engraving");
+          if (addons.butterflies) addonLines.push("Butterfly Earring Backs");
+          if (addons.chain) addonLines.push("Chain");
+          if ((addons.additional_labour as number) > 0) addonLines.push("Additional Labour");
+          if (addonLines.length > 0) rows += `<tr style="${rowBg}"><td style="${tdLbl}">Inclusions</td><td style="${tdVal}">${addonLines.map(esc).join(", ")}</td></tr>`;
+        }
+
+        if (fingerSize) rows += `<tr style="${rowBg}"><td style="${tdLbl}">Finger Size</td><td style="${tdVal}">${esc(fingerSize)}</td></tr>`;
+        if (stockSku) rows += `<tr style="${rowBg}"><td style="${tdLbl}">Stock Ref</td><td style="${tdVal};font-family:monospace;">${esc(stockSku)}</td></tr>`;
+
+        if (multiItem && itemPrice != null) {
+          rows += `<tr style="background:#333"><td style="color:#ccc;font-size:8.5pt;padding:7px 12px;border-right:1px solid #555;">Item Price</td><td style="color:#fff;font-size:12pt;font-weight:700;padding:7px 12px;">$${itemPrice.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>`;
+        }
+      });
+
+      const grandTotal = typeof qbd.total_quoted_price === "number" ? qbd.total_quoted_price : priceNum;
+      const gtText = grandTotal != null
+        ? `$${Number(grandTotal).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : "&nbsp;";
+      rows += `<tr style="background:#000"><td style="color:#fff;font-weight:bold;padding:10px 12px;border-right:1px solid #444;width:110px;font-size:9pt;">${multiItem ? "Total " : ""}Price (incl. GST)</td><td style="color:#fff;font-weight:bold;font-size:15pt;padding:10px 12px;">${gtText}</td></tr>`;
+
+      itemsSection = `<table class="line-items"><tbody>${rows}</tbody></table>`;
+
     // ── New detailed builder layout (metals array present) ────────────────
-    if (Array.isArray(qbd.metals)) {
+    } else if (Array.isArray(qbd.metals)) {
       const heading = esc(
         (qbd.subcategory as string | null) ||
         (qbd.item_type as string | null) ||
@@ -321,6 +414,9 @@ export function generateQuoteHTML(quote: Quote): string {
   const createdDate = formatDateAU(quote.created_at) || formatDateAU(new Date().toISOString());
   const staffName = esc(quote.staff_member ?? "");
   const staffEmailAddr = staffEmail(quote.staff_member);
+  const notesSection = quote.notes
+    ? `<div style="margin:10px 0 0;padding:10px 12px;background:#f9f9f9;border-left:3px solid #555;font-size:9pt;color:#444;line-height:1.7;"><div style="font-weight:bold;font-size:7.5pt;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;color:#777;">Notes</div>${esc(quote.notes).replace(/\n/g, "<br>")}</div>`
+    : "";
 
   return `<!DOCTYPE html>
 <html>
@@ -566,6 +662,7 @@ export function generateQuoteHTML(quote: Quote): string {
 
   <!-- Line items / builder section -->
   ${itemsSection}
+  ${notesSection}
 
   <hr class="table-divider">
 
