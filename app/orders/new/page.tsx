@@ -23,7 +23,6 @@ import PricingSection from "@/components/PricingSection";
 import DatesSection from "@/components/DatesSection";
 import ReferralStaffSection from "@/components/ReferralStaffSection";
 import RepairFields from "@/components/RepairFields";
-import CustomOrderFields from "@/components/CustomOrderFields";
 import OnlineOrderFields from "@/components/OnlineOrderFields";
 import LabelPreview from "@/components/LabelPreview";
 import SubmissionOverlay from "@/components/SubmissionOverlay";
@@ -400,14 +399,6 @@ function NewOrderPageInner() {
                   </Card>
                 )}
 
-                {formData.packet_type === "custom_order" && (
-                  <Card title="Custom Order Details">
-                    <CustomOrderFields
-                      data={formData}
-                      onChange={(f, v) => handleChange(f, v as string)}
-                    />
-                  </Card>
-                )}
 
                 {(formData.packet_type === "repair" || formData.packet_type === "custom_order") && (
                   <Card title="Gift & Delivery">

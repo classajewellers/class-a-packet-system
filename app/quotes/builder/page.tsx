@@ -135,7 +135,20 @@ export default function QuoteBuilderPage() {
     fetch("/api/pricing", { headers: { "x-tenant-id": user?.tenantId ?? "" } })
       .then(r => r.json())
       .then(json => {
-        setMetalRates(json.metalRates ?? []);
+        const METAL_ORDER = [
+          "9ct Yellow Gold", "9ct White Gold", "9ct Rose Gold",
+          "18ct Yellow Gold", "18ct White Gold", "18ct Rose Gold",
+          "Platinum", "Silver",
+        ];
+        const sortedMetals = (json.metalRates ?? [] as MetalRate[]).slice().sort((a: MetalRate, b: MetalRate) => {
+          const ai = METAL_ORDER.indexOf(a.metal_type);
+          const bi = METAL_ORDER.indexOf(b.metal_type);
+          if (ai !== -1 && bi !== -1) return ai - bi;
+          if (ai !== -1) return -1;
+          if (bi !== -1) return 1;
+          return a.metal_type.localeCompare(b.metal_type);
+        });
+        setMetalRates(sortedMetals);
         setFixedCosts(json.fixedCosts ?? []);
         setMarginBrackets(json.marginBrackets ?? []);
       })
