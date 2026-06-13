@@ -7,7 +7,7 @@ import AddressAutocomplete from "./AddressAutocomplete";
 
 interface Props {
   data: PacketFormData;
-  onChange: (field: keyof PacketFormData, value: string) => void;
+  onChange: (field: keyof PacketFormData, value: string | boolean) => void;
   errors: Partial<Record<keyof PacketFormData, string>>;
 }
 
@@ -209,6 +209,70 @@ export default function CustomerSection({ data, onChange, errors }: Props) {
           />
         </Field>
       </div>
+
+      {/* Different shipping address toggle */}
+      <div className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          id="different_shipping"
+          checked={!data.shipping_address_same}
+          onChange={(e) => onChange("shipping_address_same", !e.target.checked)}
+          className="w-4 h-4 rounded border-gray-300 cursor-pointer accent-[#635BFF]"
+        />
+        <label htmlFor="different_shipping" className="text-sm font-medium text-black cursor-pointer select-none">
+          Different shipping address?
+        </label>
+      </div>
+
+      {/* Shipping address fields — shown when checkbox is checked */}
+      {!data.shipping_address_same && (
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Shipping Address</p>
+          <Field label="Street Address" error={errors.shipping_street}>
+            <AddressAutocomplete
+              value={data.shipping_street}
+              onChange={(v) => onChange("shipping_street", v)}
+              onSelect={({ street, suburb, state, postcode }) => {
+                console.log("[CustomerSection] shipping onSelect:", { street, suburb, state, postcode });
+                if (street) onChange("shipping_street", street);
+                onChange("shipping_suburb", suburb);
+                onChange("shipping_state", state);
+                onChange("shipping_postcode", postcode);
+              }}
+              placeholder="Shipping street address"
+            />
+          </Field>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <Field label="Suburb" className="col-span-1" error={errors.shipping_suburb}>
+              <input
+                type="text"
+                value={data.shipping_suburb}
+                onChange={(e) => onChange("shipping_suburb", e.target.value)}
+                placeholder="Suburb"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="State" className="col-span-1" error={errors.shipping_state}>
+              <input
+                type="text"
+                value={data.shipping_state}
+                onChange={(e) => onChange("shipping_state", e.target.value)}
+                placeholder="SA"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Postcode" className="col-span-1" error={errors.shipping_postcode}>
+              <input
+                type="tel"
+                value={data.shipping_postcode}
+                onChange={(e) => onChange("shipping_postcode", e.target.value)}
+                placeholder="5000"
+                className={inputClass}
+              />
+            </Field>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <Field label="Customer No." error={errors.customer_number}>

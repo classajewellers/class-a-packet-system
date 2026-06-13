@@ -340,7 +340,7 @@ function NewOrderPageInner() {
                 <Card title="Customer">
                   <CustomerSection
                     data={formData}
-                    onChange={(f, v) => handleChange(f, v as string)}
+                    onChange={(f, v) => handleChange(f, v as string | boolean)}
                     errors={errors}
                   />
                 </Card>
