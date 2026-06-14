@@ -623,6 +623,7 @@ export function generateQuoteHTML(quote: Quote): string {
   .footer-staff-contact {
     color: #333;
   }
+  .pdfshift-banner, [class*='pdfshift-'] { display: none !important; }
 </style>
 </head>
 <body>
