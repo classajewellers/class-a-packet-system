@@ -62,7 +62,7 @@ export async function GET(
         landscape: false,
         use_print: false,
         sandbox: false,
-        css: ".pdfshift-banner, [class*='pdfshift-'] { display: none !important; }",
+        css: ".pdf-bar, .pdfshift-banner, [class*='pdfshift-'] { display: none !important; }",
       }),
     });
   } catch (fetchErr) {
