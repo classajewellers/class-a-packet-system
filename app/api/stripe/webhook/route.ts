@@ -14,9 +14,6 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-// Next.js App Router: disable body parsing so we can read raw bytes for
-// Stripe signature verification
-export const config = { api: { bodyParser: false } };
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const stripeKey = process.env.STRIPE_SECRET_KEY;
