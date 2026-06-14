@@ -46,15 +46,12 @@ export async function GET(
   }
 
   // ── PDFShift: convert HTML to PDF ────────────────────────────────────────────
-  // Basic auth: API key as username, empty password → base64("apiKey:")
-  const credentials = Buffer.from(`${apiKey}:`).toString("base64");
-
   let pdfResponse: Response;
   try {
     pdfResponse = await fetch("https://api.pdfshift.io/v3/convert/pdf", {
       method: "POST",
       headers: {
-        Authorization: `Basic ${credentials}`,
+        "X-API-Key": apiKey,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
