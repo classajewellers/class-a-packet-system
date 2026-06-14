@@ -9,201 +9,6 @@ import { Quote } from "@/lib/types";
 import { useUser } from "@/context/UserContext";
 import { formatDateAU } from "@/lib/formatters";
 import { hasPermission } from "@/lib/userTypes";
-import { BLACK_LOGO_DATA_URI } from "@/lib/logoDataURIs";
-
-// ─── Print stylesheet ──────────────────────────────────────────────────────────
-
-const PRINT_STYLE = `
-/* ── Default: hide print-only elements on screen ── */
-.print-only { display: none !important; }
-
-@media print {
-  @page { size: A4 portrait; margin: 15mm; }
-
-  /* ── Hide app chrome ── */
-  .ds-sidebar,
-  .ds-topbar,
-  .no-print { display: none !important; }
-
-  /* ── Fix app shell for print ── */
-  .app-shell  { display: block !important; }
-  .app-main   { display: block !important; overflow: visible !important; }
-  .app-content {
-    overflow: visible !important;
-    padding: 0 !important;
-    animation: none !important;
-  }
-
-  /* ── Base ── */
-  body, html {
-    background: #fff !important;
-    font-size: 11px !important;
-    font-family: Arial, Helvetica, sans-serif !important;
-  }
-  * {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-
-  /* ── Show print-only sections ── */
-  .print-only { display: block !important; }
-
-  /* ── Page wrapper ── */
-  .quote-print-wrapper {
-    max-width: none !important;
-    padding: 0 !important;
-    margin: 0 !important;
-  }
-
-  /* ── Customer card: strip chrome ── */
-  .quote-customer-card {
-    border: none !important;
-    border-bottom: 1px solid #ccc !important;
-    border-radius: 0 !important;
-    padding: 6px 0 10px !important;
-    margin-bottom: 12px !important;
-    background: transparent !important;
-  }
-  .quote-customer-name {
-    font-size: 13pt !important;
-    margin-bottom: 3px !important;
-  }
-  .quote-customer-contact {
-    font-size: 9pt !important;
-    color: #333 !important;
-  }
-
-  /* ── Item cards ── */
-  .quote-item-card {
-    border: 1px solid #ccc !important;
-    border-radius: 0 !important;
-    padding: 0 !important;
-    margin-bottom: 10px !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-    overflow: visible !important;
-  }
-
-  /* Black heading bar matches quoteGenerator */
-  .item-heading-bar {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    background: #000 !important;
-    color: #fff !important;
-    padding: 7px 12px !important;
-    margin-bottom: 0 !important;
-    border-radius: 0 !important;
-  }
-  .item-heading-bar * { color: #fff !important; }
-  .item-heading-text {
-    font-size: 10pt !important;
-    font-weight: bold !important;
-    letter-spacing: 0.5px !important;
-  }
-  .item-heading-price {
-    font-size: 10pt !important;
-    font-weight: bold !important;
-  }
-
-  /* AI description: italic, no background box */
-  .item-ai-desc {
-    font-style: italic !important;
-    font-size: 10pt !important;
-    line-height: 1.7 !important;
-    color: #111 !important;
-    background: #fff !important;
-    border: none !important;
-    border-left: none !important;
-    border-radius: 0 !important;
-    padding: 10px 12px 8px !important;
-    margin: 0 !important;
-  }
-
-  /* Detail rows table */
-  .item-details-table {
-    border: none !important;
-    border-top: 1px solid #e0e0e0 !important;
-  }
-  .item-details-table td {
-    padding: 5px 12px !important;
-    font-size: 9pt !important;
-  }
-  .item-details-table .td-label {
-    color: #555 !important;
-    width: 110px !important;
-    border-right: 1px solid #e8e8e8 !important;
-  }
-  .item-details-table .td-value {
-    color: #222 !important;
-  }
-
-  /* Stone options inner table */
-  .stone-opts-outer-td { padding: 5px 12px !important; }
-  .stone-opts-inner-table { border: 1px solid #ddd !important; }
-  .stone-opts-inner-table th {
-    padding: 4px 7px !important;
-    font-size: 8pt !important;
-    background: #444 !important;
-    color: #fff !important;
-  }
-  .stone-opts-inner-table td {
-    padding: 4px 7px !important;
-    font-size: 8.5pt !important;
-  }
-
-  /* Notes card */
-  .quote-notes-card {
-    border-left: 3px solid #555 !important;
-    border-top: none !important;
-    border-right: none !important;
-    border-bottom: none !important;
-    border-radius: 0 !important;
-    background: #f9f9f9 !important;
-    padding: 8px 12px !important;
-    margin-bottom: 10px !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-
-  /* Price bar */
-  .quote-price-bar {
-    background: #000 !important;
-    color: #fff !important;
-    border-radius: 0 !important;
-    padding: 10px 12px !important;
-    margin-top: 0 !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-  .quote-price-bar * { color: #fff !important; }
-  .quote-price-label { font-size: 9pt !important; color: #aaa !important; }
-  .quote-price-amount { font-size: 15pt !important; font-weight: bold !important; }
-
-  /* Footer */
-  .quote-print-footer {
-    display: flex !important;
-    justify-content: space-between !important;
-    align-items: flex-start !important;
-    margin-top: 12px !important;
-    padding-top: 10px !important;
-    border-top: 1px solid #ccc !important;
-    font-size: 8pt !important;
-    gap: 24px !important;
-  }
-  .print-footer-terms {
-    flex: 1 !important;
-    color: #777 !important;
-    font-style: italic !important;
-    line-height: 1.7 !important;
-  }
-  .print-footer-staff {
-    text-align: right !important;
-    line-height: 1.7 !important;
-    color: #333 !important;
-  }
-}
-`;
 
 // ─── Screen styles ────────────────────────────────────────────────────────────
 
@@ -293,7 +98,7 @@ function StoneOptionsTable({
                 <th style={{ padding: "5px 8px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "#6B7280", borderBottom: "1px solid #E8E8F0", width: 80 }}>Option</th>
                 <th style={{ padding: "5px 8px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "#6B7280", borderBottom: "1px solid #E8E8F0" }}>Specifications</th>
                 <th style={{ padding: "5px 8px", textAlign: "right", fontSize: 11, fontWeight: 600, color: "#6B7280", borderBottom: "1px solid #E8E8F0", whiteSpace: "nowrap" }}>Price</th>
-                <th className="no-print" style={{ padding: "5px 8px", width: 90, borderBottom: "1px solid #E8E8F0" }} />
+                <th style={{ padding: "5px 8px", width: 90, borderBottom: "1px solid #E8E8F0" }} />
               </tr>
             </thead>
             <tbody>
@@ -313,7 +118,7 @@ function StoneOptionsTable({
                     <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600, color: "#635BFF", whiteSpace: "nowrap" }}>
                       {optPrice}
                     </td>
-                    <td className="no-print" style={{ padding: "6px 8px", textAlign: "right" }}>
+                    <td style={{ padding: "6px 8px", textAlign: "right" }}>
                       <button
                         onClick={() => onAccept(oi)}
                         disabled={isAccepting}
@@ -522,6 +327,7 @@ export default function QuoteViewPage() {
   const [error, setError] = useState<string | null>(null);
   const [acceptingIdx, setAcceptingIdx] = useState<number | null>(null);
   const [converting, setConverting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     if (hydrated && user && !hasPermission(user, "quotes")) router.replace("/");
@@ -541,7 +347,30 @@ export default function QuoteViewPage() {
       .finally(() => setLoading(false));
   }, [id, user?.tenantId, hydrated]);
 
-  function handlePrint() { window.print(); }
+  async function handleDownloadPDF() {
+    if (!quote || downloading) return;
+    setDownloading(true);
+    try {
+      const res = await fetch(`/api/quotes/${quote.id}/pdf`, {
+        headers: { "x-tenant-id": user?.tenantId ?? "" },
+      });
+      if (!res.ok) throw new Error(`PDF generation failed (${res.status})`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const lastName = (quote.customer_last_name ?? "").trim().replace(/\s+/g, "_") || "Customer";
+      a.href = url;
+      a.download = `Quote_${quote.reference_number}_${lastName}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(`Could not generate PDF: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   function buildOrderUrl(
     q: Quote,
@@ -637,40 +466,10 @@ export default function QuoteViewPage() {
   const createdDate = formatDateAU(quote.created_at?.split("T")[0]);
 
   return (
-    <>
-      <style>{PRINT_STYLE}</style>
+    <div className="quote-print-wrapper" style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
 
-      <div className="quote-print-wrapper" style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
-
-        {/* ── Print-only: Class A Letterhead ──────────────────────────────── */}
-        <div className="print-only" style={{ marginBottom: 16 }}>
-          {/* Logo row */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
-            <div>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={BLACK_LOGO_DATA_URI} alt="Class A Jewellers" style={{ maxHeight: 52, width: "auto", display: "block" }} />
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 22, fontWeight: "bold", letterSpacing: 2, textTransform: "uppercase", color: "#000", lineHeight: 1 }}>Quotation</div>
-              <div style={{ fontSize: 9, color: "#333", marginTop: 5, lineHeight: 1.6 }}>
-                40 North East Road, Walkerville SA 5081<br />
-                08 8344 7722 &nbsp;|&nbsp; classa.com.au
-              </div>
-            </div>
-          </div>
-          {/* Divider */}
-          <div style={{ borderTop: "1.5px solid #000", margin: "8px 0 12px" }} />
-          {/* Ref + date row */}
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 14 }}>
-            <span style={{ color: "#555" }}>
-              Reference: <strong style={{ fontFamily: "monospace", color: "#000" }}>{quote.reference_number}</strong>
-            </span>
-            <span style={{ color: "#555" }}>{createdDate}</span>
-          </div>
-        </div>
-
-        {/* ── Screen: Header with nav + action buttons ────────────────────── */}
-        <div className="no-print" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+        {/* ── Header with nav + action buttons ────────────────────── */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <Link href="/quotes" style={{ color: "#6B7280", textDecoration: "none", fontSize: 14, display: "flex", alignItems: "center", gap: 4 }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -684,15 +483,16 @@ export default function QuoteViewPage() {
 
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button
-              onClick={handlePrint}
-              style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff", color: "#374151", border: "1px solid #E8E8F0", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 500, cursor: "pointer" }}
-              onMouseEnter={e => (e.currentTarget.style.background = "#F9FAFB")}
-              onMouseLeave={e => (e.currentTarget.style.background = "#fff")}
+              onClick={handleDownloadPDF}
+              disabled={downloading}
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff", color: "#374151", border: "1px solid #E8E8F0", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 500, cursor: downloading ? "wait" : "pointer", opacity: downloading ? 0.7 : 1 }}
+              onMouseEnter={e => { if (!downloading) e.currentTarget.style.background = "#F9FAFB"; }}
+              onMouseLeave={e => { if (!downloading) e.currentTarget.style.background = "#fff"; }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
               </svg>
-              Download PDF
+              {downloading ? "Generating…" : "Download PDF"}
             </button>
             <button
               onClick={handleConvertToOrder}
@@ -719,7 +519,7 @@ export default function QuoteViewPage() {
         </div>
 
         {/* ── Status bar (screen only) ─────────────────────────────────────── */}
-        <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
           <span style={{ background: sc.bg, color: sc.text, fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 999 }}>
             {STATUS_LABELS[quote.status] ?? quote.status}
           </span>
@@ -730,7 +530,7 @@ export default function QuoteViewPage() {
 
         {/* ── Customer ────────────────────────────────────────────────────── */}
         <div className="quote-customer-card" style={CARD}>
-          <span className="no-print" style={SEC_LABEL}>Customer</span>
+          <span style={SEC_LABEL}>Customer</span>
           <div className="quote-customer-name" style={{ fontSize: 18, fontWeight: 700, color: "#1A1A2E", marginBottom: 6 }}>{customerName}</div>
           <div className="quote-customer-contact" style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
             {quote.customer_email && <span style={{ fontSize: 13, color: "#6B7280" }}>{quote.customer_email}</span>}
@@ -811,21 +611,8 @@ export default function QuoteViewPage() {
           </div>
         )}
 
-        {/* ── Print-only footer ────────────────────────────────────────────── */}
-        <div className="print-only quote-print-footer" style={{ display: "none" }}>
-          <div className="print-footer-terms">
-            Valid for 7 business days from the date of this quotation, subject to availability.<br />
-            A 20% deposit is required to commence work.
-          </div>
-          <div className="print-footer-staff">
-            {quote.assigned_to && <div style={{ fontWeight: "bold", color: "#000" }}>{quote.assigned_to}</div>}
-            <div>08 8344 7722</div>
-            <div>classa.com.au</div>
-          </div>
-        </div>
-
-        {/* ── Add Item button (screen only) ────────────────────────────────── */}
-        <div className="no-print" style={{ marginTop: 16, display: "flex", justifyContent: "center" }}>
+        {/* ── Add Item button ────────────────────────────────── */}
+        <div style={{ marginTop: 16, display: "flex", justifyContent: "center" }}>
           <Link
             href={`/quotes/builder?quote_id=${quote.id}`}
             style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 24px", borderRadius: 10, border: "1px dashed #635BFF", background: "#EEF2FF", color: "#635BFF", fontSize: 14, fontWeight: 600, textDecoration: "none" }}
@@ -837,7 +624,6 @@ export default function QuoteViewPage() {
           </Link>
         </div>
 
-      </div>
-    </>
+    </div>
   );
 }
