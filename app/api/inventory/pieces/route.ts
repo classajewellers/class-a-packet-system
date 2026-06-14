@@ -12,8 +12,52 @@ const JOINED_SELECT = `
   supplier:inventory_suppliers(id,name)
 `.trim();
 
+// Category name → SKU prefix (case-insensitive substring match)
+const CATEGORY_PREFIXES: [string, string][] = [
+  ["engagement", "ER"],
+  ["wedding",    "WB"],
+  ["ring",       "RG"],
+  ["earring",    "EA"],
+  ["necklace",   "NK"],
+  ["bracelet",   "BR"],
+  ["pendant",    "PN"],
+  ["loose",      "LS"],
+  ["stone",      "LS"],
+];
+
+function categoryPrefix(categoryName?: string | null): string {
+  if (!categoryName) return "XX";
+  const lower = categoryName.toLowerCase();
+  for (const [keyword, prefix] of CATEGORY_PREFIXES) {
+    if (lower.includes(keyword)) return prefix;
+  }
+  return "XX";
+}
+
+async function generateSku(
+  supabase: Awaited<ReturnType<typeof createTenantSupabaseClient>>,
+  prefix: string
+): Promise<string> {
+  // Find the highest sequence number for this prefix in the tenant
+  const { data } = await supabase
+    .from("inventory_pieces")
+    .select("sku")
+    .ilike("sku", `${prefix}-%`)
+    .order("sku", { ascending: false })
+    .limit(20);
+
+  let maxSeq = 0;
+  for (const row of data ?? []) {
+    const parts = (row.sku as string).split("-");
+    const seq = parseInt(parts[parts.length - 1], 10);
+    if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+  }
+
+  const next = maxSeq + 1;
+  return `${prefix}-${String(next).padStart(4, "0")}`;
+}
+
 // GET /api/inventory/pieces
-// Query: search, category_id, status_id, location_id, page (default 1), per_page (default 50)
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
   const supabase = await createTenantSupabaseClient(tenantId);
@@ -48,23 +92,37 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   );
 }
 
-// POST /api/inventory/pieces — create a new piece
+// POST /api/inventory/pieces — create with auto-generated SKU
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
   const supabase = await createTenantSupabaseClient(tenantId);
 
   const body = await req.json();
 
-  // Strip joined relation keys before insert
-  const { status: _s, location: _l, category: _c, supplier: _sp, ...insertData } = body;
+  // Strip joined relation keys before insert — SKU is always generated server-side
+  const {
+    status: _s, location: _l, category: _c, supplier: _sp,
+    sku: _ignoredSku,
+    ...insertData
+  } = body;
 
-  if (!insertData.sku || typeof insertData.sku !== "string" || !insertData.sku.trim()) {
-    return NextResponse.json({ error: "sku is required" }, { status: 400 });
+  // Look up category name to determine prefix
+  let categoryName: string | null = null;
+  if (insertData.category_id) {
+    const { data: cat } = await supabase
+      .from("inventory_categories")
+      .select("name")
+      .eq("id", insertData.category_id)
+      .single();
+    categoryName = cat?.name ?? null;
   }
+
+  const prefix = categoryPrefix(categoryName);
+  const sku    = await generateSku(supabase, prefix);
 
   const { data, error } = await supabase
     .from("inventory_pieces")
-    .insert({ ...insertData, tenant_id: tenantId })
+    .insert({ ...insertData, sku, tenant_id: tenantId })
     .select(JOINED_SELECT)
     .single();
 

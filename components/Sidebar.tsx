@@ -16,6 +16,7 @@ import {
   ChevronDown,
   Brain,
   Package,
+  ClipboardList,
   X,
 } from "lucide-react";
 import { canManage, hasPermission } from "@/lib/userTypes";
@@ -218,8 +219,9 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
               />
               {inventoryExpanded && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
-                  <SubLink href="/inventory"          label="Stock Register" />
-                  {isManager && <SubLink href="/inventory/settings" label="Settings" />}
+                  <SubLink href="/inventory"                         label="Stock Register" />
+                  {isManager && <SubLink href="/inventory/purchase-orders" label="Purchase Orders" />}
+                  {isManager && <SubLink href="/inventory/settings"        label="Settings" />}
                 </div>
               )}
             </div>
