@@ -328,6 +328,11 @@ export default function QuoteViewPage() {
   const [acceptingIdx, setAcceptingIdx] = useState<number | null>(null);
   const [converting, setConverting] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [showPaymentPanel, setShowPaymentPanel] = useState(false);
+  const [generatingLink, setGeneratingLink] = useState(false);
+  const [depositInput, setDepositInput] = useState<string>("");
+  const [paymentLinkUrl, setPaymentLinkUrl] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   useEffect(() => {
     if (hydrated && user && !hasPermission(user, "quotes")) router.replace("/");
@@ -341,7 +346,13 @@ export default function QuoteViewPage() {
       .then(async res => {
         const json = await res.json();
         if (!res.ok || !json.quote) setError(json.error ?? `HTTP ${res.status} — quote not found`);
-        else setQuote(json.quote);
+        else {
+          setQuote(json.quote);
+          // Pre-populate payment link if already generated
+          if (json.quote.stripe_payment_link_url) {
+            setPaymentLinkUrl(json.quote.stripe_payment_link_url);
+          }
+        }
       })
       .catch(err => setError(String(err)))
       .finally(() => setLoading(false));
@@ -373,6 +384,38 @@ export default function QuoteViewPage() {
       setDownloading(false);
     }
   };
+
+  async function handleGeneratePaymentLink() {
+    if (!quote || !id || generatingLink) return;
+    setGeneratingLink(true);
+    try {
+      const body: { amount?: number } = {};
+      const parsed = parseFloat(depositInput);
+      if (!isNaN(parsed) && parsed > 0) body.amount = parsed;
+
+      const res = await fetch(`/api/quotes/${id}/payment-link`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-tenant-id": user?.tenantId ?? "" },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (!res.ok) { alert(json.error ?? "Failed to generate payment link"); return; }
+      setPaymentLinkUrl(json.payment_link_url);
+      setQuote(q => q ? { ...q, stripe_payment_link_url: json.payment_link_url, deposit_amount: json.deposit_amount } : q);
+    } catch (err) {
+      alert("Error: " + err);
+    } finally {
+      setGeneratingLink(false);
+    }
+  }
+
+  function handleCopyLink() {
+    if (!paymentLinkUrl) return;
+    navigator.clipboard.writeText(paymentLinkUrl).then(() => {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    });
+  }
 
   function buildOrderUrl(
     q: Quote,
@@ -517,6 +560,15 @@ export default function QuoteViewPage() {
               </svg>
               Add Item
             </Link>
+            <button
+              onClick={() => setShowPaymentPanel(p => !p)}
+              style={{ display: "flex", alignItems: "center", gap: 6, background: paymentLinkUrl ? "#F0FDF4" : "#000", color: paymentLinkUrl ? "#166534" : "#fff", border: paymentLinkUrl ? "1px solid #86EFAC" : "none", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <rect x="1" y="4" width="22" height="16" rx="2" ry="2" /><line x1="1" y1="10" x2="23" y2="10" />
+              </svg>
+              {paymentLinkUrl ? "Payment Link" : "Generate Payment Link"}
+            </button>
           </div>
         </div>
 
@@ -529,6 +581,83 @@ export default function QuoteViewPage() {
           {quote.follow_up_date && <span style={{ fontSize: 13, color: "#6B7280" }}>· Follow up: {formatDateAU(quote.follow_up_date)}</span>}
           <span style={{ fontSize: 12, color: "#9CA3AF", marginLeft: "auto" }}>{createdDate}</span>
         </div>
+
+        {/* ── Payment link panel ───────────────────────────────────────────── */}
+        {showPaymentPanel && (
+          <div style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#1A1A2E", marginBottom: 12 }}>
+              {paymentLinkUrl ? "Payment Link" : "Generate Payment Link"}
+            </div>
+
+            {paymentLinkUrl ? (
+              /* Show existing link */
+              <div>
+                {quote.deposit_paid && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, padding: "8px 12px", background: "#D1FAE5", borderRadius: 8 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
+                    <span style={{ fontSize: 13, color: "#065F46", fontWeight: 600 }}>
+                      Deposit paid{quote.deposit_paid_at ? ` — ${formatDateAU(quote.deposit_paid_at.split("T")[0])}` : ""}
+                      {quote.deposit_amount ? ` ($${Number(quote.deposit_amount).toLocaleString("en-AU", { minimumFractionDigits: 2 })})` : ""}
+                    </span>
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    readOnly
+                    value={paymentLinkUrl}
+                    style={{ flex: 1, padding: "8px 12px", border: "1px solid #E8E8F0", borderRadius: 8, fontSize: 13, color: "#374151", background: "#F9FAFB", fontFamily: "monospace", minWidth: 0 }}
+                  />
+                  <button
+                    onClick={handleCopyLink}
+                    style={{ padding: "8px 16px", background: linkCopied ? "#10B981" : "#635BFF", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}
+                  >
+                    {linkCopied ? "Copied!" : "Copy Link"}
+                  </button>
+                  <a
+                    href={paymentLinkUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ padding: "8px 14px", background: "#F3F4F6", color: "#374151", borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: "none", whiteSpace: "nowrap" }}
+                  >
+                    Open ↗
+                  </a>
+                </div>
+                <button
+                  onClick={() => { setPaymentLinkUrl(null); setQuote(q => q ? { ...q, stripe_payment_link_url: null } : q); }}
+                  style={{ marginTop: 8, fontSize: 12, color: "#9CA3AF", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                >
+                  Generate a new link
+                </button>
+              </div>
+            ) : (
+              /* Generate form */
+              <div>
+                <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 8 }}>
+                  Deposit amount (AUD) — minimum 30% of quoted price
+                  {(quote.quoted_price ?? quote.total) ? ` = $${Math.ceil(((quote.quoted_price ?? quote.total ?? 0) * 0.3) / 10) * 10}` : ""}
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    type="number"
+                    min={0}
+                    step={10}
+                    placeholder={`$${Math.ceil(((quote.quoted_price ?? quote.total ?? 0) * 0.3) / 10) * 10}`}
+                    value={depositInput}
+                    onChange={e => setDepositInput(e.target.value)}
+                    style={{ flex: 1, padding: "8px 12px", border: "1px solid #E8E8F0", borderRadius: 8, fontSize: 13, color: "#374151" }}
+                  />
+                  <button
+                    onClick={handleGeneratePaymentLink}
+                    disabled={generatingLink}
+                    style={{ padding: "8px 20px", background: "#000", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: generatingLink ? "wait" : "pointer", opacity: generatingLink ? 0.7 : 1, whiteSpace: "nowrap" }}
+                  >
+                    {generatingLink ? "Generating…" : "Generate Link"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Customer ────────────────────────────────────────────────────── */}
         <div className="quote-customer-card" style={CARD}>

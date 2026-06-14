@@ -355,6 +355,12 @@ export interface Quote {
   /** Index of the accepted stone option (set when customer confirms). */
   accepted_option?: number | null;
   stock_sku?: string | null;
+  // Stripe payment link fields
+  stripe_payment_link_id?: string | null;
+  stripe_payment_link_url?: string | null;
+  deposit_amount?: number | null;
+  deposit_paid?: boolean | null;
+  deposit_paid_at?: string | null;
 }
 
 // ─────────────────────────────────────────────

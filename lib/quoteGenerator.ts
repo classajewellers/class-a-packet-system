@@ -18,7 +18,10 @@ function formatDateAU(iso: string | null | undefined): string {
   return `${d}/${m}/${y}`;
 }
 
-export function generateQuoteHTML(quote: Quote): string {
+export function generateQuoteHTML(
+  quote: Quote,
+  opts?: { payment_link_url?: string | null; deposit_amount?: number | null }
+): string {
   const customerName = [quote.customer_first_name, quote.customer_last_name]
     .filter(Boolean)
     .join(" ");
@@ -666,6 +669,17 @@ export function generateQuoteHTML(quote: Quote): string {
   ${notesSection}
 
   <hr class="table-divider">
+
+  ${opts?.payment_link_url ? `
+  <!-- Pay Now button -->
+  <div style="text-align:center;margin:14px 0 10px;">
+    <a href="${opts.payment_link_url}" style="display:inline-block;background:#000;color:#fff;font-family:Arial,Helvetica,sans-serif;font-size:13pt;font-weight:bold;padding:14px 36px;text-decoration:none;letter-spacing:0.5px;">
+      PAY NOW${opts.deposit_amount != null ? ` — $${Number(opts.deposit_amount).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ""}
+    </a>
+    <div style="margin-top:6px;font-size:7.5pt;color:#888;">Secure payment powered by Stripe</div>
+  </div>
+  <hr class="table-divider">
+  ` : ""}
 
   <!-- Footer -->
   <div class="footer">

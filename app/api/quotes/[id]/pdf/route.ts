@@ -24,7 +24,10 @@ export async function GET(
   }
 
   const quote = data as Quote;
-  const html = generateQuoteHTML(quote);
+  const html = generateQuoteHTML(quote, {
+    payment_link_url: quote.stripe_payment_link_url ?? null,
+    deposit_amount: quote.deposit_amount ?? null,
+  });
 
   const refNum = (quote.reference_number ?? "QUOTE").replace(/[^A-Za-z0-9_-]/g, "_");
   const lastName = (quote.customer_last_name ?? "").trim().replace(/\s+/g, "_") || "Customer";
