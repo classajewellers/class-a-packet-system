@@ -31,6 +31,7 @@ export async function GET(
   const basename = `Quote_${refNum}_${lastName}`;
 
   const apiKey = process.env.PDFSHIFT_API_KEY;
+  console.log("[pdf/route] PDFSHIFT_API_KEY set:", !!apiKey);
 
   // ── Fallback: no API key — return the HTML file directly ────────────────────
   if (!apiKey) {
@@ -45,33 +46,55 @@ export async function GET(
   }
 
   // ── PDFShift: convert HTML to PDF ────────────────────────────────────────────
+  // Basic auth: API key as username, empty password → base64("apiKey:")
   const credentials = Buffer.from(`${apiKey}:`).toString("base64");
 
-  const pdfResponse = await fetch("https://api.pdfshift.io/v3/convert/pdf", {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${credentials}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      source: html,
-      landscape: false,
-      use_print: false,
-    }),
-  });
+  let pdfResponse: Response;
+  try {
+    pdfResponse = await fetch("https://api.pdfshift.io/v3/convert/pdf", {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${credentials}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        source: html,
+        landscape: false,
+        use_print: false,
+      }),
+    });
+  } catch (fetchErr) {
+    console.error("[pdf/route] fetch to PDFShift failed:", fetchErr);
+    return NextResponse.json({ error: "Could not reach PDFShift" }, { status: 502 });
+  }
 
-  if (!pdfResponse.ok) {
-    const errText = await pdfResponse.text().catch(() => pdfResponse.statusText);
-    console.error("[pdf/route] PDFShift error:", pdfResponse.status, errText);
+  const responseContentType = pdfResponse.headers.get("content-type") ?? "";
+  console.log("[pdf/route] PDFShift status:", pdfResponse.status, "content-type:", responseContentType);
+
+  // Read the body once — inspect first 200 chars for debugging regardless of outcome
+  const responseBuffer = await pdfResponse.arrayBuffer();
+  const bodyPreview = new TextDecoder().decode(responseBuffer.slice(0, 200));
+  console.log("[pdf/route] PDFShift body preview:", bodyPreview);
+
+  // Treat as an error if: non-2xx status OR response is not a PDF
+  if (!pdfResponse.ok || !responseContentType.includes("application/pdf")) {
+    console.error(
+      "[pdf/route] PDFShift returned non-PDF response.",
+      "status:", pdfResponse.status,
+      "content-type:", responseContentType,
+      "body:", bodyPreview
+    );
     return NextResponse.json(
-      { error: `PDF generation failed (${pdfResponse.status})` },
+      {
+        error: `PDF generation failed (HTTP ${pdfResponse.status})`,
+        detail: bodyPreview,
+        contentType: responseContentType,
+      },
       { status: 502 }
     );
   }
 
-  const pdfBuffer = await pdfResponse.arrayBuffer();
-
-  return new NextResponse(pdfBuffer, {
+  return new NextResponse(responseBuffer, {
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="${basename}.pdf"`,
