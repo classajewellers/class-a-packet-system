@@ -108,7 +108,13 @@
       "Bash(npm uninstall *)",
       "Bash(git -C \"/Users/joshmucklow/Downloads/Projects/gemquote 2\" log --oneline -5)",
       "Bash(node -e \"require\\('next-pwa'\\); console.log\\('ok'\\)\")",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(cat next.config.js)",
+      "Bash(cat next.config.ts)",
+      "Bash(cat next.config.mjs)",
+      "Bash(node -e \"const c = require\\('@sparticuz/chromium'\\); console.log\\(Object.keys\\(c\\)\\)\")",
+      "Bash(node -e \"const c = require\\('@sparticuz/chromium'\\).default; console.log\\(Object.keys\\(c\\)\\)\")",
+      "Bash(node -e \"const c = require\\('@sparticuz/chromium'\\); const d = c.default; console.log\\(typeof d, typeof d.executablePath, typeof d.args, d.graphicsMode\\)\")"
     ]
   }
 }

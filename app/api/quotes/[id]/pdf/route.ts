@@ -5,23 +5,6 @@ import { Quote } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-export const maxDuration = 60;
-
-async function getExecutablePath(): Promise<string> {
-  // Vercel / Lambda serverless environment
-  if (process.env.VERCEL_ENV || process.env.AWS_LAMBDA_FUNCTION_NAME) {
-    const chromium = await import("@sparticuz/chromium");
-    return chromium.default.executablePath();
-  }
-  // Local development: use system Chrome
-  if (process.platform === "darwin") {
-    return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-  }
-  if (process.platform === "win32") {
-    return "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
-  }
-  return "/usr/bin/google-chrome";
-}
 
 export async function GET(
   req: NextRequest,
@@ -43,45 +26,56 @@ export async function GET(
   const quote = data as Quote;
   const html = generateQuoteHTML(quote);
 
-  const executablePath = await getExecutablePath();
+  const refNum = (quote.reference_number ?? "QUOTE").replace(/[^A-Za-z0-9_-]/g, "_");
+  const lastName = (quote.customer_last_name ?? "").trim().replace(/\s+/g, "_") || "Customer";
+  const basename = `Quote_${refNum}_${lastName}`;
 
-  // Import dynamically — keeps these out of the client bundle
-  const chromium = await import("@sparticuz/chromium");
-  const puppeteer = await import("puppeteer-core");
+  const apiKey = process.env.PDFSHIFT_API_KEY;
 
-  // Disable graphics rendering for serverless (no GPU)
-  chromium.default.setGraphicsMode = false;
-
-  const browser = await puppeteer.default.launch({
-    args: chromium.default.args,
-    executablePath,
-    headless: true,
-  });
-
-  try {
-    const page = await browser.newPage();
-    // Use print media so the pdf-bar is hidden and print CSS applies
-    await page.emulateMediaType("print");
-    await page.setContent(html, { waitUntil: "load" });
-
-    const pdfBuffer = await page.pdf({
-      // The quoteGenerator CSS sets @page { size: 148mm 210mm } (A5)
-      printBackground: true,
-      preferCSSPageSize: true,
-    });
-
-    const refNum = (quote.reference_number ?? "QUOTE").replace(/[^A-Za-z0-9_-]/g, "_");
-    const lastName = (quote.customer_last_name ?? "").trim().replace(/\s+/g, "_") || "Customer";
-    const filename = `Quote_${refNum}_${lastName}.pdf`;
-
-    return new NextResponse(pdfBuffer as unknown as BodyInit, {
+  // ── Fallback: no API key — return the HTML file directly ────────────────────
+  if (!apiKey) {
+    const fallbackHtml = `<!-- PDFShift API key not configured. Set PDFSHIFT_API_KEY in environment variables. -->\n${html}`;
+    return new NextResponse(fallbackHtml, {
       headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Type": "text/html; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${basename}.html"`,
         "Cache-Control": "no-store",
       },
     });
-  } finally {
-    await browser.close();
   }
+
+  // ── PDFShift: convert HTML to PDF ────────────────────────────────────────────
+  const credentials = Buffer.from(`${apiKey}:`).toString("base64");
+
+  const pdfResponse = await fetch("https://api.pdfshift.io/v3/convert/pdf", {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      source: html,
+      landscape: false,
+      use_print: false,
+    }),
+  });
+
+  if (!pdfResponse.ok) {
+    const errText = await pdfResponse.text().catch(() => pdfResponse.statusText);
+    console.error("[pdf/route] PDFShift error:", pdfResponse.status, errText);
+    return NextResponse.json(
+      { error: `PDF generation failed (${pdfResponse.status})` },
+      { status: 502 }
+    );
+  }
+
+  const pdfBuffer = await pdfResponse.arrayBuffer();
+
+  return new NextResponse(pdfBuffer, {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${basename}.pdf"`,
+      "Cache-Control": "no-store",
+    },
+  });
 }
