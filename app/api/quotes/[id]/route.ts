@@ -33,6 +33,9 @@ export async function PATCH(
     status?: string;
     assigned_to?: string | null;
     follow_up_date?: string | null;
+    accepted_option?: number | null;
+    quote_builder_data?: Record<string, unknown> | null;
+    quoted_price?: number | null;
   };
   try {
     body = await req.json();
@@ -69,6 +72,19 @@ export async function PATCH(
   // ── Follow Up Date ────────────────────────────────────────────────────────
   if ("follow_up_date" in body) {
     updates.follow_up_date = body.follow_up_date ?? null;
+  }
+
+  // ── Accepted Option (stone option index) ──────────────────────────────────
+  if ("accepted_option" in body) {
+    updates.accepted_option = body.accepted_option ?? null;
+  }
+
+  // ── Quote Builder Data (append-item flow) ─────────────────────────────────
+  if ("quote_builder_data" in body) {
+    updates.quote_builder_data = body.quote_builder_data ?? null;
+  }
+  if ("quoted_price" in body) {
+    updates.quoted_price = body.quoted_price ?? null;
   }
 
   if (Object.keys(updates).length === 0) {

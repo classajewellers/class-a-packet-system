@@ -185,6 +185,21 @@ function NewOrderPageInner() {
       .catch(() => {/* ignore fetch errors */});
   }, [searchParams]);
 
+  // If the URL already has articles/instructions/total_charges (from accepted stone option),
+  // override whatever the from_quote effect built.
+  useEffect(() => {
+    const articlesParam    = searchParams.get("articles");
+    const instructionsParam = searchParams.get("instructions");
+    const totalParam       = searchParams.get("total_charges");
+    if (!articlesParam && !instructionsParam && !totalParam) return;
+    setFormData(prev => ({
+      ...prev,
+      ...(articlesParam    ? { articles: articlesParam }       : {}),
+      ...(instructionsParam ? { instructions: instructionsParam } : {}),
+      ...(totalParam        ? { total_charges: totalParam }     : {}),
+    }));
+  }, [searchParams]);
+
   const handleChange = useCallback(
     (field: keyof PacketFormData, value: string | boolean | string[]) => {
       setFormData((prev) => ({ ...prev, [field]: value }));

@@ -2,8 +2,8 @@
 
 export const dynamic = "force-dynamic";
 
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useMemo, useRef, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage, hasPermission } from "@/lib/userTypes";
 import Link from "next/link";
@@ -665,14 +665,45 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export default function QuoteBuilderPage() {
+function QuoteBuilderPageInner() {
   const { user, hydrated } = useUser();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isManager = canManage(user?.role);
+
+  // Append-to-existing-quote mode
+  const [appendToQuoteId, setAppendToQuoteId] = useState<string | null>(null);
+  const [appendToQuoteRef, setAppendToQuoteRef] = useState<string | null>(null);
+  const [existingQbd, setExistingQbd] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
     if (hydrated && user && !hasPermission(user, "quotes")) router.replace("/");
   }, [user, hydrated, router]);
+
+  // Load existing quote if quote_id param is present (append-item mode)
+  useEffect(() => {
+    const quoteId = searchParams.get("quote_id");
+    if (!quoteId || !hydrated) return;
+    fetch(`/api/quotes/${quoteId}`, { headers: { "x-tenant-id": user?.tenantId ?? "" } })
+      .then(r => r.json())
+      .then(json => {
+        if (!json.quote) return;
+        const q = json.quote;
+        setAppendToQuoteId(q.id);
+        setAppendToQuoteRef(q.reference_number);
+        // Pre-fill customer from existing quote
+        setFirstName(q.customer_first_name ?? "");
+        setLastName(q.customer_last_name ?? "");
+        setEmail(q.customer_email ?? "");
+        setPhone(q.customer_phone ?? "");
+        if (q.customer_first_name) setCustomerSearch(`${q.customer_first_name ?? ""} ${q.customer_last_name ?? ""}`.trim());
+        // Store existing builder data so we can append to it
+        if (q.quote_builder_data && typeof q.quote_builder_data === "object") {
+          setExistingQbd(q.quote_builder_data as Record<string, unknown>);
+        }
+      })
+      .catch(() => {});
+  }, [searchParams, hydrated, user?.tenantId]);
 
   // Pricing data
   const [metalRates, setMetalRates] = useState<MetalRate[]>([]);
@@ -850,30 +881,58 @@ export default function QuoteBuilderPage() {
       const primaryPricing = allPricings[0];
       const effectiveSub = primaryItem.subcategory === "Other" ? primaryItem.subcategoryOther : primaryItem.subcategory;
 
-      const res = await fetch("/api/quotes/builder", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-tenant-id": user?.tenantId ?? "" },
-        body: JSON.stringify({
-          firstName, lastName, email, phone,
-          assignedTo: user?.name ?? null,
-          quoteDescription: primaryItem.aiDesc || primaryItem.design || null,
-          internalNotes: notes,
-          quotedPrice: grandTotal,
-          totalCost: primaryPricing.totalCost,
-          multiplier: primaryPricing.activeMultiplier,
-          rawPrice: primaryPricing.rawPrice,
-          quoteBuilderData: qbd,
-          quoteType: "custom_order",
-          pipelineStage: "Pending",
-          aiDescription: primaryItem.aiDesc || null,
-          fingerSize: primaryItem.fingerSize || null,
-          stockSku: primaryItem.stockSku || null,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Save failed");
-      setToast("Quote saved successfully");
-      setTimeout(() => router.push("/quotes"), 1500);
+      let res: Response;
+      let json: { error?: string; quote?: { id: string } };
+
+      if (appendToQuoteId) {
+        // ── Append item to existing quote ─────────────────────────────────
+        const existingItems = (existingQbd && Array.isArray(existingQbd.builder_items))
+          ? (existingQbd.builder_items as Array<Record<string, unknown>>)
+          : [];
+        const mergedQbd = {
+          version: 2,
+          builder_items: [...existingItems, ...builderItemsData],
+          total_quoted_price: grandTotal + (typeof existingQbd?.total_quoted_price === "number" ? existingQbd.total_quoted_price : 0),
+        };
+        res = await fetch(`/api/quotes/${appendToQuoteId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", "x-tenant-id": user?.tenantId ?? "" },
+          body: JSON.stringify({
+            quote_builder_data: mergedQbd,
+            quoted_price: mergedQbd.total_quoted_price,
+          }),
+        });
+        json = await res.json();
+        if (!res.ok) throw new Error((json as { error?: string }).error ?? "Save failed");
+        setToast("Item added to quote");
+        setTimeout(() => router.push(`/quotes/${appendToQuoteId}`), 1200);
+      } else {
+        // ── Create new quote ───────────────────────────────────────────────
+        res = await fetch("/api/quotes/builder", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-tenant-id": user?.tenantId ?? "" },
+          body: JSON.stringify({
+            firstName, lastName, email, phone,
+            assignedTo: user?.name ?? null,
+            quoteDescription: primaryItem.aiDesc || primaryItem.design || null,
+            internalNotes: notes,
+            quotedPrice: grandTotal,
+            totalCost: primaryPricing.totalCost,
+            multiplier: primaryPricing.activeMultiplier,
+            rawPrice: primaryPricing.rawPrice,
+            quoteBuilderData: qbd,
+            quoteType: "custom_order",
+            pipelineStage: "Pending",
+            aiDescription: primaryItem.aiDesc || null,
+            fingerSize: primaryItem.fingerSize || null,
+            stockSku: primaryItem.stockSku || null,
+          }),
+        });
+        json = await res.json();
+        if (!res.ok) throw new Error((json as { error?: string }).error ?? "Save failed");
+        setToast("Quote saved successfully");
+        setTimeout(() => router.push("/quotes"), 1500);
+      }
     } catch (err) {
       setToast("Error: " + (err instanceof Error ? err.message : String(err)));
     } finally {
@@ -966,14 +1025,26 @@ export default function QuoteBuilderPage() {
   return (
     <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
-        <Link href="/quotes" style={{ color: "#6B7280", textDecoration: "none", fontSize: 14, display: "flex", alignItems: "center", gap: 4 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: appendToQuoteId ? 12 : 24 }}>
+        <Link href={appendToQuoteId ? `/quotes/${appendToQuoteId}` : "/quotes"} style={{ color: "#6B7280", textDecoration: "none", fontSize: 14, display: "flex", alignItems: "center", gap: 4 }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
-          Quotes
+          {appendToQuoteId ? "Quote" : "Quotes"}
         </Link>
         <span style={{ color: "#D1D5DB" }}>/</span>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1A1A2E", margin: 0 }}>Build Quote</h1>
+        <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1A1A2E", margin: 0 }}>
+          {appendToQuoteId ? "Add Item" : "Build Quote"}
+        </h1>
       </div>
+
+      {/* Append-mode banner */}
+      {appendToQuoteId && (
+        <div style={{ background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 10, padding: "10px 16px", marginBottom: 20, display: "flex", alignItems: "center", gap: 10 }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#635BFF" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span style={{ fontSize: 13, color: "#3730A3", fontWeight: 500 }}>
+            Adding item to quote <strong style={{ fontFamily: "monospace" }}>{appendToQuoteRef ?? appendToQuoteId}</strong>
+          </span>
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: 24, alignItems: "start" }}>
         {/* ── Left ── */}
@@ -1093,11 +1164,13 @@ export default function QuoteBuilderPage() {
 
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <button onClick={handleSave} disabled={saving} style={{ width: "100%", padding: "12px 0", borderRadius: 10, background: saving ? "#9CA3AF" : "#635BFF", color: "#fff", border: "none", cursor: saving ? "not-allowed" : "pointer", fontSize: 15, fontWeight: 600 }} onMouseEnter={e => { if (!saving) (e.currentTarget.style.background = "#4F46E5"); }} onMouseLeave={e => { if (!saving) (e.currentTarget.style.background = "#635BFF"); }}>
-                {saving ? "Saving…" : "Save Quote"}
+                {saving ? "Saving…" : appendToQuoteId ? "Add Item to Quote" : "Save Quote"}
               </button>
-              <button onClick={handlePrintPDF} style={{ width: "100%", padding: "12px 0", borderRadius: 10, background: "#fff", color: "#635BFF", border: "1px solid #635BFF", cursor: "pointer", fontSize: 15, fontWeight: 600 }} onMouseEnter={e => (e.currentTarget.style.background = "#EEF2FF")} onMouseLeave={e => (e.currentTarget.style.background = "#fff")}>
-                Print PDF
-              </button>
+              {!appendToQuoteId && (
+                <button onClick={handlePrintPDF} style={{ width: "100%", padding: "12px 0", borderRadius: 10, background: "#fff", color: "#635BFF", border: "1px solid #635BFF", cursor: "pointer", fontSize: 15, fontWeight: 600 }} onMouseEnter={e => (e.currentTarget.style.background = "#EEF2FF")} onMouseLeave={e => (e.currentTarget.style.background = "#fff")}>
+                  Print PDF
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1116,5 +1189,13 @@ export default function QuoteBuilderPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function QuoteBuilderPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 48, textAlign: "center", color: "#6B7280", fontSize: 14 }}>Loading…</div>}>
+      <QuoteBuilderPageInner />
+    </Suspense>
   );
 }
