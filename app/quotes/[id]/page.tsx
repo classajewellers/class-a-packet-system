@@ -347,30 +347,32 @@ export default function QuoteViewPage() {
       .finally(() => setLoading(false));
   }, [id, user?.tenantId, hydrated]);
 
-  async function handleDownloadPDF() {
-    if (!quote || downloading) return;
+  const handleDownloadPDF = async () => {
     setDownloading(true);
     try {
-      const res = await fetch(`/api/quotes/${quote.id}/pdf`, {
+      const res = await fetch(`/api/quotes/${quote!.id}/pdf`, {
         headers: { "x-tenant-id": user?.tenantId ?? "" },
       });
-      if (!res.ok) throw new Error(`PDF generation failed (${res.status})`);
+      if (!res.ok) {
+        const text = await res.text();
+        alert("Could not generate PDF: " + text);
+        return;
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      const lastName = (quote.customer_last_name ?? "").trim().replace(/\s+/g, "_") || "Customer";
       a.href = url;
-      a.download = `Quote_${quote.reference_number}_${lastName}.pdf`;
+      a.download = `Quote_${quote!.reference_number}_${(quote!.customer_last_name ?? "").trim().replace(/\s+/g, "_") || "Quote"}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err) {
-      alert(`Could not generate PDF: ${err instanceof Error ? err.message : String(err)}`);
+      alert("Download failed: " + err);
     } finally {
       setDownloading(false);
     }
-  }
+  };
 
   function buildOrderUrl(
     q: Quote,
