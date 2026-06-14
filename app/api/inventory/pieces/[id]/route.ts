@@ -1,71 +1,65 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createTenantSupabaseClient } from '@/lib/supabase-server'
+import { NextRequest, NextResponse } from "next/server";
+import { createTenantSupabaseClient } from "@/lib/supabase-server";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  try {
-    const tenantId = req.headers.get('x-tenant-id') ?? ''
-    const supabase = await createTenantSupabaseClient(tenantId)
-    const { data, error } = await supabase
-      .from('inventory_pieces')
-      .select(`*, location:inventory_locations(id, name, parent_id)`)
-      .eq('id', params.id)
-      .single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ piece: data })
-  } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 })
-  }
+const JOINED_SELECT = `
+  *,
+  status:inventory_statuses(id,name,colour),
+  location:inventory_locations(id,name,type),
+  category:inventory_categories(id,name),
+  supplier:inventory_suppliers(id,name)
+`.trim();
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+): Promise<NextResponse> {
+  const tenantId = req.headers.get("x-tenant-id") ?? "";
+  const supabase = await createTenantSupabaseClient(tenantId);
+
+  const { data, error } = await supabase
+    .from("inventory_pieces")
+    .select(JOINED_SELECT)
+    .eq("id", params.id)
+    .single();
+
+  if (error || !data) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  return NextResponse.json({ piece: data });
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  try {
-    const body = await req.json()
-    const update: Record<string, unknown> = {}
-    const set = (key: string, val: unknown) => { update[key] = val }
-    const num = (v: unknown) => (v == null || v === '' ? null : Number(v))
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+): Promise<NextResponse> {
+  const tenantId = req.headers.get("x-tenant-id") ?? "";
+  const supabase = await createTenantSupabaseClient(tenantId);
 
-    if (body.sku !== undefined) set('sku', body.sku)
-    if (body.metal_karat !== undefined) set('metal_karat', body.metal_karat || null)
-    if (body.metal_colour !== undefined) set('metal_colour', body.metal_colour || null)
-    if (body.metal_weight_grams !== undefined) set('metal_weight_grams', num(body.metal_weight_grams))
-    if (body.diamond_carat !== undefined) set('diamond_carat', num(body.diamond_carat))
-    if (body.diamond_colour !== undefined) set('diamond_colour', body.diamond_colour || null)
-    if (body.diamond_clarity !== undefined) set('diamond_clarity', body.diamond_clarity || null)
-    if (body.diamond_type !== undefined) set('diamond_type', body.diamond_type || null)
-    if (body.finger_size !== undefined) set('finger_size', body.finger_size || null)
-    if (body.other_specs !== undefined) set('other_specs', body.other_specs || null)
-    if (body.location_id !== undefined) set('location_id', body.location_id || null)
-    if (body.cost_price !== undefined) set('cost_price', num(body.cost_price))
-    if (body.retail_price !== undefined) set('retail_price', num(body.retail_price))
-    if (body.status !== undefined) set('status', body.status || 'in_stock')
-    if (body.notes !== undefined) set('notes', body.notes || null)
+  const body = await req.json();
 
-    const tenantId = req.headers.get('x-tenant-id') ?? ''
+  // Strip joined relation keys
+  const { status: _s, location: _l, category: _c, supplier: _sp, ...updateData } = body;
 
-    const supabase = await createTenantSupabaseClient(tenantId)
-    const { data, error } = await supabase
-      .from('inventory_pieces')
-      .update(update)
-      .eq('id', params.id)
-      .select(`*, location:inventory_locations(id, name, parent_id)`)
-      .single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ piece: data })
-  } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 })
-  }
+  const { data, error } = await supabase
+    .from("inventory_pieces")
+    .update({ ...updateData, updated_at: new Date().toISOString() })
+    .eq("id", params.id)
+    .select(JOINED_SELECT)
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ piece: data });
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  try {
-    const tenantId = req.headers.get('x-tenant-id') ?? ''
-    const supabase = await createTenantSupabaseClient(tenantId)
-    const { error } = await supabase.from('inventory_pieces').delete().eq('id', params.id)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ success: true })
-  } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 })
-  }
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+): Promise<NextResponse> {
+  const tenantId = req.headers.get("x-tenant-id") ?? "";
+  const supabase = await createTenantSupabaseClient(tenantId);
+
+  const { error } = await supabase.from("inventory_pieces").delete().eq("id", params.id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
 }

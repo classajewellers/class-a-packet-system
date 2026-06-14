@@ -378,7 +378,7 @@ export default function DashboardPage() {
             ) : (
               <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
                 {recentMovements.map((m) => {
-                  const cfg = MOVEMENT_BADGE[m.movement_type] ?? { bg: "#F3F4F6", fg: "#374151", label: m.movement_type };
+                  const cfg = (m.movement_type ? MOVEMENT_BADGE[m.movement_type] : null) ?? { bg: "#F3F4F6", fg: "#374151", label: m.movement_type ?? "move" };
                   return (
                     <li key={m.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: "1px solid #E8E8F0" }}>
                       <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: cfg.bg, color: cfg.fg, whiteSpace: "nowrap" }}>
@@ -388,10 +388,10 @@ export default function DashboardPage() {
                         {m.item?.name ?? "—"}
                       </span>
                       <span style={{ fontSize: 13, fontWeight: 600, color: "#374151", whiteSpace: "nowrap" }}>
-                        {m.quantity > 0 ? `+${m.quantity}` : m.quantity}
+                        {(m.quantity ?? 0) > 0 ? `+${m.quantity}` : m.quantity ?? ""}
                       </span>
                       <span style={{ fontSize: 11, color: "#9CA3AF", whiteSpace: "nowrap" }}>
-                        {timeAgo(m.created_at)}
+                        {timeAgo(m.created_at ?? m.moved_at ?? "")}
                       </span>
                     </li>
                   );

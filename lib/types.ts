@@ -364,6 +364,129 @@ export interface Quote {
 }
 
 // ─────────────────────────────────────────────
+// Inventory
+// ─────────────────────────────────────────────
+
+export interface InventoryStatus {
+  id: string;
+  tenant_id: string;
+  name: string;
+  colour: string;
+  sort_order: number;
+  is_active: boolean;
+}
+
+export interface InventoryLocation {
+  id: string;
+  tenant_id?: string;
+  name: string;
+  type: "Storage" | "Display" | "Service" | "External" | "Transit" | InventoryLocationType;
+  sort_order?: number;
+  is_active?: boolean;
+  // legacy fields
+  bin_code_format?: string | null;
+  shopify_visible?: boolean;
+  parent_id?: string | null;
+  created_at?: string;
+}
+
+export interface InventoryCategory {
+  id: string;
+  tenant_id: string;
+  name: string;
+  sort_order: number;
+  is_active: boolean;
+}
+
+export interface InventorySupplier {
+  id: string;
+  tenant_id?: string;
+  name: string;
+  contact_name: string | null;
+  email: string | null;
+  phone: string | null;
+  notes: string | null;
+  is_active?: boolean;
+  // legacy fields
+  lead_time_days?: number | null;
+  created_at?: string;
+}
+
+export interface InventoryMovement {
+  id: string;
+  tenant_id?: string;
+  // new schema
+  piece_id?: string;
+  from_status_id?: string | null;
+  to_status_id?: string | null;
+  moved_by?: string | null;
+  moved_at?: string;
+  // shared fields
+  from_location_id: string | null;
+  to_location_id: string | null;
+  notes: string | null;
+  // legacy schema fields
+  item_id?: string;
+  quantity?: number;
+  movement_type?: InventoryMovementType;
+  reference?: string | null;
+  created_by?: string | null;
+  created_at?: string;
+  // joined (legacy)
+  item?: { name: string; sku: string } | null;
+}
+
+export interface InventoryPiece {
+  id: string;
+  tenant_id: string;
+  sku: string;
+  title: string | null;
+  category_id: string | null;
+  collection: string | null;
+  status_id: string | null;
+  location_id: string | null;
+  assigned_to: string | null;
+  supplier_id: string | null;
+  metal_type: string | null;
+  metal_karat: string | null;
+  metal_colour: string | null;
+  metal_weight_grams: number | null;
+  finger_size: string | null;
+  chain_length: string | null;
+  dimensions: string | null;
+  diamond_type: string | null;
+  diamond_carat: number | null;
+  diamond_colour: string | null;
+  diamond_clarity: string | null;
+  diamond_certificate: string | null;
+  valuation_number: string | null;
+  valuation_amount: number | null;
+  cost_price: number | null;
+  retail_price: number | null;
+  date_received: string | null;
+  date_sold: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string | null;
+  // legacy fields
+  design_id?: string | null;
+  other_specs?: string | null;
+  // joined relations
+  status?: InventoryStatus | null;
+  location?: InventoryLocation | null;
+  category?: InventoryCategory | null;
+  supplier?: InventorySupplier | null;
+  design?: InventoryDesign | null;
+}
+
+export interface InventoryReferenceData {
+  statuses: InventoryStatus[];
+  locations: InventoryLocation[];
+  categories: InventoryCategory[];
+  suppliers: InventorySupplier[];
+}
+
+// ─────────────────────────────────────────────
 // Workshop
 // ─────────────────────────────────────────────
 export interface ComponentItem {
@@ -454,31 +577,10 @@ export interface QuoteFormData {
 }
 
 // ─────────────────────────────────────────────
-// Inventory
+// Inventory — legacy types (pre-schema-migration)
 // ─────────────────────────────────────────────
 export type InventoryLocationType = 'display' | 'storage' | 'workshop' | 'transit' | 'consignment';
 export type InventoryItemType = 'retail' | 'internal';
-
-export interface InventoryLocation {
-  id: string;
-  name: string;
-  type: InventoryLocationType;
-  bin_code_format: string | null;
-  shopify_visible: boolean;
-  parent_id: string | null;
-  created_at: string;
-}
-
-export interface InventorySupplier {
-  id: string;
-  name: string;
-  contact_name: string | null;
-  email: string | null;
-  phone: string | null;
-  lead_time_days: number | null;
-  notes: string | null;
-  created_at: string;
-}
 
 export interface InventoryItem {
   id: string;
@@ -518,23 +620,6 @@ export interface InventoryStockRow {
 export type InventoryMovementType =
   | 'receive' | 'transfer' | 'sale' | 'return'
   | 'adjustment' | 'workshop_in' | 'workshop_out' | 'stocktake';
-
-export interface InventoryMovement {
-  id: string;
-  item_id: string;
-  from_location_id: string | null;
-  to_location_id: string | null;
-  quantity: number;
-  movement_type: InventoryMovementType;
-  reference: string | null;
-  notes: string | null;
-  created_by: string | null;
-  created_at: string;
-  // Joined
-  item?: { name: string; sku: string } | null;
-  from_location?: { name: string } | null;
-  to_location?: { name: string } | null;
-}
 
 // ─────────────────────────────────────────────
 // Inventory — Products / Variants / BOM / Purchases / Gold pricing
@@ -663,30 +748,6 @@ export interface CsvImportResult {
   pieces_imported: number;
   failed: number;
   errors: Array<{ row: number; reason: string }>;
-}
-
-export interface InventoryPiece {
-  id: string;
-  design_id: string | null;
-  sku: string;
-  metal_karat: string | null;
-  metal_colour: string | null;
-  metal_weight_grams: number | null;
-  diamond_carat: number | null;
-  diamond_colour: string | null;
-  diamond_clarity: string | null;
-  diamond_type: string | null;
-  finger_size: string | null;
-  other_specs: string | null;
-  location_id: string | null;
-  cost_price: number | null;
-  retail_price: number | null;
-  status: PieceStatus;
-  notes: string | null;
-  created_at: string;
-  // joined
-  design?: InventoryDesign | null;
-  location?: InventoryLocation | null;
 }
 
 export interface InventoryPieceBom {

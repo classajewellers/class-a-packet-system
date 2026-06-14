@@ -9,6 +9,7 @@ export interface UserPermissions {
   quotes:      boolean;
   customers:   boolean;
   online:      boolean;
+  inventory:   boolean;
   reporting:   boolean;
   pricing:     boolean;
   settings:    boolean;
@@ -21,6 +22,7 @@ export const DEFAULT_STAFF_PERMISSIONS: UserPermissions = {
   quotes:      true,
   customers:   true,
   online:      true,
+  inventory:   true,
   reporting:   true,
   pricing:     false,
   settings:    false,
@@ -29,7 +31,7 @@ export const DEFAULT_STAFF_PERMISSIONS: UserPermissions = {
 
 export const ALL_MODULES: (keyof UserPermissions)[] = [
   "orders", "workshop", "quotes", "customers", "online",
-  "reporting", "pricing", "settings", "vault_brain",
+  "inventory", "reporting", "pricing", "settings", "vault_brain",
 ];
 
 export const MODULE_LABELS: Record<keyof UserPermissions, string> = {
@@ -38,6 +40,7 @@ export const MODULE_LABELS: Record<keyof UserPermissions, string> = {
   quotes:      "Quotes",
   customers:   "Customers",
   online:      "Online",
+  inventory:   "Inventory",
   reporting:   "Reporting",
   pricing:     "Pricing",
   settings:    "Settings",

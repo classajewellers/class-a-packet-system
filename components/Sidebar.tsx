@@ -15,6 +15,7 @@ import {
   Sparkles,
   ChevronDown,
   Brain,
+  Package,
   X,
 } from "lucide-react";
 import { canManage, hasPermission } from "@/lib/userTypes";
@@ -44,10 +45,11 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
   // Settings group is visible if user has pricing OR settings permission
   const showSettings = can("pricing") || can("settings") || isManager;
 
-  const quotesExpanded   = pathname.startsWith("/quotes");
-  const settingsExpanded = pathname.startsWith("/settings") ||
-                           pathname.startsWith("/pricing") ||
-                           pathname.startsWith("/admin/users");
+  const quotesExpanded    = pathname.startsWith("/quotes");
+  const inventoryExpanded = pathname.startsWith("/inventory");
+  const settingsExpanded  = pathname.startsWith("/settings") ||
+                            pathname.startsWith("/pricing") ||
+                            pathname.startsWith("/admin/users");
 
   const initials = (name: string) =>
     name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
@@ -207,6 +209,22 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
 
           {can("customers")  && <NavLink href="/customers"  icon={Users}    label="Customers" />}
           {can("workshop")   && <NavLink href="/workshop"   icon={Wrench}   label="Workshop" />}
+
+          {can("inventory") && (
+            <div>
+              <ExpandLink
+                icon={Package} label="Inventory" expanded={inventoryExpanded}
+                onClick={() => { router.push("/inventory"); onClose(); }}
+              />
+              {inventoryExpanded && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
+                  <SubLink href="/inventory"          label="Stock Register" />
+                  {isManager && <SubLink href="/inventory/settings" label="Settings" />}
+                </div>
+              )}
+            </div>
+          )}
+
           {can("vault_brain") && <NavLink href="/vault/brain" icon={Brain}  label="Vault Brain" />}
           {can("reporting")  && <NavLink href="/reporting"  icon={BarChart2} label="Reporting" />}
 
