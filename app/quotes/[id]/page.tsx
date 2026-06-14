@@ -9,21 +9,203 @@ import { Quote } from "@/lib/types";
 import { useUser } from "@/context/UserContext";
 import { formatDateAU } from "@/lib/formatters";
 import { hasPermission } from "@/lib/userTypes";
+import { BLACK_LOGO_DATA_URI } from "@/lib/logoDataURIs";
 
-// ─── Print stylesheet injected once at module load ────────────────────────────
-// Hides Vault shell (sidebar, topbar) and all UI chrome, leaving only quote content.
+// ─── Print stylesheet ──────────────────────────────────────────────────────────
+
 const PRINT_STYLE = `
+/* ── Default: hide print-only elements on screen ── */
+.print-only { display: none !important; }
+
 @media print {
-  .ds-sidebar, .ds-topbar, .no-print { display: none !important; }
-  .app-shell { display: block !important; }
-  .app-main  { display: block !important; overflow: visible !important; }
-  .app-content { overflow: visible !important; padding: 0 !important; animation: none !important; }
-  body, html { background: #fff !important; }
-  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  @page { size: A4 portrait; margin: 15mm; }
+
+  /* ── Hide app chrome ── */
+  .ds-sidebar,
+  .ds-topbar,
+  .no-print { display: none !important; }
+
+  /* ── Fix app shell for print ── */
+  .app-shell  { display: block !important; }
+  .app-main   { display: block !important; overflow: visible !important; }
+  .app-content {
+    overflow: visible !important;
+    padding: 0 !important;
+    animation: none !important;
+  }
+
+  /* ── Base ── */
+  body, html {
+    background: #fff !important;
+    font-size: 11px !important;
+    font-family: Arial, Helvetica, sans-serif !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* ── Show print-only sections ── */
+  .print-only { display: block !important; }
+
+  /* ── Page wrapper ── */
+  .quote-print-wrapper {
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* ── Customer card: strip chrome ── */
+  .quote-customer-card {
+    border: none !important;
+    border-bottom: 1px solid #ccc !important;
+    border-radius: 0 !important;
+    padding: 6px 0 10px !important;
+    margin-bottom: 12px !important;
+    background: transparent !important;
+  }
+  .quote-customer-name {
+    font-size: 13pt !important;
+    margin-bottom: 3px !important;
+  }
+  .quote-customer-contact {
+    font-size: 9pt !important;
+    color: #333 !important;
+  }
+
+  /* ── Item cards ── */
+  .quote-item-card {
+    border: 1px solid #ccc !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin-bottom: 10px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    overflow: visible !important;
+  }
+
+  /* Black heading bar matches quoteGenerator */
+  .item-heading-bar {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    background: #000 !important;
+    color: #fff !important;
+    padding: 7px 12px !important;
+    margin-bottom: 0 !important;
+    border-radius: 0 !important;
+  }
+  .item-heading-bar * { color: #fff !important; }
+  .item-heading-text {
+    font-size: 10pt !important;
+    font-weight: bold !important;
+    letter-spacing: 0.5px !important;
+  }
+  .item-heading-price {
+    font-size: 10pt !important;
+    font-weight: bold !important;
+  }
+
+  /* AI description: italic, no background box */
+  .item-ai-desc {
+    font-style: italic !important;
+    font-size: 10pt !important;
+    line-height: 1.7 !important;
+    color: #111 !important;
+    background: #fff !important;
+    border: none !important;
+    border-left: none !important;
+    border-radius: 0 !important;
+    padding: 10px 12px 8px !important;
+    margin: 0 !important;
+  }
+
+  /* Detail rows table */
+  .item-details-table {
+    border: none !important;
+    border-top: 1px solid #e0e0e0 !important;
+  }
+  .item-details-table td {
+    padding: 5px 12px !important;
+    font-size: 9pt !important;
+  }
+  .item-details-table .td-label {
+    color: #555 !important;
+    width: 110px !important;
+    border-right: 1px solid #e8e8e8 !important;
+  }
+  .item-details-table .td-value {
+    color: #222 !important;
+  }
+
+  /* Stone options inner table */
+  .stone-opts-outer-td { padding: 5px 12px !important; }
+  .stone-opts-inner-table { border: 1px solid #ddd !important; }
+  .stone-opts-inner-table th {
+    padding: 4px 7px !important;
+    font-size: 8pt !important;
+    background: #444 !important;
+    color: #fff !important;
+  }
+  .stone-opts-inner-table td {
+    padding: 4px 7px !important;
+    font-size: 8.5pt !important;
+  }
+
+  /* Notes card */
+  .quote-notes-card {
+    border-left: 3px solid #555 !important;
+    border-top: none !important;
+    border-right: none !important;
+    border-bottom: none !important;
+    border-radius: 0 !important;
+    background: #f9f9f9 !important;
+    padding: 8px 12px !important;
+    margin-bottom: 10px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Price bar */
+  .quote-price-bar {
+    background: #000 !important;
+    color: #fff !important;
+    border-radius: 0 !important;
+    padding: 10px 12px !important;
+    margin-top: 0 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  .quote-price-bar * { color: #fff !important; }
+  .quote-price-label { font-size: 9pt !important; color: #aaa !important; }
+  .quote-price-amount { font-size: 15pt !important; font-weight: bold !important; }
+
+  /* Footer */
+  .quote-print-footer {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: flex-start !important;
+    margin-top: 12px !important;
+    padding-top: 10px !important;
+    border-top: 1px solid #ccc !important;
+    font-size: 8pt !important;
+    gap: 24px !important;
+  }
+  .print-footer-terms {
+    flex: 1 !important;
+    color: #777 !important;
+    font-style: italic !important;
+    line-height: 1.7 !important;
+  }
+  .print-footer-staff {
+    text-align: right !important;
+    line-height: 1.7 !important;
+    color: #333 !important;
+  }
 }
 `;
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── Screen styles ────────────────────────────────────────────────────────────
 
 const CARD: React.CSSProperties = {
   background: "#fff",
@@ -87,7 +269,7 @@ function stoneSpecs(stones: Array<Record<string, unknown>>): string {
     .join("; ");
 }
 
-// ─── StoneOptionsTable (module-level, receives onAccept callback) ─────────────
+// ─── StoneOptionsTable ────────────────────────────────────────────────────────
 
 function StoneOptionsTable({
   stoneOptions,
@@ -103,9 +285,9 @@ function StoneOptionsTable({
   if (stoneOptions.length > 1) {
     return (
       <tr>
-        <td style={{ ...TD_L, verticalAlign: "top", paddingTop: 10 }}>Stone Options</td>
-        <td style={{ padding: "8px 12px" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <td className="stone-opts-outer-td" style={{ ...TD_L, verticalAlign: "top", paddingTop: 10 }}>Stone Options</td>
+        <td className="stone-opts-outer-td" style={{ padding: "8px 12px" }}>
+          <table className="stone-opts-inner-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ background: "#F3F4F6" }}>
                 <th style={{ padding: "5px 8px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "#6B7280", borderBottom: "1px solid #E8E8F0", width: 80 }}>Option</th>
@@ -161,7 +343,7 @@ function StoneOptionsTable({
     );
   }
 
-  // Single option: individual stone rows (no accept button needed — use top-level Convert)
+  // Single option: individual stone rows
   const stones = Array.isArray(stoneOptions[0]?.stones)
     ? (stoneOptions[0].stones as Array<Record<string, unknown>>)
     : [];
@@ -180,8 +362,8 @@ function StoneOptionsTable({
         if (!parts) return null;
         return (
           <tr key={si} style={{ background: "#F9FAFB" }}>
-            <td style={TD_L}>Stone{stones.length > 1 ? ` ${si + 1}` : ""}</td>
-            <td style={TD_V}>{parts}</td>
+            <td className="td-label" style={TD_L}>Stone{stones.length > 1 ? ` ${si + 1}` : ""}</td>
+            <td className="td-value" style={TD_V}>{parts}</td>
           </tr>
         );
       })}
@@ -189,7 +371,7 @@ function StoneOptionsTable({
   );
 }
 
-// ─── ItemSection (module-level) ───────────────────────────────────────────────
+// ─── ItemSection ──────────────────────────────────────────────────────────────
 
 function ItemSection({
   item,
@@ -208,6 +390,7 @@ function ItemSection({
     (item.subcategory as string | null) ||
     (item.item_type as string | null) ||
     "Custom Order";
+  const aiDesc = typeof item.ai_description === "string" ? item.ai_description : null;
   const stoneOptions = Array.isArray(item.stone_options)
     ? (item.stone_options as Array<Record<string, unknown>>)
     : [];
@@ -233,30 +416,57 @@ function ItemSection({
   }
 
   return (
-    <div style={CARD}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: "#1A1A2E" }}>
+    <div className="quote-item-card" style={CARD}>
+      {/* Heading — becomes black bar on print */}
+      <div
+        className="item-heading-bar"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 14,
+        }}
+      >
+        <div className="item-heading-text" style={{ fontSize: 15, fontWeight: 700, color: "#1A1A2E" }}>
           {total > 1 ? `Item ${index + 1}: ` : ""}{heading}
         </div>
         {itemPrice != null && total > 1 && (
-          <div style={{ fontSize: 20, fontWeight: 700, color: "#635BFF" }}>
+          <div className="item-heading-price" style={{ fontSize: 20, fontWeight: 700, color: "#635BFF" }}>
             ${itemPrice.toLocaleString("en-AU")}
           </div>
         )}
       </div>
 
-      {typeof item.ai_description === "string" && item.ai_description && (
-        <div style={{ fontSize: 14, color: "#374151", fontStyle: "italic", lineHeight: 1.7, marginBottom: 14, padding: "10px 12px", background: "#F9FAFB", borderRadius: 8, borderLeft: "3px solid #635BFF" }}>
-          {item.ai_description}
+      {/* AI / design description */}
+      {aiDesc && (
+        <div
+          className="item-ai-desc"
+          style={{
+            fontSize: 14,
+            color: "#374151",
+            fontStyle: "italic",
+            lineHeight: 1.7,
+            marginBottom: 14,
+            padding: "10px 12px",
+            background: "#F9FAFB",
+            borderRadius: 8,
+            borderLeft: "3px solid #635BFF",
+          }}
+        >
+          {aiDesc}
         </div>
       )}
 
-      <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #E8E8F0" }}>
+      {/* Detail rows */}
+      <table
+        className="item-details-table"
+        style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #E8E8F0" }}
+      >
         <tbody>
           {metals.filter(m => m.type).map((m, i) => (
             <tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#F9FAFB" }}>
-              <td style={TD_L}>Metal</td>
-              <td style={TD_V}>{m.type}{m.weight ? ` — ${m.weight}g` : ""}</td>
+              <td className="td-label" style={TD_L}>Metal</td>
+              <td className="td-value" style={TD_V}>{m.type}{m.weight ? ` — ${m.weight}g` : ""}</td>
             </tr>
           ))}
           <StoneOptionsTable
@@ -270,27 +480,27 @@ function ItemSection({
               .filter(Boolean).join(" ");
             return (
               <tr key={i} style={{ background: "#F9FAFB" }}>
-                <td style={TD_L}>Melee</td>
-                <td style={TD_V}>{parts}</td>
+                <td className="td-label" style={TD_L}>Melee</td>
+                <td className="td-value" style={TD_V}>{parts}</td>
               </tr>
             );
           })}
           {addonLines.length > 0 && (
             <tr style={{ background: "#F9FAFB" }}>
-              <td style={TD_L}>Inclusions</td>
-              <td style={TD_V}>{addonLines.join(", ")}</td>
+              <td className="td-label" style={TD_L}>Inclusions</td>
+              <td className="td-value" style={TD_V}>{addonLines.join(", ")}</td>
             </tr>
           )}
           {typeof item.finger_size === "string" && item.finger_size && (
             <tr>
-              <td style={TD_L}>Finger Size</td>
-              <td style={TD_V}>{item.finger_size}</td>
+              <td className="td-label" style={TD_L}>Finger Size</td>
+              <td className="td-value" style={TD_V}>{item.finger_size}</td>
             </tr>
           )}
           {typeof item.stock_sku === "string" && item.stock_sku && (
             <tr style={{ background: "#F9FAFB" }}>
-              <td style={TD_L}>Stock Ref</td>
-              <td style={{ ...TD_V, fontFamily: "monospace" }}>{item.stock_sku}</td>
+              <td className="td-label" style={TD_L}>Stock Ref</td>
+              <td className="td-value" style={{ ...TD_V, fontFamily: "monospace" }}>{item.stock_sku}</td>
             </tr>
           )}
         </tbody>
@@ -310,7 +520,6 @@ export default function QuoteViewPage() {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // acceptingIdx tracks which stone option row is mid-request
   const [acceptingIdx, setAcceptingIdx] = useState<number | null>(null);
   const [converting, setConverting] = useState(false);
 
@@ -332,27 +541,17 @@ export default function QuoteViewPage() {
       .finally(() => setLoading(false));
   }, [id, user?.tenantId, hydrated]);
 
-  // ── PDF: print current page ────────────────────────────────────────────────
-  function handlePrint() {
-    window.print();
-  }
+  function handlePrint() { window.print(); }
 
-  // ── Build order URL from a specific stone option (or default option 0) ────
   function buildOrderUrl(
     q: Quote,
     builderItems: Array<Record<string, unknown>> | null,
-    singleItemQbd: Record<string, unknown> | null,
     acceptedItemIdx: number,
     acceptedOptIdx: number
   ): string {
-    const base = `/orders/new?from_quote=${q.id}`;
-
-    // For new builder_items format, pass accepted indices so /orders/new can read them
     if (builderItems && builderItems.length > 0) {
       const item = builderItems[acceptedItemIdx] ?? builderItems[0];
-      const stoneOpts = Array.isArray(item.stone_options)
-        ? (item.stone_options as Array<Record<string, unknown>>)
-        : [];
+      const stoneOpts = Array.isArray(item.stone_options) ? (item.stone_options as Array<Record<string, unknown>>) : [];
       const opt = stoneOpts[acceptedOptIdx] ?? stoneOpts[0];
       const stones = Array.isArray(opt?.stones) ? (opt.stones as Array<Record<string, unknown>>) : [];
       const specs = stoneSpecs(stones);
@@ -361,8 +560,7 @@ export default function QuoteViewPage() {
       const subcat = (item.subcategory as string) || (item.item_type as string) || "";
       const price = typeof opt?.quoted_price === "number" ? opt.quoted_price : (typeof item.quoted_price === "number" ? item.quoted_price : null);
 
-      const articles = [subcat, design ? `Design: ${design}` : null, specs ? `Stone: ${specs}` : null]
-        .filter(Boolean).join("\n");
+      const articles = [subcat, design ? `Design: ${design}` : null, specs ? `Stone: ${specs}` : null].filter(Boolean).join("\n");
       const instructions = aiDesc || design || "";
 
       const p = new URLSearchParams();
@@ -373,11 +571,9 @@ export default function QuoteViewPage() {
       p.set("accepted_option", String(acceptedOptIdx));
       return `/orders/new?${p.toString()}`;
     }
-
-    return base;
+    return `/orders/new?from_quote=${q.id}`;
   }
 
-  // ── Accept option: mark job won + navigate to order ───────────────────────
   async function handleAcceptOption(itemIdx: number, optionIdx: number) {
     if (!quote || !id) return;
     setAcceptingIdx(optionIdx);
@@ -392,14 +588,10 @@ export default function QuoteViewPage() {
 
     const qbd = quote.quote_builder_data != null && typeof quote.quote_builder_data === "object"
       ? (quote.quote_builder_data as Record<string, unknown>) : null;
-    const builderItems = qbd && Array.isArray(qbd.builder_items)
-      ? (qbd.builder_items as Array<Record<string, unknown>>) : null;
-    const singleItemQbd = !builderItems && qbd && Array.isArray(qbd.metals) ? qbd : null;
-
-    router.push(buildOrderUrl(quote, builderItems, singleItemQbd, itemIdx, optionIdx));
+    const builderItems = qbd && Array.isArray(qbd.builder_items) ? (qbd.builder_items as Array<Record<string, unknown>>) : null;
+    router.push(buildOrderUrl(quote, builderItems, itemIdx, optionIdx));
   }
 
-  // ── Convert to Order (top-level, uses option 0 by default) ────────────────
   async function handleConvertToOrder() {
     if (!quote || !id) return;
     setConverting(true);
@@ -414,14 +606,9 @@ export default function QuoteViewPage() {
 
     const qbd = quote.quote_builder_data != null && typeof quote.quote_builder_data === "object"
       ? (quote.quote_builder_data as Record<string, unknown>) : null;
-    const builderItems = qbd && Array.isArray(qbd.builder_items)
-      ? (qbd.builder_items as Array<Record<string, unknown>>) : null;
-    const singleItemQbd = !builderItems && qbd && Array.isArray(qbd.metals) ? qbd : null;
-
-    router.push(buildOrderUrl(quote, builderItems, singleItemQbd, 0, 0));
+    const builderItems = qbd && Array.isArray(qbd.builder_items) ? (qbd.builder_items as Array<Record<string, unknown>>) : null;
+    router.push(buildOrderUrl(quote, builderItems, 0, 0));
   }
-
-  // ── Loading / error states ─────────────────────────────────────────────────
 
   if (!hydrated || loading) {
     return <div style={{ padding: 48, textAlign: "center", color: "#6B7280", fontSize: 14 }}>Loading quote…</div>;
@@ -436,7 +623,7 @@ export default function QuoteViewPage() {
     );
   }
 
-  // ── Parse builder data ─────────────────────────────────────────────────────
+  // ── Parse builder data ────────────────────────────────────────────────────
 
   const qbd = quote.quote_builder_data != null && typeof quote.quote_builder_data === "object"
     ? (quote.quote_builder_data as Record<string, unknown>) : null;
@@ -447,15 +634,42 @@ export default function QuoteViewPage() {
   const sc = STATUS_COLORS[quote.status] ?? { bg: "#F3F4F6", text: "#374151" };
   const totalPrice = quote.quoted_price ?? quote.total;
   const customerName = [quote.customer_first_name, quote.customer_last_name].filter(Boolean).join(" ") || "—";
+  const createdDate = formatDateAU(quote.created_at?.split("T")[0]);
 
   return (
     <>
-      {/* Print stylesheet — injected inline so it travels with the component */}
       <style>{PRINT_STYLE}</style>
 
-      <div style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
+      <div className="quote-print-wrapper" style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
 
-        {/* ── Header (hidden on print) ───────────────────────────────────── */}
+        {/* ── Print-only: Class A Letterhead ──────────────────────────────── */}
+        <div className="print-only" style={{ marginBottom: 16 }}>
+          {/* Logo row */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+            <div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={BLACK_LOGO_DATA_URI} alt="Class A Jewellers" style={{ maxHeight: 52, width: "auto", display: "block" }} />
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 22, fontWeight: "bold", letterSpacing: 2, textTransform: "uppercase", color: "#000", lineHeight: 1 }}>Quotation</div>
+              <div style={{ fontSize: 9, color: "#333", marginTop: 5, lineHeight: 1.6 }}>
+                40 North East Road, Walkerville SA 5081<br />
+                08 8344 7722 &nbsp;|&nbsp; classa.com.au
+              </div>
+            </div>
+          </div>
+          {/* Divider */}
+          <div style={{ borderTop: "1.5px solid #000", margin: "8px 0 12px" }} />
+          {/* Ref + date row */}
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 14 }}>
+            <span style={{ color: "#555" }}>
+              Reference: <strong style={{ fontFamily: "monospace", color: "#000" }}>{quote.reference_number}</strong>
+            </span>
+            <span style={{ color: "#555" }}>{createdDate}</span>
+          </div>
+        </div>
+
+        {/* ── Screen: Header with nav + action buttons ────────────────────── */}
         <div className="no-print" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <Link href="/quotes" style={{ color: "#6B7280", textDecoration: "none", fontSize: 14, display: "flex", alignItems: "center", gap: 4 }}>
@@ -468,7 +682,6 @@ export default function QuoteViewPage() {
             <span style={{ fontFamily: "monospace", fontSize: 13, color: "#6B7280" }}>{quote.reference_number}</span>
           </div>
 
-          {/* Action buttons */}
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button
               onClick={handlePrint}
@@ -505,56 +718,45 @@ export default function QuoteViewPage() {
           </div>
         </div>
 
-        {/* ── Print header (only visible when printing) ───────────────────── */}
-        <div style={{ display: "none" }} className="print-only">
-          <style>{`.print-only { display: none !important; } @media print { .print-only { display: block !important; } }`}</style>
-          <div style={{ marginBottom: 20, paddingBottom: 12, borderBottom: "2px solid #E8E8F0" }}>
-            <div style={{ fontSize: 11, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Quote</div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: "#1A1A2E" }}>{quote.reference_number}</div>
-            <div style={{ fontSize: 13, color: "#6B7280", marginTop: 2 }}>{formatDateAU(quote.created_at?.split("T")[0])}</div>
-          </div>
-        </div>
-
-        {/* ── Status bar (hidden on print) ────────────────────────────────── */}
+        {/* ── Status bar (screen only) ─────────────────────────────────────── */}
         <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
           <span style={{ background: sc.bg, color: sc.text, fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 999 }}>
             {STATUS_LABELS[quote.status] ?? quote.status}
           </span>
           {quote.assigned_to && <span style={{ fontSize: 13, color: "#6B7280" }}>· {quote.assigned_to}</span>}
           {quote.follow_up_date && <span style={{ fontSize: 13, color: "#6B7280" }}>· Follow up: {formatDateAU(quote.follow_up_date)}</span>}
-          <span style={{ fontSize: 12, color: "#9CA3AF", marginLeft: "auto" }}>{formatDateAU(quote.created_at?.split("T")[0])}</span>
+          <span style={{ fontSize: 12, color: "#9CA3AF", marginLeft: "auto" }}>{createdDate}</span>
         </div>
 
         {/* ── Customer ────────────────────────────────────────────────────── */}
-        <div style={CARD}>
-          <span style={SEC_LABEL}>Customer</span>
-          <div style={{ fontSize: 18, fontWeight: 700, color: "#1A1A2E", marginBottom: 6 }}>{customerName}</div>
-          <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+        <div className="quote-customer-card" style={CARD}>
+          <span className="no-print" style={SEC_LABEL}>Customer</span>
+          <div className="quote-customer-name" style={{ fontSize: 18, fontWeight: 700, color: "#1A1A2E", marginBottom: 6 }}>{customerName}</div>
+          <div className="quote-customer-contact" style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
             {quote.customer_email && <span style={{ fontSize: 13, color: "#6B7280" }}>{quote.customer_email}</span>}
             {quote.customer_phone && <span style={{ fontSize: 13, color: "#6B7280" }}>{quote.customer_phone}</span>}
           </div>
         </div>
 
-        {/* ── Items ───────────────────────────────────────────────────────── */}
-        {builderItems && builderItems.length > 0 && (
-          <>
-            {builderItems.map((item, idx) => (
-              <ItemSection
-                key={idx}
-                item={item}
-                index={idx}
-                total={builderItems.length}
-                onAcceptOption={handleAcceptOption}
-                acceptingIdx={acceptingIdx}
-              />
-            ))}
-          </>
-        )}
+        {/* ── Items: new builder_items format ──────────────────────────────── */}
+        {builderItems && builderItems.length > 0 && builderItems.map((item, idx) => (
+          <ItemSection
+            key={idx}
+            item={item}
+            index={idx}
+            total={builderItems.length}
+            onAcceptOption={handleAcceptOption}
+            acceptingIdx={acceptingIdx}
+          />
+        ))}
 
+        {/* ── Items: legacy metals format — pass top-level ai_description ── */}
         {!builderItems && singleItemQbd && (
           <ItemSection
             item={{
               ...singleItemQbd,
+              // ai_description may be on the quote root for old-format quotes
+              ai_description: singleItemQbd.ai_description ?? quote.ai_description ?? null,
               stone_options: singleItemQbd.main_stone
                 ? [{ id: "opt0", label: "Option 1", stones: Array.isArray(singleItemQbd.main_stone) ? singleItemQbd.main_stone : [singleItemQbd.main_stone] }]
                 : [],
@@ -566,23 +768,31 @@ export default function QuoteViewPage() {
           />
         )}
 
-        {!builderItems && !singleItemQbd && quote.design_brief && (
-          <div style={CARD}>
-            <span style={SEC_LABEL}>Design Brief</span>
-            <p style={{ fontSize: 14, color: "#374151", lineHeight: 1.7, margin: 0 }}>{quote.design_brief}</p>
-          </div>
-        )}
-
-        {!builderItems && !singleItemQbd && quote.ai_description && (
-          <div style={CARD}>
-            <span style={SEC_LABEL}>Description</span>
-            <p style={{ fontSize: 14, color: "#374151", fontStyle: "italic", lineHeight: 1.7, margin: 0 }}>{quote.ai_description}</p>
+        {/* ── Plain design brief (no builder data) ────────────────────────── */}
+        {!builderItems && !singleItemQbd && (quote.design_brief || quote.ai_description) && (
+          <div className="quote-item-card" style={CARD}>
+            <div
+              className="item-heading-bar"
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}
+            >
+              <div className="item-heading-text" style={{ fontSize: 15, fontWeight: 700, color: "#1A1A2E" }}>
+                Custom Order
+              </div>
+            </div>
+            {quote.ai_description && (
+              <div className="item-ai-desc" style={{ fontSize: 14, color: "#374151", fontStyle: "italic", lineHeight: 1.7, marginBottom: quote.design_brief ? 14 : 0, padding: "10px 12px", background: "#F9FAFB", borderRadius: 8, borderLeft: "3px solid #635BFF" }}>
+                {quote.ai_description}
+              </div>
+            )}
+            {quote.design_brief && (
+              <div style={{ fontSize: 14, color: "#374151", lineHeight: 1.7, padding: "10px 12px" }}>{quote.design_brief}</div>
+            )}
           </div>
         )}
 
         {/* ── Notes ───────────────────────────────────────────────────────── */}
         {quote.notes && (
-          <div style={CARD}>
+          <div className="quote-notes-card" style={CARD}>
             <span style={SEC_LABEL}>Notes</span>
             <p style={{ fontSize: 14, color: "#374151", lineHeight: 1.7, whiteSpace: "pre-wrap", margin: 0 }}>{quote.notes}</p>
           </div>
@@ -590,15 +800,31 @@ export default function QuoteViewPage() {
 
         {/* ── Price bar ───────────────────────────────────────────────────── */}
         {totalPrice != null && (
-          <div style={{ background: "#1A1A2E", borderRadius: 12, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 14, fontWeight: 500, color: "#9CA3AF" }}>Total Price (incl. GST)</span>
-            <span style={{ fontSize: 28, fontWeight: 800, color: "#fff" }}>
+          <div
+            className="quote-price-bar"
+            style={{ background: "#1A1A2E", borderRadius: 12, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}
+          >
+            <span className="quote-price-label" style={{ fontSize: 14, fontWeight: 500, color: "#9CA3AF" }}>Total Price (incl. GST)</span>
+            <span className="quote-price-amount" style={{ fontSize: 28, fontWeight: 800, color: "#fff" }}>
               ${Number(totalPrice).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
         )}
 
-        {/* ── Add Item button (hidden on print) ───────────────────────────── */}
+        {/* ── Print-only footer ────────────────────────────────────────────── */}
+        <div className="print-only quote-print-footer" style={{ display: "none" }}>
+          <div className="print-footer-terms">
+            Valid for 7 business days from the date of this quotation, subject to availability.<br />
+            A 20% deposit is required to commence work.
+          </div>
+          <div className="print-footer-staff">
+            {quote.assigned_to && <div style={{ fontWeight: "bold", color: "#000" }}>{quote.assigned_to}</div>}
+            <div>08 8344 7722</div>
+            <div>classa.com.au</div>
+          </div>
+        </div>
+
+        {/* ── Add Item button (screen only) ────────────────────────────────── */}
         <div className="no-print" style={{ marginTop: 16, display: "flex", justifyContent: "center" }}>
           <Link
             href={`/quotes/builder?quote_id=${quote.id}`}

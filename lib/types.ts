@@ -352,6 +352,8 @@ export interface Quote {
   job_description?: string | null;
   ai_description?: string | null;
   finger_size?: string | null;
+  /** Index of the accepted stone option (set when customer confirms). */
+  accepted_option?: number | null;
   stock_sku?: string | null;
 }
 
