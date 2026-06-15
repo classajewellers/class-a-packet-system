@@ -22,24 +22,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const supabase = createServerSupabaseClient();
 
-    console.log("[invite] Creating user:", normalizedEmail, "role:", role, "tenant:", tenantId);
+    console.log("[invite] Inviting user:", normalizedEmail, "role:", role, "tenant:", tenantId);
 
-    // ── Step 1: Create auth user ───────────────────────────────────────────────
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email: normalizedEmail,
-      email_confirm: false,
-      user_metadata: { full_name: fullName, role, tenant_id: tenantId },
-    });
+    // ── Step 1: Send invite email + create auth user ──────────────────────────
+    const { data: authData, error: authError } = await supabase.auth.admin.inviteUserByEmail(
+      normalizedEmail,
+      {
+        data: { full_name: fullName, role, tenant_id: tenantId },
+        redirectTo: "https://www.jewelleryvault.com.au/login",
+      }
+    );
 
-    console.log("[invite] createUser response — error:", JSON.stringify(authError), "user:", JSON.stringify(authData?.user ?? null));
+    console.log("[invite] inviteUserByEmail response — error:", JSON.stringify(authError), "user:", JSON.stringify(authData?.user ?? null));
 
     if (authError) {
-      console.error("[invite] createUser failed:", JSON.stringify(authError));
+      console.error("[invite] inviteUserByEmail failed:", JSON.stringify(authError));
       return NextResponse.json({ error: authError.message }, { status: 500 });
     }
 
     const authUserId = authData?.user?.id ?? null;
-    console.log("[invite] Auth user created, id:", authUserId ?? "(not returned)");
+    console.log("[invite] Invite sent, auth user id:", authUserId ?? "(not returned)");
 
     // ── Step 2: Insert profile ────────────────────────────────────────────────
     const profileId = authUserId ?? randomUUID();
@@ -61,22 +63,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       // Non-fatal — auth user was created; profile will be created on first login.
     } else {
       console.log("[invite] Profile created for", normalizedEmail, "id:", profileId);
-    }
-
-    // ── Step 3: Generate invite link so the user can set their password ────────
-    const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
-      type: "invite",
-      email: normalizedEmail,
-      options: {
-        data: { full_name: fullName, role, tenant_id: tenantId },
-      },
-    });
-
-    if (linkError) {
-      console.error("[invite] generateLink failed:", JSON.stringify(linkError));
-      // Non-fatal — user exists; they can use password reset to gain access.
-    } else {
-      console.log("[invite] Invite link generated:", JSON.stringify(linkData?.properties ?? null));
     }
 
     return NextResponse.json({ success: true });
