@@ -1,9 +1,17 @@
 'use client'
 export const dynamic = 'force-dynamic'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 export default function LoginPage() {
+  useEffect(() => {
+    const hash = window.location.hash
+    const search = window.location.search
+    if (hash.includes('type=invite') || search.includes('type=invite')) {
+      window.location.href = '/accept-invite' + hash + search
+    }
+  }, [])
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
