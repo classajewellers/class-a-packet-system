@@ -21,7 +21,8 @@ const labelStyle: React.CSSProperties = {
 
 export default function LoginPage() {
   // Invite flow state
-  const [inviteMode, setInviteMode] = useState<'checking' | 'verifying' | 'ready' | 'error' | null>(null)
+  const [inviteMode, setInviteMode] = useState<'ready' | 'error' | null>(null)
+  const [inviteTokenHash, setInviteTokenHash] = useState('')
   const [inviteError, setInviteError] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -44,16 +45,9 @@ export default function LoginPage() {
 
     if (!tokenHash || type !== 'invite') return
 
-    setInviteMode('verifying')
-
-    getSupabase().auth.verifyOtp({ token_hash: tokenHash, type: 'invite' }).then(({ error }) => {
-      if (error) {
-        setInviteError('This invite link has expired. Ask your manager to resend the invite.')
-        setInviteMode('error')
-      } else {
-        setInviteMode('ready')
-      }
-    })
+    // Store the token and show the form — do NOT exchange the token yet
+    setInviteTokenHash(tokenHash)
+    setInviteMode('ready')
   }, [])
 
   async function handleSetPassword() {
@@ -62,12 +56,24 @@ export default function LoginPage() {
     if (newPassword !== confirmPassword) { setInviteFormError('Passwords do not match.'); return }
 
     setInviteLoading(true)
-    const { error } = await getSupabase().auth.updateUser({ password: newPassword })
-    if (error) {
-      setInviteFormError(error.message)
+    const supabase = getSupabase()
+
+    // Exchange the invite token for a session first
+    const { error: otpError } = await supabase.auth.verifyOtp({ token_hash: inviteTokenHash, type: 'invite' })
+    if (otpError) {
+      setInviteFormError('This invite link has expired. Ask your manager to resend the invite.')
       setInviteLoading(false)
       return
     }
+
+    // Immediately set the password while the session is fresh
+    const { error: updateError } = await supabase.auth.updateUser({ password: newPassword })
+    if (updateError) {
+      setInviteFormError(updateError.message)
+      setInviteLoading(false)
+      return
+    }
+
     window.location.href = '/'
   }
 
@@ -95,10 +101,6 @@ export default function LoginPage() {
             <h1 style={{ fontSize: 24, fontWeight: 700, color: '#1A1760', margin: '0 0 8px' }}>Welcome to Vault</h1>
             <p style={{ color: '#6B7280', fontSize: 14, margin: 0 }}>Set your password to get started.</p>
           </div>
-
-          {inviteMode === 'verifying' && (
-            <p style={{ textAlign: 'center', color: '#6B7280', fontSize: 14 }}>Verifying invite link…</p>
-          )}
 
           {inviteMode === 'error' && (
             <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: 16, color: '#DC2626', fontSize: 14, textAlign: 'center' }}>
