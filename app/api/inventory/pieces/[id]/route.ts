@@ -41,6 +41,14 @@ export async function PATCH(
   // Strip joined relation keys
   const { status: _s, location: _l, category: _c, supplier: _sp, ...updateData } = body;
 
+  // Convert empty strings to null for all UUID fields
+  const toUUID = (val: any) => (val && val !== "" ? val : null);
+  updateData.category_id = toUUID(updateData.category_id);
+  updateData.status_id   = toUUID(updateData.status_id);
+  updateData.location_id = toUUID(updateData.location_id);
+  updateData.supplier_id = toUUID(updateData.supplier_id);
+  updateData.assigned_to = toUUID(updateData.assigned_to);
+
   const { data, error } = await supabase
     .from("inventory_pieces")
     .update({ ...updateData, updated_at: new Date().toISOString() })

@@ -111,11 +111,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       ...insertData
     } = body;
 
-    // Normalise optional FK fields — treat empty strings as null
-    if (!insertData.category_id) insertData.category_id = null;
-    if (!insertData.status_id)   insertData.status_id   = null;
-    if (!insertData.location_id) insertData.location_id = null;
-    if (!insertData.supplier_id) insertData.supplier_id = null;
+    // Convert empty strings to null for all UUID fields
+    const toUUID = (val: any) => (val && val !== "" ? val : null);
+    insertData.category_id = toUUID(insertData.category_id);
+    insertData.status_id   = toUUID(insertData.status_id);
+    insertData.location_id = toUUID(insertData.location_id);
+    insertData.supplier_id = toUUID(insertData.supplier_id);
+    insertData.assigned_to = toUUID(insertData.assigned_to);
 
     // Look up category name to determine SKU prefix (graceful on null/missing)
     let categoryName: string | null = null;
