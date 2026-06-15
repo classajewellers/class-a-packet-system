@@ -6,9 +6,10 @@ import { Quote } from "@/lib/types";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function GET(
+async function generatePDF(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  params: { id: string },
+  size: "a4" | "a5" = "a4"
 ): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
   const supabase = await createTenantSupabaseClient(tenantId);
@@ -31,10 +32,10 @@ export async function GET(
 
   const refNum = (quote.reference_number ?? "QUOTE").replace(/[^A-Za-z0-9_-]/g, "_");
   const lastName = (quote.customer_last_name ?? "").trim().replace(/\s+/g, "_") || "Customer";
-  const basename = `Quote_${refNum}_${lastName}`;
+  const basename = `Quote_${refNum}_${lastName}_${size.toUpperCase()}`;
 
   const apiKey = process.env.PDFSHIFT_API_KEY;
-  console.log("[pdf/route] PDFSHIFT_API_KEY set:", !!apiKey);
+  console.log("[pdf/route] PDFSHIFT_API_KEY set:", !!apiKey, "size:", size);
 
   // ── Fallback: no API key — return the HTML file directly ────────────────────
   if (!apiKey) {
@@ -48,6 +49,21 @@ export async function GET(
     });
   }
 
+  // ── Build PDFShift request body based on size ────────────────────────────────
+  const isA5 = size === "a5";
+  const pdfShiftBody: Record<string, unknown> = {
+    source: html,
+    landscape: false,
+    use_print: false,
+    sandbox: false,
+    css: isA5
+      ? ".pdf-bar, .pdfshift-banner, [class*='pdfshift-'], .pay-now-btn { display: none !important; }"
+      : ".pdf-bar, .pdfshift-banner, [class*='pdfshift-'] { display: none !important; }",
+  };
+  if (isA5) {
+    pdfShiftBody.format = "A5";
+  }
+
   // ── PDFShift: convert HTML to PDF ────────────────────────────────────────────
   let pdfResponse: Response;
   try {
@@ -57,13 +73,7 @@ export async function GET(
         "X-API-Key": apiKey,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        source: html,
-        landscape: false,
-        use_print: false,
-        sandbox: false,
-        css: ".pdf-bar, .pdfshift-banner, [class*='pdfshift-'] { display: none !important; }",
-      }),
+      body: JSON.stringify(pdfShiftBody),
     });
   } catch (fetchErr) {
     console.error("[pdf/route] fetch to PDFShift failed:", fetchErr);
@@ -73,12 +83,10 @@ export async function GET(
   const responseContentType = pdfResponse.headers.get("content-type") ?? "";
   console.log("[pdf/route] PDFShift status:", pdfResponse.status, "content-type:", responseContentType);
 
-  // Read the body once — inspect first 200 chars for debugging regardless of outcome
   const responseBuffer = await pdfResponse.arrayBuffer();
   const bodyPreview = new TextDecoder().decode(responseBuffer.slice(0, 200));
   console.log("[pdf/route] PDFShift body preview:", bodyPreview);
 
-  // Treat as an error if: non-2xx status OR response is not a PDF
   if (!pdfResponse.ok || !responseContentType.includes("application/pdf")) {
     console.error(
       "[pdf/route] PDFShift returned non-PDF response.",
@@ -103,4 +111,23 @@ export async function GET(
       "Cache-Control": "no-store",
     },
   });
+}
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+): Promise<NextResponse> {
+  return generatePDF(req, params, "a4");
+}
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+): Promise<NextResponse> {
+  let size: "a4" | "a5" = "a4";
+  try {
+    const body = await req.json();
+    if (body?.size === "a5") size = "a5";
+  } catch { /* no body — default to a4 */ }
+  return generatePDF(req, params, size);
 }

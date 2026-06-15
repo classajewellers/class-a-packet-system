@@ -46,7 +46,7 @@ export function calculateRetailPrice(cost: number): number {
     retail += remaining * TOP_MULTIPLIER;
   }
 
-  return Math.round(retail / 5) * 5;
+  return Math.ceil(retail / 5) * 5;
 }
 
 /**

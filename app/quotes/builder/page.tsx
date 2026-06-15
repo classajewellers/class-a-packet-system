@@ -192,9 +192,9 @@ function computeItemPricing(
 
   let quotedPrice: number;
   if (item.marginMultiplierOverride && parseFloat(item.marginMultiplierOverride) > 0) {
-    quotedPrice = Math.round(totalCost * parseFloat(item.marginMultiplierOverride) / 50) * 50;
+    quotedPrice = Math.ceil(totalCost * parseFloat(item.marginMultiplierOverride) / 5) * 5;
   } else {
-    quotedPrice = suggestedRetail > 0 ? suggestedRetail : Math.ceil(rawPrice / 50) * 50;
+    quotedPrice = suggestedRetail > 0 ? suggestedRetail : Math.ceil(rawPrice / 5) * 5;
   }
 
   const finalPrice = item.retailPriceOverride && parseFloat(item.retailPriceOverride) > 0
@@ -219,9 +219,9 @@ function computeItemPricing(
     const optRaw = optBracket ? optTotal * optBracket.multiplier : optTotal;
     if (oi === 0 && item.retailPriceOverride && parseFloat(item.retailPriceOverride) > 0) return parseFloat(item.retailPriceOverride);
     if (item.marginMultiplierOverride && parseFloat(item.marginMultiplierOverride) > 0) {
-      return Math.round(optTotal * parseFloat(item.marginMultiplierOverride) / 50) * 50;
+      return Math.ceil(optTotal * parseFloat(item.marginMultiplierOverride) / 5) * 5;
     }
-    return optSuggested > 0 ? optSuggested : Math.ceil(optRaw / 50) * 50;
+    return optSuggested > 0 ? optSuggested : Math.ceil(optRaw / 5) * 5;
   });
 
   return {

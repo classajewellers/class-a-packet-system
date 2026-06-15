@@ -327,10 +327,11 @@ export default function QuoteViewPage() {
   const [error, setError] = useState<string | null>(null);
   const [acceptingIdx, setAcceptingIdx] = useState<number | null>(null);
   const [converting, setConverting] = useState(false);
-  const [downloading, setDownloading] = useState(false);
+  const [downloading] = useState(false); // kept for ref safety, replaced by downloadingSize
   const [showPaymentPanel, setShowPaymentPanel] = useState(false);
   const [generatingLink, setGeneratingLink] = useState(false);
   const [depositInput, setDepositInput] = useState<string>("");
+  const [depositPercent, setDepositPercent] = useState<number>(30);
   const [paymentLinkUrl, setPaymentLinkUrl] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
 
@@ -358,11 +359,15 @@ export default function QuoteViewPage() {
       .finally(() => setLoading(false));
   }, [id, user?.tenantId, hydrated]);
 
-  const handleDownloadPDF = async () => {
-    setDownloading(true);
+  const [downloadingSize, setDownloadingSize] = useState<"a4" | "a5" | null>(null);
+
+  const handleDownloadPDF = async (size: "a4" | "a5") => {
+    setDownloadingSize(size);
     try {
       const res = await fetch(`/api/quotes/${quote!.id}/pdf`, {
-        headers: { "x-tenant-id": user?.tenantId ?? "" },
+        method: "POST",
+        headers: { "x-tenant-id": user?.tenantId ?? "", "Content-Type": "application/json" },
+        body: JSON.stringify({ size }),
       });
       if (!res.ok) {
         const text = await res.text();
@@ -373,7 +378,7 @@ export default function QuoteViewPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Quote_${quote!.reference_number}_${(quote!.customer_last_name ?? "").trim().replace(/\s+/g, "_") || "Quote"}.pdf`;
+      a.download = `Quote_${quote!.reference_number}_${(quote!.customer_last_name ?? "").trim().replace(/\s+/g, "_") || "Quote"}_${size.toUpperCase()}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -381,7 +386,7 @@ export default function QuoteViewPage() {
     } catch (err) {
       alert("Download failed: " + err);
     } finally {
-      setDownloading(false);
+      setDownloadingSize(null);
     }
   };
 
@@ -390,8 +395,9 @@ export default function QuoteViewPage() {
     setGeneratingLink(true);
     try {
       const body: { amount?: number } = {};
-      const parsed = parseFloat(depositInput);
-      if (!isNaN(parsed) && parsed > 0) body.amount = parsed;
+      const quoteTotal = quote.quoted_price ?? quote.total ?? 0;
+      const computedDeposit = Math.round((depositPercent / 100) * quoteTotal * 100) / 100;
+      if (computedDeposit > 0) body.amount = computedDeposit;
 
       const res = await fetch(`/api/quotes/${id}/payment-link`, {
         method: "POST",
@@ -528,16 +534,28 @@ export default function QuoteViewPage() {
 
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button
-              onClick={handleDownloadPDF}
-              disabled={downloading}
-              style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff", color: "#374151", border: "1px solid #E8E8F0", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 500, cursor: downloading ? "wait" : "pointer", opacity: downloading ? 0.7 : 1 }}
-              onMouseEnter={e => { if (!downloading) e.currentTarget.style.background = "#F9FAFB"; }}
-              onMouseLeave={e => { if (!downloading) e.currentTarget.style.background = "#fff"; }}
+              onClick={() => handleDownloadPDF("a5")}
+              disabled={downloadingSize !== null}
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff", color: "#374151", border: "1px solid #E8E8F0", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 500, cursor: downloadingSize !== null ? "wait" : "pointer", opacity: downloadingSize === "a5" ? 0.7 : 1 }}
+              onMouseEnter={e => { if (!downloadingSize) e.currentTarget.style.background = "#F9FAFB"; }}
+              onMouseLeave={e => { if (!downloadingSize) e.currentTarget.style.background = "#fff"; }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
               </svg>
-              {downloading ? "Generating…" : "Download PDF"}
+              {downloadingSize === "a5" ? "Generating…" : "Print (A5)"}
+            </button>
+            <button
+              onClick={() => handleDownloadPDF("a4")}
+              disabled={downloadingSize !== null}
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff", color: "#374151", border: "1px solid #E8E8F0", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 500, cursor: downloadingSize !== null ? "wait" : "pointer", opacity: downloadingSize === "a4" ? 0.7 : 1 }}
+              onMouseEnter={e => { if (!downloadingSize) e.currentTarget.style.background = "#F9FAFB"; }}
+              onMouseLeave={e => { if (!downloadingSize) e.currentTarget.style.background = "#fff"; }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+              </svg>
+              {downloadingSize === "a4" ? "Generating…" : "Send (A4)"}
             </button>
             <button
               onClick={handleConvertToOrder}
@@ -632,24 +650,27 @@ export default function QuoteViewPage() {
             ) : (
               /* Generate form */
               <div>
-                <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 8 }}>
-                  Deposit amount (AUD) — minimum 30% of quoted price
-                  {(quote.quoted_price ?? quote.total) ? ` = $${Math.ceil(((quote.quoted_price ?? quote.total ?? 0) * 0.3) / 10) * 10}` : ""}
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 8 }}>Deposit percentage</div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <input
                     type="number"
-                    min={0}
-                    step={10}
-                    placeholder={`$${Math.ceil(((quote.quoted_price ?? quote.total ?? 0) * 0.3) / 10) * 10}`}
-                    value={depositInput}
-                    onChange={e => setDepositInput(e.target.value)}
-                    style={{ flex: 1, padding: "8px 12px", border: "1px solid #E8E8F0", borderRadius: 8, fontSize: 13, color: "#374151" }}
+                    min={1}
+                    max={100}
+                    step={5}
+                    value={depositPercent}
+                    onChange={e => setDepositPercent(Math.max(1, Math.min(100, Number(e.target.value) || 30)))}
+                    style={{ width: 72, padding: "8px 10px", border: "1px solid #E8E8F0", borderRadius: 8, fontSize: 13, color: "#374151", textAlign: "right" }}
                   />
+                  <span style={{ fontSize: 13, color: "#6B7280" }}>%</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#1A1A2E", minWidth: 80 }}>
+                    = ${Math.round((depositPercent / 100) * ((quote.quoted_price ?? quote.total ?? 0)) * 100) / 100 > 0
+                      ? (Math.round((depositPercent / 100) * ((quote.quoted_price ?? quote.total ?? 0)) * 100) / 100).toLocaleString("en-AU", { minimumFractionDigits: 2 })
+                      : "—"}
+                  </span>
                   <button
                     onClick={handleGeneratePaymentLink}
                     disabled={generatingLink}
-                    style={{ padding: "8px 20px", background: "#000", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: generatingLink ? "wait" : "pointer", opacity: generatingLink ? 0.7 : 1, whiteSpace: "nowrap" }}
+                    style={{ marginLeft: "auto", padding: "8px 20px", background: "#000", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: generatingLink ? "wait" : "pointer", opacity: generatingLink ? 0.7 : 1, whiteSpace: "nowrap" }}
                   >
                     {generatingLink ? "Generating…" : "Generate Link"}
                   </button>
