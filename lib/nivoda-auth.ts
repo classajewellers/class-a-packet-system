@@ -4,12 +4,12 @@
  * Import getNivodaToken() from here — never fetch /api/nivoda/auth over HTTP.
  */
 
-export const NIVODA_ENDPOINT = "https://integrations.nivoda.net/api/diamonds";
+export const NIVODA_ENDPOINT = "https://integrations.nivoda.net/graphql-loupe360";
 
 const TEN_MINUTES  = 10 * 60 * 1000;
 const SIX_HOURS    =  6 * 60 * 60 * 1000;
 const FETCH_TIMEOUT = 30_000; // 30 s — Nivoda can be slow to respond
-const NIVODA_FALLBACK = "https://integrations.nivoda.net/graphql";
+const NIVODA_FALLBACK = "https://integrations.nivoda.net/graphql-loupe360";
 
 // In-memory cache — survives across requests within the same serverless instance.
 let cache: { token: string; expiresAt: number } | null = null;
