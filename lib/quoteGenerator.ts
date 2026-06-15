@@ -20,7 +20,7 @@ function formatDateAU(iso: string | null | undefined): string {
 
 export function generateQuoteHTML(
   quote: Quote,
-  opts?: { payment_link_url?: string | null; deposit_amount?: number | null }
+  opts?: { payment_link_url?: string | null; deposit_amount?: number | null; hidePayment?: boolean }
 ): string {
   const customerName = [quote.customer_first_name, quote.customer_last_name]
     .filter(Boolean)
@@ -670,7 +670,7 @@ export function generateQuoteHTML(
 
   <hr class="table-divider">
 
-  ${opts?.payment_link_url ? `
+  ${!opts?.hidePayment && opts?.payment_link_url ? `
   <!-- Pay Now button -->
   <div style="text-align:center;margin:14px 0 10px;">
     <a href="${opts.payment_link_url}" style="display:inline-block;background:#000;color:#fff;font-family:Arial,Helvetica,sans-serif;font-size:13pt;font-weight:bold;padding:14px 36px;text-decoration:none;letter-spacing:0.5px;">

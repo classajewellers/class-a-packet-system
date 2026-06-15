@@ -8,7 +8,7 @@ import Link from "next/link";
 import { Quote } from "@/lib/types";
 import { useUser } from "@/context/UserContext";
 import { formatDateAU } from "@/lib/formatters";
-import { hasPermission } from "@/lib/userTypes";
+import { hasPermission, canManage } from "@/lib/userTypes";
 
 // ─── Screen styles ────────────────────────────────────────────────────────────
 
@@ -335,6 +335,22 @@ export default function QuoteViewPage() {
   const [paymentLinkUrl, setPaymentLinkUrl] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
 
+  const isManager = canManage(user?.role);
+
+  async function handleDelete() {
+    if (!window.confirm("Delete this quote? This cannot be undone.")) return;
+    const res = await fetch(`/api/quotes/${id}`, {
+      method: "DELETE",
+      headers: { "x-tenant-id": user?.tenantId ?? "" },
+    });
+    if (res.ok) {
+      router.push("/quotes");
+    } else {
+      const json = await res.json().catch(() => ({}));
+      alert(json.error ?? "Failed to delete quote.");
+    }
+  }
+
   useEffect(() => {
     if (hydrated && user && !hasPermission(user, "quotes")) router.replace("/");
   }, [user, hydrated, router]);
@@ -533,6 +549,19 @@ export default function QuoteViewPage() {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {isManager && (
+              <button
+                onClick={handleDelete}
+                style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff", color: "#EF4444", border: "1px solid #FCA5A5", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 500, cursor: "pointer" }}
+                onMouseEnter={e => { e.currentTarget.style.background = "#FEF2F2"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "#fff"; }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
+                </svg>
+                Delete
+              </button>
+            )}
             <button
               onClick={() => handleDownloadPDF("a5")}
               disabled={downloadingSize !== null}

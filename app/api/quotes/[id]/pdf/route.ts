@@ -25,9 +25,11 @@ async function generatePDF(
   }
 
   const quote = data as Quote;
+  const isA5 = size === "a5";
   const html = generateQuoteHTML(quote, {
     payment_link_url: quote.stripe_payment_link_url ?? null,
     deposit_amount: quote.deposit_amount ?? null,
+    hidePayment: isA5,
   });
 
   const refNum = (quote.reference_number ?? "QUOTE").replace(/[^A-Za-z0-9_-]/g, "_");
@@ -50,7 +52,6 @@ async function generatePDF(
   }
 
   // ── Build PDFShift request body based on size ────────────────────────────────
-  const isA5 = size === "a5";
   const pdfShiftBody: Record<string, unknown> = {
     source: html,
     landscape: false,
