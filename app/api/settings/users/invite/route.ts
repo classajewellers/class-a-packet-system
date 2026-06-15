@@ -29,7 +29,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       normalizedEmail,
       {
         data: { full_name: fullName, role, tenant_id: tenantId },
-        redirectTo: "https://www.jewelleryvault.com.au/login",
+        redirectTo: "https://www.jewelleryvault.com.au/accept-invite",
       }
     );
 
