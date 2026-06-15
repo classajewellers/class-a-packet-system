@@ -463,6 +463,9 @@ export interface InventoryPiece {
   valuation_amount: number | null;
   cost_price: number | null;
   retail_price: number | null;
+  locked_cost: number | null;
+  stone_cost: number | null;
+  labour_cost: number | null;
   date_received: string | null;
   date_sold: string | null;
   notes: string | null;

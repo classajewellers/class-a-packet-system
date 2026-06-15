@@ -5,9 +5,15 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
 import { InventoryPiece, InventoryReferenceData } from "@/lib/types";
-import { ArrowLeft, Edit2, Save, X, ArrowRight } from "lucide-react";
+import { calculateLivePricing, GoldRate, MarginBracket } from "@/lib/inventoryPricing";
+import { ArrowLeft, Edit2, Save, X, ArrowRight, Lock, AlertTriangle, TrendingDown } from "lucide-react";
 
 type Params = { params: { id: string } };
+
+const fmt = (n: number | null | undefined) =>
+  n != null ? `$${n.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—";
+const fmtPct = (n: number | null | undefined) =>
+  n != null ? `${n.toFixed(1)}%` : "—";
 
 function FieldView({ label, value }: { label: string; value?: string | number | null }) {
   return (
@@ -29,6 +35,26 @@ function SectionWrap({ title, children }: { title: string; children: React.React
   );
 }
 
+function GpChip({ gp, pct }: { gp: number | null; pct: number | null }) {
+  if (gp == null) return <span style={{ color: "#9CA3AF", fontSize: 13 }}>—</span>;
+  const pctVal = pct ?? 0;
+  const colour = pctVal >= 40 ? "#10B981" : pctVal >= 20 ? "#F59E0B" : "#EF4444";
+  return (
+    <span style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 600, color: colour }}>
+      {fmt(gp)} <span style={{ fontSize: 12, fontWeight: 400 }}>({fmtPct(pct)})</span>
+    </span>
+  );
+}
+
+function LineItem({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "5px 0", fontSize: 13 }}>
+      <span style={{ color: "#6B7280" }}>{label}{sub && <span style={{ color: "#9CA3AF", marginLeft: 4, fontSize: 12 }}>{sub}</span>}</span>
+      <span style={{ fontFamily: "monospace", fontWeight: 500, color: "#374151" }}>{value}</span>
+    </div>
+  );
+}
+
 export default function InventoryItemPage({ params }: Params) {
   const router = useRouter();
   const { user, hydrated } = useUser();
@@ -43,6 +69,9 @@ export default function InventoryItemPage({ params }: Params) {
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState("");
 
+  const [goldRates, setGoldRates]         = useState<GoldRate[]>([]);
+  const [marginBrackets, setMarginBrackets] = useState<MarginBracket[]>([]);
+
   const [showMove, setShowMove]     = useState(false);
   const [moveForm, setMoveForm]     = useState({ to_location_id: "", to_status_id: "", notes: "" });
   const [moveSaving, setMoveSaving] = useState(false);
@@ -55,10 +84,11 @@ export default function InventoryItemPage({ params }: Params) {
   const fetchAll = useCallback(async () => {
     if (!tenantId) return;
     setLoading(true);
-    const [pieceRes, refRes, movRes] = await Promise.all([
+    const [pieceRes, refRes, movRes, pricingRes] = await Promise.all([
       fetch(`/api/inventory/pieces/${params.id}`, { headers }),
       fetch("/api/inventory/reference", { headers }),
       fetch(`/api/inventory/movements?piece_id=${params.id}&limit=20`, { headers }),
+      fetch("/api/pricing", { headers }),
     ]);
     if (!pieceRes.ok) { setLoading(false); return; }
     const [pieceJson, refJson, movJson] = await Promise.all([
@@ -67,6 +97,11 @@ export default function InventoryItemPage({ params }: Params) {
     setPiece(pieceJson.piece);
     setRef(refJson);
     setMovements(movJson.movements ?? []);
+    if (pricingRes.ok) {
+      const pj = await pricingRes.json();
+      setGoldRates(pj.metalRates ?? []);
+      setMarginBrackets(pj.marginBrackets ?? []);
+    }
     setLoading(false);
   }, [tenantId, params.id]);
 
@@ -186,6 +221,22 @@ export default function InventoryItemPage({ params }: Params) {
 
   const statusColour = piece.status?.colour ?? "#9CA3AF";
 
+  // Compute live pricing (manager view only)
+  const lp = isManager
+    ? calculateLivePricing(piece, goldRates, marginBrackets)
+    : null;
+
+  // Underpriced warning: actual retail > 10% below live retail
+  const underpriced = lp?.liveRetail != null && piece.retail_price != null
+    && piece.retail_price < lp.liveRetail * 0.9;
+
+  const gpColour = (pct: number | null | undefined) => {
+    if (pct == null) return "#9CA3AF";
+    if (pct >= 40) return "#10B981";
+    if (pct >= 20) return "#F59E0B";
+    return "#EF4444";
+  };
+
   return (
     <div style={{ padding: "32px 32px 64px", maxWidth: 900, margin: "0 auto" }}>
 
@@ -286,12 +337,147 @@ export default function InventoryItemPage({ params }: Params) {
         <EF label="Dimensions" field="dimensions" />
       </SectionWrap>
 
-      <SectionWrap title="Pricing & Valuation">
-        <EF label="Cost Price" field="cost_price" type="number" />
-        <EF label="Retail Price" field="retail_price" type="number" />
-        <EF label="Valuation Number" field="valuation_number" />
-        <EF label="Valuation Amount" field="valuation_amount" type="number" />
-      </SectionWrap>
+      {/* ── Pricing & Valuation — manager only ── */}
+      {isManager && (
+        <>
+          {/* Edit mode: all cost inputs */}
+          {editing && (
+            <SectionWrap title="Pricing & Valuation">
+              <EF label="Locked cost (actual cost paid)" field="locked_cost" type="number" />
+              <EF label="Stone cost" field="stone_cost" type="number" />
+              <EF label="Labour cost" field="labour_cost" type="number" />
+              <EF label="Retail Price" field="retail_price" type="number" />
+              <EF label="Cost Price" field="cost_price" type="number" />
+              <EF label="Valuation Number" field="valuation_number" />
+              <EF label="Valuation Amount" field="valuation_amount" type="number" />
+            </SectionWrap>
+          )}
+
+          {/* View mode: live pricing panels */}
+          {!editing && (
+            <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 24, marginBottom: 16 }}>
+              <h3 style={{ margin: "0 0 20px", fontSize: 12, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Pricing &amp; Valuation
+              </h3>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+
+                {/* Panel A — Actual Cost (locked) */}
+                <div style={{ background: "#FAFAFA", border: "1px solid #E5E7EB", borderRadius: 10, padding: 18 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 14 }}>
+                    <Lock size={13} style={{ color: "#6B7280" }} />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>Actual Cost</span>
+                  </div>
+
+                  {piece.locked_cost == null ? (
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 12px", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, marginBottom: 12 }}>
+                      <AlertTriangle size={14} style={{ color: "#D97706", marginTop: 1, flexShrink: 0 }} />
+                      <span style={{ fontSize: 12, color: "#92400E", lineHeight: 1.4 }}>No locked cost recorded — gross profit unavailable</span>
+                    </div>
+                  ) : (
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>Locked cost</div>
+                      <div style={{ fontFamily: "monospace", fontSize: 22, fontWeight: 700, color: "#111827" }}>{fmt(piece.locked_cost)}</div>
+                      <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>Recorded at time of entry — never changes</div>
+                    </div>
+                  )}
+
+                  <div style={{ borderTop: "1px solid #E5E7EB", paddingTop: 12 }}>
+                    <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 4 }}>Retail Price</div>
+                    <div style={{ fontFamily: "monospace", fontSize: 14, color: "#374151" }}>{fmt(piece.retail_price)}</div>
+                  </div>
+
+                  {lp?.lockedGrossProfit != null && (
+                    <div style={{ marginTop: 12 }}>
+                      <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 4 }}>Locked gross profit</div>
+                      <GpChip gp={lp.lockedGrossProfit} pct={lp.lockedGrossProfitPct} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Panel B — Live Pricing */}
+                <div style={{ background: "#FAFAFA", border: "1px solid #E5E7EB", borderRadius: 10, padding: 18 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 14 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>Live Pricing</span>
+                    <span style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 400 }}>(auto-calculated)</span>
+                  </div>
+
+                  {lp == null || lp.liveCost == null ? (
+                    <div style={{ fontSize: 13, color: "#9CA3AF" }}>
+                      Set metal weight, stone cost, or labour cost to see live pricing.
+                    </div>
+                  ) : (
+                    <>
+                      {/* Cost breakdown */}
+                      <div style={{ borderBottom: "1px solid #E5E7EB", paddingBottom: 10, marginBottom: 10 }}>
+                        {lp.liveCostBreakdown.metalCost != null ? (
+                          <LineItem
+                            label="Metal"
+                            value={fmt(lp.liveCostBreakdown.metalCost)}
+                            sub={
+                              lp.liveCostBreakdown.goldRatePerGram != null
+                                ? `${piece.metal_weight_grams}g × $${lp.liveCostBreakdown.goldRatePerGram.toFixed(2)}/g`
+                                : piece.metal_weight_grams ? `${piece.metal_weight_grams}g — rate not found` : undefined
+                            }
+                          />
+                        ) : (
+                          <LineItem label="Metal" value="—" sub="weight not set" />
+                        )}
+                        <LineItem
+                          label="Stones"
+                          value={lp.liveCostBreakdown.stoneCost != null ? fmt(lp.liveCostBreakdown.stoneCost) : "—"}
+                        />
+                        <LineItem
+                          label="Labour"
+                          value={lp.liveCostBreakdown.labourCost != null ? fmt(lp.liveCostBreakdown.labourCost) : "—"}
+                        />
+                      </div>
+
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.04em" }}>Live cost</span>
+                        <span style={{ fontFamily: "monospace", fontSize: 16, fontWeight: 700, color: "#111827" }}>{fmt(lp.liveCost)}</span>
+                      </div>
+
+                      {lp.liveRetail != null && (
+                        <div style={{ borderTop: "1px solid #E5E7EB", paddingTop: 10, marginBottom: 12 }}>
+                          <LineItem
+                            label="Live retail (suggested)"
+                            value={fmt(lp.liveRetail)}
+                            sub={lp.liveMarginMultiplier != null ? `×${lp.liveMarginMultiplier.toFixed(3)} margin` : undefined}
+                          />
+                          <LineItem label="Actual retail" value={fmt(piece.retail_price)} />
+
+                          {underpriced && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, padding: "7px 10px", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 7 }}>
+                              <TrendingDown size={13} style={{ color: "#DC2626", flexShrink: 0 }} />
+                              <span style={{ fontSize: 12, color: "#DC2626", fontWeight: 500 }}>Retail may be underpriced</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {lp.liveGrossProfit != null && (
+                        <div style={{ borderTop: "1px solid #E5E7EB", paddingTop: 10 }}>
+                          <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 4 }}>Live gross profit</div>
+                          <GpChip gp={lp.liveGrossProfit} pct={lp.liveGrossProfitPct} />
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Valuation — below panels */}
+              {(piece.valuation_number || piece.valuation_amount) && (
+                <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid #E5E7EB", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 24px" }}>
+                  <FieldView label="Valuation Number" value={piece.valuation_number} />
+                  <FieldView label="Valuation Amount" value={piece.valuation_amount} />
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
 
       <SectionWrap title="Dates">
         <EF label="Date Received" field="date_received" type="date" />
