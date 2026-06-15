@@ -57,7 +57,7 @@ async function generatePDF(
     use_print: false,
     sandbox: false,
     css: isA5
-      ? ".pdf-bar, .pdfshift-banner, [class*='pdfshift-'], .pay-now-btn { display: none !important; }"
+      ? ".pdf-bar, .pdfshift-banner, [class*='pdfshift-'], .pay-now-btn, .payment-link, [class*='pay-now'], [class*='payment'] { display: none !important; }"
       : ".pdf-bar, .pdfshift-banner, [class*='pdfshift-'] { display: none !important; }",
   };
   if (isA5) {

@@ -127,6 +127,15 @@ export async function DELETE(
     console.warn("[DELETE quote] FK clear failed (non-fatal):", clearErr.message);
   }
 
+  // Delete related notifications (notifications.quote_id FK blocks deletion)
+  const { error: notifErr } = await supabase
+    .from("notifications")
+    .delete()
+    .eq("quote_id", params.id);
+  if (notifErr) {
+    console.warn("[DELETE quote] notifications clear failed (non-fatal):", notifErr.message);
+  }
+
   const { error } = await supabase
     .from("quotes")
     .delete()
