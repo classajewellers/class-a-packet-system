@@ -194,7 +194,7 @@ function computeItemPricing(
   if (item.marginMultiplierOverride && parseFloat(item.marginMultiplierOverride) > 0) {
     quotedPrice = Math.ceil(totalCost * parseFloat(item.marginMultiplierOverride) / 5) * 5;
   } else {
-    quotedPrice = Math.ceil(rawPrice / 5) * 5;
+    quotedPrice = suggestedRetail > 0 ? Math.ceil(suggestedRetail / 5) * 5 : Math.ceil(rawPrice / 5) * 5;
   }
 
   const finalPrice = item.retailPriceOverride && parseFloat(item.retailPriceOverride) > 0
@@ -221,7 +221,7 @@ function computeItemPricing(
     if (item.marginMultiplierOverride && parseFloat(item.marginMultiplierOverride) > 0) {
       return Math.ceil(optTotal * parseFloat(item.marginMultiplierOverride) / 5) * 5;
     }
-    return Math.ceil(optRaw / 5) * 5;
+    return optSuggested > 0 ? Math.ceil(optSuggested / 5) * 5 : Math.ceil(optRaw / 5) * 5;
   });
 
   return {
@@ -629,8 +629,14 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Multiplier{item.marginMultiplierOverride ? " (override)" : ""}</span><span style={{ fontWeight: 500, color: item.marginMultiplierOverride ? "#D97706" : "#374151" }}>×{pricing.activeMultiplier?.toFixed(2) ?? "—"}</span></div>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Raw Price</span><span style={{ fontWeight: 500 }}>${pricing.rawPrice.toFixed(2)}</span></div>
-                <div style={{ borderTop: "1px solid #D1D5DB", marginTop: 8, paddingTop: 8, display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ fontWeight: 700, color: "#1A1A2E", fontSize: 14 }}>Final Price</span>
+                {pricing.suggestedRetail > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                    <span style={{ color: "#9CA3AF", fontSize: 12, fontStyle: "italic" }}>Tiered margin applied</span>
+                    <span style={{ color: "#9CA3AF", fontSize: 12 }}>${pricing.suggestedRetail.toFixed(2)}</span>
+                  </div>
+                )}
+                <div style={{ borderTop: "1px solid #D1D5DB", marginTop: 8, paddingTop: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <span style={{ fontWeight: 700, color: "#1A1A2E", fontSize: 14 }}>Final Price <span style={{ fontWeight: 400, color: "#9CA3AF", fontSize: 11 }}>(rounded to nearest $5)</span></span>
                   <span style={{ fontWeight: 800, color: "#635BFF", fontSize: 14 }}>${pricing.finalPrice.toLocaleString("en-AU")}</span>
                 </div>
                 {item.stoneOptions.length > 1 && (
