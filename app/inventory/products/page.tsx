@@ -7,9 +7,6 @@ import { canManage } from "@/lib/userTypes";
 import { InventoryProduct } from "@/lib/types";
 import { Plus, X, Package, ChevronRight } from "lucide-react";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
 export default function ProductsPage() {
   const router = useRouter();
   const { user, hydrated } = useUser();
