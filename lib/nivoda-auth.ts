@@ -27,14 +27,9 @@ async function fetchFreshToken(): Promise<string> {
   console.log("[nivoda/auth] Username   :", email);
   console.log("[nivoda/auth] Timeout    :", FETCH_TIMEOUT, "ms");
 
-  const query = `{
-    authenticate {
-      username_and_password(
-        username: "${email}",
-        password: "${password}"
-      ) {
-        token
-      }
+  const query = `mutation {
+    request_auth(username: "${email}", password: "${password}") {
+      token
     }
   }`;
 
@@ -115,9 +110,7 @@ async function fetchFreshToken(): Promise<string> {
   const j = json as {
     errors?: Array<{ message: string; [k: string]: unknown }>;
     data?: {
-      authenticate?: {
-        username_and_password?: { token?: string };
-      };
+      request_auth?: { token?: string };
     };
   };
 
@@ -126,7 +119,7 @@ async function fetchFreshToken(): Promise<string> {
     throw new Error(`Nivoda auth GraphQL error: ${j.errors[0].message}`);
   }
 
-  const token: string | undefined = j.data?.authenticate?.username_and_password?.token;
+  const token: string | undefined = j.data?.request_auth?.token;
 
   if (!token) {
     console.error("[nivoda/auth] No token in response — full JSON:", JSON.stringify(j, null, 2));
