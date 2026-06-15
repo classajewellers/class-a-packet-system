@@ -9,7 +9,7 @@ import { getSupabaseClient } from "@/lib/supabase";
 import { STAFF_EMAIL_MAP } from "@/lib/staffEmails";
 import { formatDateAU } from "@/lib/formatters";
 import nextDynamic from "next/dynamic";
-import QuoteStatsBar from "@/components/QuoteStatsBar";
+import { isOverdue, quoteStage } from "@/lib/pipeline";
 import { useUser } from "@/context/UserContext";
 import { useRouter } from "next/navigation";
 import { hasPermission } from "@/lib/userTypes";
@@ -119,9 +119,12 @@ export default function QuotesPage() {
   const followUpDueToday = quotes.filter((q) => q.follow_up_date === today && q.status !== "converted");
   const wonThisMonth = quotes.filter((q) => q.status === "converted" && (q.converted_at ?? "") >= monthStart);
   const lostThisMonth = quotes.filter((q) => q.status === "job_lost" && (q.job_lost_at ?? "") >= monthStart);
-  const conversionRate = quotes.length > 0
-    ? Math.round((quotes.filter((q) => q.status === "converted").length / quotes.length) * 100)
-    : 0;
+  const closedCount = quotes.filter((q) => q.status === "converted" || q.status === "job_won" || q.status === "job_lost").length;
+  const wonCount = quotes.filter((q) => q.status === "converted" || q.status === "job_won").length;
+  const conversionRate = closedCount > 0 ? Math.round((wonCount / closedCount) * 100) : 0;
+  const overdueFollowUps = quotes.filter(
+    (q) => isOverdue(q.follow_up_date) && quoteStage(q.status) !== "job_won" && quoteStage(q.status) !== "job_lost" && q.status !== "converted"
+  ).length;
 
   return (
     <>
@@ -140,25 +143,23 @@ export default function QuotesPage() {
           </Link>
         </div>
 
-        {/* Stats bar */}
+        {/* Stats row */}
         {!loading && quotes.length > 0 && (
-          <>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              {[
-                { label: 'Active', value: activeQuotes.length, color: '#1A1A2E' },
-                { label: 'Follow Up Today', value: followUpDueToday.length, color: followUpDueToday.length > 0 ? '#EF4444' : '#1A1A2E' },
-                { label: 'Won This Month', value: wonThisMonth.length, color: '#10B981' },
-                { label: 'Lost This Month', value: lostThisMonth.length, color: '#1A1A2E' },
-                { label: 'Conversion Rate', value: `${conversionRate}%`, color: '#1A1A2E' },
-              ].map(({ label, value, color }) => (
-                <div key={label} style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, padding: 16, borderLeft: '3px solid #635BFF' }}>
-                  <p style={{ fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>{label}</p>
-                  <p style={{ fontSize: 28, fontWeight: 700, color, lineHeight: 1 }}>{value}</p>
-                </div>
-              ))}
-            </div>
-            <QuoteStatsBar quotes={quotes} />
-          </>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {[
+              { label: 'Active Quotes', value: activeQuotes.length, color: '#1A1A2E' },
+              { label: 'Follow Up Today', value: followUpDueToday.length, color: followUpDueToday.length > 0 ? '#EF4444' : '#1A1A2E' },
+              { label: 'Won This Month', value: wonThisMonth.length, color: '#10B981' },
+              { label: 'Lost This Month', value: lostThisMonth.length, color: lostThisMonth.length > 0 ? '#EF4444' : '#1A1A2E' },
+              { label: 'Conversion Rate', value: `${conversionRate}%`, color: conversionRate >= 50 ? '#10B981' : '#1A1A2E' },
+              { label: 'Overdue Follow-ups', value: overdueFollowUps, color: overdueFollowUps > 0 ? '#EF4444' : '#1A1A2E' },
+            ].map(({ label, value, color }) => (
+              <div key={label} style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, padding: '16px 16px 14px', borderLeft: '3px solid #635BFF' }}>
+                <p style={{ fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>{label}</p>
+                <p style={{ fontSize: 28, fontWeight: 700, color, lineHeight: 1 }}>{value}</p>
+              </div>
+            ))}
+          </div>
         )}
 
         {/* Staff filter + view toggle */}
