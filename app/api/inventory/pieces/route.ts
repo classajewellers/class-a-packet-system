@@ -38,23 +38,26 @@ async function generateSku(
   supabase: Awaited<ReturnType<typeof createTenantSupabaseClient>>,
   prefix: string
 ): Promise<string> {
-  // Find the highest sequence number for this prefix in the tenant
-  const { data } = await supabase
-    .from("inventory_pieces")
-    .select("sku")
-    .ilike("sku", `${prefix}-%`)
-    .order("sku", { ascending: false })
-    .limit(20);
+  try {
+    const { data } = await supabase
+      .from("inventory_pieces")
+      .select("sku")
+      .ilike("sku", `${prefix}-%`)
+      .order("sku", { ascending: false })
+      .limit(20);
 
-  let maxSeq = 0;
-  for (const row of data ?? []) {
-    const parts = (row.sku as string).split("-");
-    const seq = parseInt(parts[parts.length - 1], 10);
-    if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+    let maxSeq = 0;
+    for (const row of data ?? []) {
+      const parts = (row.sku as string).split("-");
+      const seq = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+    }
+
+    return `${prefix}-${String(maxSeq + 1).padStart(4, "0")}`;
+  } catch (err) {
+    console.error("[generateSku] fallback to timestamp:", err);
+    return `XX-${Date.now().toString().slice(-4)}`;
   }
-
-  const next = maxSeq + 1;
-  return `${prefix}-${String(next).padStart(4, "0")}`;
 }
 
 // GET /api/inventory/pieces
@@ -94,38 +97,62 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
 // POST /api/inventory/pieces — create with auto-generated SKU
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const tenantId = req.headers.get("x-tenant-id") ?? "";
-  const supabase = await createTenantSupabaseClient(tenantId);
+  try {
+    const tenantId = req.headers.get("x-tenant-id") ?? "";
+    const supabase = await createTenantSupabaseClient(tenantId);
 
-  const body = await req.json();
+    const body = await req.json();
+    console.log("[POST /api/inventory/pieces] body:", JSON.stringify(body));
 
-  // Strip joined relation keys before insert — SKU is always generated server-side
-  const {
-    status: _s, location: _l, category: _c, supplier: _sp,
-    sku: _ignoredSku,
-    ...insertData
-  } = body;
+    // Strip joined relation keys and any client-supplied SKU
+    const {
+      status: _s, location: _l, category: _c, supplier: _sp,
+      sku: _ignoredSku,
+      ...insertData
+    } = body;
 
-  // Look up category name to determine prefix
-  let categoryName: string | null = null;
-  if (insertData.category_id) {
-    const { data: cat } = await supabase
-      .from("inventory_categories")
-      .select("name")
-      .eq("id", insertData.category_id)
+    // Normalise optional FK fields — treat empty strings as null
+    if (!insertData.category_id) insertData.category_id = null;
+    if (!insertData.status_id)   insertData.status_id   = null;
+    if (!insertData.location_id) insertData.location_id = null;
+    if (!insertData.supplier_id) insertData.supplier_id = null;
+
+    // Look up category name to determine SKU prefix (graceful on null/missing)
+    let categoryName: string | null = null;
+    if (insertData.category_id) {
+      try {
+        const { data: cat } = await supabase
+          .from("inventory_categories")
+          .select("name")
+          .eq("id", insertData.category_id)
+          .single();
+        categoryName = cat?.name ?? null;
+      } catch (catErr) {
+        console.error("[POST /api/inventory/pieces] category lookup failed:", catErr);
+      }
+    }
+
+    const prefix = categoryPrefix(categoryName);
+    const sku    = await generateSku(supabase, prefix);
+    console.log("[POST /api/inventory/pieces] generated SKU:", sku);
+
+    const { data, error } = await supabase
+      .from("inventory_pieces")
+      .insert({ ...insertData, sku, tenant_id: tenantId })
+      .select(JOINED_SELECT)
       .single();
-    categoryName = cat?.name ?? null;
+
+    if (error) {
+      console.error("[POST /api/inventory/pieces] insert error:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ piece: data });
+  } catch (error) {
+    console.error("POST /api/inventory/pieces error:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Unexpected server error" },
+      { status: 500 }
+    );
   }
-
-  const prefix = categoryPrefix(categoryName);
-  const sku    = await generateSku(supabase, prefix);
-
-  const { data, error } = await supabase
-    .from("inventory_pieces")
-    .insert({ ...insertData, sku, tenant_id: tenantId })
-    .select(JOINED_SELECT)
-    .single();
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ piece: data });
 }
