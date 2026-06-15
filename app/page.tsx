@@ -145,8 +145,15 @@ export default function DashboardPage() {
   const today = todayISO();
   const todaysOrders    = packets.filter((p) => (p.created_at ?? "").startsWith(today)).length;
   const dueToday        = packets.filter((p) => p.due_date === today && p.collected_date == null).length;
+  const ONLINE_SOURCES = ["shopify", "online"];
   const overdueRepairs  = packets.filter(
-    (p) => p.packet_type === "repair" && p.due_date != null && p.due_date < today && p.collected_date == null
+    (p) =>
+      p.packet_type === "repair" &&
+      p.due_date != null &&
+      p.due_date < today &&
+      p.collected_date == null &&
+      !ONLINE_SOURCES.includes((p as any).order_source ?? "") &&
+      (p as any).order_type !== "online"
   ).length;
   const unprintedOnline = packets.filter((p) => p.packet_type === "online_order" && !p.label_printed).length;
 
@@ -160,10 +167,6 @@ export default function DashboardPage() {
 
   const upcoming = packets
     .filter((p) => p.due_date != null && p.due_date >= today && p.due_date <= in7DaysISO && p.collected_date == null)
-    .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""));
-
-  const overdue = packets
-    .filter((p) => p.due_date != null && p.due_date < today && p.collected_date == null)
     .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""));
 
   // ── Shared styles ──────────────────────────────────────────────────────────
@@ -195,6 +198,22 @@ export default function DashboardPage() {
 
   return (
     <div style={{ padding: 24, maxWidth: 1200, margin: "0 auto" }}>
+
+      {/* ── Header with action buttons ── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, marginBottom: 20 }}>
+        <Link
+          href="/quotes/builder"
+          style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "#635BFF", color: "#fff", height: 38, padding: "0 18px", borderRadius: 8, fontWeight: 500, fontSize: 14 }}
+        >
+          New Quote
+        </Link>
+        <Link
+          href="/orders/new"
+          style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "#fff", color: "#1A1A2E", height: 38, padding: "0 18px", borderRadius: 8, fontWeight: 500, fontSize: 14, border: "1px solid #E8E8F0" }}
+        >
+          New Order
+        </Link>
+      </div>
 
       {/* ── Stat cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
@@ -308,32 +327,6 @@ export default function DashboardPage() {
 
         {/* Right column */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-
-          {/* Overdue */}
-          {!loading && overdue.length > 0 && (
-            <div style={{ ...card }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: "1px solid #FEE2E2" }}>
-                <span style={{ fontWeight: 600, fontSize: 14, color: "#1A1A2E" }}>Overdue</span>
-                <span style={{ ...BADGE_BASE, background: "#EF4444", color: "#fff" }}>{overdue.length}</span>
-              </div>
-              <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
-                {overdue.slice(0, 5).map((p) => {
-                  const name = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
-                  return (
-                    <li key={p.id} style={{ padding: "10px 16px", borderBottom: "1px solid #E8E8F0" }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1A1A2E" }}>{name}</div>
-                      <div style={{ fontSize: 12, color: "#EF4444", marginTop: 2 }}>
-                        {packetTypeLabel(p.packet_type)} · Due {formatDateAU(p.due_date)}
-                      </div>
-                    </li>
-                  );
-                })}
-                {overdue.length > 5 && (
-                  <li style={{ padding: "8px 16px", fontSize: 12, color: "#9CA3AF" }}>+{overdue.length - 5} more overdue</li>
-                )}
-              </ul>
-            </div>
-          )}
 
           {/* Due This Week */}
           <div style={card}>
