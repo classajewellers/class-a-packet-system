@@ -2,72 +2,68 @@
 export const dynamic = 'force-dynamic'
 
 import { useState, useEffect } from 'react'
+import { createBrowserClient } from '@supabase/ssr'
+
+function getSupabase() {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+}
+
+function getParam(name: string): string | null {
+  // Check query string first, then hash (Supabase uses both depending on flow)
+  const search = new URLSearchParams(window.location.search)
+  if (search.get(name)) return search.get(name)
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+  return hash.get(name)
+}
 
 export default function AcceptInvitePage() {
-  const [fullName, setFullName] = useState('')
+  const [status, setStatus] = useState<'verifying' | 'ready' | 'error'>('verifying')
+  const [tokenError, setTokenError] = useState('')
   const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [sessionReady, setSessionReady] = useState(false)
-  const [sessionError, setSessionError] = useState('')
 
-  // On mount, exchange the token from the URL fragment for a session.
-  // Supabase appends #access_token=...&type=invite (or ?token_hash=...) to the
-  // redirectTo URL. We need to establish the session before updateUser() will work.
-  //
-  // NOTE: Add https://www.jewelleryvault.com.au/accept-invite to the Supabase
-  // redirect allowlist: Dashboard → Authentication → URL Configuration → Redirect URLs
   useEffect(() => {
-    async function establish() {
-      const { createBrowserClient } = await import('@supabase/ssr')
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      )
+    async function verify() {
+      const tokenHash = getParam('token_hash')
+      const type = getParam('type')
 
-      // Let the Supabase client pick up the hash / query params automatically.
-      const { data, error: sessErr } = await supabase.auth.getSession()
-
-      if (sessErr || !data.session) {
-        setSessionError('This invite link has expired. Please ask your manager to resend the invite.')
+      if (!tokenHash) {
+        setTokenError('This invite link has expired. Ask your manager to resend the invite.')
+        setStatus('error')
         return
       }
 
-      // Pre-fill full name from invite metadata if available.
-      const meta = data.session.user.user_metadata
-      if (meta?.full_name) setFullName(meta.full_name as string)
+      const supabase = getSupabase()
+      const { error } = await supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: (type as 'invite') ?? 'invite',
+      })
 
-      setSessionReady(true)
+      if (error) {
+        setTokenError('This invite link has expired. Ask your manager to resend the invite.')
+        setStatus('error')
+        return
+      }
+
+      setStatus('ready')
     }
 
-    establish()
+    verify()
   }, [])
 
   async function handleSubmit() {
     setError('')
-
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.')
-      return
-    }
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.')
-      return
-    }
+    if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
+    if (password !== confirm) { setError('Passwords do not match.'); return }
 
     setLoading(true)
-
-    const { createBrowserClient } = await import('@supabase/ssr')
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-
-    const updates: { password: string; data?: { full_name: string } } = { password }
-    if (fullName.trim()) updates.data = { full_name: fullName.trim() }
-
-    const { error: updateErr } = await supabase.auth.updateUser(updates)
+    const supabase = getSupabase()
+    const { error: updateErr } = await supabase.auth.updateUser({ password })
 
     if (updateErr) {
       setError(updateErr.message)
@@ -78,75 +74,43 @@ export default function AcceptInvitePage() {
     window.location.href = '/'
   }
 
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '10px 14px',
-    border: '1px solid #E8E8F0',
-    borderRadius: 8,
-    fontSize: 14,
-    boxSizing: 'border-box',
-  }
-  const labelStyle: React.CSSProperties = {
-    display: 'block',
-    fontSize: 14,
-    fontWeight: 500,
-    color: '#374151',
-    marginBottom: 6,
+  const input: React.CSSProperties = {
+    width: '100%', padding: '10px 14px', border: '1px solid #E8E8F0',
+    borderRadius: 8, fontSize: 14, boxSizing: 'border-box', marginTop: 6,
   }
 
   return (
     <div style={{ minHeight: '100vh', background: '#F9FAFB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, sans-serif' }}>
       <div style={{ background: 'white', border: '1px solid #E8E8F0', borderRadius: 12, padding: 48, width: 400 }}>
+
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{ width: 48, height: 48, background: '#635BFF', borderRadius: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
             <span style={{ color: 'white', fontSize: 20 }}>◆</span>
           </div>
           <h1 style={{ fontSize: 24, fontWeight: 700, color: '#1A1760', margin: '0 0 8px' }}>Welcome to Vault</h1>
-          <p style={{ color: '#6B7280', fontSize: 14, margin: 0 }}>You've been invited to Vault. Set your password to get started.</p>
+          <p style={{ color: '#6B7280', fontSize: 14, margin: 0 }}>Set your password to get started.</p>
         </div>
 
-        {sessionError ? (
+        {status === 'verifying' && (
+          <p style={{ textAlign: 'center', color: '#6B7280', fontSize: 14 }}>Verifying invite link…</p>
+        )}
+
+        {status === 'error' && (
           <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: 16, color: '#DC2626', fontSize: 14, textAlign: 'center' }}>
-            {sessionError}
+            {tokenError}
           </div>
-        ) : !sessionReady ? (
-          <div style={{ textAlign: 'center', color: '#6B7280', fontSize: 14, padding: '16px 0' }}>
-            Verifying invite link…
-          </div>
-        ) : (
+        )}
+
+        {status === 'ready' && (
           <>
             <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Full Name</label>
-              <input
-                type="text"
-                value={fullName}
-                onChange={e => setFullName(e.target.value)}
-                placeholder="Jane Smith"
-                style={inputStyle}
-              />
-            </div>
-
-            <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
-                style={inputStyle}
-              />
+              <label style={{ fontSize: 14, fontWeight: 500, color: '#374151' }}>Password</label>
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" style={input} />
             </div>
 
             <div style={{ marginBottom: 24 }}>
-              <label style={labelStyle}>Confirm Password</label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={e => setConfirmPassword(e.target.value)}
-                placeholder="••••••••"
-                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                style={inputStyle}
-              />
+              <label style={{ fontSize: 14, fontWeight: 500, color: '#374151' }}>Confirm Password</label>
+              <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="••••••••" onKeyDown={e => e.key === 'Enter' && handleSubmit()} style={input} />
             </div>
 
             {error && (
