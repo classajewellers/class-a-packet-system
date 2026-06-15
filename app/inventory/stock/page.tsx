@@ -47,7 +47,7 @@ const STATUS_BADGE: Record<string, { bg: string; fg: string; label: string }> = 
   consignment: { bg: "#FFF7ED", fg: "#9A3412", label: "Consignment" },
 };
 
-const METAL_KARATS = ["9K", "18K", "Platinum", "Silver", "Other"];
+const METAL_CARATS = ["9K", "18K", "Platinum", "Silver", "Other"];
 const METAL_COLOURS = ["Yellow", "White", "Rose", "N/A"];
 const DIAMOND_TYPES = ["Natural", "Lab Grown", "None"];
 const DIAMOND_COLOURS = ["D", "E", "F", "G", "H", "I", "J", "Other"];
@@ -846,7 +846,7 @@ function PieceDetailsForm({
 }) {
   const { user } = useUser();
   const [sku, setSku] = useState(piece?.sku ?? "");
-  const [metalKarat, setMetalKarat] = useState(piece?.metal_karat ?? "");
+  const [metalCarat, setMetalCarat] = useState(piece?.metal_karat ?? "");
   const [metalColour, setMetalColour] = useState(piece?.metal_colour ?? "");
   const [metalWeight, setMetalWeight] = useState(piece?.metal_weight_grams != null ? String(piece.metal_weight_grams) : "");
   const [diamondType, setDiamondType] = useState(piece?.diamond_type ?? "");
@@ -877,7 +877,7 @@ function PieceDetailsForm({
       const payload = {
         design_id: design?.id ?? null,
         sku: sku.trim(),
-        metal_karat: metalKarat || null,
+        metal_karat: metalCarat || null,
         metal_colour: metalColour || null,
         metal_weight_grams: metalWeight,
         diamond_type: diamondType || null,
@@ -945,10 +945,10 @@ function PieceDetailsForm({
 
       <SectionHeader>Metal</SectionHeader>
       <Row>
-        <FieldLabel label="Karat">
-          <select value={metalKarat} onChange={(e) => setMetalKarat(e.target.value)} style={inputStyle}>
+        <FieldLabel label="Carat">
+          <select value={metalCarat} onChange={(e) => setMetalCarat(e.target.value)} style={inputStyle}>
             <option value="">—</option>
-            {METAL_KARATS.map((k) => <option key={k} value={k}>{k}</option>)}
+            {METAL_CARATS.map((k) => <option key={k} value={k}>{k}</option>)}
           </select>
         </FieldLabel>
         <FieldLabel label="Colour">
@@ -1143,7 +1143,7 @@ function PieceBomPanel({
                     existing={item}
                     suppliers={suppliers}
                     goldPrices={goldPrices}
-                    metalKarat={piece.metal_karat}
+                    metalCarat={piece.metal_karat}
                     onClose={() => setEditingId(null)}
                     onSaved={(saved) => {
                       setItems((prev) => prev.map((i) => i.id === saved.id ? saved : i));
@@ -1168,7 +1168,7 @@ function PieceBomPanel({
               existing={null}
               suppliers={suppliers}
               goldPrices={goldPrices}
-              metalKarat={piece.metal_karat}
+              metalCarat={piece.metal_karat}
               onClose={() => setShowAddForm(false)}
               onSaved={(saved) => {
                 setItems((prev) => [...prev, saved]);
@@ -1257,13 +1257,13 @@ function BomItemRow({ item, onEdit, onDelete }: { item: InventoryPieceBom; onEdi
 // BOM Item Form (add + edit)
 // ─────────────────────────────────────────────────────────────────────────
 function BomItemForm({
-  pieceId, existing, suppliers, goldPrices, metalKarat, onClose, onSaved,
+  pieceId, existing, suppliers, goldPrices, metalCarat, onClose, onSaved,
 }: {
   pieceId: string;
   existing: InventoryPieceBom | null;
   suppliers: InventorySupplier[];
   goldPrices: Record<string, { price_per_gram: number; created_at: string }>;
-  metalKarat: string | null;
+  metalCarat: string | null;
   onClose: () => void;
   onSaved: (item: InventoryPieceBom) => void;
 }) {
@@ -1278,8 +1278,8 @@ function BomItemForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const showGoldHint = componentType === "casting" && metalKarat && goldPrices[metalKarat];
-  const goldPriceEntry = showGoldHint ? goldPrices[metalKarat!] : null;
+  const showGoldHint = componentType === "casting" && metalCarat && goldPrices[metalCarat];
+  const goldPriceEntry = showGoldHint ? goldPrices[metalCarat!] : null;
   const goldDays = goldPriceEntry ? daysSince(goldPriceEntry.created_at) : null;
   const goldStale = goldDays != null && goldDays > 7;
 
@@ -1358,7 +1358,7 @@ function BomItemForm({
         }}>
           {goldStale ? <AlertTriangle size={14} /> : <Info size={14} color={AMBER} />}
           <span>
-            Current {metalKarat} gold price: <strong>${Number(goldPriceEntry.price_per_gram).toFixed(2)}/g</strong>
+            Current {metalCarat} gold price: <strong>${Number(goldPriceEntry.price_per_gram).toFixed(2)}/g</strong>
             {goldDays != null && (
               <> (updated {goldDays === 0 ? "today" : goldDays === 1 ? "1 day ago" : `${goldDays} days ago`})</>
             )}

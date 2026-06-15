@@ -138,7 +138,7 @@ function isNativeShopifyFormat(body: Record<string, unknown>): boolean {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const meaningfulKeys = [
-  "metal", "carat", "karat", "gold", "colour", "color",
+  "metal", "carat", "carat", "gold", "colour", "color",
   "stone", "gem", "diamond", "sapphire", "ruby", "emerald",
   "size", "ring size", "engraving", "personalisation", "personalization",
   "chain", "initial", "birthstone",

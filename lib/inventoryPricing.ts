@@ -27,9 +27,9 @@ export interface LivePricingResult {
   };
 }
 
-function findGoldRate(metalKarat: string | null | undefined, goldRates: GoldRate[]): number | null {
-  if (!metalKarat || goldRates.length === 0) return null;
-  const kLower = metalKarat.toLowerCase().trim();
+function findGoldRate(metalCarat: string | null | undefined, goldRates: GoldRate[]): number | null {
+  if (!metalCarat || goldRates.length === 0) return null;
+  const kLower = metalCarat.toLowerCase().trim();
 
   for (const r of goldRates) {
     if (r.metal_type.toLowerCase() === kLower) return r.price_per_gram;

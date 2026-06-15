@@ -627,7 +627,7 @@ export type InventoryMovementType =
 // ─────────────────────────────────────────────
 // Inventory — Products / Variants / BOM / Purchases / Gold pricing
 // ─────────────────────────────────────────────
-export type MetalKarat = '9K' | '18K' | 'Platinum' | 'Silver' | 'Other';
+export type MetalCarat = '9K' | '18K' | 'Platinum' | 'Silver' | 'Other';
 export type MetalColour = 'Yellow' | 'White' | 'Rose' | 'N/A';
 export type DiamondType = 'Natural' | 'Lab Grown' | 'None';
 export type BomComponentType = 'casting' | 'diamond' | 'labour' | 'settings' | 'findings' | 'other';
@@ -650,7 +650,7 @@ export interface InventoryVariant {
   product_id: string;
   sku: string;
   metal_type: string | null;
-  metal_karat: MetalKarat | null;
+  metal_karat: MetalCarat | null;
   metal_colour: MetalColour | null;
   metal_weight_grams: number | null;
   diamond_carat: number | null;
@@ -686,7 +686,7 @@ export interface InventoryBomItem {
 
 export interface InventoryGoldPrice {
   id: string;
-  karat: string;
+  carat: string;
   price_per_gram: number;
   supplier_id: string | null;
   effective_date: string;

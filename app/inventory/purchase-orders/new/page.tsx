@@ -293,7 +293,7 @@ export default function NewPurchaseOrderPage() {
                   <input value={line.metal_type} onChange={e => updateLine(line._id, { metal_type: e.target.value })} placeholder="e.g. Yellow Gold" style={IF} />
                 </div>
                 <div>
-                  <label style={LF}>Karat</label>
+                  <label style={LF}>Carat</label>
                   <input value={line.metal_karat} onChange={e => updateLine(line._id, { metal_karat: e.target.value })} placeholder="e.g. 18ct" style={IF} />
                 </div>
                 <div>

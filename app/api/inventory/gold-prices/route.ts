@@ -13,11 +13,11 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: false })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     const all = data ?? []
-    const latestByKarat: Record<string, unknown> = {}
-    for (const row of all as Array<{ karat: string }>) {
-      if (!latestByKarat[row.karat]) latestByKarat[row.karat] = row
+    const latestByCarat: Record<string, unknown> = {}
+    for (const row of all as Array<{ carat: string }>) {
+      if (!latestByCarat[row.carat]) latestByCarat[row.carat] = row
     }
-    return NextResponse.json({ prices: all, latest: latestByKarat })
+    return NextResponse.json({ prices: all, latest: latestByCarat })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     const { data, error } = await supabase
       .from('inventory_gold_prices')
       .insert({
-        karat: body.karat,
+        carat: body.carat,
         price_per_gram: body.price_per_gram,
         supplier_id: body.supplier_id || null,
         effective_date: body.effective_date || new Date().toISOString().slice(0, 10),

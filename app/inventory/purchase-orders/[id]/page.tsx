@@ -217,7 +217,7 @@ function ReceiveCard({
           <input value={specs.metal_type} onChange={e => setSpecs(s => ({ ...s, metal_type: e.target.value }))} style={IF} />
         </div>
         <div>
-          <label style={LF}>Karat</label>
+          <label style={LF}>Carat</label>
           <input value={specs.metal_karat} onChange={e => setSpecs(s => ({ ...s, metal_karat: e.target.value }))} style={IF} />
         </div>
         <div>

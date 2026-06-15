@@ -29,7 +29,7 @@ const ALLOWED_CATEGORIES = [
 ] as const
 
 const ALLOWED_STATUSES = ['in_stock', 'on_order', 'sold', 'consignment', 'repair'] as const
-const ALLOWED_KARATS = ['9K', '14K', '18K', '22K', '24K', 'Platinum', 'Silver', 'Other'] as const
+const ALLOWED_CARATS = ['9K', '14K', '18K', '22K', '24K', 'Platinum', 'Silver', 'Other'] as const
 const ALLOWED_COLOURS = ['Yellow', 'White', 'Rose', 'Two-Tone', 'Tri-Colour', 'Other'] as const
 const ALLOWED_DIAMOND_TYPES = ['Natural', 'Lab Grown', 'Moissanite', 'None'] as const
 
@@ -156,16 +156,16 @@ export async function POST(req: NextRequest) {
         }
 
         // Validate enums
-        const karatInput = (row.metal_karat ?? '').trim()
-        let metalKarat: string | null = null
-        if (karatInput) {
-          const matched = pickEnum(karatInput, ALLOWED_KARATS)
+        const caratInput = (row.metal_karat ?? '').trim()
+        let metalCarat: string | null = null
+        if (caratInput) {
+          const matched = pickEnum(caratInput, ALLOWED_CARATS)
           if (!matched) {
-            errors.push({ row: rowNumber, reason: `Invalid metal_karat "${karatInput}"` })
+            errors.push({ row: rowNumber, reason: `Invalid metal_karat "${caratInput}"` })
             failed++
             continue
           }
-          metalKarat = matched
+          metalCarat = matched
         }
 
         const colourInput = (row.metal_colour ?? '').trim()
@@ -195,7 +195,7 @@ export async function POST(req: NextRequest) {
         const insertPayload = {
           design_id: designId,
           sku,
-          metal_karat: metalKarat,
+          metal_karat: metalCarat,
           metal_colour: metalColour,
           metal_weight_grams: parseNum(row.metal_weight_grams),
           diamond_type: diamondType,

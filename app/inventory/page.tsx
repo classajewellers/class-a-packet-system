@@ -349,7 +349,7 @@ export default function InventoryPage() {
                   <input value={addForm.metal_type} onChange={e => setAddForm(f => ({ ...f, metal_type: e.target.value }))} placeholder="e.g. Yellow Gold" style={IF} />
                 </div>
                 <div>
-                  <label style={LF}>Karat</label>
+                  <label style={LF}>Carat</label>
                   <input value={addForm.metal_karat} onChange={e => setAddForm(f => ({ ...f, metal_karat: e.target.value }))} placeholder="e.g. 18ct" style={IF} />
                 </div>
                 <div>
