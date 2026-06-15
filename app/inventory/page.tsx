@@ -45,7 +45,7 @@ const BLANK_FORM: AddForm = {
 export default function InventoryPage() {
   const router = useRouter();
   const { user, hydrated } = useUser();
-  const tenantId: string = (user as any)?.tenant_id ?? "";
+  const tenantId: string = user?.tenantId ?? "";
   const isManager = hydrated ? canManage(user?.role) : false;
 
   const [pieces, setPieces]   = useState<InventoryPiece[]>([]);

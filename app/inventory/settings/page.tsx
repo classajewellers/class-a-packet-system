@@ -35,7 +35,7 @@ function ColourDot({ colour, selected, onClick }: { colour: string; selected: bo
 
 export default function InventorySettingsPage() {
   const { user, hydrated } = useUser();
-  const tenantId: string = (user as any)?.tenant_id ?? "";
+  const tenantId: string = user?.tenantId ?? "";
   const isManager = hydrated ? canManage(user?.role) : false;
 
   const [tab, setTab]     = useState<TabKey>("statuses");

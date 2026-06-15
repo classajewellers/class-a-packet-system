@@ -32,7 +32,7 @@ function SectionWrap({ title, children }: { title: string; children: React.React
 export default function InventoryItemPage({ params }: Params) {
   const router = useRouter();
   const { user, hydrated } = useUser();
-  const tenantId: string = (user as any)?.tenant_id ?? "";
+  const tenantId: string = user?.tenantId ?? "";
   const isManager = hydrated ? canManage(user?.role) : false;
 
   const [piece, setPiece]     = useState<InventoryPiece | null>(null);

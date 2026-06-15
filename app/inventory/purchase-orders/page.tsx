@@ -59,7 +59,7 @@ function SkeletonRow() {
 export default function PurchaseOrdersPage() {
   const router = useRouter();
   const { user, hydrated } = useUser();
-  const tenantId: string = (user as any)?.tenant_id ?? "";
+  const tenantId: string = user?.tenantId ?? "";
   const isManager = hydrated ? canManage(user?.role) : false;
 
   const [pos, setPos]         = useState<PurchaseOrder[]>([]);

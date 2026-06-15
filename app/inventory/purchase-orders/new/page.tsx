@@ -42,7 +42,7 @@ const IF = { width: "100%", boxSizing: "border-box" as const, padding: "7px 10px
 export default function NewPurchaseOrderPage() {
   const router = useRouter();
   const { user, hydrated } = useUser();
-  const tenantId: string = (user as any)?.tenant_id ?? "";
+  const tenantId: string = user?.tenantId ?? "";
 
   const [ref, setRef]             = useState<InventoryReferenceData | null>(null);
   const [suppliers, setSuppliers] = useState<any[]>([]);

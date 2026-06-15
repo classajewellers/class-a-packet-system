@@ -273,7 +273,7 @@ function ReceiveCard({
 export default function PurchaseOrderDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { user, hydrated } = useUser();
-  const tenantId: string = (user as any)?.tenant_id ?? "";
+  const tenantId: string = user?.tenantId ?? "";
   const isManager = hydrated ? canManage(user?.role) : false;
 
   const [po, setPo]           = useState<PurchaseOrder | null>(null);
