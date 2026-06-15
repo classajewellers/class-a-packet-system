@@ -8,7 +8,8 @@ import { useUser } from "@/context/UserContext";
 import { canManage, hasPermission } from "@/lib/userTypes";
 import Link from "next/link";
 import { generateQuoteHTML } from "@/lib/quoteGenerator";
-import { calculateRetailPrice, calculateMultiplier, multiplierColour } from "@/lib/marginCalculator";
+import { calculateRetailPrice, calculateBlendedRetailFromBrackets, calculateMultiplier, multiplierColour } from "@/lib/marginCalculator";
+import type { BlendedBreakdownLine } from "@/lib/marginCalculator";
 import NivodaModal, { type NivodaStone } from "@/components/NivodaModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -127,8 +128,9 @@ function onBlurField(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement 
 
 interface ItemPricing {
   metalCost: number; mainStoneCost: number; meleeCost: number; mainStoneSettingCost: number;
-  mainStoneSettingRate: number; addonsCost: number; totalCost: number; bracket: MarginBracket | undefined;
+  mainStoneSettingRate: number; addonsCost: number; totalCost: number;
   rawPrice: number; quotedPrice: number; finalPrice: number; suggestedRetail: number;
+  breakdown: BlendedBreakdownLine[];
   mult: number | null; mColour: "green" | "orange" | "red" | null; costMap: Record<string, number>;
   extraLabour: number; activeMultiplier: number | null; handEngravingCost: number; laserEngravingCost: number;
   // Stone option prices (index matches stoneOptions array)
@@ -186,15 +188,16 @@ function computeItemPricing(
   const baseWithoutMainStone = metalCost + meleeCost + addonsCost - mainStoneSettingCost;
   const totalCost = metalCost + mainStoneCost + meleeCost + addonsCost;
 
-  const suggestedRetail = totalCost > 0 ? calculateRetailPrice(totalCost) : 0;
-  const bracket = marginBrackets.find(b => totalCost >= b.cost_min && (b.cost_max == null || totalCost <= b.cost_max)) ?? marginBrackets[marginBrackets.length - 1];
-  const rawPrice = bracket ? totalCost * bracket.multiplier : totalCost;
+  const blended = calculateBlendedRetailFromBrackets(totalCost, marginBrackets);
+  const suggestedRetail = blended.retail;
+  const rawPrice = blended.unrounded;
+  const breakdown = blended.breakdown;
 
   let quotedPrice: number;
   if (item.marginMultiplierOverride && parseFloat(item.marginMultiplierOverride) > 0) {
     quotedPrice = Math.ceil(totalCost * parseFloat(item.marginMultiplierOverride) / 5) * 5;
   } else {
-    quotedPrice = suggestedRetail > 0 ? Math.ceil(suggestedRetail / 5) * 5 : Math.ceil(rawPrice / 5) * 5;
+    quotedPrice = suggestedRetail > 0 ? suggestedRetail : (totalCost > 0 ? Math.ceil(totalCost / 5) * 5 : 0);
   }
 
   const finalPrice = item.retailPriceOverride && parseFloat(item.retailPriceOverride) > 0
@@ -203,7 +206,7 @@ function computeItemPricing(
 
   const activeMultiplier = item.marginMultiplierOverride && parseFloat(item.marginMultiplierOverride) > 0
     ? parseFloat(item.marginMultiplierOverride)
-    : (bracket?.multiplier ?? null);
+    : null;
 
   const mult = calculateMultiplier(finalPrice, totalCost);
   const mColour = mult != null ? multiplierColour(mult) : null;
@@ -226,7 +229,7 @@ function computeItemPricing(
 
   return {
     metalCost, mainStoneCost, meleeCost, mainStoneSettingCost, mainStoneSettingRate,
-    addonsCost, totalCost, bracket, rawPrice, quotedPrice, finalPrice, suggestedRetail,
+    addonsCost, totalCost, rawPrice, quotedPrice, finalPrice, suggestedRetail, breakdown,
     mult, mColour, costMap, extraLabour, activeMultiplier, handEngravingCost, laserEngravingCost,
     stoneOptionPrices, baseWithoutMainStone,
   };
@@ -627,13 +630,31 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                   <span style={{ fontWeight: 600, color: "#374151" }}>Subtotal</span>
                   <span style={{ fontWeight: 700, color: "#374151" }}>${pricing.totalCost.toFixed(2)}</span>
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Multiplier{item.marginMultiplierOverride ? " (override)" : ""}</span><span style={{ fontWeight: 500, color: item.marginMultiplierOverride ? "#D97706" : "#374151" }}>×{pricing.activeMultiplier?.toFixed(2) ?? "—"}</span></div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Raw Price</span><span style={{ fontWeight: 500 }}>${pricing.rawPrice.toFixed(2)}</span></div>
-                {pricing.suggestedRetail > 0 && (
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-                    <span style={{ color: "#9CA3AF", fontSize: 12, fontStyle: "italic" }}>Tiered margin applied</span>
-                    <span style={{ color: "#9CA3AF", fontSize: 12 }}>${pricing.suggestedRetail.toFixed(2)}</span>
-                  </div>
+                {item.marginMultiplierOverride && parseFloat(item.marginMultiplierOverride) > 0 ? (
+                  <>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                      <span style={{ color: "#6B7280" }}>Override multiplier</span>
+                      <span style={{ fontWeight: 500, color: "#D97706" }}>×{pricing.activeMultiplier?.toFixed(2)}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                      <span style={{ color: "#6B7280" }}>Pre-rounding</span>
+                      <span style={{ fontWeight: 500 }}>${(pricing.totalCost * parseFloat(item.marginMultiplierOverride)).toFixed(2)}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 4, marginTop: 6 }}>Margin calculation (blended)</div>
+                    {pricing.breakdown.map((line, i) => (
+                      <div key={i} style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                        <span style={{ color: "#9CA3AF", fontSize: 12 }}>{line.label} × {line.multiplier.toFixed(2)}</span>
+                        <span style={{ color: "#374151", fontSize: 12 }}>${line.subtotal.toFixed(2)}</span>
+                      </div>
+                    ))}
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5, marginTop: 4 }}>
+                      <span style={{ color: "#6B7280", fontSize: 12 }}>Subtotal (unrounded)</span>
+                      <span style={{ fontWeight: 500, fontSize: 12 }}>${pricing.rawPrice.toFixed(2)}</span>
+                    </div>
+                  </>
                 )}
                 <div style={{ borderTop: "1px solid #D1D5DB", marginTop: 8, paddingTop: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                   <span style={{ fontWeight: 700, color: "#1A1A2E", fontSize: 14 }}>Final Price <span style={{ fontWeight: 400, color: "#9CA3AF", fontSize: 11 }}>(rounded to nearest $5)</span></span>

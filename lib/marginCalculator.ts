@@ -10,6 +10,74 @@ export interface MarginBracket {
   multiplier: number;
 }
 
+// ── DB-sourced blended calculation ───────────────────────────────────────────
+
+export interface DBMarginBracket {
+  cost_min: number;
+  cost_max: number | null;
+  multiplier: number;
+}
+
+export interface BlendedBreakdownLine {
+  label: string;
+  portion: number;
+  multiplier: number;
+  subtotal: number;
+}
+
+export interface BlendedResult {
+  unrounded: number;
+  retail: number;
+  breakdown: BlendedBreakdownLine[];
+}
+
+/**
+ * Blended retail calculation using DB-sourced brackets.
+ * Each bracket's multiplier applies only to the cost portion within that bracket —
+ * identical to income-tax bracket logic. Retail always increases as cost increases.
+ */
+export function calculateBlendedRetailFromBrackets(
+  cost: number,
+  brackets: DBMarginBracket[]
+): BlendedResult {
+  if (cost <= 0 || brackets.length === 0) return { unrounded: 0, retail: 0, breakdown: [] };
+
+  const sorted = [...brackets].sort((a, b) => a.cost_min - b.cost_min);
+
+  let retail = 0;
+  let remaining = cost;
+  const breakdown: BlendedBreakdownLine[] = [];
+
+  for (const bracket of sorted) {
+    if (remaining <= 0) break;
+    const capacity = bracket.cost_max != null ? bracket.cost_max - bracket.cost_min : remaining;
+    const portion = Math.min(remaining, capacity);
+    if (portion <= 0) continue;
+    const subtotal = portion * bracket.multiplier;
+    retail += subtotal;
+    remaining -= portion;
+    const label = breakdown.length === 0
+      ? `First $${Math.round(portion).toLocaleString("en-AU")}`
+      : `Next $${Math.round(portion).toLocaleString("en-AU")}`;
+    breakdown.push({ label, portion, multiplier: bracket.multiplier, subtotal });
+  }
+
+  // Cost exceeds the highest bracket — use the top bracket's multiplier
+  if (remaining > 0) {
+    const topMultiplier = sorted[sorted.length - 1].multiplier;
+    const subtotal = remaining * topMultiplier;
+    retail += subtotal;
+    breakdown.push({
+      label: `Next $${Math.round(remaining).toLocaleString("en-AU")}`,
+      portion: remaining,
+      multiplier: topMultiplier,
+      subtotal,
+    });
+  }
+
+  return { unrounded: retail, retail: Math.ceil(retail / 5) * 5, breakdown };
+}
+
 export const MARGIN_BRACKETS: MarginBracket[] = [
   { min: 0,     max: 500,   multiplier: 3.20 },
   { min: 500,   max: 1000,  multiplier: 2.95 },
