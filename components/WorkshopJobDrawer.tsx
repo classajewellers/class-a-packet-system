@@ -73,6 +73,85 @@ function SectionHeader({ label, action }: { label: string; action?: React.ReactN
   );
 }
 
+// ── Supplier Section ─────────────────────────────────────────────────────────
+
+function SupplierSection({
+  packetId, tenantId, supplier, sentDate, expectedReturn, returned
+}: {
+  packetId: string;
+  tenantId: string;
+  supplier: string | null | undefined;
+  sentDate: string | null | undefined;
+  expectedReturn: string | null | undefined;
+  returned: boolean | null | undefined;
+}) {
+  const [localSupplier, setLocalSupplier] = useState(supplier ?? "");
+  const [localSent, setLocalSent] = useState(sentDate ?? "");
+  const [localExpected, setLocalExpected] = useState(expectedReturn ?? "");
+  const [localReturned, setLocalReturned] = useState(returned ?? false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await fetch(`/api/workshop/job-lists/${packetId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-tenant-id": tenantId },
+        body: JSON.stringify({
+          workshop_supplier: localSupplier || null,
+          workshop_supplier_sent_date: localSent || null,
+          workshop_supplier_expected_return: localExpected || null,
+          workshop_supplier_returned: localReturned,
+        }),
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div>
+        <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 4 }}>Supplier</label>
+        <select style={fieldStyle} value={localSupplier} onChange={e => setLocalSupplier(e.target.value)}>
+          <option value="">— None —</option>
+          <option value="McAskills">McAskills</option>
+          <option value="Chemgold">Chemgold</option>
+          <option value="In-house">In-house</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div>
+        <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 4 }}>Sent to Supplier</label>
+        <input type="date" style={fieldStyle} value={localSent} onChange={e => setLocalSent(e.target.value)} />
+      </div>
+      <div>
+        <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 4 }}>Expected Return</label>
+        <input type="date" style={fieldStyle} value={localExpected} onChange={e => setLocalExpected(e.target.value)} />
+      </div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, color: '#374151' }}>
+        <input
+          type="checkbox"
+          checked={localReturned}
+          onChange={e => setLocalReturned(e.target.checked)}
+          style={{ width: 16, height: 16, accentColor: '#635BFF' }}
+        />
+        Returned from supplier
+      </label>
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        style={{ padding: '8px 16px', borderRadius: 8, background: saved ? '#16A34A' : '#635BFF', color: '#fff', fontSize: 13, fontWeight: 600, border: 'none', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}
+      >
+        {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save Supplier Info'}
+      </button>
+    </div>
+  );
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -730,6 +809,21 @@ export default function WorkshopJobDrawer({ job, onClose, onUpdate, onDelete }: 
           <p style={{ fontSize: 12, color: '#9CA3AF' }}>
             Ref: {local.reference_number || "—"} &bull; Created {formatDateAU(local.created_at?.split("T")[0])}
           </p>
+
+          {/* Supplier Tracking — manager only */}
+          {isManager && local.packet_id && (
+            <div style={{ marginBottom: 16 }}>
+              <SectionHeader label="Supplier Tracking" />
+              <SupplierSection
+                packetId={local.packet_id}
+                tenantId={user?.tenantId ?? ""}
+                supplier={local.workshop_supplier}
+                sentDate={local.workshop_supplier_sent_date}
+                expectedReturn={local.workshop_supplier_expected_return}
+                returned={local.workshop_supplier_returned}
+              />
+            </div>
+          )}
 
           {/* Delete — manager only */}
           {isManager && (

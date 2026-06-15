@@ -15,6 +15,8 @@ import {
 import { todayISO } from "@/lib/formatters";
 import { printLabel } from "@/lib/dymo";
 import { useUser } from "@/context/UserContext";
+import { canManage } from "@/lib/userTypes";
+import { calculateWorkshopDueDate } from "@/lib/workshopDueDates";
 import PacketTypeSelector from "@/components/PacketTypeSelector";
 import CustomerSection from "@/components/CustomerSection";
 import ValueContactSection from "@/components/ValueContactSection";
@@ -66,6 +68,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 function NewOrderPageInner() {
   const searchParams = useSearchParams();
   const { user } = useUser();
+  const isManager = canManage(user?.role);
   const [formData, setFormData] = useState<PacketFormData>({
     ...defaultFormData,
     in_date: todayISO(),
@@ -202,19 +205,46 @@ function NewOrderPageInner() {
 
   const handleChange = useCallback(
     (field: keyof PacketFormData, value: string | boolean | string[]) => {
-      setFormData((prev) => ({ ...prev, [field]: value }));
+      setFormData((prev) => {
+        const next = { ...prev, [field]: value };
+        // Recalculate workshop due date when complexity or manufacture type changes
+        if (field === "job_complexity" || field === "manufacture_type") {
+          const dueDate = calculateWorkshopDueDate(
+            new Date(),
+            next.packet_type,
+            field === "job_complexity" ? String(value) : next.job_complexity,
+            field === "manufacture_type" ? String(value) : next.manufacture_type,
+          );
+          next.workshop_due_date = dueDate.toISOString().split("T")[0];
+          next.workshop_due_date_overridden = false;
+        }
+        return next;
+      });
       setErrors((prev) => {
         if (!prev[field]) return prev;
-        const next = { ...prev };
-        delete next[field];
-        return next;
+        const nextErr = { ...prev };
+        delete nextErr[field];
+        return nextErr;
       });
     },
     []
   );
 
   function handleTypeChange(type: PacketType) {
-    setFormData((prev) => ({ ...prev, packet_type: type }));
+    setFormData((prev) => {
+      const dueDate = calculateWorkshopDueDate(
+        new Date(),
+        type,
+        prev.job_complexity,
+        prev.manufacture_type,
+      );
+      return {
+        ...prev,
+        packet_type: type,
+        workshop_due_date: dueDate.toISOString().split("T")[0],
+        workshop_due_date_overridden: false,
+      };
+    });
     setErrors((prev) => { const n = { ...prev }; delete n.packet_type; return n; });
   }
 
@@ -411,6 +441,82 @@ function NewOrderPageInner() {
                       onChange={(f, v) => handleChange(f, v as string)}
                       repairTrackerNumber={submittedPacket?.repair_tracker_number ?? undefined}
                     />
+                  </Card>
+                )}
+
+                {(formData.packet_type === "repair" || formData.packet_type === "custom_order") && (
+                  <Card title="Workshop Details">
+                    <div className="space-y-4">
+                      {formData.packet_type === "repair" && (
+                        <div>
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Job Complexity</p>
+                          <div className="flex gap-3">
+                            {["Standard", "Complex"].map((opt) => (
+                              <button
+                                key={opt}
+                                type="button"
+                                onClick={() => handleChange("job_complexity", opt)}
+                                className={`px-5 py-2 rounded-lg text-sm font-semibold border-2 transition-colors ${
+                                  formData.job_complexity === opt
+                                    ? "bg-black text-white border-black"
+                                    : "bg-white text-black border-gray-300 hover:border-black"
+                                }`}
+                              >
+                                {opt}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="text-xs text-gray-400 mt-1">
+                            {formData.job_complexity === "Complex" ? "10 business days" : "5 business days"} standard turnaround
+                          </p>
+                        </div>
+                      )}
+
+                      {formData.packet_type === "custom_order" && (
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                            Manufacture Type
+                          </label>
+                          <select
+                            value={formData.manufacture_type}
+                            onChange={(e) => handleChange("manufacture_type", e.target.value)}
+                            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black"
+                          >
+                            <option value="Fully Finished">Fully Finished — 42 business days</option>
+                            <option value="Set Only">Set Only — 21 business days</option>
+                            <option value="Raw Cast">Raw Cast — 21 business days</option>
+                            <option value="FF Assembly">FF Assembly — 14 business days</option>
+                            <option value="Fully Polished">Fully Polished — 14 business days</option>
+                          </select>
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                          Workshop Due Date
+                        </label>
+                        <input
+                          type="date"
+                          value={formData.workshop_due_date}
+                          readOnly={!isManager}
+                          onChange={(e) => {
+                            handleChange("workshop_due_date", e.target.value);
+                            handleChange("workshop_due_date_overridden", true);
+                          }}
+                          className={`w-full rounded-lg border px-3 py-2.5 text-sm text-black focus:outline-none ${
+                            isManager
+                              ? "border-gray-300 bg-white focus:ring-2 focus:ring-black cursor-pointer"
+                              : "border-gray-200 bg-gray-50 cursor-default"
+                          } ${formData.workshop_due_date_overridden ? "border-amber-400" : ""}`}
+                        />
+                        <p className="text-xs text-gray-400 mt-1">
+                          {formData.workshop_due_date_overridden
+                            ? "⚠️ Manually overridden"
+                            : "Auto-calculated from order type and complexity."}
+                          {!isManager && " Managers can override."}
+                        </p>
+                      </div>
+                    </div>
                   </Card>
                 )}
 

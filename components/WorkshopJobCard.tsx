@@ -25,11 +25,11 @@ function todayISO() {
   return new Date().toISOString().split("T")[0];
 }
 
-function formatDateAU(iso: string | null | undefined): string {
+function formatDateShort(iso: string | null | undefined): string {
   if (!iso) return "";
-  const [y, m, d] = iso.split("-");
-  if (!y || !m || !d) return iso;
-  return `${d}/${m}/${y}`;
+  const [, m, d] = iso.split("-");
+  if (!m || !d) return iso;
+  return `${d}/${m}`;
 }
 
 function daysInStage(changedAt: string): number {
@@ -124,10 +124,26 @@ export default function WorkshopJobCard({ job, onClick }: Props) {
         </p>
       )}
 
+      {/* Manufacture type / supplier badges */}
+      {(job.manufacture_type || job.workshop_supplier) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+          {job.manufacture_type && (
+            <span style={{ display: 'inline-flex', padding: '2px 7px', borderRadius: 999, fontSize: 10, fontWeight: 500, background: '#F3F4F6', color: '#6B7280' }}>
+              {job.manufacture_type}
+            </span>
+          )}
+          {job.workshop_supplier && (
+            <span style={{ display: 'inline-flex', padding: '2px 7px', borderRadius: 999, fontSize: 10, fontWeight: 500, background: '#DBEAFE', color: '#1E40AF' }}>
+              → {job.workshop_supplier}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Due date + ref */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
-        <span style={{ fontSize: 12, color: isOverdue ? '#EF4444' : isDueToday ? '#F59E0B' : '#9CA3AF', fontWeight: (isOverdue || isDueToday) ? 600 : 400 }}>
-          {job.due_date ? formatDateAU(job.due_date) : "No due date"}
+        <span style={{ fontSize: 12, padding: '2px 7px', borderRadius: 6, background: isOverdue ? '#FEE2E2' : isDueToday ? '#FEF3C7' : '#F3F4F6', color: isOverdue ? '#EF4444' : isDueToday ? '#F59E0B' : '#9CA3AF', fontWeight: (isOverdue || isDueToday) ? 600 : 400 }}>
+          {job.due_date ? formatDateShort(job.due_date) : "No date"}
         </span>
         <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#D1D5DB' }}>{job.reference_number || ""}</span>
       </div>

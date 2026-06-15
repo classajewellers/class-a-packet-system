@@ -80,6 +80,12 @@ export interface PacketFormData {
   // Jewellery details — PCN and custom orders
   carat_weight: string;
   metal_colour: string;
+
+  // Workshop scheduling
+  job_complexity: string;
+  manufacture_type: string;
+  workshop_due_date: string;
+  workshop_due_date_overridden: boolean;
 }
 
 export const defaultFormData: PacketFormData = {
@@ -129,6 +135,10 @@ export const defaultFormData: PacketFormData = {
   delivery_method: "Pickup",
   carat_weight: "",
   metal_colour: "",
+  job_complexity: "Standard",
+  manufacture_type: "Fully Finished",
+  workshop_due_date: "",
+  workshop_due_date_overridden: false,
 };
 
 // ─────────────────────────────────────────────
@@ -222,6 +232,16 @@ export interface Packet {
 
   // Valuation photo (stored as storage path)
   valuation_photo_url?: string | null;
+
+  // Workshop scheduling (added via migration 045+)
+  job_complexity: string | null;
+  manufacture_type: string | null;
+  workshop_due_date: string | null;
+  workshop_due_date_overridden: boolean | null;
+  workshop_supplier: string | null;
+  workshop_supplier_sent_date: string | null;
+  workshop_supplier_expected_return: string | null;
+  workshop_supplier_returned: boolean | null;
 }
 
 // ─────────────────────────────────────────────
@@ -533,6 +553,36 @@ export interface WorkshopJob {
   wsjb_ready_for_jeweller: boolean | null;
   // Valuation flag — inherited from packet at intake
   valuation_required: boolean | null;
+  // Workshop supplier tracking
+  workshop_supplier: string | null;
+  workshop_supplier_sent_date: string | null;
+  workshop_supplier_expected_return: string | null;
+  workshop_supplier_returned: boolean | null;
+  manufacture_type: string | null;
+  workshop_due_date: string | null;
+  workshop_due_date_overridden: boolean | null;
+}
+
+// ─────────────────────────────────────────────
+// Job List (Workshop major/minor job lists)
+// ─────────────────────────────────────────────
+export interface JobListItem {
+  id: string;
+  reference_number: string | null;
+  in_date: string | null;
+  customer_last_name: string | null;
+  instructions: string | null;
+  articles: string | null;
+  product_category: string | null;
+  staff_member: string | null;
+  assigned_jeweller?: string | null;
+  workshop_due_date: string | null;
+  workshop_due_date_overridden: boolean | null;
+  manufacture_type: string | null;
+  job_complexity: string | null;
+  workshop_supplier: string | null;
+  collected_date: string | null;
+  packet_type: string;
 }
 
 // ─────────────────────────────────────────────

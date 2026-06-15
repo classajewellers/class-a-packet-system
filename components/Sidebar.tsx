@@ -48,6 +48,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
 
   const quotesExpanded    = pathname.startsWith("/quotes");
   const inventoryExpanded = pathname.startsWith("/inventory");
+  const workshopExpanded  = pathname.startsWith("/workshop");
   const settingsExpanded  = pathname.startsWith("/settings") ||
                             pathname.startsWith("/pricing") ||
                             pathname.startsWith("/admin/users");
@@ -209,7 +210,21 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
           )}
 
           {can("customers")  && <NavLink href="/customers"  icon={Users}    label="Customers" />}
-          {can("workshop")   && <NavLink href="/workshop"   icon={Wrench}   label="Workshop" />}
+          {can("workshop") && (
+            <div>
+              <ExpandLink
+                icon={Wrench} label="Workshop" expanded={workshopExpanded}
+                onClick={() => { router.push("/workshop"); onClose(); }}
+              />
+              {workshopExpanded && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
+                  <SubLink href="/workshop"            label="Workshop Board" />
+                  <SubLink href="/workshop/major-jobs" label="Major Jobs" />
+                  <SubLink href="/workshop/minor-jobs" label="Minor Jobs" />
+                </div>
+              )}
+            </div>
+          )}
 
           {can("inventory") && (
             <div>

@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useUser } from "@/context/UserContext";
 import { canManage, hasPermission } from "@/lib/userTypes";
 import { WorkshopJob } from "@/lib/types";
@@ -76,6 +77,22 @@ export default function WorkshopPage() {
 
   return (
     <div className="space-y-6">
+      {/* Job list shortcuts */}
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <Link
+          href="/workshop/major-jobs"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, border: '1px solid #E8E8F0', background: '#fff', color: '#635BFF', fontSize: 13, fontWeight: 600, textDecoration: 'none', transition: 'background .15s' }}
+        >
+          Major Jobs
+        </Link>
+        <Link
+          href="/workshop/minor-jobs"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, border: '1px solid #E8E8F0', background: '#fff', color: '#635BFF', fontSize: 13, fontWeight: 600, textDecoration: 'none', transition: 'background .15s' }}
+        >
+          Minor Jobs
+        </Link>
+      </div>
+
       {/* Tab bar */}
       <div style={{ display: 'flex', borderBottom: '1px solid #E8E8F0' }}>
         {(['workshop','valuations'] as const).map((t) => (

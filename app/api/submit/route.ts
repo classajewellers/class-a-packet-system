@@ -100,9 +100,16 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
   }
   if (formData.packet_type === "repair") {
     insertData.arms_tracker_number = formData.arms_tracker_number || null;
+    insertData.job_complexity = formData.job_complexity || "Standard";
   }
   if (formData.packet_type === "custom_order") {
     insertData.cad_required = formData.cad_required ?? false;
+    insertData.manufacture_type = formData.manufacture_type || "Fully Finished";
+  }
+  // Workshop scheduling — save for repair and custom_order
+  if (formData.packet_type === "repair" || formData.packet_type === "custom_order") {
+    insertData.workshop_due_date = formData.workshop_due_date || null;
+    insertData.workshop_due_date_overridden = formData.workshop_due_date_overridden ?? false;
   }
 
   // Online order-specific columns
