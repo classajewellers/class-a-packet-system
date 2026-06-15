@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getNivodaToken, NIVODA_ENDPOINT } from "@/lib/nivoda-auth";
+import { getNivodaToken, clearNivodaTokenCache, NIVODA_ENDPOINT } from "@/lib/nivoda-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +67,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       console.log("[nivoda/search] Got token (first 20 chars):", token.slice(0, 20) + "…");
     } catch (e) {
       console.error("[nivoda/search] Failed to get token:", e);
+      clearNivodaTokenCache();
       return NextResponse.json(
         { error: "Authentication failed", detail: e instanceof Error ? e.message : String(e) },
         { status: 502 }
@@ -158,6 +159,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     if (j.errors?.length) {
       console.error("[nivoda/search] GraphQL errors:", JSON.stringify(j.errors, null, 2));
+      // Clear cache on auth errors so the next request fetches a fresh token.
+      const isAuthError = j.errors.some(e =>
+        /auth|token|unauthori[sz]ed|forbidden/i.test(e.message)
+      );
+      if (isAuthError) {
+        console.warn("[nivoda/search] Auth-related GraphQL error — clearing token cache");
+        clearNivodaTokenCache();
+      }
       return NextResponse.json(
         { error: j.errors[0].message, graphql_errors: j.errors },
         { status: 502 }

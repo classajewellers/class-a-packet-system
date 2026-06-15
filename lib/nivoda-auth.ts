@@ -25,6 +25,7 @@ async function fetchFreshToken(): Promise<string> {
 
   console.log("[nivoda/auth] Endpoint   :", NIVODA_ENDPOINT);
   console.log("[nivoda/auth] Username   :", email);
+  console.log("[nivoda/auth] Password   : (length", password.length, ")");
   console.log("[nivoda/auth] Timeout    :", FETCH_TIMEOUT, "ms");
 
   const query = `mutation {
@@ -127,6 +128,14 @@ async function fetchFreshToken(): Promise<string> {
   }
 
   return token;
+}
+
+/** Wipe the in-memory token cache. Call this when Nivoda rejects a cached token. */
+export function clearNivodaTokenCache(): void {
+  if (cache) {
+    console.log("[nivoda/auth] Token cache cleared");
+    cache = null;
+  }
 }
 
 /**

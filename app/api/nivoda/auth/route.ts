@@ -9,7 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getNivodaToken, NIVODA_ENDPOINT } from "@/lib/nivoda-auth";
+import { getNivodaToken, clearNivodaTokenCache, NIVODA_ENDPOINT } from "@/lib/nivoda-auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -19,7 +19,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   try {
     if (fresh) {
-      console.log("[nivoda/auth] ?fresh=1 — bypassing cache");
+      console.log("[nivoda/auth] ?fresh=1 — clearing cache and fetching new token");
+      clearNivodaTokenCache();
     }
 
     const token = await getNivodaToken(fresh);
