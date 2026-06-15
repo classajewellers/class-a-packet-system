@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useUser } from "@/context/UserContext";
+import ReactMarkdown from "react-markdown";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -143,12 +144,31 @@ export default function AIAssistant({ open, onClose }: Props) {
                     : "bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm"
                 }`}
               >
-                {msg.content.split("\n").map((line, j) => (
-                  <span key={j}>
-                    {line}
-                    {j < msg.content.split("\n").length - 1 && <br />}
-                  </span>
-                ))}
+                {msg.role === "user" ? (
+                  msg.content.split("\n").map((line, j) => (
+                    <span key={j}>
+                      {line}
+                      {j < msg.content.split("\n").length - 1 && <br />}
+                    </span>
+                  ))
+                ) : (
+                  <ReactMarkdown
+                    components={{
+                      h1: ({node, ...props}) => <h2 className="text-base font-semibold mt-3 mb-1" {...props} />,
+                      h2: ({node, ...props}) => <h3 className="text-sm font-semibold mt-3 mb-1" {...props} />,
+                      h3: ({node, ...props}) => <h3 className="text-sm font-semibold mt-2 mb-1" {...props} />,
+                      p: ({node, ...props}) => <p className="text-sm leading-relaxed mb-2" {...props} />,
+                      ul: ({node, ...props}) => <ul className="text-sm list-disc list-inside space-y-1 mb-2" {...props} />,
+                      ol: ({node, ...props}) => <ol className="text-sm list-decimal list-inside space-y-1 mb-2" {...props} />,
+                      li: ({node, ...props}) => <li className="text-sm leading-relaxed" {...props} />,
+                      strong: ({node, ...props}) => <strong className="font-semibold" {...props} />,
+                      hr: ({node, ...props}) => <hr className="my-3 border-gray-200" {...props} />,
+                      code: ({node, ...props}) => <code className="text-xs bg-gray-100 px-1 py-0.5 rounded font-mono" {...props} />,
+                    }}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
+                )}
               </div>
             </div>
           ))}
