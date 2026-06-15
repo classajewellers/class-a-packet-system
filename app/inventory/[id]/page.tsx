@@ -382,7 +382,7 @@ export default function InventoryItemPage({ params }: Params) {
                     <option value="">— None —</option>
                     {productVariants.map((v: any) => (
                       <option key={v.id} value={v.id}>
-                        {v.title ?? [v.metal_karat, v.metal_colour, v.metal_type, v.finger_size && `Size ${v.finger_size}`].filter(Boolean).join(" ") || v.id}
+                        {v.title ?? ([v.metal_karat, v.metal_colour, v.metal_type, v.finger_size && `Size ${v.finger_size}`].filter(Boolean).join(" ") || v.id)}
                       </option>
                     ))}
                   </select>
