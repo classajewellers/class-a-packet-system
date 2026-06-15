@@ -48,6 +48,8 @@ export async function PATCH(
   updateData.location_id = toUUID(updateData.location_id);
   updateData.supplier_id = toUUID(updateData.supplier_id);
   updateData.assigned_to = toUUID(updateData.assigned_to);
+  if ("product_id" in updateData) updateData.product_id = toUUID(updateData.product_id);
+  if ("variant_id" in updateData) updateData.variant_id = toUUID(updateData.variant_id);
 
   const { data, error } = await supabase
     .from("inventory_pieces")

@@ -6,7 +6,7 @@ import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
 import { InventoryPiece, InventoryReferenceData } from "@/lib/types";
 import { calculateLivePricing, GoldRate, MarginBracket } from "@/lib/inventoryPricing";
-import { ArrowLeft, Edit2, Save, X, ArrowRight, Lock, AlertTriangle, TrendingDown } from "lucide-react";
+import { ArrowLeft, Edit2, Save, X, ArrowRight, Lock, AlertTriangle, TrendingDown, Link2 } from "lucide-react";
 
 type Params = { params: { id: string } };
 
@@ -79,16 +79,26 @@ export default function InventoryItemPage({ params }: Params) {
 
   const [movements, setMovements] = useState<any[]>([]);
 
+  // Product link state
+  const [products, setProducts]             = useState<any[]>([]);
+  const [productVariants, setProductVariants] = useState<any[]>([]);
+  const [linkEditing, setLinkEditing]       = useState(false);
+  const [linkProductId, setLinkProductId]   = useState("");
+  const [linkVariantId, setLinkVariantId]   = useState("");
+  const [linkSaving, setLinkSaving]         = useState(false);
+  const [linkError, setLinkError]           = useState("");
+
   const headers = { "x-tenant-id": tenantId };
 
   const fetchAll = useCallback(async () => {
     if (!tenantId) return;
     setLoading(true);
-    const [pieceRes, refRes, movRes, pricingRes] = await Promise.all([
+    const [pieceRes, refRes, movRes, pricingRes, prodRes] = await Promise.all([
       fetch(`/api/inventory/pieces/${params.id}`, { headers }),
       fetch("/api/inventory/reference", { headers }),
       fetch(`/api/inventory/movements?piece_id=${params.id}&limit=20`, { headers }),
       fetch("/api/pricing", { headers }),
+      fetch("/api/inventory/products", { headers }),
     ]);
     if (!pieceRes.ok) { setLoading(false); return; }
     const [pieceJson, refJson, movJson] = await Promise.all([
@@ -101,6 +111,10 @@ export default function InventoryItemPage({ params }: Params) {
       const pj = await pricingRes.json();
       setGoldRates(pj.metalRates ?? []);
       setMarginBrackets(pj.marginBrackets ?? []);
+    }
+    if (prodRes.ok) {
+      const pj = await prodRes.json();
+      setProducts(pj.products ?? []);
     }
     setLoading(false);
   }, [tenantId, params.id]);
@@ -157,6 +171,46 @@ export default function InventoryItemPage({ params }: Params) {
     if (!confirm(`Delete ${piece.sku}? This cannot be undone.`)) return;
     const res = await fetch(`/api/inventory/pieces/${piece.id}`, { method: "DELETE", headers });
     if (res.ok) router.push("/inventory");
+  }
+
+  async function loadProductVariants(productId: string) {
+    if (!productId) { setProductVariants([]); return; }
+    const res = await fetch(`/api/inventory/variants?product_id=${productId}`, { headers });
+    if (res.ok) setProductVariants((await res.json()).variants ?? []);
+  }
+
+  async function handleSaveLink() {
+    if (!piece) return;
+    setLinkSaving(true);
+    setLinkError("");
+    const payload: any = {
+      product_id: linkProductId || null,
+      variant_id: linkVariantId || null,
+    };
+    // Auto-fill empty fields from selected variant
+    if (linkVariantId) {
+      const v = productVariants.find((x: any) => x.id === linkVariantId);
+      if (v) {
+        if (!piece.metal_type   && v.metal_type)   payload.metal_type   = v.metal_type;
+        if (!piece.metal_karat  && v.metal_karat)  payload.metal_karat  = v.metal_karat;
+        if (!piece.metal_colour && v.metal_colour) payload.metal_colour = v.metal_colour;
+        if (!piece.finger_size  && v.finger_size)  payload.finger_size  = v.finger_size;
+        if (!piece.diamond_type && v.diamond_type) payload.diamond_type = v.diamond_type;
+        if (!piece.diamond_carat && v.diamond_carat) payload.diamond_carat = v.diamond_carat;
+        if (!piece.diamond_colour && v.diamond_colour) payload.diamond_colour = v.diamond_colour;
+        if (!piece.diamond_clarity && v.diamond_clarity) payload.diamond_clarity = v.diamond_clarity;
+      }
+    }
+    const res = await fetch(`/api/inventory/pieces/${piece.id}`, {
+      method: "PATCH",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    setLinkSaving(false);
+    if (!res.ok) { setLinkError(json.error ?? "Save failed"); return; }
+    setPiece(json.piece);
+    setLinkEditing(false);
   }
 
   function fv(key: keyof InventoryPiece): any {
@@ -247,6 +301,108 @@ export default function InventoryItemPage({ params }: Params) {
       >
         <ArrowLeft size={16} /> Stock Register
       </button>
+
+      {/* Product Link */}
+      <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 16, marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Link2 size={14} style={{ color: "#9CA3AF" }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>Product Link</span>
+          </div>
+          {isManager && !linkEditing && (
+            <button
+              onClick={() => {
+                setLinkProductId(piece.product_id ?? "");
+                setLinkVariantId(piece.variant_id ?? "");
+                setLinkError("");
+                if (piece.product_id) loadProductVariants(piece.product_id);
+                setLinkEditing(true);
+              }}
+              style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #E5E7EB", background: "#fff", fontSize: 12, cursor: "pointer", color: "#374151" }}
+            >Edit</button>
+          )}
+        </div>
+
+        {!linkEditing ? (
+          <div style={{ marginTop: 10, display: "flex", gap: 24 }}>
+            {piece.product_id ? (
+              <>
+                <div>
+                  <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 2 }}>Product</div>
+                  <button
+                    onClick={() => router.push(`/inventory/products/${piece.product_id}`)}
+                    style={{ fontSize: 14, fontWeight: 600, color: "#635BFF", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                  >
+                    {products.find((p: any) => p.id === piece.product_id)?.title ?? piece.product_id}
+                  </button>
+                </div>
+                {piece.variant_id && (
+                  <div>
+                    <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 2 }}>Variant</div>
+                    <div style={{ fontSize: 14, color: "#374151" }}>
+                      {(() => {
+                        const v = productVariants.find((x: any) => x.id === piece.variant_id);
+                        return v?.title ?? [v?.metal_karat, v?.metal_colour, v?.metal_type].filter(Boolean).join(" ") ?? piece.variant_id;
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div style={{ fontSize: 13, color: "#9CA3AF" }}>Not linked to any product</div>
+            )}
+          </div>
+        ) : (
+          <div style={{ marginTop: 12 }}>
+            {linkError && <div style={{ padding: "8px 12px", background: "#FEF2F2", color: "#DC2626", borderRadius: 6, fontSize: 12, marginBottom: 10 }}>{linkError}</div>}
+            <div style={{ display: "flex", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 180 }}>
+                <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 4 }}>Product</div>
+                <select
+                  value={linkProductId}
+                  onChange={e => {
+                    setLinkProductId(e.target.value);
+                    setLinkVariantId("");
+                    loadProductVariants(e.target.value);
+                  }}
+                  style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, background: "#fff" }}
+                >
+                  <option value="">— None —</option>
+                  {products.map((p: any) => <option key={p.id} value={p.id}>{p.title ?? p.name}</option>)}
+                </select>
+              </div>
+              {linkProductId && productVariants.length > 0 && (
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 4 }}>Variant</div>
+                  <select
+                    value={linkVariantId}
+                    onChange={e => setLinkVariantId(e.target.value)}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, background: "#fff" }}
+                  >
+                    <option value="">— None —</option>
+                    {productVariants.map((v: any) => (
+                      <option key={v.id} value={v.id}>
+                        {v.title ?? [v.metal_karat, v.metal_colour, v.metal_type, v.finger_size && `Size ${v.finger_size}`].filter(Boolean).join(" ") || v.id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+            {linkVariantId && (
+              <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 10, padding: "8px 12px", background: "#F0FDF4", borderRadius: 6, border: "1px solid #BBF7D0" }}>
+                Any empty spec fields (metal, stone, size) will be auto-filled from the selected variant.
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setLinkEditing(false)} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 13, cursor: "pointer" }}>Cancel</button>
+              <button onClick={handleSaveLink} disabled={linkSaving} style={{ padding: "7px 16px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 13, fontWeight: 500, cursor: linkSaving ? "not-allowed" : "pointer", opacity: linkSaving ? 0.7 : 1 }}>
+                {linkSaving ? "Saving…" : "Save Link"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Title bar */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>

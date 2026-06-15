@@ -81,10 +81,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     .order("created_at", { ascending: false })
     .range(from, to);
 
+  const unassigned = searchParams.get("unassigned") === "true";
+
   if (search)      query = query.or(`sku.ilike.%${search}%,title.ilike.%${search}%`);
   if (categoryId)  query = query.eq("category_id", categoryId);
   if (statusId)    query = query.eq("status_id",   statusId);
   if (locationId)  query = query.eq("location_id", locationId);
+  if (unassigned)  query = query.is("product_id", null);
 
   const { data, error, count } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -1,61 +1,71 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createTenantSupabaseClient } from '@/lib/supabase-server'
+import { NextRequest, NextResponse } from "next/server";
+import { createTenantSupabaseClient } from "@/lib/supabase-server";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url)
-    const search = searchParams.get('search') ?? ''
-    const tenantId = req.headers.get('x-tenant-id') ?? ''
-    const supabase = await createTenantSupabaseClient(tenantId)
-    let query = supabase
-      .from('inventory_products')
-      .select(`*, inventory_variants(*, inventory_variant_stock(quantity))`)
-      .order('name', { ascending: true })
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,category.ilike.%${search}%`)
-    }
-    const { data, error } = await query
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    const products = (data ?? []).map((p: Record<string, unknown>) => {
-      const rawVariants = (p.inventory_variants as Record<string, unknown>[]) ?? []
-      const variants = rawVariants.map((v) => {
-        const stockRows = (v.inventory_variant_stock as { quantity: number }[] | null) ?? []
-        const total_stock = stockRows.reduce((sum, r) => sum + (r.quantity ?? 0), 0)
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { inventory_variant_stock: _s, ...rest } = v
-        return { ...rest, total_stock }
-      })
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { inventory_variants: _v, ...rest } = p
-      return { ...rest, variants }
-    })
-    return NextResponse.json({ products })
+    const tenantId = req.headers.get("x-tenant-id") ?? "";
+    const supabase = await createTenantSupabaseClient(tenantId);
+
+    const { data, error } = await supabase
+      .from("inventory_products")
+      .select(`
+        id, title, collection, description, is_active, created_at,
+        category:inventory_categories(id, name),
+        _variants:inventory_variants(id),
+        _pieces:inventory_pieces(id)
+      `)
+      .eq("tenant_id", tenantId)
+      .order("title");
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    const products = (data ?? []).map((p: any) => ({
+      id: p.id,
+      title: p.title,
+      collection: p.collection,
+      description: p.description,
+      is_active: p.is_active,
+      created_at: p.created_at,
+      category: p.category,
+      variant_count: (p._variants as any[])?.length ?? 0,
+      piece_count: (p._pieces as any[])?.length ?? 0,
+    }));
+
+    return NextResponse.json({ products });
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
-    const tenantId = req.headers.get('x-tenant-id') ?? ''
-    const supabase = await createTenantSupabaseClient(tenantId)
+    const tenantId = req.headers.get("x-tenant-id") ?? "";
+    const supabase = await createTenantSupabaseClient(tenantId);
+    const body = await req.json();
+
+    if (!body.title?.trim()) {
+      return NextResponse.json({ error: "title is required" }, { status: 400 });
+    }
+
     const { data, error } = await supabase
-      .from('inventory_products')
+      .from("inventory_products")
       .insert({
-        name: body.name,
+        tenant_id: tenantId,
+        title: body.title.trim(),
+        category_id: body.category_id || null,
+        collection: body.collection || null,
         description: body.description || null,
-        category: body.category || null,
-        department: body.department || null,
         notes: body.notes || null,
       })
-      .select()
-      .single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ product: data })
+      .select(`*, category:inventory_categories(id, name)`)
+      .single();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ product: data }, { status: 201 });
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

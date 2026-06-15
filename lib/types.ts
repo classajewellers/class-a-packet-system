@@ -471,6 +471,9 @@ export interface InventoryPiece {
   notes: string | null;
   created_at: string;
   updated_at: string | null;
+  // product hierarchy
+  product_id?: string | null;
+  variant_id?: string | null;
   // legacy fields
   design_id?: string | null;
   other_specs?: string | null;
@@ -635,35 +638,57 @@ export type InvoiceStatus = 'pending' | 'received' | 'partial' | 'disputed';
 
 export interface InventoryProduct {
   id: string;
-  name: string;
+  tenant_id?: string;
+  // New schema
+  title?: string;
+  category_id?: string | null;
+  collection?: string | null;
+  is_active?: boolean;
+  updated_at?: string | null;
+  // Legacy
+  name?: string;
+  department?: string | null;
+  // Common
   description: string | null;
-  category: string | null;
-  department: string | null;
   notes: string | null;
   created_at: string;
-  // joined
+  // Computed
+  variant_count?: number;
+  piece_count?: number;
+  // Joined
+  category?: { id: string; name: string } | string | null;
   variants?: InventoryVariant[];
 }
 
 export interface InventoryVariant {
   id: string;
   product_id: string;
-  sku: string;
-  metal_type: string | null;
-  metal_karat: MetalCarat | null;
-  metal_colour: MetalColour | null;
-  metal_weight_grams: number | null;
-  diamond_carat: number | null;
-  diamond_colour: string | null;
-  diamond_clarity: string | null;
-  diamond_type: DiamondType | null;
-  finger_size: string | null;
-  other_specs: string | null;
-  cost_price: number | null;
-  retail_price: number | null;
-  is_active: boolean;
+  tenant_id?: string;
+  // New schema
+  title?: string | null;
+  chain_length?: string | null;
+  updated_at?: string | null;
+  // Legacy
+  sku?: string;
+  other_specs?: string | null;
+  cost_price?: number | null;
+  retail_price?: number | null;
+  // Common
+  metal_type?: string | null;
+  metal_karat?: string | null;
+  metal_colour?: string | null;
+  metal_weight_grams?: number | null;
+  diamond_carat?: number | null;
+  diamond_colour?: string | null;
+  diamond_clarity?: string | null;
+  diamond_type?: string | null;
+  finger_size?: string | null;
+  is_active?: boolean;
   created_at: string;
-  // joined
+  // Computed
+  piece_count?: number;
+  pieces?: InventoryPiece[];
+  // Joined (legacy)
   product?: InventoryProduct | null;
   total_stock?: number;
 }
