@@ -28,13 +28,8 @@ async function fetchFreshToken(): Promise<string> {
   console.log("[nivoda/auth] Password   : (length", password.length, ")");
   console.log("[nivoda/auth] Timeout    :", FETCH_TIMEOUT, "ms");
 
-  const query = `mutation {
-    request_auth(username: "${email}", password: "${password}") {
-      token
-    }
-  }`;
-
-  const requestBody = JSON.stringify({ query });
+  // TEMP: introspect available mutations — revert after checking Vercel logs
+  const requestBody = `{"query":"{ __schema { mutationType { fields { name args { name type { name kind ofType { name kind } } } } } } }"}`;
   console.log("[nivoda/auth] Request body:", requestBody);
 
   async function attemptFetch(endpoint: string): Promise<Response> {
