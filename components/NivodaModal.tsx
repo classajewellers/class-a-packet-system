@@ -11,6 +11,8 @@ export interface NivodaStone {
   color: string;
   clarity: string;
   cut: string | null;
+  polish: string | null;
+  symmetry: string | null;
   lab: string | null;
   certNumber: string | null;
   price: number;
@@ -28,7 +30,7 @@ interface Props {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const PRIMARY_SHAPES = ["ROUND", "OVAL", "EMERALD", "CUSHION", "MARQUISE", "PEAR", "PRINCESS", "RADIANT"] as const;
+const PRIMARY_SHAPES  = ["ROUND", "OVAL", "EMERALD", "CUSHION", "MARQUISE", "PEAR", "PRINCESS", "RADIANT"] as const;
 const EXTENDED_SHAPES = ["ASSCHER", "HEART", "SQ_RADIANT", "OLD_MINER", "STAR", "ROSE", "TRIANGULAR", "TRILLIANT", "BAGUETTE", "SHIELD", "LOZENGE", "KITE", "EUROPEAN_CUT", "HALF_MOON", "TRAPEZOID", "FLANDERS", "BRIOLETTE", "SQUARE", "OCTAGONAL", "HEXAGONAL", "PENTAGONAL"] as const;
 
 const SHAPE_LABELS: Record<string, string> = {
@@ -46,6 +48,20 @@ const SHAPE_LABELS: Record<string, string> = {
 const COLORS    = ["D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"] as const;
 const CLARITIES = ["FL", "IF", "VVS1", "VVS2", "VS1", "VS2", "SI1", "SI2"] as const;
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function randAlpha(len: number): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let out = "";
+  for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  return out;
+}
+
+function makeRefId(price: number): string {
+  const aud = Math.round(price / 100);
+  return `${randAlpha(4)}-${aud}-${randAlpha(4)}`;
+}
+
 // ─── Diamond placeholder icon ─────────────────────────────────────────────────
 
 function DiamondIcon() {
@@ -61,22 +77,26 @@ function DiamondIcon() {
 
 export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: Props) {
   // Filters
-  const [labgrown, setLabgrown]           = useState(true);
-  const [shapes, setShapes]               = useState<string[]>(["ROUND"]);
+  const [labgrown, setLabgrown]             = useState(true);
+  const [shapes, setShapes]                 = useState<string[]>(["ROUND"]);
   const [showMoreShapes, setShowMoreShapes] = useState(false);
-  const [caratFrom, setCaratFrom]         = useState("0.50");
-  const [caratTo, setCaratTo]             = useState("2.00");
-  const [colorGrades, setColorGrades]     = useState<string[]>(["D", "E", "F", "G", "H"]);
-  const [clarityGrades, setClarityGrades] = useState<string[]>(["VVS1", "VVS2", "VS1", "VS2", "SI1"]);
-  const [budget, setBudget]               = useState("");
-  const [hasImage, setHasImage]           = useState(true);
+  const [caratFrom, setCaratFrom]           = useState("0.50");
+  const [caratTo, setCaratTo]               = useState("2.00");
+  const [colorGrades, setColorGrades]       = useState<string[]>(["D", "E", "F", "G", "H"]);
+  const [clarityGrades, setClarityGrades]   = useState<string[]>(["VVS1", "VVS2", "VS1", "VS2", "SI1"]);
+  const [budget, setBudget]                 = useState("");
+  const [hasImage, setHasImage]             = useState(true);
 
   // Results
-  const [results, setResults]             = useState<NivodaStone[]>([]);
-  const [totalCount, setTotalCount]       = useState(0);
-  const [loading, setLoading]             = useState(false);
-  const [error, setError]                 = useState<string | null>(null);
-  const [searched, setSearched]           = useState(false);
+  const [results, setResults]               = useState<NivodaStone[]>([]);
+  const [refIds, setRefIds]                 = useState<Record<string, string>>({});
+  const [totalCount, setTotalCount]         = useState(0);
+  const [loading, setLoading]               = useState(false);
+  const [error, setError]                   = useState<string | null>(null);
+  const [searched, setSearched]             = useState(false);
+
+  // Detail view
+  const [selectedStone, setSelectedStone]   = useState<NivodaStone | null>(null);
 
   const PAGE_SIZE = 20;
 
@@ -109,10 +129,20 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
         setError("Unable to connect to Nivoda. Please enter stone details manually.");
         return;
       }
+      const incoming: NivodaStone[] = json.results ?? [];
       if (offset === 0) {
-        setResults(json.results ?? []);
+        setResults(incoming);
+        // Generate ref IDs once for this batch
+        const ids: Record<string, string> = {};
+        incoming.forEach(s => { ids[s.id] = makeRefId(s.price); });
+        setRefIds(ids);
       } else {
-        setResults(prev => [...prev, ...(json.results ?? [])]);
+        setResults(prev => [...prev, ...incoming]);
+        setRefIds(prev => {
+          const ids = { ...prev };
+          incoming.forEach(s => { if (!ids[s.id]) ids[s.id] = makeRefId(s.price); });
+          return ids;
+        });
       }
       setTotalCount(json.total_count ?? 0);
       setSearched(true);
@@ -125,7 +155,9 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
 
   function handleSearch() {
     setResults([]);
+    setRefIds({});
     setTotalCount(0);
+    setSelectedStone(null);
     runSearch(0);
   }
 
@@ -140,14 +172,12 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
 
   if (!open) return null;
 
-  // Styles
   const numIn: React.CSSProperties = { border: "1px solid #E8E8F0", borderRadius: 8, padding: "7px 10px", fontSize: 13, outline: "none", width: "100%", boxSizing: "border-box" };
 
   function ShapeBtn({ s }: { s: string }) {
     const active = shapes.includes(s);
     return (
       <button
-        key={s}
         onClick={() => toggleShape(s)}
         style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${active ? "#635BFF" : "#E8E8F0"}`, background: active ? "#635BFF" : "#fff", color: active ? "#fff" : "#374151", fontSize: 11, fontWeight: 500, cursor: "pointer", transition: "all .15s" }}
       >
@@ -286,63 +316,80 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
             >{loading && !results.length ? "Searching…" : "Search"}</button>
           </div>
 
-          {/* ── Results panel ── */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "20px" }}>
+          {/* ── Right panel — grid or detail view ── */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "20px", minWidth: 0 }}>
 
-            {/* Loading (initial) */}
-            {loading && results.length === 0 && (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 200, gap: 12, color: "#6B7280" }}>
-                <div style={{ width: 32, height: 32, border: "3px solid #635BFF", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-                <span style={{ fontSize: 14 }}>Searching Nivoda…</span>
-                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-              </div>
-            )}
-
-            {/* Error */}
-            {error && !loading && (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 200, gap: 8, textAlign: "center", padding: "0 32px" }}>
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path strokeLinecap="round" d="M12 8v4m0 4h.01"/></svg>
-                <span style={{ fontSize: 14, color: "#6B7280" }}>{error}</span>
-              </div>
-            )}
-
-            {/* Empty */}
-            {searched && !loading && !error && results.length === 0 && (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 200, gap: 8, color: "#6B7280" }}>
-                <DiamondIcon />
-                <span style={{ fontSize: 14 }}>No stones found — try adjusting your filters.</span>
-              </div>
-            )}
-
-            {/* Not yet searched */}
-            {!searched && !loading && !error && (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 200, gap: 8, color: "#9CA3AF" }}>
-                <DiamondIcon />
-                <span style={{ fontSize: 14 }}>Set your filters and press Search.</span>
-              </div>
-            )}
-
-            {/* Results grid */}
-            {results.length > 0 && (
+            {/* ── Expanded detail view ── */}
+            {selectedStone ? (
+              <StoneDetailView
+                stone={selectedStone}
+                refId={refIds[selectedStone.id] ?? ""}
+                onBack={() => setSelectedStone(null)}
+                onSelect={handleSelect}
+              />
+            ) : (
               <>
-                <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 14 }}>
-                  Showing {results.length} of {totalCount.toLocaleString()} stones
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-                  {results.map(stone => (
-                    <StoneCard key={stone.id} stone={stone} onSelect={handleSelect} />
-                  ))}
-                </div>
-
-                {/* Load more */}
-                {results.length < totalCount && (
-                  <div style={{ textAlign: "center", marginTop: 20 }}>
-                    <button
-                      onClick={handleLoadMore}
-                      disabled={loading}
-                      style={{ padding: "9px 28px", borderRadius: 8, border: "1px solid #635BFF", background: "#EEF2FF", color: "#635BFF", fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer" }}
-                    >{loading ? "Loading…" : `Load More (${totalCount - results.length} remaining)`}</button>
+                {/* Loading (initial) */}
+                {loading && results.length === 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 200, gap: 12, color: "#6B7280" }}>
+                    <div style={{ width: 32, height: 32, border: "3px solid #635BFF", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+                    <span style={{ fontSize: 14 }}>Searching Nivoda…</span>
+                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
                   </div>
+                )}
+
+                {/* Error */}
+                {error && !loading && (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 200, gap: 8, textAlign: "center", padding: "0 32px" }}>
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path strokeLinecap="round" d="M12 8v4m0 4h.01"/></svg>
+                    <span style={{ fontSize: 14, color: "#6B7280" }}>{error}</span>
+                  </div>
+                )}
+
+                {/* Empty */}
+                {searched && !loading && !error && results.length === 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 200, gap: 8, color: "#6B7280" }}>
+                    <DiamondIcon />
+                    <span style={{ fontSize: 14 }}>No stones found — try adjusting your filters.</span>
+                  </div>
+                )}
+
+                {/* Not yet searched */}
+                {!searched && !loading && !error && (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 200, gap: 8, color: "#9CA3AF" }}>
+                    <DiamondIcon />
+                    <span style={{ fontSize: 14 }}>Set your filters and press Search.</span>
+                  </div>
+                )}
+
+                {/* Results grid */}
+                {results.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 14 }}>
+                      Showing {results.length} of {totalCount.toLocaleString()} stones
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+                      {results.map(stone => (
+                        <StoneCard
+                          key={stone.id}
+                          stone={stone}
+                          onSelect={handleSelect}
+                          onExpand={() => setSelectedStone(stone)}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Load more */}
+                    {results.length < totalCount && (
+                      <div style={{ textAlign: "center", marginTop: 20 }}>
+                        <button
+                          onClick={handleLoadMore}
+                          disabled={loading}
+                          style={{ padding: "9px 28px", borderRadius: 8, border: "1px solid #635BFF", background: "#EEF2FF", color: "#635BFF", fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer" }}
+                        >{loading ? "Loading…" : `Load More (${totalCount - results.length} remaining)`}</button>
+                      </div>
+                    )}
+                  </>
                 )}
               </>
             )}
@@ -353,15 +400,18 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
   );
 }
 
-// ─── Stone card ───────────────────────────────────────────────────────────────
+// ─── Stone card (grid view) ───────────────────────────────────────────────────
 
-function StoneCard({ stone, onSelect }: { stone: NivodaStone; onSelect: (s: NivodaStone) => void }) {
+function StoneCard({ stone, onSelect, onExpand }: { stone: NivodaStone; onSelect: (s: NivodaStone) => void; onExpand: () => void }) {
   const price = stone.price > 0
     ? `A$${(stone.price / 100).toLocaleString("en-AU", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
     : "POA";
 
   return (
-    <div style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 10, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+    <div
+      onClick={onExpand}
+      style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 10, overflow: "hidden", display: "flex", flexDirection: "column", cursor: "pointer" }}
+    >
       {/* Image */}
       <div style={{ height: 110, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
         {stone.image ? (
@@ -386,12 +436,98 @@ function StoneCard({ stone, onSelect }: { stone: NivodaStone; onSelect: (s: Nivo
 
       <div style={{ padding: "0 10px 10px" }}>
         <button
-          onClick={() => onSelect(stone)}
+          onClick={e => { e.stopPropagation(); onSelect(stone); }}
           style={{ width: "100%", padding: "7px 0", borderRadius: 8, background: "#635BFF", color: "#fff", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, transition: "background .15s" }}
           onMouseEnter={e => (e.currentTarget.style.background = "#4F46E5")}
           onMouseLeave={e => (e.currentTarget.style.background = "#635BFF")}
         >Select Stone</button>
       </div>
+    </div>
+  );
+}
+
+// ─── Stone detail view ────────────────────────────────────────────────────────
+
+function StoneDetailView({ stone, refId, onBack, onSelect }: { stone: NivodaStone; refId: string; onBack: () => void; onSelect: (s: NivodaStone) => void }) {
+  const price = stone.price > 0
+    ? `A$${(stone.price / 100).toLocaleString("en-AU", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+    : "POA";
+
+  const rows: { label: string; value: string | null | undefined }[] = [
+    { label: "Shape",      value: SHAPE_LABELS[stone.shape] ?? stone.shape },
+    { label: "Carats",     value: `${stone.carats}ct` },
+    { label: "Colour",     value: stone.color },
+    { label: "Clarity",    value: stone.clarity },
+    { label: "Cut",        value: stone.cut },
+    { label: "Polish",     value: stone.polish },
+    { label: "Symmetry",   value: stone.symmetry },
+    { label: "Lab",        value: stone.lab },
+    { label: "Cert No.",   value: stone.certNumber },
+    { label: "Cost",       value: price },
+    { label: "Ref",        value: refId },
+  ];
+
+  const videoUrl = stone.video ? `${stone.video}/autoplay` : null;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+      {/* Back link */}
+      <button
+        onClick={onBack}
+        style={{ alignSelf: "flex-start", background: "none", border: "none", cursor: "pointer", color: "#635BFF", fontSize: 13, fontWeight: 500, padding: "0 0 16px", display: "flex", alignItems: "center", gap: 4 }}
+      >
+        ← Back to results
+      </button>
+
+      {/* Image */}
+      {stone.image && (
+        <div style={{ background: "#F3F4F6", borderRadius: 10, overflow: "hidden", marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center", maxHeight: 500 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={stone.image} alt={`${stone.carats}ct ${stone.shape}`} style={{ width: "100%", maxHeight: 500, objectFit: "contain" }} />
+        </div>
+      )}
+
+      {/* Video */}
+      {videoUrl && (
+        <div style={{ marginBottom: 16, borderRadius: 10, overflow: "hidden", background: "#000", aspectRatio: "16/9" }}>
+          <iframe
+            src={videoUrl}
+            style={{ width: "100%", height: "100%", border: "none", display: "block" }}
+            allow="autoplay"
+            allowFullScreen
+          />
+        </div>
+      )}
+
+      {/* No media fallback */}
+      {!stone.image && !videoUrl && (
+        <div style={{ background: "#F3F4F6", borderRadius: 10, height: 200, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+          <DiamondIcon />
+        </div>
+      )}
+
+      {/* Details table */}
+      <div style={{ background: "#FAFBFF", border: "1px solid #E8E8F0", borderRadius: 10, overflow: "hidden", marginBottom: 16 }}>
+        {rows.filter(r => r.value).map((r, i) => (
+          <div
+            key={r.label}
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderBottom: i < rows.filter(x => x.value).length - 1 ? "1px solid #E8E8F0" : "none", background: i % 2 === 0 ? "#fff" : "#FAFBFF" }}
+          >
+            <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 500 }}>{r.label}</span>
+            <span style={{ fontSize: 13, color: r.label === "Cost" ? "#635BFF" : r.label === "Ref" ? "#9CA3AF" : "#1A1A2E", fontWeight: r.label === "Cost" ? 700 : r.label === "Ref" ? 400 : 500, fontFamily: r.label === "Ref" ? "monospace" : "inherit" }}>
+              {r.value}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Select button */}
+      <button
+        onClick={() => onSelect(stone)}
+        style={{ width: "100%", padding: "12px 0", borderRadius: 10, background: "#635BFF", color: "#fff", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 600, transition: "background .15s" }}
+        onMouseEnter={e => (e.currentTarget.style.background = "#4F46E5")}
+        onMouseLeave={e => (e.currentTarget.style.background = "#635BFF")}
+      >Select Stone</button>
     </div>
   );
 }
