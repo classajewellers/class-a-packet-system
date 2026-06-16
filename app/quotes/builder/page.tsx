@@ -246,11 +246,13 @@ interface ItemCardProps {
   fixedCosts: FixedCost[];
   isManager: boolean;
   setItems: React.Dispatch<React.SetStateAction<BuilderItem[]>>;
-  onShowNivoda: (itemId: string) => void;
+  onShowNivoda: (itemId: string, optId: string) => void;
   errors: Record<string, string>;
 }
 
 function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManager, setItems, onShowNivoda, errors }: ItemCardProps) {
+  const [activeOptIdx, setActiveOptIdx] = useState(0);
+
   function set<K extends keyof BuilderItem>(key: K, value: BuilderItem[K]) {
     setItems(prev => prev.map(it => it.id === item.id ? { ...it, [key]: value } : it));
   }
@@ -403,7 +405,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
           <div style={sectionStyle}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", ...headingStyle, marginBottom: 0, paddingBottom: 0, borderBottom: "none" }}>
               <span>Main Stone</span>
-              <button onClick={() => onShowNivoda(item.id)} style={{ padding: "5px 12px", borderRadius: 7, border: "1px solid #635BFF", background: "#EEF2FF", color: "#635BFF", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Browse Stones</button>
+              <button onClick={() => { setActiveOptIdx(0); onShowNivoda(item.id, item.stoneOptions[0].id); }} style={{ padding: "5px 12px", borderRadius: 7, border: "1px solid #635BFF", background: "#EEF2FF", color: "#635BFF", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Browse Stones</button>
             </div>
             <div style={{ borderBottom: "1px solid #E8E8F0", marginBottom: 14, marginTop: 8 }} />
             <div style={{ marginBottom: item.includeMainStone ? 12 : 0 }}>
@@ -427,9 +429,12 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                           <span style={{ fontSize: 12, fontWeight: 600, color: "#635BFF" }}>${pricing.stoneOptionPrices[optIdx].toLocaleString("en-AU")}</span>
                         )}
                       </div>
-                      {item.stoneOptions.length > 1 && (
-                        <button onClick={() => set("stoneOptions", item.stoneOptions.filter(o => o.id !== opt.id))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 18, color: "#9CA3AF" }}>×</button>
-                      )}
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <button onClick={() => { setActiveOptIdx(optIdx); onShowNivoda(item.id, opt.id); }} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #635BFF", background: "#EEF2FF", color: "#635BFF", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Browse Stones</button>
+                        {item.stoneOptions.length > 1 && (
+                          <button onClick={() => set("stoneOptions", item.stoneOptions.filter(o => o.id !== opt.id))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 18, color: "#9CA3AF" }}>×</button>
+                        )}
+                      </div>
                     </div>
 
                     {opt.stones.map((stone, si) => (
@@ -573,7 +578,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                         subcategory: item.subcategory === "Other" ? item.subcategoryOther : item.subcategory,
                         design: item.design,
                         metals: item.metals.filter(m => m.type),
-                        mainStones: item.includeMainStone ? item.stoneOptions[0]?.stones ?? [] : [],
+                        mainStones: item.includeMainStone ? item.stoneOptions[activeOptIdx]?.stones ?? item.stoneOptions[0]?.stones ?? [] : [],
                         meleeStones: item.meleeRows.filter(m => m.stoneType),
                         engraving: { hand: item.handEngraving, laser: item.laserEngraving },
                         fingerSize: item.fingerSize || null,
@@ -589,7 +594,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                 disabled={item.aiGenerating}
                 style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid #635BFF", background: "#EEF2FF", color: "#635BFF", fontSize: 12, fontWeight: 600, cursor: item.aiGenerating ? "wait" : "pointer", display: "flex", alignItems: "center", gap: 6 }}
               >
-                {item.aiGenerating ? <><span style={{ display: "inline-block", width: 12, height: 12, border: "2px solid #635BFF", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />Generating…</> : "↺ Regenerate"}
+                {item.aiGenerating ? <><span style={{ display: "inline-block", width: 12, height: 12, border: "2px solid #635BFF", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />Generating…</> : "Generate"}
               </button>
             </div>
             <div style={{ borderBottom: "1px solid #E8E8F0", marginBottom: 12, marginTop: 8 }} />
@@ -755,6 +760,7 @@ function QuoteBuilderPageInner() {
   // Nivoda
   const [showNivodaModal, setShowNivodaModal] = useState(false);
   const nivodaTargetItemId = useRef<string | null>(null);
+  const nivodaTargetOptId  = useRef<string | null>(null);
 
   // UI
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -823,11 +829,14 @@ function QuoteBuilderPageInner() {
       cost: stone.price > 0 ? String(Math.round(stone.price / 100)) : "",
       nivodaId: stone.id,
     };
-    const targetId = nivodaTargetItemId.current;
+    const targetId    = nivodaTargetItemId.current;
+    const targetOptId = nivodaTargetOptId.current;
     setItems(prev => prev.map(it => it.id !== targetId ? it : {
       ...it,
       includeMainStone: true,
-      stoneOptions: [{ ...it.stoneOptions[0], stones: [formatted] }],
+      stoneOptions: it.stoneOptions.map(opt =>
+        opt.id !== targetOptId ? opt : { ...opt, stones: [formatted] }
+      ),
     }));
   }, []);
 
@@ -1131,7 +1140,7 @@ function QuoteBuilderPageInner() {
               fixedCosts={fixedCosts}
               isManager={isManager}
               setItems={setItems}
-              onShowNivoda={(itemId) => { nivodaTargetItemId.current = itemId; setShowNivodaModal(true); }}
+              onShowNivoda={(itemId, optId) => { nivodaTargetItemId.current = itemId; nivodaTargetOptId.current = optId; setShowNivodaModal(true); }}
               errors={errors}
             />
           ))}

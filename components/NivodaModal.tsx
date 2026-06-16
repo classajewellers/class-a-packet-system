@@ -166,7 +166,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
   }
 
   function handleSelect(stone: NivodaStone) {
-    onSelectStone(stone);
+    onSelectStone({ ...stone, labgrown });
     onClose();
   }
 
