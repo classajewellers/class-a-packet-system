@@ -234,8 +234,8 @@ function computeItemPricing(
     const optSettingCost = (opt.stones?.length ?? 0) * mainStoneSettingRate;
     const optTotal = baseWithoutMainStone + optStoneCost + optSettingCost;
     const optSuggested = optTotal > 0 ? calculateRetailPrice(optTotal) : 0;
-    const optBracket = safeBrackets.find(b => optTotal >= b.cost_min && (b.cost_max == null || optTotal <= b.cost_max)) ?? safeBrackets[safeBrackets.length - 1];
-    const optRaw = optBracket ? optTotal * optBracket.multiplier : optTotal;
+    const optBracket = safeBrackets.find(b => optTotal >= Number(b.cost_min) && (b.cost_max == null || optTotal <= Number(b.cost_max))) ?? safeBrackets[safeBrackets.length - 1];
+    const optRaw = optBracket ? optTotal * Number(optBracket.multiplier) : optTotal;
     if (oi === 0 && item.retailPriceOverride && parseFloat(item.retailPriceOverride) > 0) return parseFloat(item.retailPriceOverride);
     if (item.marginMultiplierOverride && parseFloat(item.marginMultiplierOverride) > 0) {
       return Math.ceil(optTotal * parseFloat(item.marginMultiplierOverride) / 5) * 5;

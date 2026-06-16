@@ -42,7 +42,7 @@ export function calculateBlendedRetailFromBrackets(
 ): BlendedResult {
   if (cost <= 0 || brackets.length === 0) return { unrounded: 0, retail: 0, breakdown: [] };
 
-  const sorted = [...brackets].sort((a, b) => a.cost_min - b.cost_min);
+  const sorted = [...brackets].sort((a, b) => Number(a.cost_min) - Number(b.cost_min));
 
   let retail = 0;
   let remaining = cost;
@@ -50,21 +50,24 @@ export function calculateBlendedRetailFromBrackets(
 
   for (const bracket of sorted) {
     if (remaining <= 0) break;
-    const capacity = bracket.cost_max != null ? bracket.cost_max - bracket.cost_min : remaining;
+    const costMin = Number(bracket.cost_min);
+    const costMax = bracket.cost_max != null ? Number(bracket.cost_max) : null;
+    const multiplier = Number(bracket.multiplier);
+    const capacity = costMax != null ? costMax - costMin : remaining;
     const portion = Math.min(remaining, capacity);
     if (portion <= 0) continue;
-    const subtotal = portion * bracket.multiplier;
+    const subtotal = portion * multiplier;
     retail += subtotal;
     remaining -= portion;
     const label = breakdown.length === 0
       ? `First $${Math.round(portion).toLocaleString("en-AU")}`
       : `Next $${Math.round(portion).toLocaleString("en-AU")}`;
-    breakdown.push({ label, portion, multiplier: bracket.multiplier, subtotal });
+    breakdown.push({ label, portion, multiplier, subtotal });
   }
 
   // Cost exceeds the highest bracket — use the top bracket's multiplier
   if (remaining > 0) {
-    const topMultiplier = sorted[sorted.length - 1].multiplier;
+    const topMultiplier = Number(sorted[sorted.length - 1].multiplier);
     const subtotal = remaining * topMultiplier;
     retail += subtotal;
     breakdown.push({
