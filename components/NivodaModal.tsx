@@ -18,9 +18,9 @@ export interface NivodaStone {
   price: number;
   image: string | null;
   video: string | null;
-  length_mm: number | null;
-  width_mm: number | null;
-  depth_mm: number | null;
+  length: number | null;
+  width: number | null;
+  depth: number | null;
   labgrown: boolean;
 }
 
@@ -468,9 +468,9 @@ function StoneDetailView({ stone, refId, onBack, onSelect }: { stone: NivodaSton
     { label: "Ref",        value: refId },
   ];
 
-  const hasDimensions = [stone.length_mm, stone.width_mm, stone.depth_mm].some(v => v && v > 0);
+  const hasDimensions = [stone.length, stone.width, stone.depth].some(v => v && v > 0);
   const dimensionsStr = hasDimensions
-    ? `${(stone.length_mm ?? 0).toFixed(2)} × ${(stone.width_mm ?? 0).toFixed(2)} × ${(stone.depth_mm ?? 0).toFixed(2)} mm`
+    ? `${(stone.length ?? 0).toFixed(2)} × ${(stone.width ?? 0).toFixed(2)} × ${(stone.depth ?? 0).toFixed(2)} mm`
     : null;
 
   const videoUrl = stone.video ? `${stone.video}/autoplay` : null;

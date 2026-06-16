@@ -29,9 +29,9 @@ export interface NivodaResult {
   certNumber: string | null;
   image: string | null;
   video: string | null;
-  length_mm: number | null;
-  width_mm: number | null;
-  depth_mm: number | null;
+  length: number | null;
+  width: number | null;
+  depth: number | null;
 }
 
 async function runSearch(token: string, body: Record<string, unknown>): Promise<NextResponse> {
@@ -125,9 +125,9 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
                 cut
                 polish
                 symmetry
-                length_mm
-                width_mm
-                depth_mm
+                length
+                width
+                depth
               }
             }
           }
@@ -198,7 +198,7 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
     id: string; price: number;
     diamond: {
       image?: string; video?: string;
-      certificate: { lab?: string; certNumber?: string; shape?: string; carats?: number; clarity?: string; color?: string; cut?: string; polish?: string; symmetry?: string; length_mm?: number; width_mm?: number; depth_mm?: number };
+      certificate: { lab?: string; certNumber?: string; shape?: string; carats?: number; clarity?: string; color?: string; cut?: string; polish?: string; symmetry?: string; length?: number; width?: number; depth?: number };
     };
   };
 
@@ -216,9 +216,9 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
     certNumber: item.diamond?.certificate?.certNumber ?? null,
     image:      item.diamond?.image                           ?? null,
     video:      item.diamond?.video                           ?? null,
-    length_mm:  item.diamond?.certificate?.length_mm          ?? null,
-    width_mm:   item.diamond?.certificate?.width_mm           ?? null,
-    depth_mm:   item.diamond?.certificate?.depth_mm           ?? null,
+    length:  item.diamond?.certificate?.length          ?? null,
+    width:   item.diamond?.certificate?.width           ?? null,
+    depth:   item.diamond?.certificate?.depth           ?? null,
   }));
 
   console.log(`[nivoda/search] Returning ${results.length} of ${raw.total_count ?? 0} total`);
