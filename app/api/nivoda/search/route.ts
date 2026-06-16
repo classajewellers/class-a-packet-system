@@ -110,7 +110,6 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ query, variables: { token } }),
-      signal:  AbortSignal.timeout?.(30_000),
     });
   } catch (err) {
     throw new Error(`Nivoda search: network error — ${err instanceof Error ? err.message : String(err)}`);
@@ -224,6 +223,45 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   } catch (err) {
     console.error("[nivoda/search] Unhandled error:", err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
+  }
+}
+
+// GET handler — accepts the same filters as query params for browser testing
+// e.g. /api/nivoda/search?shape=ROUND&caratFrom=0.5&caratTo=1&colorFrom=D&colorTo=H
+export async function GET(req: NextRequest): Promise<NextResponse> {
+  const p = new URL(req.url).searchParams;
+  const body: Record<string, unknown> = {
+    shape:       p.get("shape")       ?? "ROUND",
+    caratFrom:   parseFloat(p.get("caratFrom") ?? "0.3"),
+    caratTo:     parseFloat(p.get("caratTo")   ?? "5"),
+    colorFrom:   p.get("colorFrom")   ?? "D",
+    colorTo:     p.get("colorTo")     ?? "H",
+    clarityFrom: p.get("clarityFrom") ?? "VVS1",
+    clarityTo:   p.get("clarityTo")   ?? "SI1",
+    labgrown:    p.get("labgrown") !== "false",
+    limit:       parseInt(p.get("limit")  ?? "20"),
+    offset:      parseInt(p.get("offset") ?? "0"),
+  };
+  if (p.has("budget")) body.budget = parseFloat(p.get("budget")!);
+
+  try {
+    const token = await getNivodaToken();
+    try {
+      return await runSearch(token, body);
+    } catch (err) {
+      if ((err as { isAuthError?: boolean }).isAuthError) {
+        clearNivodaTokenCache();
+        const freshToken = await getNivodaToken(true);
+        return await runSearch(freshToken, body);
+      }
+      throw err;
+    }
+  } catch (err) {
+    console.error("[nivoda/search] GET error:", err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },
       { status: 500 }

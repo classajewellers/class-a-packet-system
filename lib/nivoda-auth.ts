@@ -50,8 +50,6 @@ async function fetchFreshToken(): Promise<string> {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ query }),
-      // 30 s timeout via AbortSignal where supported
-      signal:  AbortSignal.timeout?.(30_000),
     });
   } catch (err) {
     throw new Error(`Nivoda auth: network error — ${err instanceof Error ? err.message : String(err)}`);
