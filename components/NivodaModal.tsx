@@ -18,6 +18,9 @@ export interface NivodaStone {
   price: number;
   image: string | null;
   video: string | null;
+  length_mm: number | null;
+  width_mm: number | null;
+  depth_mm: number | null;
   labgrown: boolean;
 }
 
@@ -462,9 +465,13 @@ function StoneDetailView({ stone, refId, onBack, onSelect }: { stone: NivodaSton
     { label: "Symmetry",   value: stone.symmetry },
     { label: "Lab",        value: stone.lab },
     { label: "Cert No.",   value: stone.certNumber },
-    { label: "Nivoda ID",  value: stone.id.replace(/^DIAMOND\//, "") },
     { label: "Ref",        value: refId },
   ];
+
+  const hasDimensions = [stone.length_mm, stone.width_mm, stone.depth_mm].some(v => v && v > 0);
+  const dimensionsStr = hasDimensions
+    ? `${(stone.length_mm ?? 0).toFixed(2)} × ${(stone.width_mm ?? 0).toFixed(2)} × ${(stone.depth_mm ?? 0).toFixed(2)} mm`
+    : null;
 
   const videoUrl = stone.video ? `${stone.video}/autoplay` : null;
 
@@ -507,14 +514,25 @@ function StoneDetailView({ stone, refId, onBack, onSelect }: { stone: NivodaSton
 
       {/* Details table */}
       <div style={{ background: "#FAFBFF", border: "1px solid #E8E8F0", borderRadius: 10, overflow: "hidden", marginBottom: 16 }}>
-        {rows.filter(r => r.value).map((r, i) => (
+        {[...rows.filter(r => r.value), ...(dimensionsStr ? [{ label: "Dimensions", value: dimensionsStr }] : [])].map((r, i, arr) => (
           <div
             key={r.label}
-            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderBottom: i < rows.filter(x => x.value).length - 1 ? "1px solid #E8E8F0" : "none", background: i % 2 === 0 ? "#fff" : "#FAFBFF" }}
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderBottom: i < arr.length - 1 ? "1px solid #E8E8F0" : "none", background: i % 2 === 0 ? "#fff" : "#FAFBFF" }}
           >
             <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 500 }}>{r.label}</span>
-            <span style={{ fontSize: 13, color: (r.label === "Ref" || r.label === "Nivoda ID") ? "#9CA3AF" : "#1A1A2E", fontWeight: (r.label === "Ref" || r.label === "Nivoda ID") ? 400 : 500, fontFamily: (r.label === "Ref" || r.label === "Nivoda ID") ? "monospace" : "inherit" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: r.label === "Ref" ? "#9CA3AF" : "#1A1A2E", fontWeight: r.label === "Ref" ? 400 : 500, fontFamily: r.label === "Ref" ? "monospace" : "inherit" }}>
               {r.value}
+              {r.label === "Cert No." && r.value && (
+                <button
+                  onClick={() => navigator.clipboard.writeText(r.value!)}
+                  title="Copy to clipboard"
+                  style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "#9CA3AF", display: "flex", alignItems: "center" }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  </svg>
+                </button>
+              )}
             </span>
           </div>
         ))}
