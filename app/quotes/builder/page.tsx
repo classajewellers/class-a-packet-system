@@ -152,11 +152,11 @@ function computeItemPricing(
   }
 
   const mainStoneSettingRate = fixedCosts.find(fc => fc.key === "main_stone_setting")?.amount ?? 80;
-  const stoneCount = item.includeMainStone && item.stoneOptions[0] ? item.stoneOptions[0].stones.length : 0;
+  const stoneCount = item.includeMainStone && item.stoneOptions[0] ? (item.stoneOptions[0].stones?.length ?? 0) : 0;
   const mainStoneSettingCost = item.includeMainStone ? stoneCount * mainStoneSettingRate : 0;
 
   const mainStoneCost = item.includeMainStone && isManager && item.stoneOptions[0]
-    ? item.stoneOptions[0].stones.reduce((s, st) => s + (parseFloat(st.cost) || 0), 0)
+    ? (item.stoneOptions[0].stones ?? []).reduce((s, st) => s + (parseFloat(st.cost) || 0), 0)
     : 0;
 
   const meleeCost = isManager
@@ -230,8 +230,8 @@ function computeItemPricing(
   // Per stone option prices (only when multiple options)
   const stoneOptionPrices = item.stoneOptions.map((opt, oi) => {
     if (!item.includeMainStone) return finalPrice;
-    const optStoneCost = isManager ? opt.stones.reduce((s, st) => s + (parseFloat(st.cost) || 0), 0) : 0;
-    const optSettingCost = opt.stones.length * mainStoneSettingRate;
+    const optStoneCost = isManager ? (opt.stones ?? []).reduce((s, st) => s + (parseFloat(st.cost) || 0), 0) : 0;
+    const optSettingCost = (opt.stones?.length ?? 0) * mainStoneSettingRate;
     const optTotal = baseWithoutMainStone + optStoneCost + optSettingCost;
     const optSuggested = optTotal > 0 ? calculateRetailPrice(optTotal) : 0;
     const optBracket = safeBrackets.find(b => optTotal >= b.cost_min && (b.cost_max == null || optTotal <= b.cost_max)) ?? safeBrackets[safeBrackets.length - 1];
@@ -421,7 +421,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
           <div style={sectionStyle}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", ...headingStyle, marginBottom: 0, paddingBottom: 0, borderBottom: "none" }}>
               <span>Main Stone</span>
-              <button onClick={() => { setActiveOptIdx(0); onShowNivoda(item.id, item.stoneOptions[0].id); }} style={{ padding: "5px 12px", borderRadius: 7, border: "1px solid #635BFF", background: "#EEF2FF", color: "#635BFF", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Browse Stones</button>
+              <button onClick={() => { setActiveOptIdx(0); onShowNivoda(item.id, item.stoneOptions[0]?.id ?? ""); }} style={{ padding: "5px 12px", borderRadius: 7, border: "1px solid #635BFF", background: "#EEF2FF", color: "#635BFF", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Browse Stones</button>
             </div>
             <div style={{ borderBottom: "1px solid #E8E8F0", marginBottom: 14, marginTop: 8 }} />
             <div style={{ marginBottom: item.includeMainStone ? 12 : 0 }}>
@@ -838,7 +838,7 @@ function QuoteBuilderPageInner() {
     const formatted: StoneEntry = {
       id: uid(),
       caratWeight: String(stone.carats),
-      shape: stone.shape.charAt(0) + stone.shape.slice(1).toLowerCase(),
+      shape: stone.shape ? stone.shape.charAt(0) + stone.shape.slice(1).toLowerCase() : "",
       colour: stone.color,
       clarity: stone.clarity,
       origin: stone.labgrown ? "Lab Grown" : "Natural",
@@ -883,7 +883,7 @@ function QuoteBuilderPageInner() {
           stone_options: item.includeMainStone ? item.stoneOptions.map((opt, oi) => ({
             id: opt.id,
             label: opt.label,
-            stones: opt.stones.map(s => ({
+            stones: (opt.stones ?? []).map(s => ({
               carat_weight: parseFloat(s.caratWeight) || null,
               shape: s.shape || null,
               colour: s.colour || null,
@@ -1037,7 +1037,7 @@ function QuoteBuilderPageInner() {
             stone_options: item.includeMainStone ? item.stoneOptions.map((opt, oi) => ({
               id: opt.id,
               label: opt.label,
-              stones: opt.stones.map(s => ({
+              stones: (opt.stones ?? []).map(s => ({
                 carat_weight: parseFloat(s.caratWeight) || null,
                 shape: s.shape || null,
                 colour: s.colour || null,

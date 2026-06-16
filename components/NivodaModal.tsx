@@ -419,7 +419,7 @@ function StoneCard({ stone, onSelect, onExpand }: { stone: NivodaStone; onSelect
       <div style={{ height: 110, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
         {stone.image ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={stone.image} alt={`${stone.carats}ct ${stone.shape}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          <img src={stone.image} alt={`${stone.carats ?? "?"}ct ${stone.shape ?? ""}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         ) : (
           <DiamondIcon />
         )}
@@ -427,7 +427,7 @@ function StoneCard({ stone, onSelect, onExpand }: { stone: NivodaStone; onSelect
 
       {/* Details */}
       <div style={{ padding: "10px 10px 6px", flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "#1A1A2E" }}>{stone.carats}ct {SHAPE_LABELS[stone.shape] ?? stone.shape}</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#1A1A2E" }}>{stone.carats ?? "?"}ct {SHAPE_LABELS[stone.shape] ?? stone.shape ?? "Unknown"}</div>
         <div style={{ fontSize: 12, color: "#6B7280" }}>
           {stone.color}/{stone.clarity}{stone.cut ? ` · ${stone.cut}` : ""}
         </div>
@@ -457,7 +457,7 @@ function StoneDetailView({ stone, refId, onBack, onSelect }: { stone: NivodaSton
 
   const rows: { label: string; value: string | null | undefined }[] = [
     { label: "Shape",      value: SHAPE_LABELS[stone.shape] ?? stone.shape },
-    { label: "Carats",     value: `${stone.carats}ct` },
+    { label: "Carats",     value: stone.carats != null ? `${stone.carats}ct` : null },
     { label: "Colour",     value: stone.color },
     { label: "Clarity",    value: stone.clarity },
     { label: "Cut",        value: stone.cut },
@@ -489,7 +489,7 @@ function StoneDetailView({ stone, refId, onBack, onSelect }: { stone: NivodaSton
       {stone.image && (
         <div style={{ background: "#F3F4F6", borderRadius: 10, overflow: "hidden", marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center", maxHeight: 500 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={stone.image} alt={`${stone.carats}ct ${stone.shape}`} style={{ width: "100%", maxHeight: 500, objectFit: "contain" }} />
+          <img src={stone.image} alt={`${stone.carats ?? "?"}ct ${stone.shape ?? ""}`} style={{ width: "100%", maxHeight: 500, objectFit: "contain" }} />
         </div>
       )}
 
@@ -524,7 +524,7 @@ function StoneDetailView({ stone, refId, onBack, onSelect }: { stone: NivodaSton
               {r.value}
               {r.label === "Cert No." && r.value && (
                 <button
-                  onClick={() => navigator.clipboard.writeText(r.value!)}
+                  onClick={() => navigator.clipboard?.writeText(r.value!).catch(() => {})}
                   title="Copy to clipboard"
                   style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "#9CA3AF", display: "flex", alignItems: "center" }}
                 >
