@@ -29,7 +29,6 @@ export interface NivodaResult {
   certNumber: string | null;
   image: string | null;
   video: string | null;
-  ratio: number | null;
 }
 
 async function runSearch(token: string, body: Record<string, unknown>): Promise<NextResponse> {
@@ -101,7 +100,6 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
               availability
               image
               video
-              ratio
               certificate {
                 lab
                 certNumber
@@ -181,7 +179,7 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
   type RawItem = {
     id: string; price: number;
     diamond: {
-      image?: string; video?: string; ratio?: number;
+      image?: string; video?: string;
       certificate: { lab?: string; certNumber?: string; shape?: string; carats?: number; clarity?: string; color?: string; cut?: string; polish?: string; symmetry?: string };
     };
   };
@@ -200,7 +198,6 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
     certNumber: item.diamond?.certificate?.certNumber ?? null,
     image:      item.diamond?.image                  ?? null,
     video:      item.diamond?.video                  ?? null,
-    ratio:      item.diamond?.ratio                  ?? null,
   }));
 
   console.log(`[nivoda/search] Returning ${results.length} of ${raw.total_count ?? 0} total`);

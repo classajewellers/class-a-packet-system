@@ -16,7 +16,6 @@ export interface NivodaStone {
   price: number;
   image: string | null;
   video: string | null;
-  ratio: number | null;
   labgrown: boolean;
 }
 
@@ -371,9 +370,6 @@ function StoneCard({ stone, onSelect }: { stone: NivodaStone; onSelect: (s: Nivo
         <div style={{ fontSize: 12, color: "#6B7280" }}>
           {stone.color}/{stone.clarity}{stone.cut ? ` · ${stone.cut}` : ""}
         </div>
-        {stone.ratio && stone.ratio > 0 && (
-          <div style={{ fontSize: 11, color: "#9CA3AF" }}>{stone.ratio.toFixed(2)} ratio</div>
-        )}
         {stone.lab && (
           <div style={{ fontSize: 11, color: "#6B7280" }}>{stone.lab}{stone.certNumber ? ` · ${stone.certNumber}` : ""}</div>
         )}
