@@ -462,7 +462,7 @@ function StoneDetailView({ stone, refId, onBack, onSelect }: { stone: NivodaSton
     { label: "Symmetry",   value: stone.symmetry },
     { label: "Lab",        value: stone.lab },
     { label: "Cert No.",   value: stone.certNumber },
-    { label: "Cost",       value: price },
+    { label: "Nivoda ID",  value: stone.id.replace(/^DIAMOND\//, "") },
     { label: "Ref",        value: refId },
   ];
 
@@ -513,7 +513,7 @@ function StoneDetailView({ stone, refId, onBack, onSelect }: { stone: NivodaSton
             style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderBottom: i < rows.filter(x => x.value).length - 1 ? "1px solid #E8E8F0" : "none", background: i % 2 === 0 ? "#fff" : "#FAFBFF" }}
           >
             <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 500 }}>{r.label}</span>
-            <span style={{ fontSize: 13, color: r.label === "Cost" ? "#635BFF" : r.label === "Ref" ? "#9CA3AF" : "#1A1A2E", fontWeight: r.label === "Cost" ? 700 : r.label === "Ref" ? 400 : 500, fontFamily: r.label === "Ref" ? "monospace" : "inherit" }}>
+            <span style={{ fontSize: 13, color: (r.label === "Ref" || r.label === "Nivoda ID") ? "#9CA3AF" : "#1A1A2E", fontWeight: (r.label === "Ref" || r.label === "Nivoda ID") ? 400 : 500, fontFamily: (r.label === "Ref" || r.label === "Nivoda ID") ? "monospace" : "inherit" }}>
               {r.value}
             </span>
           </div>
