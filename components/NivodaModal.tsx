@@ -431,7 +431,6 @@ function StoneCard({ stone, onSelect, onExpand }: { stone: NivodaStone; onSelect
         {stone.lab && (
           <div style={{ fontSize: 11, color: "#6B7280" }}>{stone.lab}{stone.certNumber ? ` · ${stone.certNumber}` : ""}</div>
         )}
-        <div style={{ fontSize: 15, fontWeight: 700, color: "#635BFF", marginTop: 4 }}>{price}</div>
       </div>
 
       <div style={{ padding: "0 10px 10px" }}>
