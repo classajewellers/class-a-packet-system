@@ -4,12 +4,12 @@ import { getNivodaToken, clearNivodaTokenCache, getNivodaEndpoint } from "@/lib/
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const COLORS    = ["D","E","F","G","H","I","J","K"] as const;
-const CLARITIES = ["FL","IF","VVS1","VVS2","VS1","VS2","SI1","SI2"] as const;
+const COLORS    = ["D","E","F","G","H","I","J","K","L","M"] as const;
+const CLARITIES = ["FL","IF","VVS1","VVS2","VS1","VS2","SI1","SI2","SI3","I1","I2","I3"] as const;
 
 function expandRange(arr: readonly string[], from: string, to: string): string[] {
   const a = arr.indexOf(from), b = arr.indexOf(to);
-  if (a === -1 && b === -1) return [];
+  if (a === -1 && b === -1) return [from]; // fallback: return from value
   if (a === -1) return [to];
   if (b === -1) return [from];
   return [...arr.slice(Math.min(a, b), Math.max(a, b) + 1)];
