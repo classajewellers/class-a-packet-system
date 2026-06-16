@@ -16,7 +16,7 @@ import NivodaModal, { type NivodaStone } from "@/components/NivodaModal";
 
 interface MetalRate { id: string; metal_type: string; price_per_gram: number; }
 interface FixedCost { id: string; key: string; label: string; amount: number; }
-interface MarginBracket { id: string; cost_min: number; cost_max: number | null; multiplier: number; }
+interface MarginBracket { id: string; cost_min: number; cost_max: number | null; multiplier: number; stone_type?: string | null; }
 
 interface MetalRow { id: string; type: string; weight: string; }
 interface StoneEntry {
@@ -188,7 +188,23 @@ function computeItemPricing(
   const baseWithoutMainStone = metalCost + meleeCost + addonsCost - mainStoneSettingCost;
   const totalCost = metalCost + mainStoneCost + meleeCost + addonsCost;
 
-  const blended = calculateBlendedRetailFromBrackets(totalCost, marginBrackets);
+  // Filter brackets by stone_type when the DB has stone_type rows; fall back to all brackets
+  const primaryOrigin = item.includeMainStone
+    ? (item.stoneOptions[0]?.stones[0]?.origin ?? "Natural")
+    : "Natural";
+  const stoneTypeKey = primaryOrigin === "Lab Grown" ? "lab_grown" : "natural";
+  const hasStonetype = marginBrackets.some(b => b.stone_type != null);
+  const activeBrackets = hasStonetype
+    ? (() => {
+        const filtered = marginBrackets.filter(b => b.stone_type === stoneTypeKey);
+        return filtered.length > 0
+          ? filtered
+          : marginBrackets.filter(b => b.stone_type === "natural" || b.stone_type == null);
+      })()
+    : marginBrackets;
+  const safeBrackets = activeBrackets.length > 0 ? activeBrackets : marginBrackets;
+
+  const blended = calculateBlendedRetailFromBrackets(totalCost, safeBrackets);
   const suggestedRetail = blended.retail;
   const rawPrice = blended.unrounded;
   const breakdown = blended.breakdown;
@@ -218,7 +234,7 @@ function computeItemPricing(
     const optSettingCost = opt.stones.length * mainStoneSettingRate;
     const optTotal = baseWithoutMainStone + optStoneCost + optSettingCost;
     const optSuggested = optTotal > 0 ? calculateRetailPrice(optTotal) : 0;
-    const optBracket = marginBrackets.find(b => optTotal >= b.cost_min && (b.cost_max == null || optTotal <= b.cost_max)) ?? marginBrackets[marginBrackets.length - 1];
+    const optBracket = safeBrackets.find(b => optTotal >= b.cost_min && (b.cost_max == null || optTotal <= b.cost_max)) ?? safeBrackets[safeBrackets.length - 1];
     const optRaw = optBracket ? optTotal * optBracket.multiplier : optTotal;
     if (oi === 0 && item.retailPriceOverride && parseFloat(item.retailPriceOverride) > 0) return parseFloat(item.retailPriceOverride);
     if (item.marginMultiplierOverride && parseFloat(item.marginMultiplierOverride) > 0) {
