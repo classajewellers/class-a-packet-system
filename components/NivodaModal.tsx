@@ -16,6 +16,7 @@ export interface NivodaStone {
   price: number;
   image: string | null;
   video: string | null;
+  ratio: number | null;
   labgrown: boolean;
 }
 
@@ -28,12 +29,21 @@ interface Props {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const SHAPES = ["ROUND", "OVAL", "CUSHION", "EMERALD", "PEAR", "PRINCESS", "RADIANT", "MARQUISE", "HEART", "ASSCHER"] as const;
+const PRIMARY_SHAPES = ["ROUND", "OVAL", "EMERALD", "CUSHION", "MARQUISE", "PEAR", "PRINCESS", "RADIANT"] as const;
+const EXTENDED_SHAPES = ["ASSCHER", "HEART", "SQ_RADIANT", "OLD_MINER", "STAR", "ROSE", "TRIANGULAR", "TRILLIANT", "BAGUETTE", "SHIELD", "LOZENGE", "KITE", "EUROPEAN_CUT", "HALF_MOON", "TRAPEZOID", "FLANDERS", "BRIOLETTE", "SQUARE", "OCTAGONAL", "HEXAGONAL", "PENTAGONAL"] as const;
+
 const SHAPE_LABELS: Record<string, string> = {
-  ROUND: "Round", OVAL: "Oval", CUSHION: "Cushion", EMERALD: "Emerald",
-  PEAR: "Pear", PRINCESS: "Princess", RADIANT: "Radiant",
-  MARQUISE: "Marquise", HEART: "Heart", ASSCHER: "Asscher",
+  ROUND: "Round", OVAL: "Oval", EMERALD: "Emerald", CUSHION: "Cushion",
+  MARQUISE: "Marquise", PEAR: "Pear", PRINCESS: "Princess", RADIANT: "Radiant",
+  ASSCHER: "Asscher", HEART: "Heart", SQ_RADIANT: "Sq. Radiant",
+  OLD_MINER: "Old Miner", STAR: "Star", ROSE: "Rose",
+  TRIANGULAR: "Triangular", TRILLIANT: "Trilliant", BAGUETTE: "Baguette",
+  SHIELD: "Shield", LOZENGE: "Lozenge", KITE: "Kite",
+  EUROPEAN_CUT: "European", HALF_MOON: "Half Moon", TRAPEZOID: "Trapezoid",
+  FLANDERS: "Flanders", BRIOLETTE: "Briolette", SQUARE: "Square",
+  OCTAGONAL: "Octagonal", HEXAGONAL: "Hexagonal", PENTAGONAL: "Pentagonal",
 };
+
 const COLORS    = ["D", "E", "F", "G", "H", "I", "J", "K"] as const;
 const CLARITIES = ["FL", "IF", "VVS1", "VVS2", "VS1", "VS2", "SI1", "SI2"] as const;
 
@@ -52,24 +62,29 @@ function DiamondIcon() {
 
 export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: Props) {
   // Filters
-  const [labgrown, setLabgrown]       = useState(true);
-  const [shape, setShape]             = useState("ROUND");
-  const [caratFrom, setCaratFrom]     = useState("0.50");
-  const [caratTo, setCaratTo]         = useState("2.00");
-  const [colorFrom, setColorFrom]     = useState("D");
-  const [colorTo, setColorTo]         = useState("H");
-  const [clarityFrom, setClarityFrom] = useState("VVS1");
-  const [clarityTo, setClarityTo]     = useState("SI1");
-  const [budget, setBudget]           = useState("");
+  const [labgrown, setLabgrown]           = useState(true);
+  const [shapes, setShapes]               = useState<string[]>(["ROUND"]);
+  const [showMoreShapes, setShowMoreShapes] = useState(false);
+  const [caratFrom, setCaratFrom]         = useState("0.50");
+  const [caratTo, setCaratTo]             = useState("2.00");
+  const [colorFrom, setColorFrom]         = useState("D");
+  const [colorTo, setColorTo]             = useState("H");
+  const [clarityFrom, setClarityFrom]     = useState("VVS1");
+  const [clarityTo, setClarityTo]         = useState("SI1");
+  const [budget, setBudget]               = useState("");
 
   // Results
-  const [results, setResults]         = useState<NivodaStone[]>([]);
-  const [totalCount, setTotalCount]   = useState(0);
-  const [loading, setLoading]         = useState(false);
-  const [error, setError]             = useState<string | null>(null);
-  const [searched, setSearched]       = useState(false);
+  const [results, setResults]             = useState<NivodaStone[]>([]);
+  const [totalCount, setTotalCount]       = useState(0);
+  const [loading, setLoading]             = useState(false);
+  const [error, setError]                 = useState<string | null>(null);
+  const [searched, setSearched]           = useState(false);
 
   const PAGE_SIZE = 20;
+
+  function toggleShape(s: string) {
+    setShapes(prev => prev.includes(s) ? (prev.length > 1 ? prev.filter(x => x !== s) : prev) : [...prev, s]);
+  }
 
   const runSearch = useCallback(async (offset = 0) => {
     setLoading(true);
@@ -79,7 +94,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
         method: "POST",
         headers: { "Content-Type": "application/json", "x-tenant-id": tenantId },
         body: JSON.stringify({
-          shape,
+          shapes,
           caratFrom: parseFloat(caratFrom) || 0.3,
           caratTo:   parseFloat(caratTo)   || 5,
           colorFrom, colorTo,
@@ -107,7 +122,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
     } finally {
       setLoading(false);
     }
-  }, [shape, caratFrom, caratTo, colorFrom, colorTo, clarityFrom, clarityTo, labgrown, budget, tenantId]);
+  }, [shapes, caratFrom, caratTo, colorFrom, colorTo, clarityFrom, clarityTo, labgrown, budget, tenantId]);
 
   function handleSearch() {
     setResults([]);
@@ -129,6 +144,19 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
   // Styles
   const sel: React.CSSProperties = { border: "1px solid #E8E8F0", borderRadius: 8, padding: "7px 10px", fontSize: 13, outline: "none", background: "#fff", cursor: "pointer", width: "100%" };
   const numIn: React.CSSProperties = { border: "1px solid #E8E8F0", borderRadius: 8, padding: "7px 10px", fontSize: 13, outline: "none", width: "100%", boxSizing: "border-box" };
+
+  function ShapeBtn({ s }: { s: string }) {
+    const active = shapes.includes(s);
+    return (
+      <button
+        key={s}
+        onClick={() => toggleShape(s)}
+        style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${active ? "#635BFF" : "#E8E8F0"}`, background: active ? "#635BFF" : "#fff", color: active ? "#fff" : "#374151", fontSize: 11, fontWeight: 500, cursor: "pointer", transition: "all .15s" }}
+      >
+        {SHAPE_LABELS[s] ?? s}
+      </button>
+    );
+  }
 
   return (
     <div
@@ -174,10 +202,15 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Shape</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                {SHAPES.map(s => (
-                  <button key={s} onClick={() => setShape(s)} style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${shape === s ? "#635BFF" : "#E8E8F0"}`, background: shape === s ? "#635BFF" : "#fff", color: shape === s ? "#fff" : "#374151", fontSize: 11, fontWeight: 500, cursor: "pointer", transition: "all .15s" }}>{SHAPE_LABELS[s]}</button>
-                ))}
+                {PRIMARY_SHAPES.map(s => <ShapeBtn key={s} s={s} />)}
+                {showMoreShapes && EXTENDED_SHAPES.map(s => <ShapeBtn key={s} s={s} />)}
               </div>
+              <button
+                onClick={() => setShowMoreShapes(v => !v)}
+                style={{ marginTop: 6, background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "#635BFF", fontWeight: 500, padding: 0 }}
+              >
+                {showMoreShapes ? "− Less shapes" : "+ More shapes"}
+              </button>
             </div>
 
             {/* Carat */}
@@ -338,6 +371,9 @@ function StoneCard({ stone, onSelect }: { stone: NivodaStone; onSelect: (s: Nivo
         <div style={{ fontSize: 12, color: "#6B7280" }}>
           {stone.color}/{stone.clarity}{stone.cut ? ` · ${stone.cut}` : ""}
         </div>
+        {stone.ratio && stone.ratio > 0 && (
+          <div style={{ fontSize: 11, color: "#9CA3AF" }}>{stone.ratio.toFixed(2)} ratio</div>
+        )}
         {stone.lab && (
           <div style={{ fontSize: 11, color: "#6B7280" }}>{stone.lab}{stone.certNumber ? ` · ${stone.certNumber}` : ""}</div>
         )}

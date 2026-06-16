@@ -9,7 +9,7 @@ const CLARITIES = ["FL","IF","VVS1","VVS2","VS1","VS2","SI1","SI2","SI3","I1","I
 
 function expandRange(arr: readonly string[], from: string, to: string): string[] {
   const a = arr.indexOf(from), b = arr.indexOf(to);
-  if (a === -1 && b === -1) return [from]; // fallback: return from value
+  if (a === -1 && b === -1) return [from];
   if (a === -1) return [to];
   if (b === -1) return [from];
   return [...arr.slice(Math.min(a, b), Math.max(a, b) + 1)];
@@ -29,6 +29,7 @@ export interface NivodaResult {
   certNumber: string | null;
   image: string | null;
   video: string | null;
+  ratio: number | null;
 }
 
 async function runSearch(token: string, body: Record<string, unknown>): Promise<NextResponse> {
@@ -46,14 +47,25 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
     offset      = 0,
   } = body;
 
-  const colors    = expandRange(COLORS,    String(colorFrom),    String(colorTo));
-  const clarities = expandRange(CLARITIES, String(clarityFrom),  String(clarityTo));
-  const shapeStr  = (String(shape)).toUpperCase();
+  // Accept array (multi-select UI) or single shape
+  const shapesArr: string[] = Array.isArray(body.shapes)
+    ? (body.shapes as string[]).map(s => String(s).toUpperCase())
+    : [String(shape).toUpperCase()];
+
+  const colors    = expandRange(COLORS,    String(colorFrom),   String(colorTo));
+  const clarities = expandRange(CLARITIES, String(clarityFrom), String(clarityTo));
   const limitNum  = Math.min(Number(limit), 50);
   const offsetNum = Number(offset);
 
-  // Build query — enum values (shapes, color, clarity) must be inlined, not passed as string vars.
-  // Token is passed as a variable so it doesn't need escaping.
+  // Quality filter defaults — UI can override by passing the key in the request body
+  const cuts          = (body.cut as string[])             ?? ["EX", "ID", "EIGHTX"];
+  const polishes      = (body.polish as string[])          ?? ["EX"];
+  const symmetries    = (body.symmetry as string[])        ?? ["EX"];
+  const fluorescences = (body.fluorescence as string[])    ?? ["NON"];
+  const eyeClean      = (body.eyeClean  as string)         ?? "Yes";
+  const noBGM         = body.noBGM !== undefined ? Number(body.noBGM) : 1;
+  const certLabs      = (body.certificate_lab as string[]) ?? ["GIA", "IGI"];
+
   const budgetClause = budget
     ? `, max_price: { amount: ${Number(budget)}, currency: AUD }`
     : "";
@@ -64,10 +76,17 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
         diamonds_by_query(
           query: {
             labgrown: ${labgrown ? "true" : "false"}
-            shapes: ["${shapeStr}"]
+            shapes: [${shapesArr.map(s => `"${s}"`).join(", ")}]
             sizes: { from: ${Number(caratFrom)}, to: ${Number(caratTo)} }
             color: [${colors.join(", ")}]
             clarity: [${clarities.join(", ")}]
+            cut: [${cuts.join(", ")}]
+            polish: [${polishes.join(", ")}]
+            symmetry: [${symmetries.join(", ")}]
+            fluorescence: [${fluorescences.join(", ")}]
+            eye_clean: ${eyeClean}
+            no_bgm: ${noBGM}
+            certificate_lab: [${certLabs.join(", ")}]
             availability: AVAILABLE${budgetClause}
           }
           limit: ${limitNum}
@@ -82,6 +101,7 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
               availability
               image
               video
+              ratio
               certificate {
                 lab
                 certNumber
@@ -102,7 +122,7 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
 
   const endpoint = getNivodaEndpoint();
   console.log("[nivoda/search] Endpoint:", endpoint);
-  console.log("[nivoda/search] Params:", { shapeStr, caratFrom, caratTo, labgrown, colors, clarities, limitNum, offsetNum });
+  console.log("[nivoda/search] Params:", { shapesArr, caratFrom, caratTo, labgrown, colors, clarities, limitNum, offsetNum });
 
   let res: Response;
   try {
@@ -144,7 +164,6 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
       e.extensions?.code === "UNAUTHENTICATED"
     );
     if (isAuthError) {
-      // Signal to the caller that it should retry with a fresh token
       throw Object.assign(new Error(j.errors[0].message), { isAuthError: true });
     }
     return NextResponse.json(
@@ -155,7 +174,6 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
 
   const raw = j.data?.as?.diamonds_by_query;
   if (!raw) {
-    // Empty / unexpected shape — return gracefully
     console.warn("[nivoda/search] No diamonds_by_query in response:", JSON.stringify(j).slice(0, 500));
     return NextResponse.json({ results: [], total_count: 0 });
   }
@@ -163,7 +181,7 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
   type RawItem = {
     id: string; price: number;
     diamond: {
-      image?: string; video?: string;
+      image?: string; video?: string; ratio?: number;
       certificate: { lab?: string; certNumber?: string; shape?: string; carats?: number; clarity?: string; color?: string; cut?: string; polish?: string; symmetry?: string };
     };
   };
@@ -172,7 +190,7 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
     id:         item.id,
     price:      item.price,
     carats:     item.diamond?.certificate?.carats    ?? 0,
-    shape:      item.diamond?.certificate?.shape     ?? shapeStr,
+    shape:      item.diamond?.certificate?.shape     ?? shapesArr[0],
     color:      item.diamond?.certificate?.color     ?? "",
     clarity:    item.diamond?.certificate?.clarity   ?? "",
     cut:        item.diamond?.certificate?.cut       ?? null,
@@ -182,6 +200,7 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
     certNumber: item.diamond?.certificate?.certNumber ?? null,
     image:      item.diamond?.image                  ?? null,
     video:      item.diamond?.video                  ?? null,
+    ratio:      item.diamond?.ratio                  ?? null,
   }));
 
   console.log(`[nivoda/search] Returning ${results.length} of ${raw.total_count ?? 0} total`);
@@ -197,7 +216,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    // Attempt 1 — use cached token
     let token: string;
     try {
       token = await getNivodaToken();
@@ -212,7 +230,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     try {
       return await runSearch(token, body);
     } catch (err) {
-      // If search returned an auth error, clear cache and retry once with fresh token
       if ((err as { isAuthError?: boolean }).isAuthError) {
         console.warn("[nivoda/search] Auth error on search — clearing cache and retrying");
         clearNivodaTokenCache();
