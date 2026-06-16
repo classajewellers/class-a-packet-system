@@ -51,8 +51,18 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
     ? (body.shapes as string[]).map(s => String(s).toUpperCase())
     : [String(shape).toUpperCase()];
 
-  const colors    = expandRange(COLORS,    String(colorFrom),   String(colorTo));
-  const clarities = expandRange(CLARITIES, String(clarityFrom), String(clarityTo));
+  // Accept explicit grade arrays from toggle UI, fall back to range expansion
+  const colors: string[] = Array.isArray(body.colorGrades)
+    ? (body.colorGrades as string[])
+    : typeof body.colorGrades === "string"
+      ? (body.colorGrades as string).split(",").map(s => s.trim()).filter(Boolean)
+      : expandRange(COLORS, String(colorFrom), String(colorTo));
+
+  const clarities: string[] = Array.isArray(body.clarityGrades)
+    ? (body.clarityGrades as string[])
+    : typeof body.clarityGrades === "string"
+      ? (body.clarityGrades as string).split(",").map(s => s.trim()).filter(Boolean)
+      : expandRange(CLARITIES, String(clarityFrom), String(clarityTo));
   const limitNum  = Math.min(Number(limit), 50);
   const offsetNum = Number(offset);
 

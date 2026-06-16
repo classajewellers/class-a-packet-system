@@ -43,7 +43,7 @@ const SHAPE_LABELS: Record<string, string> = {
   OCTAGONAL: "Octagonal", HEXAGONAL: "Hexagonal", PENTAGONAL: "Pentagonal",
 };
 
-const COLORS    = ["D", "E", "F", "G", "H", "I", "J", "K"] as const;
+const COLORS    = ["D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"] as const;
 const CLARITIES = ["FL", "IF", "VVS1", "VVS2", "VS1", "VS2", "SI1", "SI2"] as const;
 
 // ─── Diamond placeholder icon ─────────────────────────────────────────────────
@@ -66,10 +66,8 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
   const [showMoreShapes, setShowMoreShapes] = useState(false);
   const [caratFrom, setCaratFrom]         = useState("0.50");
   const [caratTo, setCaratTo]             = useState("2.00");
-  const [colorFrom, setColorFrom]         = useState("D");
-  const [colorTo, setColorTo]             = useState("H");
-  const [clarityFrom, setClarityFrom]     = useState("VVS1");
-  const [clarityTo, setClarityTo]         = useState("SI1");
+  const [colorGrades, setColorGrades]     = useState<string[]>(["D", "E", "F", "G", "H"]);
+  const [clarityGrades, setClarityGrades] = useState<string[]>(["VVS1", "VVS2", "VS1", "VS2", "SI1"]);
   const [budget, setBudget]               = useState("");
 
   // Results
@@ -96,8 +94,8 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
           shapes,
           caratFrom: parseFloat(caratFrom) || 0.3,
           caratTo:   parseFloat(caratTo)   || 5,
-          colorFrom, colorTo,
-          clarityFrom, clarityTo,
+          colorGrades,
+          clarityGrades,
           labgrown,
           budget: budget ? parseFloat(budget) * 100 : undefined,
           limit: PAGE_SIZE,
@@ -121,7 +119,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
     } finally {
       setLoading(false);
     }
-  }, [shapes, caratFrom, caratTo, colorFrom, colorTo, clarityFrom, clarityTo, labgrown, budget, tenantId]);
+  }, [shapes, caratFrom, caratTo, colorGrades, clarityGrades, labgrown, budget, tenantId]);
 
   function handleSearch() {
     setResults([]);
@@ -141,7 +139,6 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
   if (!open) return null;
 
   // Styles
-  const sel: React.CSSProperties = { border: "1px solid #E8E8F0", borderRadius: 8, padding: "7px 10px", fontSize: 13, outline: "none", background: "#fff", cursor: "pointer", width: "100%" };
   const numIn: React.CSSProperties = { border: "1px solid #E8E8F0", borderRadius: 8, padding: "7px 10px", fontSize: 13, outline: "none", width: "100%", boxSizing: "border-box" };
 
   function ShapeBtn({ s }: { s: string }) {
@@ -230,38 +227,34 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
             {/* Colour */}
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Colour</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                <div>
-                  <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>From</div>
-                  <select style={sel} value={colorFrom} onChange={e => setColorFrom(e.target.value)}>
-                    {COLORS.map(c => <option key={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>To</div>
-                  <select style={sel} value={colorTo} onChange={e => setColorTo(e.target.value)}>
-                    {COLORS.map(c => <option key={c}>{c}</option>)}
-                  </select>
-                </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                {COLORS.map(c => {
+                  const active = colorGrades.includes(c);
+                  return (
+                    <button
+                      key={c}
+                      onClick={() => setColorGrades(prev => active ? (prev.length > 1 ? prev.filter(x => x !== c) : prev) : [...prev, c])}
+                      style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${active ? "#635BFF" : "#E8E8F0"}`, background: active ? "#635BFF" : "#fff", color: active ? "#fff" : "#374151", fontSize: 11, fontWeight: 500, cursor: "pointer", transition: "all .15s" }}
+                    >{c}</button>
+                  );
+                })}
               </div>
             </div>
 
             {/* Clarity */}
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Clarity</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                <div>
-                  <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>From</div>
-                  <select style={sel} value={clarityFrom} onChange={e => setClarityFrom(e.target.value)}>
-                    {CLARITIES.map(c => <option key={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>To</div>
-                  <select style={sel} value={clarityTo} onChange={e => setClarityTo(e.target.value)}>
-                    {CLARITIES.map(c => <option key={c}>{c}</option>)}
-                  </select>
-                </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                {CLARITIES.map(c => {
+                  const active = clarityGrades.includes(c);
+                  return (
+                    <button
+                      key={c}
+                      onClick={() => setClarityGrades(prev => active ? (prev.length > 1 ? prev.filter(x => x !== c) : prev) : [...prev, c])}
+                      style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${active ? "#635BFF" : "#E8E8F0"}`, background: active ? "#635BFF" : "#fff", color: active ? "#fff" : "#374151", fontSize: 11, fontWeight: 500, cursor: "pointer", transition: "all .15s" }}
+                    >{c}</button>
+                  );
+                })}
               </div>
             </div>
 
