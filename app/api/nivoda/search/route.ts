@@ -61,7 +61,7 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
   const cuts          = (body.cut as string[])             ?? ["EX", "ID", "EIGHTX"];
   const polishes      = (body.polish as string[])          ?? ["EX"];
   const symmetries    = (body.symmetry as string[])        ?? ["EX"];
-  const fluorescences = (body.fluorescence as string[])    ?? ["NON"];
+  const fluorescences = (body.flouresence as string[])     ?? ["NON"];
   const eyeClean      = (body.eyeClean  as string)         ?? "Yes";
   const noBGM         = body.noBGM !== undefined ? Number(body.noBGM) : 1;
   const certLabs      = (body.certificate_lab as string[]) ?? ["GIA", "IGI"];
@@ -83,9 +83,9 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
             cut: [${cuts.join(", ")}]
             polish: [${polishes.join(", ")}]
             symmetry: [${symmetries.join(", ")}]
-            fluorescence: [${fluorescences.join(", ")}]
-            eye_clean: ${eyeClean}
-            no_bgm: ${noBGM}
+            flouresence: [${fluorescences.join(", ")}]
+            eyeClean: ${eyeClean}
+            noBGM: ${noBGM}
             certificate_lab: [${certLabs.join(", ")}]
             availability: AVAILABLE${budgetClause}
           }
