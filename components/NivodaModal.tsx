@@ -69,6 +69,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
   const [colorGrades, setColorGrades]     = useState<string[]>(["D", "E", "F", "G", "H"]);
   const [clarityGrades, setClarityGrades] = useState<string[]>(["VVS1", "VVS2", "VS1", "VS2", "SI1"]);
   const [budget, setBudget]               = useState("");
+  const [hasImage, setHasImage]           = useState(true);
 
   // Results
   const [results, setResults]             = useState<NivodaStone[]>([]);
@@ -97,6 +98,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
           colorGrades,
           clarityGrades,
           labgrown,
+          ...(hasImage ? { has_image: true } : {}),
           budget: budget ? parseFloat(budget) * 100 : undefined,
           limit: PAGE_SIZE,
           offset,
@@ -119,7 +121,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
     } finally {
       setLoading(false);
     }
-  }, [shapes, caratFrom, caratTo, colorGrades, clarityGrades, labgrown, budget, tenantId]);
+  }, [shapes, caratFrom, caratTo, colorGrades, clarityGrades, labgrown, hasImage, budget, tenantId]);
 
   function handleSearch() {
     setResults([]);
@@ -262,6 +264,19 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Max Budget (AUD)</div>
               <input style={numIn} type="number" min="0" step="100" value={budget} onChange={e => setBudget(e.target.value)} placeholder="Optional" onFocus={e => (e.target.style.borderColor = "#635BFF")} onBlur={e => (e.target.style.borderColor = "#E8E8F0")} />
+            </div>
+
+            {/* Images only */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={hasImage}
+                  onChange={e => setHasImage(e.target.checked)}
+                  style={{ width: 15, height: 15, accentColor: "#635BFF", cursor: "pointer" }}
+                />
+                <span style={{ fontSize: 12, fontWeight: 500, color: "#374151" }}>Images only</span>
+              </label>
             </div>
 
             <button

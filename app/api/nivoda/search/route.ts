@@ -74,6 +74,7 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
   const eyeClean      = (body.eyeClean  as string)         ?? "Yes";
   const noBGM         = body.noBGM !== undefined ? Number(body.noBGM) : 1;
   const certLabs      = (body.certificate_lab as string[]) ?? ["GIA", "IGI"];
+  const hasImage      = body.has_image !== undefined ? Boolean(body.has_image) : true;
 
   const budgetClause = budget
     ? `, max_price: { amount: ${Number(budget)}, currency: AUD }`
@@ -96,6 +97,7 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
             eyeClean: ${eyeClean}
             noBGM: ${noBGM}
             certificate_lab: [${certLabs.join(", ")}]
+            has_image: ${hasImage}
             availability: AVAILABLE${budgetClause}
           }
           limit: ${limitNum}
