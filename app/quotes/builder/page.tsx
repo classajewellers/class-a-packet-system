@@ -148,10 +148,10 @@ function computeItemPricing(
   let metalCost = 0;
   for (const m of item.metals) {
     const rate = metalRates.find(r => r.metal_type === m.type);
-    if (rate) metalCost += (parseFloat(m.weight) || 0) * rate.price_per_gram;
+    if (rate) metalCost += (parseFloat(m.weight) || 0) * Number(rate.price_per_gram);
   }
 
-  const mainStoneSettingRate = fixedCosts.find(fc => fc.key === "main_stone_setting")?.amount ?? 80;
+  const mainStoneSettingRate = Number(fixedCosts.find(fc => fc.key === "main_stone_setting")?.amount ?? 80);
   const stoneCount = item.includeMainStone && item.stoneOptions[0] ? (item.stoneOptions[0].stones?.length ?? 0) : 0;
   const mainStoneSettingCost = item.includeMainStone ? stoneCount * mainStoneSettingRate : 0;
 
@@ -168,9 +168,9 @@ function computeItemPricing(
   if (mainStoneSettingCost > 0) costMap.mainStoneSetting = mainStoneSettingCost;
 
   for (const fc of fixedCosts) {
-    if (fc.key === "labour") { addonsCost += fc.amount; costMap.labour = fc.amount; }
-    if (fc.key === "butterflies" && item.butterflies) { addonsCost += fc.amount; costMap.butterflies = fc.amount; }
-    if (fc.key === "chain" && item.chain) { addonsCost += fc.amount; costMap.chain = fc.amount; }
+    if (fc.key === "labour") { addonsCost += Number(fc.amount); costMap.labour = Number(fc.amount); }
+    if (fc.key === "butterflies" && item.butterflies) { addonsCost += Number(fc.amount); costMap.butterflies = Number(fc.amount); }
+    if (fc.key === "chain" && item.chain) { addonsCost += Number(fc.amount); costMap.chain = Number(fc.amount); }
   }
 
   if (item.smallSettings) {
@@ -401,7 +401,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                         <option value="">Select metal…</option>
                         {metalRates.map(r => <option key={r.id} value={r.metal_type}>{r.metal_type}</option>)}
                       </select>
-                      {isManager && m.type && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>Rate: ${rate?.price_per_gram.toFixed(2)}/g</div>}
+                      {isManager && m.type && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>Rate: ${Number(rate?.price_per_gram ?? 0).toFixed(2)}/g</div>}
                     </div>
                     <div>
                       <label style={labelStyle}>Weight (grams)</label>
@@ -543,7 +543,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "#F9FAFB", borderRadius: 8, border: "1px solid #E8E8F0" }}>
                 <span style={{ fontSize: 14, color: "#374151", fontWeight: 500 }}>Labour</span>
-                {isManager && <span style={{ fontSize: 13, color: "#6B7280" }}>${(fixedCosts.find(fc => fc.key === "labour")?.amount ?? 300).toFixed(2)}</span>}
+                {isManager && <span style={{ fontSize: 13, color: "#6B7280" }}>${Number(fixedCosts.find(fc => fc.key === "labour")?.amount ?? 300).toFixed(2)}</span>}
               </div>
               {isManager && item.includeMainStone && pricing.mainStoneSettingCost > 0 && (
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "#F9FAFB", borderRadius: 8, border: "1px solid #E8E8F0" }}>
@@ -557,11 +557,11 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
               </div>
               <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", userSelect: "none" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}><input type="checkbox" checked={item.butterflies} onChange={e => set("butterflies", e.target.checked)} style={{ accentColor: "#635BFF", width: 16, height: 16, cursor: "pointer" }} /><span style={{ fontSize: 14, color: "#374151" }}>Butterflies (earrings)</span></div>
-                {isManager && item.butterflies && <span style={{ fontSize: 13, color: "#6B7280" }}>${(fixedCosts.find(fc => fc.key === "butterflies")?.amount ?? 15).toFixed(2)}</span>}
+                {isManager && item.butterflies && <span style={{ fontSize: 13, color: "#6B7280" }}>${Number(fixedCosts.find(fc => fc.key === "butterflies")?.amount ?? 15).toFixed(2)}</span>}
               </label>
               <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", userSelect: "none" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}><input type="checkbox" checked={item.chain} onChange={e => set("chain", e.target.checked)} style={{ accentColor: "#635BFF", width: 16, height: 16, cursor: "pointer" }} /><span style={{ fontSize: 14, color: "#374151" }}>Chain (bracelet/necklace)</span></div>
-                {isManager && item.chain && <span style={{ fontSize: 13, color: "#6B7280" }}>${(fixedCosts.find(fc => fc.key === "chain")?.amount ?? 40).toFixed(2)}</span>}
+                {isManager && item.chain && <span style={{ fontSize: 13, color: "#6B7280" }}>${Number(fixedCosts.find(fc => fc.key === "chain")?.amount ?? 40).toFixed(2)}</span>}
               </label>
               <div>
                 <Toggle on={item.additionalLabour} onChange={v => set("additionalLabour", v)}>Additional Labour</Toggle>
@@ -627,8 +627,8 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                 <div style={{ fontWeight: 600, color: "#374151", marginBottom: 10 }}>Cost Breakdown</div>
                 {item.metals.filter(m => m.type).map((m, idx) => {
                   const rate = metalRates.find(r => r.metal_type === m.type);
-                  const cost = rate ? (parseFloat(m.weight) || 0) * rate.price_per_gram : 0;
-                  return <div key={m.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Metal {idx + 1}: {m.type} — {m.weight || "0"}g × ${rate?.price_per_gram.toFixed(2) ?? "0.00"}/g</span><span style={{ fontWeight: 500 }}>${cost.toFixed(2)}</span></div>;
+                  const cost = rate ? (parseFloat(m.weight) || 0) * Number(rate.price_per_gram) : 0;
+                  return <div key={m.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Metal {idx + 1}: {m.type} — {m.weight || "0"}g × ${Number(rate?.price_per_gram ?? 0).toFixed(2)}/g</span><span style={{ fontWeight: 500 }}>${cost.toFixed(2)}</span></div>;
                 })}
                 {item.includeMainStone && item.stoneOptions[0]?.stones.map((s, idx) => {
                   const cost = parseFloat(s.cost) || 0;
@@ -640,10 +640,10 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                   const t = (parseFloat(r.individualCost) || 0) * (parseInt(r.qty) || 0);
                   return <div key={r.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Melee {idx + 1}: {r.qty || 1}× {r.stoneType}</span><span style={{ fontWeight: 500 }}>${t.toFixed(2)}</span></div>;
                 })}
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Labour</span><span style={{ fontWeight: 500 }}>${(pricing.costMap.labour ?? 0).toFixed(2)}</span></div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Labour</span><span style={{ fontWeight: 500 }}>${Number(pricing.costMap.labour ?? 0).toFixed(2)}</span></div>
                 {item.smallSettings && (parseInt(item.smallSettingsQty) || 0) > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Melee Settings: {item.smallSettingsQty} × $30.00</span><span style={{ fontWeight: 500 }}>${(pricing.costMap.smallSettings ?? 0).toFixed(2)}</span></div>}
-                {item.butterflies && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Butterflies</span><span style={{ fontWeight: 500 }}>${(pricing.costMap.butterflies ?? 0).toFixed(2)}</span></div>}
-                {item.chain && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Chain</span><span style={{ fontWeight: 500 }}>${(pricing.costMap.chain ?? 0).toFixed(2)}</span></div>}
+                {item.butterflies && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Butterflies</span><span style={{ fontWeight: 500 }}>${Number(pricing.costMap.butterflies ?? 0).toFixed(2)}</span></div>}
+                {item.chain && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Chain</span><span style={{ fontWeight: 500 }}>${Number(pricing.costMap.chain ?? 0).toFixed(2)}</span></div>}
                 {item.additionalLabour && pricing.extraLabour > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Additional Labour</span><span style={{ fontWeight: 500 }}>${pricing.extraLabour.toFixed(2)}</span></div>}
                 {item.handEngraving && pricing.handEngravingCost > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Hand Engraving</span><span style={{ fontWeight: 500 }}>${pricing.handEngravingCost.toFixed(2)}</span></div>}
                 {item.laserEngraving && pricing.laserEngravingCost > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Laser Engraving</span><span style={{ fontWeight: 500 }}>${pricing.laserEngravingCost.toFixed(2)}</span></div>}

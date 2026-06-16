@@ -92,7 +92,7 @@ export default function PricingPage() {
     id: string; tableName: string; field: string; currentValue: number; prefix?: string; step?: string;
   }) {
     const isEditing = editingId === id;
-    const fmt = (v: number) => prefix === '$' ? `$${v.toFixed(2)}` : v.toFixed(4);
+    const fmt = (v: number) => prefix === '$' ? `$${Number(v).toFixed(2)}` : Number(v).toFixed(4);
     return (
       <td style={tdStyle}>
         {isEditing ? (
@@ -245,10 +245,10 @@ export default function PricingPage() {
                     {marginBrackets.map(r => (
                       <tr key={r.id}>
                         <td style={tdStyle}>
-                          ${r.cost_min.toLocaleString()} – {r.cost_max != null ? `$${r.cost_max.toLocaleString()}` : 'above'}
+                          ${Number(r.cost_min).toLocaleString()} – {r.cost_max != null ? `$${Number(r.cost_max).toLocaleString()}` : 'above'}
                         </td>
                         <td style={{ ...tdStyle, fontFamily: 'monospace', fontWeight: 600, color: '#635BFF' }}>
-                          ×{r.multiplier.toFixed(3)}
+                          ×{Number(r.multiplier).toFixed(3)}
                         </td>
                       </tr>
                     ))}
