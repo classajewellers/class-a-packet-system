@@ -64,7 +64,7 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
         diamonds_by_query(
           query: {
             labgrown: ${labgrown ? "true" : "false"}
-            shapes: [${shapeStr}]
+            shapes: ["${shapeStr}"]
             sizes: { from: ${Number(caratFrom)}, to: ${Number(caratTo)} }
             color: [${colors.join(", ")}]
             clarity: [${clarities.join(", ")}]
