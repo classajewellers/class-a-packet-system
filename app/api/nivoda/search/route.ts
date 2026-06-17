@@ -265,8 +265,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let body: Record<string, unknown>;
   try {
     body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[nivoda/search] Failed to parse request body:", msg);
+    return NextResponse.json({ error: "Invalid JSON body", detail: msg }, { status: 400 });
   }
 
   const tenantId = req.headers.get("x-tenant-id") ?? undefined;
