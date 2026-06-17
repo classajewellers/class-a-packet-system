@@ -45,6 +45,7 @@ async function fetchFreshToken(): Promise<string> {
   console.log("[nivoda/auth] Requesting token — endpoint:", endpoint, "user:", email);
 
   let res: Response;
+  let rawBody: string;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
   try {
@@ -54,6 +55,7 @@ async function fetchFreshToken(): Promise<string> {
       body:    JSON.stringify({ query }),
       signal:  controller.signal,
     });
+    rawBody = await res.text();
   } catch (err) {
     clearTimeout(timeout);
     if (err instanceof Error && err.name === "AbortError") {
@@ -63,7 +65,6 @@ async function fetchFreshToken(): Promise<string> {
   }
   clearTimeout(timeout);
 
-  const rawBody = await res.text();
   console.log("[nivoda/auth] HTTP", res.status, "body:", rawBody.slice(0, 500));
 
   if (!res.ok) {
