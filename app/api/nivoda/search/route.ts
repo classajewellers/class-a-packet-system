@@ -35,7 +35,6 @@ export interface NivodaResult {
   width: number | null;
   depth: number | null;
   labgrown: boolean;
-  tablePercentage: number | null;
   depthPercentage: number | null;
 }
 
@@ -133,7 +132,6 @@ async function runSearch(token: string, body: Record<string, unknown>, tenantId?
                 length
                 width
                 depth
-                tablePercentage
                 depthPercentage
               }
             }
@@ -225,7 +223,7 @@ async function runSearch(token: string, body: Record<string, unknown>, tenantId?
     id: string; price: number;
     diamond: {
       image?: string; video?: string;
-      certificate: { lab?: string; certNumber?: string; shape?: string; carats?: number; clarity?: string; color?: string; cut?: string; polish?: string; symmetry?: string; length?: number; width?: number; depth?: number; tablePercentage?: number; depthPercentage?: number };
+      certificate: { lab?: string; certNumber?: string; shape?: string; carats?: number; clarity?: string; color?: string; cut?: string; polish?: string; symmetry?: string; length?: number; width?: number; depth?: number; depthPercentage?: number };
     };
   };
 
@@ -247,7 +245,6 @@ async function runSearch(token: string, body: Record<string, unknown>, tenantId?
     width:         item.diamond?.certificate?.width        ?? null,
     depth:         item.diamond?.certificate?.depth        ?? null,
     labgrown:      Boolean(labgrown),
-    tablePercentage: item.diamond?.certificate?.tablePercentage ?? null,
     depthPercentage: item.diamond?.certificate?.depthPercentage ?? null,
   }));
 

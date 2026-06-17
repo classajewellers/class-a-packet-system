@@ -23,7 +23,6 @@ export interface NivodaStone {
   width: number | null;
   depth: number | null;
   labgrown: boolean;
-  tablePercentage: number | null;
   depthPercentage: number | null;
 }
 
@@ -460,8 +459,7 @@ function StoneCard({ stone, onSelect, onExpand, brackets }: { stone: NivodaStone
   const retail = calcRetail(stone, brackets);
 
   const statParts: string[] = [];
-  if (stone.tablePercentage != null && stone.tablePercentage > 0) statParts.push(`T: ${stone.tablePercentage}%`);
-  if (stone.depthPercentage != null && stone.depthPercentage > 0) statParts.push(`D: ${stone.depthPercentage}%`);
+  if (stone.depthPercentage != null && Number(stone.depthPercentage) > 0) statParts.push(`D: ${Number(stone.depthPercentage)}%`);
   const cardRatio = stone.length && stone.width && Number(stone.width) > 0
     ? (Number(stone.length) / Number(stone.width)).toFixed(2) : null;
   if (cardRatio) statParts.push(`R: ${cardRatio}`);
