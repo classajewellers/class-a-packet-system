@@ -13,7 +13,7 @@ type Params = { params: { id: string } };
 const fmt = (n: number | null | undefined) =>
   n != null ? `$${n.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—";
 const fmtPct = (n: number | null | undefined) =>
-  n != null ? `${n.toFixed(1)}%` : "—";
+  n != null ? `${Number(n).toFixed(1)}%` : "—";
 
 function FieldView({ label, value }: { label: string; value?: string | number | null }) {
   return (
@@ -572,7 +572,7 @@ export default function InventoryItemPage({ params }: Params) {
                             value={fmt(lp.liveCostBreakdown.metalCost)}
                             sub={
                               lp.liveCostBreakdown.goldRatePerGram != null
-                                ? `${piece.metal_weight_grams}g × $${lp.liveCostBreakdown.goldRatePerGram.toFixed(2)}/g`
+                                ? `${piece.metal_weight_grams}g × $${Number(lp.liveCostBreakdown.goldRatePerGram).toFixed(2)}/g`
                                 : piece.metal_weight_grams ? `${piece.metal_weight_grams}g — rate not found` : undefined
                             }
                           />
@@ -599,7 +599,7 @@ export default function InventoryItemPage({ params }: Params) {
                           <LineItem
                             label="Live retail (suggested)"
                             value={fmt(lp.liveRetail)}
-                            sub={lp.liveMarginMultiplier != null ? `×${lp.liveMarginMultiplier.toFixed(3)} margin` : undefined}
+                            sub={lp.liveMarginMultiplier != null ? `×${Number(lp.liveMarginMultiplier).toFixed(3)} margin` : undefined}
                           />
                           <LineItem label="Actual retail" value={fmt(piece.retail_price)} />
 

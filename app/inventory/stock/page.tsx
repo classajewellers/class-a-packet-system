@@ -110,7 +110,7 @@ function multiplierBadge(mult: number | null) {
   }[colour];
   return (
     <span style={{ display: "inline-flex", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: palette.bg, color: palette.fg }}>
-      ×{mult.toFixed(2)}
+      ×{Number(mult).toFixed(2)}
     </span>
   );
 }
@@ -1191,8 +1191,8 @@ function PieceBomPanel({
 
           {/* Summary */}
           <div style={{ marginTop: 16, padding: 14, background: "#F9FAFB", borderRadius: 8, fontSize: 13 }}>
-            <SummaryRow label="Total BOM Cost" value={`$${totalBomCost.toFixed(2)}`} />
-            <SummaryRow label="Suggested Retail" value={`$${suggestedRetail.toFixed(0)}`} />
+            <SummaryRow label="Total BOM Cost" value={`$${Number(totalBomCost).toFixed(2)}`} />
+            <SummaryRow label="Suggested Retail" value={`$${Number(suggestedRetail).toFixed(0)}`} />
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0" }}>
               <span style={{ color: "#6B7280" }}>Current Retail</span>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

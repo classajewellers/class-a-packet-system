@@ -142,7 +142,7 @@ export default function QuoteLineItems({ lineItems, onChange, isManager }: Props
                   className="col-span-2 flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium"
                   style={{ background: colourStyle.bg, color: colourStyle.text }}
                 >
-                  <span>×{mult.toFixed(2)}</span>
+                  <span>×{Number(mult).toFixed(2)}</span>
                   <span style={{ opacity: 0.6 }}>
                     (${(retailNum - costNum).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} profit)
                   </span>

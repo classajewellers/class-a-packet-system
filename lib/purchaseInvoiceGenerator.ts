@@ -11,7 +11,7 @@ function escapeHtml(s: string): string {
 
 function fmtCurrency(v: number | null | undefined): string {
   if (v == null) return '—';
-  return '$' + v.toFixed(2);
+  return '$' + Number(v).toFixed(2);
 }
 
 function fmtDate(iso: string | null | undefined): string {

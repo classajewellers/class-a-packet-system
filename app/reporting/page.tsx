@@ -29,7 +29,7 @@ function fmtCurrency(n: number) {
   return n.toLocaleString("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 2 });
 }
 function fmtPct(n: number) {
-  return n.toFixed(1) + "%";
+  return Number(n).toFixed(1) + "%";
 }
 function fmtDate(iso: string) {
   const [, m, d] = iso.split("-");
@@ -123,7 +123,7 @@ function KpiCard({
       {delta != null && (
         <div style={{ marginTop: 6, fontSize: 12, color: delta >= 0 ? "#10B981" : "#EF4444", display: "flex", alignItems: "center", gap: 2 }}>
           <span>{delta >= 0 ? "▲" : "▼"}</span>
-          <span>{Math.abs(delta).toFixed(1)}% vs prior period</span>
+          <span>{Number(Math.abs(delta)).toFixed(1)}% vs prior period</span>
         </div>
       )}
       {sub && <div style={{ marginTop: 4, fontSize: 12, color: "#9CA3AF" }}>{sub}</div>}

@@ -470,7 +470,7 @@ function StoneDetailView({ stone, refId, onBack, onSelect }: { stone: NivodaSton
 
   const hasDimensions = [stone.length, stone.width, stone.depth].some(v => v && v > 0);
   const dimensionsStr = hasDimensions
-    ? `${(stone.length ?? 0).toFixed(2)} × ${(stone.width ?? 0).toFixed(2)} × ${(stone.depth ?? 0).toFixed(2)} mm`
+    ? `${Number(stone.length ?? 0).toFixed(2)} × ${Number(stone.width ?? 0).toFixed(2)} × ${Number(stone.depth ?? 0).toFixed(2)} mm`
     : null;
 
   const videoUrl = stone.video ? `${stone.video}/autoplay` : null;

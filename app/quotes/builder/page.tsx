@@ -406,7 +406,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                     <div>
                       <label style={labelStyle}>Weight (grams)</label>
                       <input style={inputStyle} type="number" step="0.1" min="0" value={m.weight} onChange={e => set("metals", item.metals.map(x => x.id === m.id ? { ...x, weight: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField} placeholder="e.g. 5.5" />
-                      {isManager && m.weight && m.type && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>Metal cost: ${metalCost.toFixed(2)}</div>}
+                      {isManager && m.weight && m.type && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>Metal cost: ${Number(metalCost).toFixed(2)}</div>}
                     </div>
                   </div>
                 </div>
@@ -530,7 +530,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                     {isManager && <div><label style={{ ...labelStyle, color: "#635BFF" }}>Cost / Stone ($)</label><input style={{ ...inputStyle, borderColor: "#C4BFFE" }} type="number" step="0.01" min="0" value={r.individualCost} onChange={e => set("meleeRows", item.meleeRows.map(x => x.id === r.id ? { ...x, individualCost: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField} placeholder="0.00" /></div>}
                     <div><label style={labelStyle}>Qty</label><input style={inputStyle} type="number" step="1" min="1" value={r.qty} onChange={e => set("meleeRows", item.meleeRows.map(x => x.id === r.id ? { ...x, qty: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField} /></div>
                   </div>
-                  {isManager && rowTotal > 0 && <div style={{ marginTop: 6, fontSize: 12, color: "#6B7280", textAlign: "right" }}>Row total: <strong style={{ color: "#1A1A2E" }}>${rowTotal.toFixed(2)}</strong></div>}
+                  {isManager && rowTotal > 0 && <div style={{ marginTop: 6, fontSize: 12, color: "#6B7280", textAlign: "right" }}>Row total: <strong style={{ color: "#1A1A2E" }}>${Number(rowTotal).toFixed(2)}</strong></div>}
                 </div>
               );
             })}
@@ -548,12 +548,12 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
               {isManager && item.includeMainStone && pricing.mainStoneSettingCost > 0 && (
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "#F9FAFB", borderRadius: 8, border: "1px solid #E8E8F0" }}>
                   <span style={{ fontSize: 14, color: "#374151" }}>Stone Settings (auto)</span>
-                  <span style={{ fontSize: 13, color: "#6B7280" }}>{item.stoneOptions[0]?.stones.length ?? 0} × ${pricing.mainStoneSettingRate.toFixed(2)} = ${pricing.mainStoneSettingCost.toFixed(2)}</span>
+                  <span style={{ fontSize: 13, color: "#6B7280" }}>{item.stoneOptions[0]?.stones.length ?? 0} × ${Number(pricing.mainStoneSettingRate).toFixed(2)} = ${Number(pricing.mainStoneSettingCost).toFixed(2)}</span>
                 </div>
               )}
               <div>
                 <Toggle on={item.smallSettings} onChange={v => set("smallSettings", v)}>Small Stone Settings</Toggle>
-                {item.smallSettings && <div style={{ marginTop: 8, paddingLeft: 50, display: "flex", alignItems: "center", gap: 8 }}><label style={{ ...labelStyle, marginBottom: 0 }}>Qty</label><input style={{ ...inputStyle, width: 80 }} type="number" min="1" value={item.smallSettingsQty} onChange={e => set("smallSettingsQty", e.target.value)} />{isManager && <span style={{ fontSize: 12, color: "#6B7280" }}>= ${((parseInt(item.smallSettingsQty) || 0) * 30).toFixed(2)}</span>}</div>}
+                {item.smallSettings && <div style={{ marginTop: 8, paddingLeft: 50, display: "flex", alignItems: "center", gap: 8 }}><label style={{ ...labelStyle, marginBottom: 0 }}>Qty</label><input style={{ ...inputStyle, width: 80 }} type="number" min="1" value={item.smallSettingsQty} onChange={e => set("smallSettingsQty", e.target.value)} />{isManager && <span style={{ fontSize: 12, color: "#6B7280" }}>= ${Number((parseInt(item.smallSettingsQty) || 0) * 30).toFixed(2)}</span>}</div>}
               </div>
               <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", userSelect: "none" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}><input type="checkbox" checked={item.butterflies} onChange={e => set("butterflies", e.target.checked)} style={{ accentColor: "#635BFF", width: 16, height: 16, cursor: "pointer" }} /><span style={{ fontSize: 14, color: "#374151" }}>Butterflies (earrings)</span></div>
@@ -628,38 +628,38 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                 {item.metals.filter(m => m.type).map((m, idx) => {
                   const rate = metalRates.find(r => r.metal_type === m.type);
                   const cost = rate ? (parseFloat(m.weight) || 0) * Number(rate.price_per_gram) : 0;
-                  return <div key={m.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Metal {idx + 1}: {m.type} — {m.weight || "0"}g × ${Number(rate?.price_per_gram ?? 0).toFixed(2)}/g</span><span style={{ fontWeight: 500 }}>${cost.toFixed(2)}</span></div>;
+                  return <div key={m.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Metal {idx + 1}: {m.type} — {m.weight || "0"}g × ${Number(rate?.price_per_gram ?? 0).toFixed(2)}/g</span><span style={{ fontWeight: 500 }}>${Number(cost).toFixed(2)}</span></div>;
                 })}
                 {item.includeMainStone && item.stoneOptions[0]?.stones.map((s, idx) => {
                   const cost = parseFloat(s.cost) || 0;
                   const parts = [s.caratWeight && `${s.caratWeight}ct`, s.shape, (s.colour || s.clarity) && `${s.colour}/${s.clarity}`, s.origin].filter(Boolean).join(" ");
-                  return <div key={s.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Stone {idx + 1}: {parts || "—"}</span><span style={{ fontWeight: 500 }}>${cost.toFixed(2)}</span></div>;
+                  return <div key={s.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Stone {idx + 1}: {parts || "—"}</span><span style={{ fontWeight: 500 }}>${Number(cost).toFixed(2)}</span></div>;
                 })}
-                {item.includeMainStone && (item.stoneOptions[0]?.stones.length ?? 0) > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Stone Settings: {item.stoneOptions[0]?.stones.length} × ${pricing.mainStoneSettingRate.toFixed(2)}</span><span style={{ fontWeight: 500 }}>${pricing.mainStoneSettingCost.toFixed(2)}</span></div>}
+                {item.includeMainStone && (item.stoneOptions[0]?.stones.length ?? 0) > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Stone Settings: {item.stoneOptions[0]?.stones.length} × ${Number(pricing.mainStoneSettingRate).toFixed(2)}</span><span style={{ fontWeight: 500 }}>${Number(pricing.mainStoneSettingCost).toFixed(2)}</span></div>}
                 {item.meleeRows.filter(r => r.stoneType).map((r, idx) => {
                   const t = (parseFloat(r.individualCost) || 0) * (parseInt(r.qty) || 0);
-                  return <div key={r.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Melee {idx + 1}: {r.qty || 1}× {r.stoneType}</span><span style={{ fontWeight: 500 }}>${t.toFixed(2)}</span></div>;
+                  return <div key={r.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Melee {idx + 1}: {r.qty || 1}× {r.stoneType}</span><span style={{ fontWeight: 500 }}>${Number(t).toFixed(2)}</span></div>;
                 })}
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Labour</span><span style={{ fontWeight: 500 }}>${Number(pricing.costMap.labour ?? 0).toFixed(2)}</span></div>
-                {item.smallSettings && (parseInt(item.smallSettingsQty) || 0) > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Melee Settings: {item.smallSettingsQty} × $30.00</span><span style={{ fontWeight: 500 }}>${(pricing.costMap.smallSettings ?? 0).toFixed(2)}</span></div>}
+                {item.smallSettings && (parseInt(item.smallSettingsQty) || 0) > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Melee Settings: {item.smallSettingsQty} × $30.00</span><span style={{ fontWeight: 500 }}>${Number(pricing.costMap.smallSettings ?? 0).toFixed(2)}</span></div>}
                 {item.butterflies && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Butterflies</span><span style={{ fontWeight: 500 }}>${Number(pricing.costMap.butterflies ?? 0).toFixed(2)}</span></div>}
                 {item.chain && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Chain</span><span style={{ fontWeight: 500 }}>${Number(pricing.costMap.chain ?? 0).toFixed(2)}</span></div>}
-                {item.additionalLabour && pricing.extraLabour > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Additional Labour</span><span style={{ fontWeight: 500 }}>${pricing.extraLabour.toFixed(2)}</span></div>}
-                {item.handEngraving && pricing.handEngravingCost > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Hand Engraving</span><span style={{ fontWeight: 500 }}>${pricing.handEngravingCost.toFixed(2)}</span></div>}
-                {item.laserEngraving && pricing.laserEngravingCost > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Laser Engraving</span><span style={{ fontWeight: 500 }}>${pricing.laserEngravingCost.toFixed(2)}</span></div>}
+                {item.additionalLabour && pricing.extraLabour > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Additional Labour</span><span style={{ fontWeight: 500 }}>${Number(pricing.extraLabour).toFixed(2)}</span></div>}
+                {item.handEngraving && pricing.handEngravingCost > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Hand Engraving</span><span style={{ fontWeight: 500 }}>${Number(pricing.handEngravingCost).toFixed(2)}</span></div>}
+                {item.laserEngraving && pricing.laserEngravingCost > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Laser Engraving</span><span style={{ fontWeight: 500 }}>${Number(pricing.laserEngravingCost).toFixed(2)}</span></div>}
                 <div style={{ borderTop: "1px solid #D1D5DB", margin: "8px 0", paddingTop: 8, display: "flex", justifyContent: "space-between" }}>
                   <span style={{ fontWeight: 600, color: "#374151" }}>Subtotal</span>
-                  <span style={{ fontWeight: 700, color: "#374151" }}>${pricing.totalCost.toFixed(2)}</span>
+                  <span style={{ fontWeight: 700, color: "#374151" }}>${Number(pricing.totalCost).toFixed(2)}</span>
                 </div>
                 {item.marginMultiplierOverride && parseFloat(item.marginMultiplierOverride) > 0 ? (
                   <>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
                       <span style={{ color: "#6B7280" }}>Override multiplier</span>
-                      <span style={{ fontWeight: 500, color: "#D97706" }}>×{pricing.activeMultiplier?.toFixed(2)}</span>
+                      <span style={{ fontWeight: 500, color: "#D97706" }}>×{Number(pricing.activeMultiplier ?? 0).toFixed(2)}</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
                       <span style={{ color: "#6B7280" }}>Pre-rounding</span>
-                      <span style={{ fontWeight: 500 }}>${(pricing.totalCost * parseFloat(item.marginMultiplierOverride)).toFixed(2)}</span>
+                      <span style={{ fontWeight: 500 }}>${Number(pricing.totalCost * parseFloat(item.marginMultiplierOverride)).toFixed(2)}</span>
                     </div>
                   </>
                 ) : (
@@ -667,13 +667,13 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                     <div style={{ color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 4, marginTop: 6 }}>Margin calculation (blended)</div>
                     {pricing.breakdown.map((line, i) => (
                       <div key={i} style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                        <span style={{ color: "#9CA3AF", fontSize: 12 }}>{line.label} × {line.multiplier.toFixed(2)}</span>
-                        <span style={{ color: "#374151", fontSize: 12 }}>${line.subtotal.toFixed(2)}</span>
+                        <span style={{ color: "#9CA3AF", fontSize: 12 }}>{line.label} × {Number(line.multiplier).toFixed(2)}</span>
+                        <span style={{ color: "#374151", fontSize: 12 }}>${Number(line.subtotal).toFixed(2)}</span>
                       </div>
                     ))}
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5, marginTop: 4 }}>
                       <span style={{ color: "#6B7280", fontSize: 12 }}>Subtotal (unrounded)</span>
-                      <span style={{ fontWeight: 500, fontSize: 12 }}>${pricing.rawPrice.toFixed(2)}</span>
+                      <span style={{ fontWeight: 500, fontSize: 12 }}>${Number(pricing.rawPrice).toFixed(2)}</span>
                     </div>
                   </>
                 )}

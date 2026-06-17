@@ -79,7 +79,7 @@ export default function LaybyFields({ data, onChange, errors }: Props) {
           </label>
           <div className="rounded-lg border border-[#C9A84C]/40 bg-[#fdf8ed] px-3 py-2.5 text-sm font-semibold text-[#1B1F3B]">
             {numPayments > 0
-              ? `$${paymentAmount.toFixed(2)}`
+              ? `$${Number(paymentAmount).toFixed(2)}`
               : "—"}
           </div>
         </div>

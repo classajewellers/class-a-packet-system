@@ -34,8 +34,8 @@ function FileIcon({ fileType }: { fileType: string }) {
 function formatSize(bytes: number | null) {
   if (!bytes) return "";
   if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024) return `${Number(bytes / 1024).toFixed(1)} KB`;
+  return `${Number(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 export default function AttachmentsSection({ entityType, entityId }: Props) {

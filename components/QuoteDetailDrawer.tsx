@@ -429,9 +429,9 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
                                 color: mult >= 2.50 ? '#15803D' : mult >= 2.00 ? '#B45309' : '#DC2626',
                                 fontWeight: 600,
                               }}>
-                                ×{mult.toFixed(2)}
+                                ×{Number(mult).toFixed(2)}
                                 <span style={{ fontWeight: 400, opacity: 0.75, marginLeft: 4 }}>
-                                  (${marginAmt.toFixed(0)})
+                                  (${Number(marginAmt).toFixed(0)})
                                 </span>
                               </span>
                             ) : '—'}
@@ -468,7 +468,7 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
                     </div>
                     <div style={{ fontSize: 12, color: '#6B7280' }}>
                       Multiplier: <strong style={{ color: multColour }}>
-                        {totalMult != null ? `×${totalMult.toFixed(2)}` : '—'}
+                        {totalMult != null ? `×${Number(totalMult).toFixed(2)}` : '—'}
                         <span style={{ fontWeight: 400, marginLeft: 4 }}>
                           (${totalMargin.toLocaleString('en-AU', { minimumFractionDigits: 2 })} profit)
                         </span>
@@ -536,7 +536,7 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
                       <span style={keyStyle}>Metal{filteredMetals.length > 1 ? ` ${i + 1}` : ""}</span>
                       <span style={valStyle}>
                         {m.type}{m.weight ? ` — ${m.weight}g` : ""}
-                        {isManager && m.cost ? <span style={{ color: '#635BFF', fontWeight: 400, marginLeft: 6 }}>(${(m.cost as number).toFixed(2)})</span> : null}
+                        {isManager && m.cost ? <span style={{ color: '#635BFF', fontWeight: 400, marginLeft: 6 }}>(${Number(m.cost).toFixed(2)})</span> : null}
                       </span>
                     </div>
                   ))}
@@ -551,7 +551,7 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
                         <span style={keyStyle}>Stone{mainStones.length > 1 ? ` ${i + 1}` : ""}</span>
                         <span style={valStyle}>
                           {parts || "—"}
-                          {isManager && (s.cost as number) > 0 ? <span style={{ color: '#635BFF', fontWeight: 400, marginLeft: 6 }}>(${(s.cost as number).toFixed(2)})</span> : null}
+                          {isManager && (s.cost as number) > 0 ? <span style={{ color: '#635BFF', fontWeight: 400, marginLeft: 6 }}>(${Number(s.cost).toFixed(2)})</span> : null}
                         </span>
                       </div>
                     );
@@ -567,7 +567,7 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
                         <span style={keyStyle}>Melee{filteredMelee.length > 1 ? ` ${i + 1}` : ""}</span>
                         <span style={valStyle}>
                           {parts || "—"}
-                          {isManager && rowTotal && rowTotal > 0 ? <span style={{ color: '#635BFF', fontWeight: 400, marginLeft: 6 }}>(${(rowTotal as number).toFixed(2)})</span> : null}
+                          {isManager && rowTotal && rowTotal > 0 ? <span style={{ color: '#635BFF', fontWeight: 400, marginLeft: 6 }}>(${Number(rowTotal).toFixed(2)})</span> : null}
                         </span>
                       </div>
                     );
@@ -575,11 +575,11 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
 
                   {addons && (
                     <>
-                      {addons.hand_engraving && <div style={rowStyle}><span style={keyStyle}>Hand Engraving</span><span style={valStyle}>{isManager && (addons.hand_engraving_cost as number) > 0 ? `$${(addons.hand_engraving_cost as number).toFixed(2)}` : "Included"}</span></div>}
-                      {addons.laser_engraving && <div style={rowStyle}><span style={keyStyle}>Laser Engraving</span><span style={valStyle}>{isManager && (addons.laser_engraving_cost as number) > 0 ? `$${(addons.laser_engraving_cost as number).toFixed(2)}` : "Included"}</span></div>}
+                      {addons.hand_engraving && <div style={rowStyle}><span style={keyStyle}>Hand Engraving</span><span style={valStyle}>{isManager && (addons.hand_engraving_cost as number) > 0 ? `$${Number(addons.hand_engraving_cost).toFixed(2)}` : "Included"}</span></div>}
+                      {addons.laser_engraving && <div style={rowStyle}><span style={keyStyle}>Laser Engraving</span><span style={valStyle}>{isManager && (addons.laser_engraving_cost as number) > 0 ? `$${Number(addons.laser_engraving_cost).toFixed(2)}` : "Included"}</span></div>}
                       {addons.butterflies && <div style={rowStyle}><span style={keyStyle}>Butterfly Backs</span><span style={valStyle}>Included</span></div>}
                       {addons.chain && <div style={rowStyle}><span style={keyStyle}>Chain</span><span style={valStyle}>Included</span></div>}
-                      {(addons.additional_labour as number) > 0 && <div style={rowStyle}><span style={keyStyle}>Additional Labour</span><span style={valStyle}>{isManager ? `$${(addons.additional_labour as number).toFixed(2)}` : "Included"}</span></div>}
+                      {(addons.additional_labour as number) > 0 && <div style={rowStyle}><span style={keyStyle}>Additional Labour</span><span style={valStyle}>{isManager ? `$${Number(addons.additional_labour).toFixed(2)}` : "Included"}</span></div>}
                     </>
                   )}
                 </div>
@@ -593,7 +593,7 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
                     {mult != null && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                         <span style={{ fontSize: 12, color: '#635BFF' }}>Multiplier</span>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#635BFF' }}>×{(mult as number).toFixed(2)}</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#635BFF' }}>×{Number(mult).toFixed(2)}</span>
                       </div>
                     )}
                     {quotedPrice != null && (

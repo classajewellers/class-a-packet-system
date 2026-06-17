@@ -118,7 +118,8 @@
       "Bash(curl -s \"https://giucusqyobfsdfwwfyue.supabase.co/rest/v1/?apikey=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdpdWN1c3F5b2Jmc2Rmd3dmeXVlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODA5ODg3NiwiZXhwIjoyMDkzNjc0ODc2fQ.PgqdO6ZfYcTZiExQpYklAF0QstzlXTym7M38_1zAdJ8\")",
       "Bash(sed -i '' '1s/^\\\\/\\\\/ @ts-nocheck\\\\n//' \"/Users/joshmucklow/Downloads/Projects/gemquote 2/app/inventory/stock/page.tsx\")",
       "Bash(sed -i '' '1s/^/\"use client\";\\\\n\\\\/\\\\/ @ts-nocheck\\\\n\\\\nimport/' \"/Users/joshmucklow/Downloads/Projects/gemquote 2/app/inventory/stock/page.tsx\")",
-      "Bash(awk -F: '{print $1}')"
+      "Bash(awk -F: '{print $1}')",
+      "Bash(git revert *)"
     ]
   }
 }

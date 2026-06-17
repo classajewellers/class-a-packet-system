@@ -79,7 +79,7 @@ export function formatShopifyLineItems(lineItems: ShopifyLineItem[]): string {
     .map((li) => {
       const variant = li.variant_title ? ` - ${li.variant_title}` : "";
       const price = parseFloat(li.price);
-      const priceStr = isNaN(price) ? li.price : `$${price.toFixed(2)}`;
+      const priceStr = isNaN(price) ? li.price : `$${Number(price).toFixed(2)}`;
       return `${li.quantity}x ${li.title}${variant} — ${priceStr}`;
     })
     .join("\n");

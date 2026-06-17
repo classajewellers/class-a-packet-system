@@ -1008,7 +1008,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                 <Label>Balance</Label>
                 <div style={{ width: '100%', borderRadius: 8, border: '1px solid #E8E8F0', background: '#F9FAFB', padding: '8px 12px', fontSize: 14, color: '#6B7280' }} className="select-none">
                   {(local.total_charges || local.deposit)
-                    ? `$${balance.toFixed(2)}`
+                    ? `$${Number(balance).toFixed(2)}`
                     : "—"}
                 </div>
               </div>
