@@ -211,9 +211,9 @@ async function runSearch(token: string, body: Record<string, unknown>, tenantId?
   }
 
   const raw = j.data?.as?.diamonds_by_query;
-  if (!raw) {
-    console.warn("[nivoda/search] No diamonds_by_query in response:", JSON.stringify(j).slice(0, 500));
-    return NextResponse.json({ results: [], total_count: 0 });
+  if (!raw?.items) {
+    console.error("[nivoda/search] Unexpected response shape:", JSON.stringify(j).slice(0, 500));
+    return NextResponse.json({ error: "Unexpected Nivoda response shape" }, { status: 502 });
   }
 
   type RawItem = {
