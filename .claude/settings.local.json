@@ -119,7 +119,8 @@
       "Bash(sed -i '' '1s/^\\\\/\\\\/ @ts-nocheck\\\\n//' \"/Users/joshmucklow/Downloads/Projects/gemquote 2/app/inventory/stock/page.tsx\")",
       "Bash(sed -i '' '1s/^/\"use client\";\\\\n\\\\/\\\\/ @ts-nocheck\\\\n\\\\nimport/' \"/Users/joshmucklow/Downloads/Projects/gemquote 2/app/inventory/stock/page.tsx\")",
       "Bash(awk -F: '{print $1}')",
-      "Bash(git revert *)"
+      "Bash(git revert *)",
+      "Bash(grep -n \"stone card\\\\|stone grid\\\\|results.map\\\\|refIds\\\\|Est\\\\.\\\\|A\\\\$\\\\|price\\\\b\" \"/Users/joshmucklow/Downloads/Projects/gemquote 2/components/NivodaModal.tsx\")"
     ]
   }
 }

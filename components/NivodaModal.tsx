@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { calculateBlendedRetailFromBrackets } from "@/lib/marginCalculator";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,14 @@ export interface NivodaStone {
   width: number | null;
   depth: number | null;
   labgrown: boolean;
+}
+
+interface MarginBracket {
+  id: string;
+  cost_min: number;
+  cost_max: number | null;
+  multiplier: number;
+  stone_type?: string | null;
 }
 
 interface Props {
@@ -65,6 +74,28 @@ function makeRefId(price: number): string {
   return `${randAlpha(4)}-${aud}-${randAlpha(4)}`;
 }
 
+// ─── Retail price calculator ──────────────────────────────────────────────────
+
+function calcRetail(stone: NivodaStone, brackets: MarginBracket[]): number | null {
+  if (!brackets.length || stone.price <= 0) return null;
+  try {
+    const costAUD = stone.price / 100;
+    const stoneTypeKey = stone.labgrown ? "lab_grown" : "natural";
+    const hasStonetype = brackets.some(b => b.stone_type != null);
+    const active = hasStonetype
+      ? (() => {
+          const f = brackets.filter(b => b.stone_type === stoneTypeKey);
+          return f.length > 0 ? f : brackets.filter(b => b.stone_type === "natural" || b.stone_type == null);
+        })()
+      : brackets;
+    const pool = active.length > 0 ? active : brackets;
+    const { retail } = calculateBlendedRetailFromBrackets(costAUD, pool);
+    return retail > 0 ? retail : null;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Diamond placeholder icon ─────────────────────────────────────────────────
 
 function DiamondIcon() {
@@ -101,7 +132,18 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
   // Detail view
   const [selectedStone, setSelectedStone]   = useState<NivodaStone | null>(null);
 
+  // Margin brackets for retail price calculation
+  const [marginBrackets, setMarginBrackets] = useState<MarginBracket[]>([]);
+
   const PAGE_SIZE = 20;
+
+  useEffect(() => {
+    if (!open) return;
+    fetch('/api/pricing', { headers: { 'x-tenant-id': tenantId } })
+      .then(r => r.json())
+      .then(json => setMarginBrackets(json.marginBrackets ?? []))
+      .catch(() => {});
+  }, [open, tenantId]);
 
   function toggleShape(s: string) {
     setShapes(prev => prev.includes(s) ? (prev.length > 1 ? prev.filter(x => x !== s) : prev) : [...prev, s]);
@@ -329,6 +371,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
                 refId={refIds[selectedStone.id] ?? ""}
                 onBack={() => setSelectedStone(null)}
                 onSelect={handleSelect}
+                brackets={marginBrackets}
               />
             ) : (
               <>
@@ -378,6 +421,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
                           stone={stone}
                           onSelect={handleSelect}
                           onExpand={() => setSelectedStone(stone)}
+                          brackets={marginBrackets}
                         />
                       ))}
                     </div>
@@ -405,10 +449,11 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
 
 // ─── Stone card (grid view) ───────────────────────────────────────────────────
 
-function StoneCard({ stone, onSelect, onExpand }: { stone: NivodaStone; onSelect: (s: NivodaStone) => void; onExpand: () => void }) {
+function StoneCard({ stone, onSelect, onExpand, brackets }: { stone: NivodaStone; onSelect: (s: NivodaStone) => void; onExpand: () => void; brackets: MarginBracket[] }) {
   const price = stone.price > 0
     ? `A$${(stone.price / 100).toLocaleString("en-AU", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
     : "POA";
+  const retail = calcRetail(stone, brackets);
 
   return (
     <div
@@ -434,6 +479,9 @@ function StoneCard({ stone, onSelect, onExpand }: { stone: NivodaStone; onSelect
         {stone.lab && (
           <div style={{ fontSize: 11, color: "#6B7280" }}>{stone.lab}{stone.certNumber ? ` · ${stone.certNumber}` : ""}</div>
         )}
+        {retail != null && (
+          <div style={{ fontSize: 11, color: "#635BFF", fontWeight: 600 }}>Est. retail: A${retail.toLocaleString("en-AU")}</div>
+        )}
       </div>
 
       <div style={{ padding: "0 10px 10px" }}>
@@ -450,10 +498,11 @@ function StoneCard({ stone, onSelect, onExpand }: { stone: NivodaStone; onSelect
 
 // ─── Stone detail view ────────────────────────────────────────────────────────
 
-function StoneDetailView({ stone, refId, onBack, onSelect }: { stone: NivodaStone; refId: string; onBack: () => void; onSelect: (s: NivodaStone) => void }) {
+function StoneDetailView({ stone, refId, onBack, onSelect, brackets }: { stone: NivodaStone; refId: string; onBack: () => void; onSelect: (s: NivodaStone) => void; brackets: MarginBracket[] }) {
   const price = stone.price > 0
     ? `A$${(stone.price / 100).toLocaleString("en-AU", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
     : "POA";
+  const retail = calcRetail(stone, brackets);
 
   const rows: { label: string; value: string | null | undefined }[] = [
     { label: "Shape",      value: SHAPE_LABELS[stone.shape] ?? stone.shape },
@@ -518,13 +567,13 @@ function StoneDetailView({ stone, refId, onBack, onSelect }: { stone: NivodaSton
 
       {/* Details table */}
       <div style={{ background: "#FAFBFF", border: "1px solid #E8E8F0", borderRadius: 10, overflow: "hidden", marginBottom: 16 }}>
-        {[...rows.filter(r => r.value), ...(dimensionsStr ? [{ label: "Dimensions", value: dimensionsStr }] : []), ...(ratio ? [{ label: "Ratio", value: `${ratio} : 1` }] : [])].map((r, i, arr) => (
+        {[...rows.filter(r => r.value), ...(dimensionsStr ? [{ label: "Dimensions", value: dimensionsStr }] : []), ...(ratio ? [{ label: "Ratio", value: `${ratio} : 1` }] : []), ...(retail != null ? [{ label: "Est. Retail", value: `A$${retail.toLocaleString("en-AU")}` }] : [])].map((r, i, arr) => (
           <div
             key={r.label}
             style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderBottom: i < arr.length - 1 ? "1px solid #E8E8F0" : "none", background: i % 2 === 0 ? "#fff" : "#FAFBFF" }}
           >
             <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 500 }}>{r.label}</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: r.label === "Ref" ? "#9CA3AF" : "#1A1A2E", fontWeight: r.label === "Ref" ? 400 : 500, fontFamily: r.label === "Ref" ? "monospace" : "inherit" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: r.label === "Ref" ? "#9CA3AF" : r.label === "Est. Retail" ? "#635BFF" : "#1A1A2E", fontWeight: r.label === "Ref" ? 400 : r.label === "Est. Retail" ? 600 : 500, fontFamily: r.label === "Ref" ? "monospace" : "inherit" }}>
               {r.value}
               {r.label === "Cert No." && r.value && (
                 <button
