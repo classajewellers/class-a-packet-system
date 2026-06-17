@@ -473,6 +473,10 @@ function StoneDetailView({ stone, refId, onBack, onSelect }: { stone: NivodaSton
     ? `${Number(stone.length ?? 0).toFixed(2)} × ${Number(stone.width ?? 0).toFixed(2)} × ${Number(stone.depth ?? 0).toFixed(2)} mm`
     : null;
 
+  const ratio = stone.length && stone.width && Number(stone.width) > 0
+    ? (Number(stone.length) / Number(stone.width)).toFixed(2)
+    : null;
+
   const videoUrl = stone.video ? `${stone.video}/autoplay` : null;
 
   return (
@@ -514,7 +518,7 @@ function StoneDetailView({ stone, refId, onBack, onSelect }: { stone: NivodaSton
 
       {/* Details table */}
       <div style={{ background: "#FAFBFF", border: "1px solid #E8E8F0", borderRadius: 10, overflow: "hidden", marginBottom: 16 }}>
-        {[...rows.filter(r => r.value), ...(dimensionsStr ? [{ label: "Dimensions", value: dimensionsStr }] : [])].map((r, i, arr) => (
+        {[...rows.filter(r => r.value), ...(dimensionsStr ? [{ label: "Dimensions", value: dimensionsStr }] : []), ...(ratio ? [{ label: "Ratio", value: `${ratio} : 1` }] : [])].map((r, i, arr) => (
           <div
             key={r.label}
             style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderBottom: i < arr.length - 1 ? "1px solid #E8E8F0" : "none", background: i % 2 === 0 ? "#fff" : "#FAFBFF" }}
