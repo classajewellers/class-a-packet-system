@@ -34,8 +34,8 @@ export interface NivodaResult {
   width: number | null;
   depth: number | null;
   labgrown: boolean;
-  table_percent: number | null;
-  depth_percent: number | null;
+  tablePercentage: number | null;
+  depthPercentage: number | null;
 }
 
 async function runSearch(token: string, body: Record<string, unknown>, tenantId?: string): Promise<NextResponse> {
@@ -132,8 +132,8 @@ async function runSearch(token: string, body: Record<string, unknown>, tenantId?
                 length
                 width
                 depth
-                table_percent
-                depth_percent
+                tablePercentage
+                depthPercentage
               }
             }
           }
@@ -204,7 +204,7 @@ async function runSearch(token: string, body: Record<string, unknown>, tenantId?
     id: string; price: number;
     diamond: {
       image?: string; video?: string;
-      certificate: { lab?: string; certNumber?: string; shape?: string; carats?: number; clarity?: string; color?: string; cut?: string; polish?: string; symmetry?: string; length?: number; width?: number; depth?: number; table_percent?: number; depth_percent?: number };
+      certificate: { lab?: string; certNumber?: string; shape?: string; carats?: number; clarity?: string; color?: string; cut?: string; polish?: string; symmetry?: string; length?: number; width?: number; depth?: number; tablePercentage?: number; depthPercentage?: number };
     };
   };
 
@@ -226,8 +226,8 @@ async function runSearch(token: string, body: Record<string, unknown>, tenantId?
     width:         item.diamond?.certificate?.width        ?? null,
     depth:         item.diamond?.certificate?.depth        ?? null,
     labgrown:      Boolean(labgrown),
-    table_percent: item.diamond?.certificate?.table_percent ?? null,
-    depth_percent: item.diamond?.certificate?.depth_percent ?? null,
+    tablePercentage: item.diamond?.certificate?.tablePercentage ?? null,
+    depthPercentage: item.diamond?.certificate?.depthPercentage ?? null,
   }));
 
   // Fetch margin brackets server-side so the modal can calculate retail prices
