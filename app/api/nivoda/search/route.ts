@@ -145,6 +145,7 @@ async function runSearch(token: string, body: Record<string, unknown>, tenantId?
   const endpoint = getNivodaEndpoint();
   console.log("[nivoda/search] Endpoint:", endpoint);
   console.log("[nivoda/search] Params:", { shapesArr, caratFrom, caratTo, labgrown, colors, clarities, limitNum, offsetNum });
+  console.log("[nivoda/search] query:", query);
 
   let res: Response;
   try {
@@ -170,8 +171,10 @@ async function runSearch(token: string, body: Record<string, unknown>, tenantId?
   let json: unknown;
   try {
     json = JSON.parse(rawBody);
-  } catch {
-    return NextResponse.json({ error: "Nivoda returned non-JSON response" }, { status: 502 });
+  } catch (parseErr) {
+    console.error("[nivoda/search] JSON parse failed:", parseErr);
+    console.error("[nivoda/search] Raw body that failed to parse:", rawBody.slice(0, 2000));
+    return NextResponse.json({ error: "Nivoda returned non-JSON response", raw: rawBody.slice(0, 500) }, { status: 502 });
   }
 
   const j = json as {
@@ -278,9 +281,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       throw err;
     }
   } catch (err) {
-    console.error("[nivoda/search] Unhandled error:", err);
+    console.error("[nivoda/search] Fatal error:", err);
+    if (err instanceof Error) {
+      console.error("[nivoda/search] Stack:", err.stack);
+    }
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : String(err) },
+      { error: String(err) },
       { status: 500 }
     );
   }
