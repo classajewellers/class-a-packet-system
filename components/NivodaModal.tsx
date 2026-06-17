@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { calculateBlendedRetailFromBrackets } from "@/lib/marginCalculator";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -23,6 +23,8 @@ export interface NivodaStone {
   width: number | null;
   depth: number | null;
   labgrown: boolean;
+  table_percent: number | null;
+  depth_percent: number | null;
 }
 
 interface MarginBracket {
@@ -79,17 +81,7 @@ function makeRefId(price: number): string {
 function calcRetail(stone: NivodaStone, brackets: MarginBracket[]): number | null {
   if (!brackets.length || stone.price <= 0) return null;
   try {
-    const costAUD = stone.price / 100;
-    const stoneTypeKey = stone.labgrown ? "lab_grown" : "natural";
-    const hasStonetype = brackets.some(b => b.stone_type != null);
-    const active = hasStonetype
-      ? (() => {
-          const f = brackets.filter(b => b.stone_type === stoneTypeKey);
-          return f.length > 0 ? f : brackets.filter(b => b.stone_type === "natural" || b.stone_type == null);
-        })()
-      : brackets;
-    const pool = active.length > 0 ? active : brackets;
-    const { retail } = calculateBlendedRetailFromBrackets(costAUD, pool);
+    const { retail } = calculateBlendedRetailFromBrackets(stone.price / 100, brackets);
     return retail > 0 ? retail : null;
   } catch {
     return null;
@@ -141,9 +133,19 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
     if (!open) return;
     fetch('/api/pricing', { headers: { 'x-tenant-id': tenantId } })
       .then(r => r.json())
-      .then(json => setMarginBrackets(json.marginBrackets ?? []))
+      .then(json => { if (json.marginBrackets?.length) setMarginBrackets(json.marginBrackets); })
       .catch(() => {});
   }, [open, tenantId]);
+
+  // Pre-filter brackets by the current stone type so child components don't need to
+  const activeBrackets = useMemo((): MarginBracket[] => {
+    if (!marginBrackets.length) return [];
+    const stoneTypeKey = labgrown ? "lab_grown" : "natural";
+    const hasStonetype = marginBrackets.some(b => b.stone_type != null);
+    if (!hasStonetype) return marginBrackets;
+    const filtered = marginBrackets.filter(b => b.stone_type === stoneTypeKey);
+    return filtered.length > 0 ? filtered : marginBrackets.filter(b => b.stone_type === "natural" || b.stone_type == null);
+  }, [marginBrackets, labgrown]);
 
   function toggleShape(s: string) {
     setShapes(prev => prev.includes(s) ? (prev.length > 1 ? prev.filter(x => x !== s) : prev) : [...prev, s]);
@@ -175,6 +177,8 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
         return;
       }
       const incoming: NivodaStone[] = json.results ?? [];
+      // Also update brackets from search response (more reliable than /api/pricing fetch)
+      if (json.marginBrackets?.length) setMarginBrackets(json.marginBrackets);
       if (offset === 0) {
         setResults(incoming);
         // Generate ref IDs once for this batch
@@ -421,7 +425,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
                           stone={stone}
                           onSelect={handleSelect}
                           onExpand={() => setSelectedStone(stone)}
-                          brackets={marginBrackets}
+                          brackets={activeBrackets}
                         />
                       ))}
                     </div>
@@ -455,6 +459,17 @@ function StoneCard({ stone, onSelect, onExpand, brackets }: { stone: NivodaStone
     : "POA";
   const retail = calcRetail(stone, brackets);
 
+  const statParts: string[] = [];
+  if (stone.table_percent != null && stone.table_percent > 0) statParts.push(`T: ${stone.table_percent}%`);
+  if (stone.depth_percent != null && stone.depth_percent > 0) statParts.push(`D: ${stone.depth_percent}%`);
+  const cardRatio = stone.length && stone.width && Number(stone.width) > 0
+    ? (Number(stone.length) / Number(stone.width)).toFixed(2) : null;
+  if (cardRatio) statParts.push(`R: ${cardRatio}`);
+  if (stone.length && stone.width && stone.depth &&
+      Number(stone.length) > 0 && Number(stone.width) > 0 && Number(stone.depth) > 0) {
+    statParts.push(`M: ${Number(stone.length).toFixed(2)} × ${Number(stone.width).toFixed(2)} × ${Number(stone.depth).toFixed(2)}`);
+  }
+
   return (
     <div
       onClick={onExpand}
@@ -476,6 +491,9 @@ function StoneCard({ stone, onSelect, onExpand, brackets }: { stone: NivodaStone
         <div style={{ fontSize: 12, color: "#6B7280" }}>
           {stone.color}/{stone.clarity}{stone.cut ? ` · ${stone.cut}` : ""}
         </div>
+        {statParts.length > 0 && (
+          <div style={{ fontSize: 11, color: "#9CA3AF", lineHeight: 1.4 }}>{statParts.join("  ")}</div>
+        )}
         {stone.lab && (
           <div style={{ fontSize: 11, color: "#6B7280" }}>{stone.lab}{stone.certNumber ? ` · ${stone.certNumber}` : ""}</div>
         )}

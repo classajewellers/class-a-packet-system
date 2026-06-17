@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getNivodaToken, clearNivodaTokenCache, getNivodaEndpoint } from "@/lib/nivoda-auth";
+import { createTenantSupabaseClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -32,9 +33,12 @@ export interface NivodaResult {
   length: number | null;
   width: number | null;
   depth: number | null;
+  labgrown: boolean;
+  table_percent: number | null;
+  depth_percent: number | null;
 }
 
-async function runSearch(token: string, body: Record<string, unknown>): Promise<NextResponse> {
+async function runSearch(token: string, body: Record<string, unknown>, tenantId?: string): Promise<NextResponse> {
   const {
     shape       = "ROUND",
     caratFrom   = 0.3,
@@ -128,6 +132,8 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
                 length
                 width
                 depth
+                table_percent
+                depth_percent
               }
             }
           }
@@ -198,31 +204,44 @@ async function runSearch(token: string, body: Record<string, unknown>): Promise<
     id: string; price: number;
     diamond: {
       image?: string; video?: string;
-      certificate: { lab?: string; certNumber?: string; shape?: string; carats?: number; clarity?: string; color?: string; cut?: string; polish?: string; symmetry?: string; length?: number; width?: number; depth?: number };
+      certificate: { lab?: string; certNumber?: string; shape?: string; carats?: number; clarity?: string; color?: string; cut?: string; polish?: string; symmetry?: string; length?: number; width?: number; depth?: number; table_percent?: number; depth_percent?: number };
     };
   };
 
   const results: NivodaResult[] = ((raw.items ?? []) as RawItem[]).map(item => ({
-    id:         item.id,
-    price:      item.price,
-    carats:     item.diamond?.certificate?.carats    ?? 0,
-    shape:      item.diamond?.certificate?.shape     ?? shapesArr[0],
-    color:      item.diamond?.certificate?.color     ?? "",
-    clarity:    item.diamond?.certificate?.clarity   ?? "",
-    cut:        item.diamond?.certificate?.cut       ?? null,
-    polish:     item.diamond?.certificate?.polish    ?? null,
-    symmetry:   item.diamond?.certificate?.symmetry  ?? null,
-    lab:        item.diamond?.certificate?.lab       ?? null,
-    certNumber: item.diamond?.certificate?.certNumber ?? null,
-    image:      item.diamond?.image                           ?? null,
-    video:      item.diamond?.video                           ?? null,
-    length:  item.diamond?.certificate?.length          ?? null,
-    width:   item.diamond?.certificate?.width           ?? null,
-    depth:   item.diamond?.certificate?.depth           ?? null,
+    id:            item.id,
+    price:         item.price,
+    carats:        item.diamond?.certificate?.carats       ?? 0,
+    shape:         item.diamond?.certificate?.shape        ?? shapesArr[0],
+    color:         item.diamond?.certificate?.color        ?? "",
+    clarity:       item.diamond?.certificate?.clarity      ?? "",
+    cut:           item.diamond?.certificate?.cut          ?? null,
+    polish:        item.diamond?.certificate?.polish       ?? null,
+    symmetry:      item.diamond?.certificate?.symmetry     ?? null,
+    lab:           item.diamond?.certificate?.lab          ?? null,
+    certNumber:    item.diamond?.certificate?.certNumber   ?? null,
+    image:         item.diamond?.image                     ?? null,
+    video:         item.diamond?.video                     ?? null,
+    length:        item.diamond?.certificate?.length       ?? null,
+    width:         item.diamond?.certificate?.width        ?? null,
+    depth:         item.diamond?.certificate?.depth        ?? null,
+    labgrown:      Boolean(labgrown),
+    table_percent: item.diamond?.certificate?.table_percent ?? null,
+    depth_percent: item.diamond?.certificate?.depth_percent ?? null,
   }));
 
+  // Fetch margin brackets server-side so the modal can calculate retail prices
+  let marginBrackets: unknown[] = [];
+  try {
+    const supabase = await createTenantSupabaseClient(tenantId ?? null);
+    const { data } = await supabase.from("pricing_margin_brackets").select("*").order("cost_min", { ascending: true });
+    marginBrackets = data ?? [];
+  } catch {
+    // fail silently — retail price display is non-critical
+  }
+
   console.log(`[nivoda/search] Returning ${results.length} of ${raw.total_count ?? 0} total`);
-  return NextResponse.json({ results, total_count: raw.total_count ?? 0 });
+  return NextResponse.json({ results, total_count: raw.total_count ?? 0, marginBrackets });
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -232,6 +251,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
+
+  const tenantId = req.headers.get("x-tenant-id") ?? undefined;
 
   try {
     let token: string;
@@ -246,13 +267,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     try {
-      return await runSearch(token, body);
+      return await runSearch(token, body, tenantId);
     } catch (err) {
       if ((err as { isAuthError?: boolean }).isAuthError) {
         console.warn("[nivoda/search] Auth error on search — clearing cache and retrying");
         clearNivodaTokenCache();
         const freshToken = await getNivodaToken(true);
-        return await runSearch(freshToken, body);
+        return await runSearch(freshToken, body, tenantId);
       }
       throw err;
     }
