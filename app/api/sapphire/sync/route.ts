@@ -89,7 +89,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     .eq("id", user.id)
     .single();
   if (profile?.role !== "manager" && profile?.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden — manager only" }, { status: 403 });
+    return NextResponse.json({ error: "Forbidden — manager or admin only" }, { status: 403 });
   }
 
   try {
