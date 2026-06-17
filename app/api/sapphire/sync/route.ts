@@ -1,35 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSapphireToken, clearSapphireTokenCache } from "@/lib/sapphire-auth";
+import { getSapphireCredentials, clearSapphireTokenCache } from "@/lib/sapphire-auth";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
-export const dynamic   = "force-dynamic";
+export const dynamic    = "force-dynamic";
 export const revalidate = 0;
 export const maxDuration = 60;
 
-const STOCK_ENDPOINT = "http://api.sapphirexport.com/api/Stock/GetStock";
+const STOCK_ENDPOINT  = "http://api.sapphirexport.com/api/Stock/GetStock";
 const MELEE_CARAT_MAX = 0.30;
+const PAGE_SIZE       = 100;
 
 type SapphireStoneRaw = {
-  Stock_No?:     string;
-  Shape?:        string;
+  StockNo?:      string;
+  ShapeName?:    string;
   Carat?:        number | string;
-  Color?:        string;
-  Clarity?:      string;
-  Cut?:          string;
-  Polish?:       string;
-  Symmetry?:     string;
-  Fluorescence?: string;
-  Lab?:          string;
-  Asking_Rate?:  number | string;
-  Total_Price?:  number | string;
-  Stock_Type?:   string;
-  Availability?: string;
+  ColorName?:    string;
+  ClarityName?:  string;
+  CutName?:      string;
+  PolName?:      string;
+  SymName?:      string;
+  FLName?:       string;
+  LabName?:      string;
+  LabReportNo?:  string;
+  AskingRate?:   number | string;
+  StockTypeName?: string;
+  Webstatus?:    string;
   Length?:       number | string;
   Width?:        number | string;
-  Depth?:        number | string;
+  Height?:       number | string;
 };
 
-async function fetchStockPage(token: string, page: number): Promise<{ items: SapphireStoneRaw[]; hasMore: boolean }> {
+async function fetchStockPage(
+  token: string,
+  userId: string,
+  page: number,
+): Promise<{ items: SapphireStoneRaw[]; hasMore: boolean }> {
   const controller = new AbortController();
   const timeoutId  = setTimeout(() => controller.abort(), 30000);
 
@@ -40,40 +45,39 @@ async function fetchStockPage(token: string, page: number): Promise<{ items: Sap
       method:  "POST",
       headers: {
         "Content-Type":  "application/json",
-        "Authorization": `Bearer ${token}`,
+        "Authorization": `bearer ${token}`,
       },
-      body:   JSON.stringify({ Page: page, PageSize: 200 }),
+      body:   JSON.stringify({ UserID: userId, Token: token, Page: page, Limit: PAGE_SIZE }),
       signal: controller.signal,
     });
     text = await res.text();
   } catch (err: unknown) {
     clearTimeout(timeoutId);
     const e = err instanceof Error ? err : new Error(String(err));
-    throw new Error(`Sapphire stock fetch failed (page ${page}): ${e.message}`);
+    throw new Error(`Sapphire GetStock fetch failed (page ${page}): ${e.message}`);
   }
   clearTimeout(timeoutId);
 
   if (!res.ok) {
-    throw new Error(`Sapphire stock HTTP ${res.status} on page ${page}: ${text.slice(0, 200)}`);
+    throw new Error(`Sapphire GetStock HTTP ${res.status} on page ${page}: ${text.slice(0, 200)}`);
   }
 
   let json: { Data?: { Stock?: SapphireStoneRaw[]; TotalCount?: number } };
   try {
     json = JSON.parse(text);
   } catch {
-    throw new Error(`Sapphire stock non-JSON response on page ${page}: ${text.slice(0, 200)}`);
+    throw new Error(`Sapphire GetStock non-JSON on page ${page}: ${text.slice(0, 200)}`);
   }
 
-  const items = json?.Data?.Stock ?? [];
-  const total = json?.Data?.TotalCount ?? 0;
-  const fetched = (page - 1) * 200 + items.length;
-  return { items, hasMore: fetched < total };
+  const items    = json?.Data?.Stock ?? [];
+  const total    = Number(json?.Data?.TotalCount ?? 0);
+  const fetched  = (page - 1) * PAGE_SIZE + items.length;
+  return { items, hasMore: items.length === PAGE_SIZE && fetched < total };
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   console.log("[sapphire/sync] handler invoked");
 
-  // Manager-only: validate role via Supabase session
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
@@ -89,23 +93,23 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const token = await getSapphireToken();
+    let creds = await getSapphireCredentials();
 
     const allItems: SapphireStoneRaw[] = [];
-    let page = 1;
+    let page    = 1;
     let hasMore = true;
 
     while (hasMore) {
       console.log(`[sapphire/sync] fetching page ${page}...`);
       let result: { items: SapphireStoneRaw[]; hasMore: boolean };
       try {
-        result = await fetchStockPage(token, page);
+        result = await fetchStockPage(creds.token, creds.userId, page);
       } catch (err) {
-        // If first page auth-fails, clear cache and retry once
         if (page === 1) {
+          console.warn("[sapphire/sync] page 1 failed — clearing cache and retrying");
           clearSapphireTokenCache();
-          const freshToken = await getSapphireToken(true);
-          result = await fetchStockPage(freshToken, page);
+          creds  = await getSapphireCredentials(true);
+          result = await fetchStockPage(creds.token, creds.userId, page);
         } else {
           throw err;
         }
@@ -113,41 +117,45 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       allItems.push(...result.items);
       hasMore = result.hasMore;
       page++;
-      if (page > 100) break; // safety cap
+      if (page > 200) break; // safety cap — 200 pages × 100 = 20k stones max
     }
 
-    console.log(`[sapphire/sync] fetched ${allItems.length} total stones`);
+    const totalScanned = allItems.length;
+    console.log(`[sapphire/sync] fetched ${totalScanned} total stones across ${page - 1} pages`);
 
-    // Filter to melee only (≤ 0.30ct)
     const melee = allItems.filter(s => Number(s.Carat ?? 0) <= MELEE_CARAT_MAX);
-    console.log(`[sapphire/sync] ${melee.length} melee stones after filter`);
+    console.log(`[sapphire/sync] ${melee.length} melee stones (≤ ${MELEE_CARAT_MAX}ct) after filter`);
 
     if (melee.length === 0) {
-      return NextResponse.json({ synced: 0, message: "No melee stones found in stock feed" });
+      return NextResponse.json({ synced: 0, total_scanned: totalScanned, message: "No melee stones found in stock feed" });
     }
 
-    // Upsert in batches of 500
-    const db = createServerSupabaseClient();
-    const rows = melee.map(s => ({
-      stock_no:     String(s.Stock_No ?? ""),
-      shape:        s.Shape        ?? null,
-      carat:        s.Carat        != null ? Number(s.Carat)       : null,
-      color:        s.Color        ?? null,
-      clarity:      s.Clarity      ?? null,
-      cut:          s.Cut          ?? null,
-      polish:       s.Polish       ?? null,
-      symmetry:     s.Symmetry     ?? null,
-      fluorescence: s.Fluorescence ?? null,
-      lab:          s.Lab          ?? null,
-      asking_rate:  s.Asking_Rate  != null ? Number(s.Asking_Rate) : null,
-      total_price:  s.Total_Price  != null ? Number(s.Total_Price) : null,
-      stock_type:   s.Stock_Type   ?? null,
-      availability: s.Availability ?? null,
-      length:       s.Length       != null ? Number(s.Length)      : null,
-      width:        s.Width        != null ? Number(s.Width)        : null,
-      depth:        s.Depth        != null ? Number(s.Depth)        : null,
-      synced_at:    new Date().toISOString(),
-    })).filter(r => r.stock_no);
+    const db   = createServerSupabaseClient();
+    const now  = new Date().toISOString();
+    const rows = melee.map(s => {
+      const carat      = s.Carat      != null ? Number(s.Carat)     : null;
+      const askingRate = s.AskingRate != null ? Number(s.AskingRate) : null;
+      return {
+        stock_no:     String(s.StockNo ?? ""),
+        shape:        s.ShapeName    ?? null,
+        carat,
+        color:        s.ColorName    ?? null,
+        clarity:      s.ClarityName  ?? null,
+        cut:          s.CutName      ?? null,
+        polish:       s.PolName      ?? null,
+        symmetry:     s.SymName      ?? null,
+        fluorescence: s.FLName       ?? null,
+        lab:          s.LabName      ?? null,
+        asking_rate:  askingRate,
+        total_price:  askingRate != null && carat != null ? askingRate * carat : null,
+        stock_type:   s.StockTypeName ?? null,
+        availability: s.Webstatus    ?? null,
+        length:       s.Length != null ? Number(s.Length) : null,
+        width:        s.Width  != null ? Number(s.Width)  : null,
+        depth:        s.Height != null ? Number(s.Height) : null,
+        synced_at:    now,
+      };
+    }).filter(r => r.stock_no);
 
     let synced = 0;
     const BATCH = 500;
@@ -164,7 +172,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     console.log(`[sapphire/sync] upserted ${synced} melee stones`);
-    return NextResponse.json({ synced, total_fetched: allItems.length });
+    return NextResponse.json({ synced, total_scanned: totalScanned });
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

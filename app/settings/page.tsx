@@ -10,7 +10,7 @@ import { canManage } from "@/lib/userTypes";
 
 interface SyncResult {
   synced?:        number;
-  total_fetched?: number;
+  total_scanned?: number;
   message?:       string;
   error?:         string;
 }
@@ -134,7 +134,7 @@ export default function SettingsPage() {
               ? `Error: ${syncResult.error}`
               : syncResult.message
                 ? syncResult.message
-                : `Synced ${syncResult.synced?.toLocaleString()} melee stones (${syncResult.total_fetched?.toLocaleString()} total in feed)`
+                : `Synced ${syncResult.synced?.toLocaleString()} melee stones (${syncResult.total_scanned?.toLocaleString()} total scanned)`
             }
           </div>
         )}

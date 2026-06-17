@@ -2,33 +2,34 @@
  * Sapphire Export authentication utility.
  * Fetches and caches a bearer token for the Sapphire Export stock API.
  *
- * Required env vars (set in Vercel — never in code):
- *   SAPPHIRE_EMAIL
- *   SAPPHIRE_PASSWORD
+ * Username is hardcoded ("assalc") — it never changes.
+ * SAPPHIRE_PASSWORD must be set as a Vercel env var — never hardcode it.
  */
 
-const AUTH_ENDPOINT = "http://api.sapphirexport.com/api/Stock/ClientLogin";
+const AUTH_ENDPOINT   = "http://api.sapphirexport.com/api/Stock/ClientLogin";
+const SAPPHIRE_USERNAME = "assalc";
 
 const TOKEN_TTL_MS      = 6 * 60 * 60 * 1000; // 6 hours
 const REFRESH_BUFFER_MS = 10 * 60 * 1000;      // refresh 10 min before expiry
 
-let cache: { token: string; expiresAt: number } | null = null;
+interface SapphireCredentials {
+  token:  string;
+  userId: string;
+}
+
+let cache: (SapphireCredentials & { expiresAt: number }) | null = null;
 
 export function clearSapphireTokenCache(): void {
   cache = null;
   console.log("[sapphire/auth] Token cache cleared");
 }
 
-async function fetchFreshToken(): Promise<string> {
-  console.log("[sapphire/auth] fetchFreshToken start");
+async function fetchFreshCredentials(): Promise<SapphireCredentials> {
+  console.log("[sapphire/auth] fetchFreshCredentials start");
 
-  const email    = process.env.SAPPHIRE_EMAIL;
   const password = process.env.SAPPHIRE_PASSWORD;
-
-  if (!email || !password) {
-    throw new Error(
-      `Sapphire auth: missing env var(s): ${[!email && "SAPPHIRE_EMAIL", !password && "SAPPHIRE_PASSWORD"].filter(Boolean).join(", ")}`
-    );
+  if (!password) {
+    throw new Error("Sapphire auth: SAPPHIRE_PASSWORD env var is not set");
   }
 
   const controller = new AbortController();
@@ -44,7 +45,7 @@ async function fetchFreshToken(): Promise<string> {
     res = await fetch(AUTH_ENDPOINT, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ Username: email, Password: password }),
+      body:    JSON.stringify({ Username: SAPPHIRE_USERNAME, Password: password }),
       signal:  controller.signal,
     });
     console.log("[sapphire/auth] fetch resolved, status:", res.status);
@@ -59,7 +60,7 @@ async function fetchFreshToken(): Promise<string> {
 
   clearTimeout(timeoutId);
 
-  let json: { Data?: { User_Info?: { Token?: string } }; Message?: string; Status?: string };
+  let json: { Data?: { User_Info?: { Token?: string; UserId?: string; UserID?: string } }; Message?: string };
   try {
     json = JSON.parse(text);
   } catch {
@@ -67,27 +68,29 @@ async function fetchFreshToken(): Promise<string> {
     throw new Error("Sapphire auth response was not valid JSON");
   }
 
-  const token = json?.Data?.User_Info?.Token;
+  const token  = json?.Data?.User_Info?.Token;
+  const userId = json?.Data?.User_Info?.UserId ?? json?.Data?.User_Info?.UserID ?? "";
+
   if (!token) {
     console.error("[sapphire/auth] No token in response:", text.slice(0, 300));
     throw new Error(`Sapphire auth returned no token — ${json?.Message ?? "unknown error"}`);
   }
 
-  console.log("[sapphire/auth] Token obtained successfully");
-  return token;
+  console.log("[sapphire/auth] Credentials obtained successfully");
+  return { token, userId };
 }
 
-export async function getSapphireToken(skipCache = false): Promise<string> {
+export async function getSapphireCredentials(skipCache = false): Promise<SapphireCredentials> {
   const now = Date.now();
 
   if (!skipCache && cache && cache.expiresAt - now > REFRESH_BUFFER_MS) {
     const minsLeft = Math.round((cache.expiresAt - now) / 60_000);
-    console.log(`[sapphire/auth] Using cached token (${minsLeft}m remaining)`);
-    return cache.token;
+    console.log(`[sapphire/auth] Using cached credentials (${minsLeft}m remaining)`);
+    return { token: cache.token, userId: cache.userId };
   }
 
-  const token = await fetchFreshToken();
-  cache = { token, expiresAt: now + TOKEN_TTL_MS };
-  console.log("[sapphire/auth] Token cached for 6h");
-  return token;
+  const creds = await fetchFreshCredentials();
+  cache = { ...creds, expiresAt: now + TOKEN_TTL_MS };
+  console.log("[sapphire/auth] Credentials cached for 6h");
+  return creds;
 }
