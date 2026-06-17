@@ -151,8 +151,12 @@ async function runSearch(token: string, body: Record<string, unknown>, tenantId?
   console.log("[nivoda/search] Token OK, sending GraphQL query to:", endpoint);
 
   let res: Response;
+  let rawBody: string;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25000);
+  const timeout = setTimeout(() => {
+    console.log("[nivoda/search] ABORTING — 25s timeout hit");
+    controller.abort();
+  }, 25000);
   try {
     res = await fetch(endpoint, {
       method:  "POST",
@@ -160,19 +164,20 @@ async function runSearch(token: string, body: Record<string, unknown>, tenantId?
       body:    JSON.stringify({ query, variables: { token } }),
       signal:  controller.signal,
     });
+    console.log("[nivoda/search] Nivoda HTTP status:", res.status);
+    rawBody = await res.text();
+    console.log("[nivoda/search] HTTP", res.status, "body:", rawBody.slice(0, 1000));
   } catch (err) {
     clearTimeout(timeout);
     if (err instanceof Error && err.name === "AbortError") {
       console.error("[nivoda/search] Request timed out after 25s");
       return NextResponse.json({ error: "Nivoda request timed out" }, { status: 504 });
     }
-    throw new Error(`Nivoda search: network error — ${err instanceof Error ? err.message : String(err)}`);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[nivoda/search] fetch/body error:", msg);
+    throw new Error(`Nivoda search: network error — ${msg}`);
   }
   clearTimeout(timeout);
-
-  console.log("[nivoda/search] Nivoda HTTP status:", res.status);
-  const rawBody = await res.text();
-  console.log("[nivoda/search] HTTP", res.status, "body:", rawBody.slice(0, 1000));
 
   if (!res.ok) {
     return NextResponse.json(
