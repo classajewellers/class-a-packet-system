@@ -51,6 +51,7 @@ async function fetchFreshToken(): Promise<string> {
   }, 10000);
 
   let res: Response;
+  let text: string;
   try {
     console.log('[nivoda/auth] calling fetch...');
     res = await fetch(endpoint, {
@@ -60,6 +61,8 @@ async function fetchFreshToken(): Promise<string> {
       signal: controller.signal,
     });
     console.log('[nivoda/auth] fetch resolved, status:', res.status);
+    text = await res.text();
+    console.log('[nivoda/auth] response text length:', text.length);
   } catch (err: unknown) {
     clearTimeout(timeoutId);
     const e = err instanceof Error ? err : new Error(String(err));
@@ -68,9 +71,6 @@ async function fetchFreshToken(): Promise<string> {
   }
 
   clearTimeout(timeoutId);
-
-  const text = await res.text();
-  console.log('[nivoda/auth] response text length:', text.length);
 
   let json: { data?: { authenticate?: { username_and_password?: { token?: string } } }; errors?: Array<{ message: string }> };
   try {
