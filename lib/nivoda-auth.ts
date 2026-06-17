@@ -45,15 +45,23 @@ async function fetchFreshToken(): Promise<string> {
   console.log("[nivoda/auth] Requesting token — endpoint:", endpoint, "user:", email);
 
   let res: Response;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
   try {
     res = await fetch(endpoint, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ query }),
+      signal:  controller.signal,
     });
   } catch (err) {
+    clearTimeout(timeout);
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("Nivoda auth: request timed out after 10s");
+    }
     throw new Error(`Nivoda auth: network error — ${err instanceof Error ? err.message : String(err)}`);
   }
+  clearTimeout(timeout);
 
   const rawBody = await res.text();
   console.log("[nivoda/auth] HTTP", res.status, "body:", rawBody.slice(0, 500));
