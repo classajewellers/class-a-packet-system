@@ -30,9 +30,11 @@ export function clearNivodaTokenCache(): void {
 }
 
 async function fetchFreshToken(): Promise<string> {
-  const endpoint = getNivodaEndpoint();
+  console.log('[nivoda/auth] fetchFreshToken start');
+
   const email    = process.env.NIVODA_EMAIL;
   const password = process.env.NIVODA_PASSWORD;
+  const endpoint = getNivodaEndpoint();
 
   if (!email || !password) {
     throw new Error(
@@ -40,61 +42,56 @@ async function fetchFreshToken(): Promise<string> {
     );
   }
 
-  const query = `{ authenticate { username_and_password(username: "${email}", password: "${password}") { token } } }`;
+  const authQuery = `{ authenticate { username_and_password(username: "${email}", password: "${password}") { token } } }`;
 
-  console.log("[nivoda/auth] Requesting token — endpoint:", endpoint, "user:", email);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    console.log('[nivoda/auth] ABORTING — 10s timeout hit');
+    controller.abort();
+  }, 10000);
 
   let res: Response;
-  let rawBody: string;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
   try {
+    console.log('[nivoda/auth] calling fetch...');
     res = await fetch(endpoint, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ query }),
-      signal:  controller.signal,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: authQuery }),
+      signal: controller.signal,
     });
-    rawBody = await res.text();
-  } catch (err) {
-    clearTimeout(timeout);
-    if (err instanceof Error && err.name === "AbortError") {
-      throw new Error("Nivoda auth: request timed out after 10s");
-    }
-    throw new Error(`Nivoda auth: network error — ${err instanceof Error ? err.message : String(err)}`);
-  }
-  clearTimeout(timeout);
-
-  console.log("[nivoda/auth] HTTP", res.status, "body:", rawBody.slice(0, 500));
-
-  if (!res.ok) {
-    throw new Error(`Nivoda auth: HTTP ${res.status} ${res.statusText} — ${rawBody.slice(0, 200)}`);
+    console.log('[nivoda/auth] fetch resolved, status:', res.status);
+  } catch (err: unknown) {
+    clearTimeout(timeoutId);
+    const e = err instanceof Error ? err : new Error(String(err));
+    console.error('[nivoda/auth] fetch threw:', e.name, e.message);
+    throw new Error(`Nivoda auth fetch failed: ${e.message}`);
   }
 
-  let json: unknown;
+  clearTimeout(timeoutId);
+
+  const text = await res.text();
+  console.log('[nivoda/auth] response text length:', text.length);
+
+  let json: { data?: { authenticate?: { username_and_password?: { token?: string } } }; errors?: Array<{ message: string }> };
   try {
-    json = JSON.parse(rawBody);
+    json = JSON.parse(text);
   } catch {
-    throw new Error(`Nivoda auth: non-JSON response — ${rawBody.slice(0, 200)}`);
+    console.error('[nivoda/auth] JSON parse failed, raw:', text.slice(0, 200));
+    throw new Error('Nivoda auth response was not valid JSON');
   }
 
-  const j = json as {
-    errors?: Array<{ message: string }>;
-    data?:   { authenticate?: { username_and_password?: { token?: string } } };
-  };
-
-  if (j.errors?.length) {
-    console.error("[nivoda/auth] GraphQL errors:", JSON.stringify(j.errors));
-    throw new Error(`Nivoda auth GraphQL error: ${j.errors[0].message}`);
+  if (json.errors?.length) {
+    console.error('[nivoda/auth] GraphQL errors:', JSON.stringify(json.errors));
+    throw new Error(`Nivoda auth GraphQL error: ${json.errors[0].message}`);
   }
 
-  const token = j.data?.authenticate?.username_and_password?.token;
+  const token = json?.data?.authenticate?.username_and_password?.token;
   if (!token) {
-    console.error("[nivoda/auth] No token in response:", JSON.stringify(j));
-    throw new Error(`Nivoda auth: no token returned — ${JSON.stringify(j)}`);
+    console.error('[nivoda/auth] No token in response:', text.slice(0, 300));
+    throw new Error('Nivoda auth returned no token');
   }
 
-  console.log("[nivoda/auth] Token acquired (first 20):", token.slice(0, 20) + "…");
+  console.log('[nivoda/auth] Token obtained successfully');
   return token;
 }
 

@@ -261,6 +261,7 @@ async function runSearch(token: string, body: Record<string, unknown>, tenantId?
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  console.log('[nivoda/search] handler invoked, method: POST');
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -308,6 +309,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 // GET handler — accepts the same filters as query params for browser testing
 // e.g. /api/nivoda/search?shape=ROUND&caratFrom=0.5&caratTo=1&colorFrom=D&colorTo=H
 export async function GET(req: NextRequest): Promise<NextResponse> {
+  console.log('[nivoda/search] handler invoked, method: GET');
   const p = new URL(req.url).searchParams;
   const body: Record<string, unknown> = {
     shape:       p.get("shape")       ?? "ROUND",
