@@ -23,6 +23,10 @@ interface Variant {
   last_direct_cost: number | null;
   current_retail: number | null;
   notes: string | null;
+  melee_quantity: number | null;
+  melee_carat_weight: number | null;
+  melee_colour_group: string | null;
+  melee_clarity: string | null;
   pricing_build_components: BuildComponent[];
   pricing_supplier_costs: SupplierCost[];
 }
@@ -34,11 +38,15 @@ interface Product {
   pricing_product_variants: Variant[];
 }
 
+const COLOUR_GROUPS    = ["D-F", "G-H", "I-J", "K-L", "M-N"];
+const PARCEL_CLARITIES = ["VVS", "VS", "SI1", "SI2", "SI3", "I1", "I2", "I3"];
+
 // Server-side calculation result shape (mirrors POST /api/pricing-hub/calculate response)
 interface CalcResult {
   metalCost: number;
   labourCost: number;
   fixedCost: number;
+  meleeCostAud: number;
   totalCost: number;
   multiplier: number | null;
   recommendedRetail: number | null;
@@ -46,6 +54,7 @@ interface CalcResult {
   pricingMode: string;
   breakdown: { type: string; label: string; amount: number }[];
   diamondNote: string | null;
+  meleeNote: string | null;
 }
 
 // Per-variant calculation state
@@ -84,6 +93,7 @@ export default function ProductDetailPage() {
   const [showAdd, setShowAdd]       = useState(false);
   const [vNew, setVNew]             = useState({
     name: "", metal_type: "", metal_grams: "", diamond_type: "none", pricing_mode: "our_build",
+    melee_quantity: "", melee_carat_weight: "", melee_colour_group: "G-H", melee_clarity: "SI1",
   });
   const [addSaving, setAddSaving]   = useState(false);
   const [addError, setAddError]     = useState<string | null>(null);
@@ -199,6 +209,8 @@ export default function ProductDetailPage() {
       name: v.name, metal_type: v.metal_type, metal_grams: v.metal_grams,
       diamond_type: v.diamond_type, pricing_mode: v.pricing_mode,
       last_direct_cost: v.last_direct_cost,
+      melee_quantity: v.melee_quantity, melee_carat_weight: v.melee_carat_weight,
+      melee_colour_group: v.melee_colour_group ?? "G-H", melee_clarity: v.melee_clarity ?? "SI1",
     });
   }
 
@@ -239,18 +251,22 @@ export default function ProductDetailPage() {
       method: "POST", credentials: "include",
       headers: { "Content-Type": "application/json", "x-tenant-id": tid },
       body: JSON.stringify({
-        product_id:   id,
-        name:         vNew.name.trim(),
-        metal_type:   vNew.metal_type   || null,
-        metal_grams:  vNew.metal_grams  ? Number(vNew.metal_grams) : null,
-        diamond_type: vNew.diamond_type,
-        pricing_mode: vNew.pricing_mode,
+        product_id:          id,
+        name:                vNew.name.trim(),
+        metal_type:          vNew.metal_type          || null,
+        metal_grams:         vNew.metal_grams         ? Number(vNew.metal_grams)        : null,
+        diamond_type:        vNew.diamond_type,
+        pricing_mode:        vNew.pricing_mode,
+        melee_quantity:      vNew.melee_quantity      ? Number(vNew.melee_quantity)      : null,
+        melee_carat_weight:  vNew.melee_carat_weight  ? Number(vNew.melee_carat_weight)  : null,
+        melee_colour_group:  vNew.melee_colour_group  || null,
+        melee_clarity:       vNew.melee_clarity       || null,
       }),
     });
     const data = await res.json();
     setAddSaving(false);
     if (!res.ok) { setAddError(data.error ?? "Failed"); return; }
-    setVNew({ name: "", metal_type: "", metal_grams: "", diamond_type: "none", pricing_mode: "our_build" });
+    setVNew({ name: "", metal_type: "", metal_grams: "", diamond_type: "none", pricing_mode: "our_build", melee_quantity: "", melee_carat_weight: "", melee_colour_group: "G-H", melee_clarity: "SI1" });
     setShowAdd(false);
     load();
   }
@@ -394,7 +410,59 @@ export default function ProductDetailPage() {
               </select>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+          {/* Melee stone fields */}
+          <div style={{ borderTop: "1px solid #E8E8F0", paddingTop: 10, marginTop: 4 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 8 }}>
+              Melee Stones (under 0.30ct) — optional
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr auto", gap: 10, alignItems: "flex-end" }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Quantity</label>
+                <input
+                  type="number" step="1" min="0"
+                  value={vNew.melee_quantity}
+                  onChange={e => setVNew(v => ({ ...v, melee_quantity: e.target.value }))}
+                  placeholder="e.g. 22"
+                  style={{ width: "100%", padding: "7px 10px", border: "1px solid #D1D5DB", borderRadius: 7, fontSize: 13, boxSizing: "border-box" as const }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>ct / stone</label>
+                <input
+                  type="number" step="0.001" min="0"
+                  value={vNew.melee_carat_weight}
+                  onChange={e => setVNew(v => ({ ...v, melee_carat_weight: e.target.value }))}
+                  placeholder="e.g. 0.010"
+                  style={{ width: "100%", padding: "7px 10px", border: "1px solid #D1D5DB", borderRadius: 7, fontSize: 13, boxSizing: "border-box" as const }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Colour Group</label>
+                <select
+                  value={vNew.melee_colour_group}
+                  onChange={e => setVNew(v => ({ ...v, melee_colour_group: e.target.value }))}
+                  style={{ width: "100%", padding: "7px 10px", border: "1px solid #D1D5DB", borderRadius: 7, fontSize: 13 }}>
+                  {COLOUR_GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Clarity</label>
+                <select
+                  value={vNew.melee_clarity}
+                  onChange={e => setVNew(v => ({ ...v, melee_clarity: e.target.value }))}
+                  style={{ width: "100%", padding: "7px 10px", border: "1px solid #D1D5DB", borderRadius: 7, fontSize: 13 }}>
+                  {PARCEL_CLARITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              {vNew.melee_quantity && vNew.melee_carat_weight && (
+                <span style={{ fontSize: 12, color: "#6B7280", whiteSpace: "nowrap" as const, paddingBottom: 8 }}>
+                  Total: {(Number(vNew.melee_quantity) * Number(vNew.melee_carat_weight)).toFixed(3)}ct
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <button onClick={createVariant} disabled={addSaving}
               style={{ padding: "7px 16px", background: addSaving ? "#E8E8F0" : "#635BFF", color: addSaving ? "#9CA3AF" : "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: addSaving ? "wait" : "pointer" }}>
               {addSaving ? "Saving…" : "Add Variant"}
@@ -553,6 +621,62 @@ export default function ProductDetailPage() {
                       </td>
                     </tr>
 
+                    {/* Melee edit sub-row — shown when editing */}
+                    {isEditing && (
+                      <tr>
+                        <td colSpan={9} style={{ padding: "0 14px 12px", background: "#F9FAFB", borderBottom: "1px solid #F3F4F6" }}>
+                          <div style={{ paddingTop: 10 }}>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 8 }}>
+                              Melee Stones (under 0.30ct)
+                            </div>
+                            <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" as const }}>
+                              <div>
+                                <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 3 }}>Quantity</label>
+                                <input type="number" step="1" min="0"
+                                  value={String(vBuf.melee_quantity ?? "")}
+                                  onChange={e => setVBuf(b => ({ ...b, melee_quantity: e.target.value === "" ? null : Number(e.target.value) }))}
+                                  placeholder="e.g. 22"
+                                  style={{ ...inputSm, width: 70 }} />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 3 }}>ct / stone</label>
+                                <input type="number" step="0.001" min="0"
+                                  value={String(vBuf.melee_carat_weight ?? "")}
+                                  onChange={e => setVBuf(b => ({ ...b, melee_carat_weight: e.target.value === "" ? null : Number(e.target.value) }))}
+                                  placeholder="0.010"
+                                  style={{ ...inputSm, width: 75 }} />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 3 }}>Colour Group</label>
+                                <select
+                                  value={String(vBuf.melee_colour_group ?? "G-H")}
+                                  onChange={e => setVBuf(b => ({ ...b, melee_colour_group: e.target.value }))}
+                                  style={{ ...inputSm, width: 80 }}>
+                                  {COLOUR_GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
+                                </select>
+                              </div>
+                              <div>
+                                <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 3 }}>Clarity</label>
+                                <select
+                                  value={String(vBuf.melee_clarity ?? "SI1")}
+                                  onChange={e => setVBuf(b => ({ ...b, melee_clarity: e.target.value }))}
+                                  style={{ ...inputSm, width: 72 }}>
+                                  {PARCEL_CLARITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                              </div>
+                              {vBuf.melee_quantity != null && vBuf.melee_carat_weight != null &&
+                               vBuf.melee_quantity > 0 && vBuf.melee_carat_weight > 0 && (
+                                <span style={{ fontSize: 12, color: "#6B7280", paddingBottom: 4 }}>
+                                  Total: {(vBuf.melee_quantity * vBuf.melee_carat_weight).toFixed(3)}ct
+                                  ({vBuf.melee_quantity} × {vBuf.melee_carat_weight}ct)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+
                     {/* Expanded detail row */}
                     {isOpen && !isEditing && (
                       <tr>
@@ -613,6 +737,15 @@ export default function ProductDetailPage() {
                                   <p style={{ fontSize: 11, color: "#9CA3AF", margin: "4px 0 0", fontStyle: "italic" }}>
                                     {calc.result!.diamondNote}
                                   </p>
+                                )}
+                                {calc.result!.meleeNote && (
+                                  <div style={{
+                                    display: "inline-flex", alignItems: "center", gap: 6, marginTop: 6,
+                                    background: "#FEF3C7", border: "1px solid #FDE68A",
+                                    borderRadius: 6, padding: "5px 10px", fontSize: 11, color: "#92400E",
+                                  }}>
+                                    <span>⚠</span><span>{calc.result!.meleeNote}</span>
+                                  </div>
                                 )}
                               </div>
                             )}

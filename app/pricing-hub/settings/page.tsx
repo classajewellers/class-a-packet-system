@@ -18,13 +18,20 @@ interface RapEntry {
   id: string; shape: string; size_min: number; size_max: number;
   colour: string; clarity: string; price_hundreds_usd: number; rap_date: string;
 }
+interface ParcelEntry {
+  id: string; size_min: number; size_max: number;
+  colour_group: string; clarity: string; price_usd_per_carat: number; rap_date: string;
+}
 
-type Tab = "gold" | "rates" | "rapaport";
+type Tab = "gold" | "rates" | "rapaport" | "parcels";
 
-const UNIT_OPTIONS = ["flat", "per_stone", "per_gram"];
-const SHAPES = ["Round", "Princess", "Oval", "Cushion", "Pear", "Marquise", "Emerald", "Radiant", "Asscher", "Heart"];
-const COLOURS = ["D", "E", "F", "G", "H", "I", "J", "K", "L", "M"];
-const CLARITIES = ["IF", "VVS1", "VVS2", "VS1", "VS2", "SI1", "SI2", "I1", "I2", "I3"];
+const UNIT_OPTIONS    = ["flat", "per_stone", "per_gram"];
+const SHAPES          = ["Round", "Princess", "Oval", "Cushion", "Pear", "Marquise", "Emerald", "Radiant", "Asscher", "Heart"];
+const COLOURS         = ["D", "E", "F", "G", "H", "I", "J", "K", "L", "M"];
+const CLARITIES       = ["IF", "VVS1", "VVS2", "VS1", "VS2", "SI1", "SI2", "I1", "I2", "I3"];
+const COLOUR_GROUPS   = ["D-F", "G-H", "I-J", "K-L", "M-N"];
+const PARCEL_CLARITIES = ["VVS", "VS", "SI1", "SI2", "SI3", "I1", "I2", "I3"];
+const TODAY           = new Date().toISOString().slice(0, 10);
 
 // ── Inline edit helpers ───────────────────────────────────────────────────────
 
@@ -65,7 +72,7 @@ export default function PricingSettingsPage() {
   const [newRate, setNewRate]         = useState({ label: "", amount: "", unit: "flat" });
   const [rateSaving, setRateSaving]   = useState(false);
 
-  // Rapaport
+  // Rapaport (individual solitaire diamonds)
   const [rapEntries, setRapEntries]   = useState<RapEntry[]>([]);
   const [editingRap, setEditingRap]   = useState<string | null>(null);
   const [rapBuf, setRapBuf]           = useState<Partial<RapEntry>>({});
@@ -73,6 +80,23 @@ export default function PricingSettingsPage() {
   const [showAddRap, setShowAddRap]   = useState(false);
   const [newRap, setNewRap]           = useState({ shape: "Round", size_min: "", size_max: "", colour: "G", clarity: "VS1", price_hundreds_usd: "", rap_date: "" });
   const [addRapSaving, setAddRapSaving] = useState(false);
+
+  // Parcel prices (melee stones)
+  const [parcels, setParcels]           = useState<ParcelEntry[]>([]);
+  const [editingParcel, setEditingParcel] = useState<string | null>(null);
+  const [parcelBuf, setParcelBuf]       = useState<Partial<ParcelEntry>>({});
+  const [parcelSaving, setParcelSaving] = useState(false);
+  const [showAddParcel, setShowAddParcel] = useState(false);
+  const [newParcel, setNewParcel]       = useState({
+    size_min: "", size_max: "", colour_group: "G-H", clarity: "SI1",
+    price_usd_per_carat: "", rap_date: TODAY,
+  });
+  const [addParcelSaving, setAddParcelSaving] = useState(false);
+
+  // FX rate
+  const [fxRate, setFxRate]     = useState("1.58");
+  const [fxSaving, setFxSaving] = useState(false);
+  const [fxSaved, setFxSaved]   = useState(false);
 
   useEffect(() => {
     if (hydrated && user && user.role !== "admin") router.replace("/");
@@ -98,10 +122,24 @@ export default function PricingSettingsPage() {
     setRapEntries(Array.isArray(d) ? d : []);
   }, [tid]);
 
+  const loadParcels = useCallback(async () => {
+    const res = await fetch("/api/pricing-hub/rapaport-parcels", { credentials: "include", headers: { "x-tenant-id": tid } });
+    const d = await res.json();
+    setParcels(Array.isArray(d) ? d : []);
+  }, [tid]);
+
+  const loadFx = useCallback(async () => {
+    const res = await fetch("/api/pricing-hub/tenant-features", { credentials: "include", headers: { "x-tenant-id": tid } });
+    if (res.ok) {
+      const d = await res.json();
+      if (d.fx_usd_aud != null) setFxRate(String(d.fx_usd_aud));
+    }
+  }, [tid]);
+
   useEffect(() => {
     if (!hydrated || !user || user.role !== "admin") return;
-    loadGold(); loadRates(); loadRap();
-  }, [hydrated, user, loadGold, loadRates, loadRap]);
+    loadGold(); loadRates(); loadRap(); loadParcels(); loadFx();
+  }, [hydrated, user, loadGold, loadRates, loadRap, loadParcels, loadFx]);
 
   if (!hydrated || !user) return null;
   if (user.role !== "admin") return null;
@@ -191,12 +229,73 @@ export default function PricingSettingsPage() {
     loadRap();
   }
 
+  // ── Parcel handlers ────────────────────────────────────────────────────────
+
+  async function saveParcel(id: string) {
+    setParcelSaving(true);
+    await fetch(`/api/pricing-hub/rapaport-parcels/${id}`, {
+      method: "PATCH", credentials: "include",
+      headers: { "Content-Type": "application/json", "x-tenant-id": tid },
+      body: JSON.stringify({
+        price_usd_per_carat: Number(parcelBuf.price_usd_per_carat ?? 0),
+        rap_date: parcelBuf.rap_date,
+      }),
+    });
+    setParcelSaving(false); setEditingParcel(null);
+    loadParcels();
+  }
+
+  async function deleteParcel(id: string) {
+    if (!confirm("Delete this parcel price entry?")) return;
+    await fetch(`/api/pricing-hub/rapaport-parcels/${id}`, {
+      method: "DELETE", credentials: "include",
+      headers: { "x-tenant-id": tid },
+    });
+    loadParcels();
+  }
+
+  async function addParcel() {
+    if (!newParcel.size_min || !newParcel.size_max || !newParcel.price_usd_per_carat || !newParcel.rap_date) return;
+    setAddParcelSaving(true);
+    await fetch("/api/pricing-hub/rapaport-parcels", {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json", "x-tenant-id": tid },
+      body: JSON.stringify({
+        size_min:            parseFloat(newParcel.size_min),
+        size_max:            parseFloat(newParcel.size_max),
+        colour_group:        newParcel.colour_group,
+        clarity:             newParcel.clarity,
+        price_usd_per_carat: parseFloat(newParcel.price_usd_per_carat),
+        rap_date:            newParcel.rap_date,
+      }),
+    });
+    setAddParcelSaving(false);
+    setShowAddParcel(false);
+    setNewParcel({ size_min: "", size_max: "", colour_group: "G-H", clarity: "SI1", price_usd_per_carat: "", rap_date: TODAY });
+    loadParcels();
+  }
+
+  async function saveFxRate() {
+    const val = parseFloat(fxRate);
+    if (isNaN(val) || val <= 0) return;
+    setFxSaving(true);
+    await fetch("/api/pricing-hub/tenant-features", {
+      method: "PATCH", credentials: "include",
+      headers: { "Content-Type": "application/json", "x-tenant-id": tid },
+      body: JSON.stringify({ fx_usd_aud: val }),
+    });
+    setFxSaving(false);
+    setFxSaved(true);
+    setTimeout(() => setFxSaved(false), 2000);
+  }
+
   // ── Tab bar ────────────────────────────────────────────────────────────────
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "gold",    label: "Gold Prices" },
     { key: "rates",   label: "Rate Cards" },
     { key: "rapaport",label: "Rapaport" },
+    { key: "parcels", label: "Parcel Prices" },
   ];
 
   const RateSection = ({ cardType, title }: { cardType: "our_build" | "supplier"; title: string }) => {
@@ -371,6 +470,129 @@ export default function PricingSettingsPage() {
           <RateSection cardType="our_build" title="Our Build Rates" />
           <div style={{ borderTop: "1px solid #E8E8F0", paddingTop: 20 }}>
             <RateSection cardType="supplier" title="Supplier Rates" />
+          </div>
+        </div>
+      )}
+
+      {/* ── Parcel Prices tab ───────────────────────────────────────────────── */}
+      {tab === "parcels" && (
+        <div>
+          {/* Banner */}
+          <div style={{ background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 10, padding: "12px 16px", marginBottom: 20, fontSize: 13, color: "#3730A3" }}>
+            <strong>Rapaport Parcel Prices — {new Date().toLocaleDateString("en-AU", { month: "long", year: "numeric" })}</strong>
+            {" · "}Prices in USD/ct · Updated weekly · API integration pending — enter manually.
+          </div>
+
+          {/* FX Rate */}
+          <div style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 10, padding: "14px 16px", marginBottom: 20, display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>USD / AUD Exchange Rate</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 12, color: "#9CA3AF" }}>1 USD =</span>
+              <input
+                type="number" step="0.0001" min="0.5" max="3"
+                value={fxRate}
+                onChange={e => setFxRate(e.target.value)}
+                style={{ ...inputStyle, width: 80, textAlign: "right" as const }}
+              />
+              <span style={{ fontSize: 12, color: "#9CA3AF" }}>AUD</span>
+            </div>
+            <button onClick={saveFxRate} disabled={fxSaving} style={saveBtnStyle(fxSaved)}>
+              {fxSaved ? "Saved ✓" : fxSaving ? "…" : "Save"}
+            </button>
+            <span style={{ fontSize: 12, color: "#9CA3AF" }}>Used to convert USD parcel prices to AUD cost.</span>
+          </div>
+
+          {/* Table header + add button */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: "#374151" }}>Melee Parcel Prices</h3>
+            <button onClick={() => setShowAddParcel(v => !v)} style={{ padding: "7px 14px", background: "#635BFF", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+              + Add Entry
+            </button>
+          </div>
+
+          {/* Add form */}
+          {showAddParcel && (
+            <div style={{ background: "#F9FAFB", border: "1px solid #E8E8F0", borderRadius: 10, padding: 16, marginBottom: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
+                {[
+                  { label: "Min ct", el: <input type="number" step="0.001" value={newParcel.size_min} onChange={e => setNewParcel(p => ({ ...p, size_min: e.target.value }))} placeholder="0.010" style={{ ...inputStyle, width: "100%" }} /> },
+                  { label: "Max ct", el: <input type="number" step="0.001" value={newParcel.size_max} onChange={e => setNewParcel(p => ({ ...p, size_max: e.target.value }))} placeholder="0.019" style={{ ...inputStyle, width: "100%" }} /> },
+                  { label: "Colour Group", el: <select value={newParcel.colour_group} onChange={e => setNewParcel(p => ({ ...p, colour_group: e.target.value }))} style={{ ...inputStyle, width: "100%" }}>{COLOUR_GROUPS.map(c => <option key={c} value={c}>{c}</option>)}</select> },
+                  { label: "Clarity", el: <select value={newParcel.clarity} onChange={e => setNewParcel(p => ({ ...p, clarity: e.target.value }))} style={{ ...inputStyle, width: "100%" }}>{PARCEL_CLARITIES.map(c => <option key={c} value={c}>{c}</option>)}</select> },
+                  { label: "USD/ct", el: <input type="number" step="0.01" value={newParcel.price_usd_per_carat} onChange={e => setNewParcel(p => ({ ...p, price_usd_per_carat: e.target.value }))} placeholder="85.00" style={{ ...inputStyle, width: "100%" }} /> },
+                  { label: "Rap Date", el: <input type="date" value={newParcel.rap_date} onChange={e => setNewParcel(p => ({ ...p, rap_date: e.target.value }))} style={{ ...inputStyle, width: "100%" }} /> },
+                ].map(({ label, el }) => (
+                  <div key={label}>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 3 }}>{label}</label>
+                    {el}
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={addParcel} disabled={addParcelSaving} style={saveBtnStyle(false)}>{addParcelSaving ? "Saving…" : "Add"}</button>
+                <button onClick={() => setShowAddParcel(false)} style={{ padding: "4px 12px", background: "transparent", color: "#6B7280", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {/* Parcels table */}
+          <div style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, overflow: "hidden" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  {["Size Range (ct)", "Colour Group", "Clarity", "USD/ct", "Rap Date", ""].map(h => (
+                    <th key={h} style={{ ...thStyle, textAlign: h === "USD/ct" ? "right" as const : "left" as const }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {parcels.length === 0 ? (
+                  <tr><td colSpan={6} style={{ padding: 28, textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>No parcel price entries yet. Click "+ Add Entry" to add one.</td></tr>
+                ) : parcels.map((p, i) => {
+                  const isEditing = editingParcel === p.id;
+                  return (
+                    <tr key={p.id} style={{ borderBottom: i < parcels.length - 1 ? "1px solid #F3F4F6" : "none" }}>
+                      <td style={{ padding: "9px 12px", fontSize: 13 }}>
+                        {`${Number(p.size_min).toFixed(3)}–${Number(p.size_max).toFixed(3)}`}
+                      </td>
+                      <td style={{ padding: "9px 12px", fontSize: 13, fontWeight: 500 }}>{p.colour_group}</td>
+                      <td style={{ padding: "9px 12px", fontSize: 13 }}>{p.clarity}</td>
+                      <td style={{ padding: "9px 12px", fontSize: 13, textAlign: "right" as const, fontWeight: 600, color: "#1A1760" }}>
+                        {isEditing
+                          ? <input type="number" step="0.01" value={String(parcelBuf.price_usd_per_carat ?? p.price_usd_per_carat)} onChange={e => setParcelBuf(b => ({ ...b, price_usd_per_carat: parseFloat(e.target.value) }))} style={{ ...inputStyle, width: 70, textAlign: "right" as const }} />
+                          : `$${Number(p.price_usd_per_carat).toFixed(2)}`
+                        }
+                      </td>
+                      <td style={{ padding: "9px 12px", fontSize: 13, color: "#6B7280" }}>
+                        {isEditing
+                          ? <input type="date" value={String(parcelBuf.rap_date ?? p.rap_date)} onChange={e => setParcelBuf(b => ({ ...b, rap_date: e.target.value }))} style={{ ...inputStyle, width: 120 }} />
+                          : new Date(p.rap_date).toLocaleDateString("en-AU")
+                        }
+                      </td>
+                      <td style={{ padding: "9px 12px" }}>
+                        <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
+                          {isEditing ? (
+                            <>
+                              <button onClick={() => saveParcel(p.id)} disabled={parcelSaving} style={saveBtnStyle(false)}>{parcelSaving ? "…" : "Save"}</button>
+                              <button onClick={() => setEditingParcel(null)} style={{ padding: "3px 8px", background: "transparent", color: "#6B7280", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>✕</button>
+                            </>
+                          ) : (
+                            <>
+                              <button onClick={() => { setEditingParcel(p.id); setParcelBuf({ price_usd_per_carat: p.price_usd_per_carat, rap_date: p.rap_date }); }}
+                                style={{ background: "transparent", border: "none", cursor: "pointer", color: "#9CA3AF", fontSize: 13 }}
+                                onMouseEnter={e => (e.currentTarget.style.color = "#635BFF")} onMouseLeave={e => (e.currentTarget.style.color = "#9CA3AF")}>✎</button>
+                              <button onClick={() => deleteParcel(p.id)}
+                                style={{ background: "transparent", border: "none", cursor: "pointer", color: "#9CA3AF", fontSize: 13 }}
+                                onMouseEnter={e => (e.currentTarget.style.color = "#DC2626")} onMouseLeave={e => (e.currentTarget.style.color = "#9CA3AF")}>✕</button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

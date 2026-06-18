@@ -22,14 +22,18 @@ export async function GET(): Promise<NextResponse> {
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   let body: {
-    product_id?:    string;
-    name?:          string;
-    metal_type?:    string;
-    metal_grams?:   number;
-    diamond_type?:  string;
-    pricing_mode?:  string;
-    last_direct_cost?: number;
-    notes?:         string;
+    product_id?:         string;
+    name?:               string;
+    metal_type?:         string;
+    metal_grams?:        number;
+    diamond_type?:       string;
+    pricing_mode?:       string;
+    last_direct_cost?:   number;
+    notes?:              string;
+    melee_quantity?:     number;
+    melee_carat_weight?: number;
+    melee_colour_group?: string;
+    melee_clarity?:      string;
   };
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
@@ -42,14 +46,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .insert({
       product_id:               body.product_id,
       name:                     body.name.trim(),
-      metal_type:               body.metal_type        ?? null,
-      metal_grams:              body.metal_grams        ?? null,
-      diamond_type:             body.diamond_type       ?? "none",
-      pricing_mode:             body.pricing_mode       ?? "our_build",
-      last_direct_cost:         body.last_direct_cost   ?? null,
-      active_pricing_mode:      body.pricing_mode       ?? "build",
+      metal_type:               body.metal_type         ?? null,
+      metal_grams:              body.metal_grams         ?? null,
+      diamond_type:             body.diamond_type        ?? "none",
+      pricing_mode:             body.pricing_mode        ?? "our_build",
+      last_direct_cost:         body.last_direct_cost    ?? null,
+      active_pricing_mode:      body.pricing_mode        ?? "build",
       target_margin_multiplier: 2.5,
-      notes:                    body.notes              ?? null,
+      notes:                    body.notes               ?? null,
+      melee_quantity:           body.melee_quantity      ?? null,
+      melee_carat_weight:       body.melee_carat_weight  ?? null,
+      melee_colour_group:       body.melee_colour_group  ?? null,
+      melee_clarity:            body.melee_clarity       ?? null,
     })
     .select()
     .single();

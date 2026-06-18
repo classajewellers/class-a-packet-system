@@ -31,6 +31,7 @@ export async function PATCH(
     "name", "metal_type", "metal_grams", "diamond_type",
     "pricing_mode", "last_direct_cost",
     "active_pricing_mode", "target_margin_multiplier", "current_retail", "notes",
+    "melee_quantity", "melee_carat_weight", "melee_colour_group", "melee_clarity",
   ];
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   for (const key of allowed) {

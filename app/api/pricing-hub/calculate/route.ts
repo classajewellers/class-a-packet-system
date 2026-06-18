@@ -40,7 +40,13 @@ function findMultiplier(cost: number, brackets: MarginBracket[]): { multiplier: 
 // ── Route ────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  let body: { variantId?: string };
+  let body: {
+    variantId?: string;
+    melee_quantity?: number;
+    melee_carat_weight?: number;
+    melee_colour_group?: string;
+    melee_clarity?: string;
+  };
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
   const { variantId } = body;
@@ -48,11 +54,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "variantId is required" }, { status: 400 });
   }
 
-  const tenantId = req.headers.get("x-tenant-id") ?? "";
+  // Resolve tenant from session cookie (same pattern as products GET)
+  let tenantId = req.headers.get("x-tenant-id") ?? "";
+  try {
+    const { createServerClient: createSSR } = await import("@supabase/ssr");
+    const sessionClient = createSSR(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { cookies: { getAll() { return req.cookies.getAll(); }, setAll() {} } }
+    );
+    const { data: { user } } = await sessionClient.auth.getUser();
+    if (user) {
+      const db2 = createServerSupabaseClient();
+      const { data: profile } = await db2.from("profiles").select("tenant_id").eq("auth_user_id", user.id).single();
+      if (profile?.tenant_id) tenantId = profile.tenant_id;
+    }
+  } catch { /* fall through to header value */ }
+
   const db = createServerSupabaseClient();
 
   // Fetch all data in parallel
-  const [variantRes, goldRes, rateRes, bracketRes] = await Promise.all([
+  const [variantRes, goldRes, rateRes, bracketRes, featuresRes] = await Promise.all([
     db.from("pricing_product_variants").select("*").eq("id", variantId).single(),
     db.from("pricing_gold_prices").select("id, metal_type, price_per_gram").order("metal_type"),
     db.from("pricing_rate_cards")
@@ -63,16 +85,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     db.from("pricing_margin_brackets")
       .select("id, cost_min, cost_max, multiplier, stone_type")
       .order("cost_min", { ascending: true }),
+    db.from("tenant_features")
+      .select("fx_usd_aud")
+      .eq("tenant_id", tenantId)
+      .single(),
   ]);
 
   if (variantRes.error || !variantRes.data) {
     return NextResponse.json({ error: "Variant not found" }, { status: 404 });
   }
 
-  const variant    = variantRes.data;
-  const goldPrices = (goldRes.data ?? []) as GoldPrice[];
-  const rateCards  = (rateRes.data ?? []) as RateCard[];
+  const variant     = variantRes.data;
+  const goldPrices  = (goldRes.data ?? []) as GoldPrice[];
+  const rateCards   = (rateRes.data ?? []) as RateCard[];
   const allBrackets = (bracketRes.data ?? []) as MarginBracket[];
+  const fxRate      = Number(featuresRes.data?.fx_usd_aud ?? 1.58);
+
+  // Melee fields: prefer request body override, fall back to what's stored on the variant
+  const meleeQty    = body.melee_quantity      ?? (variant.melee_quantity      != null ? Number(variant.melee_quantity)      : null);
+  const meleeCt     = body.melee_carat_weight  ?? (variant.melee_carat_weight  != null ? Number(variant.melee_carat_weight)  : null);
+  const meleeColour = body.melee_colour_group  ?? variant.melee_colour_group  ?? null;
+  const meleeClarity = body.melee_clarity      ?? variant.melee_clarity       ?? null;
 
   // ── Metal cost ────────────────────────────────────────────────────────────
   const metalGrams    = variant.metal_grams != null ? Number(variant.metal_grams) : null;
@@ -95,12 +128,44 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const labourCost    = matchingCards.reduce((s, r) => s + Number(r.amount), 0);
 
   // ── Fixed cost ────────────────────────────────────────────────────────────
-  // pricing_fixed_costs is not included in the current UI calculation.
-  // Reserved here for Phase 2 of the pricing engine.
   const fixedCost = 0;
 
+  // ── Melee stone cost ──────────────────────────────────────────────────────
+  let meleeCostAud     = 0;
+  let meleeCostUsd     = 0;
+  let meleePricePerCt  = 0;
+  let meleeTotalCarats = 0;
+  let meleeRapDate: string | null = null;
+  let meleeNote: string | null = null;
+
+  if (meleeQty != null && meleeQty > 0 && meleeCt != null && meleeCt > 0 && meleeColour && meleeClarity) {
+    meleeTotalCarats = meleeQty * meleeCt;
+
+    // Look up the most recent matching parcel price
+    const { data: parcelRow } = await db
+      .from("rapaport_parcels")
+      .select("price_usd_per_carat, rap_date")
+      .eq("tenant_id", tenantId)
+      .eq("colour_group", meleeColour)
+      .eq("clarity", meleeClarity)
+      .lte("size_min", meleeCt)
+      .gte("size_max", meleeCt)
+      .order("rap_date", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (parcelRow) {
+      meleePricePerCt = Number(parcelRow.price_usd_per_carat);
+      meleeRapDate    = String(parcelRow.rap_date);
+      meleeCostUsd    = meleePricePerCt * meleeTotalCarats;
+      meleeCostAud    = meleeCostUsd * fxRate;
+    } else {
+      meleeNote = `No parcel price found for ${meleeColour} / ${meleeClarity} at ${meleeCt}ct — check Rapaport parcel settings`;
+    }
+  }
+
   // ── Total ────────────────────────────────────────────────────────────────
-  const totalCost = metalCost + labourCost + fixedCost;
+  const totalCost = metalCost + labourCost + fixedCost + meleeCostAud;
 
   // ── Margin bracket lookup ─────────────────────────────────────────────────
   // Filter by stone_type matching the variant's diamond_type.
@@ -138,6 +203,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     breakdown.push({ type: "fixed", label: "Fixed overheads", amount: fixedCost });
   }
 
+  if (meleeCostAud > 0) {
+    breakdown.push({
+      type:   "melee",
+      label:  `${meleeQty} × ${meleeCt}ct ${meleeColour}/${meleeClarity} @ USD $${meleePricePerCt.toFixed(2)}/ct × ${fxRate.toFixed(4)} AUD`,
+      amount: meleeCostAud,
+    });
+  }
+
   return NextResponse.json({
     variantId,
     variantName:   variant.name,
@@ -150,6 +223,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     metalCost,
     labourCost,
     fixedCost,
+    meleeCostAud,
+    meleeCostUsd,
+    meleePriceUsedUsdPerCt: meleePricePerCt,
+    meleeTotalCarats,
+    meleeRapDate,
     totalCost,
     // Margin
     multiplier,
@@ -174,5 +252,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     diamondNote: stoneKey
       ? `${stoneKey === "natural" ? "Natural" : "Lab grown"} diamond — stone cost not yet included`
       : null,
+    meleeNote,
   });
 }

@@ -493,6 +493,60 @@ export default function InventoryItemPage({ params }: Params) {
         <EF label="Dimensions" field="dimensions" />
       </SectionWrap>
 
+      {/* ── Melee Stones ── */}
+      {(editing || (piece.melee_quantity != null && piece.melee_quantity > 0)) && (
+        <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 24, marginBottom: 16 }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 12, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>
+            Melee Stones (under 0.30ct)
+          </h3>
+          {!editing ? (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 24px" }}>
+              <FieldView label="Quantity" value={piece.melee_quantity} />
+              <FieldView label="ct / stone" value={piece.melee_carat_weight} />
+              <FieldView label="Colour Group" value={piece.melee_colour_group} />
+              <FieldView label="Clarity" value={piece.melee_clarity} />
+              {piece.melee_quantity != null && piece.melee_carat_weight != null && (
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 3 }}>Total Melee</div>
+                  <div style={{ fontSize: 14, color: "#111827" }}>
+                    {(Number(piece.melee_quantity) * Number(piece.melee_carat_weight)).toFixed(3)}ct
+                    <span style={{ color: "#9CA3AF", marginLeft: 6, fontSize: 13 }}>
+                      ({piece.melee_quantity} × {piece.melee_carat_weight}ct)
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 24px" }}>
+              <EF label="Quantity" field={"melee_quantity" as keyof InventoryPiece} type="number" />
+              <EF label="ct / stone" field={"melee_carat_weight" as keyof InventoryPiece} type="number" />
+              <EF
+                label="Colour Group"
+                field={"melee_colour_group" as keyof InventoryPiece}
+                opts={["D-F", "G-H", "I-J", "K-L", "M-N"].map(g => ({ value: g, label: g }))}
+              />
+              <EF
+                label="Clarity"
+                field={"melee_clarity" as keyof InventoryPiece}
+                opts={["VVS", "VS", "SI1", "SI2", "SI3", "I1", "I2", "I3"].map(c => ({ value: c, label: c }))}
+              />
+              {(form.melee_quantity as number) > 0 && (form.melee_carat_weight as number) > 0 && (
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 3 }}>Total Melee</div>
+                  <div style={{ fontSize: 14, color: "#111827" }}>
+                    {(Number(form.melee_quantity) * Number(form.melee_carat_weight)).toFixed(3)}ct
+                    <span style={{ color: "#9CA3AF", marginLeft: 6, fontSize: 13 }}>
+                      ({form.melee_quantity} × {form.melee_carat_weight}ct)
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Pricing & Valuation — manager only ── */}
       {isManager && (
         <>

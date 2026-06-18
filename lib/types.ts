@@ -491,6 +491,11 @@ export interface InventoryPiece {
   notes: string | null;
   created_at: string;
   updated_at: string | null;
+  // melee stone fields
+  melee_quantity?: number | null;
+  melee_carat_weight?: number | null;
+  melee_colour_group?: string | null;
+  melee_clarity?: string | null;
   // product hierarchy
   product_id?: string | null;
   variant_id?: string | null;
