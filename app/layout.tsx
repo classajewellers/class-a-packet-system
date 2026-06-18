@@ -13,13 +13,13 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
     title: "Vault",
   },
-  themeColor: "#635BFF",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
+  themeColor: "#635BFF",
 };
 
 export default function RootLayout({
