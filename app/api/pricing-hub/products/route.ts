@@ -22,7 +22,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
-  let body: { name?: string; product_type?: string; product_status?: string; category?: string; description?: string };
+  let body: { name?: string; category?: string; description?: string; active?: boolean };
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
   if (!body.name?.trim()) return NextResponse.json({ error: "name is required" }, { status: 400 });
@@ -31,12 +31,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const { data, error } = await db
     .from("pricing_products")
     .insert({
-      name:           body.name.trim(),
-      product_type:   body.product_type   ?? null,
-      product_status: body.product_status ?? "in_stock",
-      category:       body.category       ?? null,
-      description:    body.description    ?? null,
-      tenant_id:      tenantId            || null,
+      name:        body.name.trim(),
+      category:    body.category    ?? null,
+      description: body.description ?? null,
+      active:      body.active      ?? true,
+      tenant_id:   tenantId         || null,
     })
     .select()
     .single();

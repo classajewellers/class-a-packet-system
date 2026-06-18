@@ -34,7 +34,7 @@ export async function PATCH(
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
-  const allowed = ["name", "category", "description", "active", "product_type", "product_status"];
+  const allowed = ["name", "category", "description", "active"];
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   for (const key of allowed) {
     if (key in body) patch[key] = body[key];

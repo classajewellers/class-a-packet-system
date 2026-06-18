@@ -12,35 +12,15 @@ interface Variant { id: string; pricing_mode: string | null; }
 interface Product {
   id: string;
   name: string;
-  product_type: string | null;
-  product_status: string | null;
+  category: string | null;
   active: boolean;
   pricing_product_variants: Variant[];
 }
 
-const STATUS_OPTIONS = ["in_stock", "made_to_order", "custom_order"] as const;
-type Status = typeof STATUS_OPTIONS[number];
-
-const STATUS_LABELS: Record<Status, string> = {
-  in_stock:      "In Stock",
-  made_to_order: "Made to Order",
-  custom_order:  "Custom Order",
-};
-
-const STATUS_COLORS: Record<Status, { bg: string; color: string }> = {
-  in_stock:      { bg: "#F0FDF4", color: "#16A34A" },
-  made_to_order: { bg: "#FFFBEB", color: "#D97706" },
-  custom_order:  { bg: "#EEF2FF", color: "#635BFF" },
-};
-
-function statusBadge(status: string | null) {
-  const s = (status ?? "in_stock") as Status;
-  const c = STATUS_COLORS[s] ?? STATUS_COLORS.in_stock;
-  return (
-    <span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: c.bg, color: c.color }}>
-      {STATUS_LABELS[s] ?? s}
-    </span>
-  );
+function statusBadge(active: boolean) {
+  return active
+    ? <span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: "#F0FDF4", color: "#16A34A" }}>Active</span>
+    : <span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: "#F3F4F6", color: "#6B7280" }}>Inactive</span>;
 }
 
 function modeDisplay(variants: Variant[]): string {
@@ -73,12 +53,12 @@ export default function PricingProductsPage() {
 
   // New product form
   const [newName, setNewName]         = useState("");
-  const [newType, setNewType]         = useState("");
-  const [newStatus, setNewStatus]     = useState<Status>("in_stock");
+  const [newCategory, setNewCategory] = useState("");
+  const [newActive, setNewActive]     = useState(true);
 
   // Inline edit state
   const [editingId, setEditingId]     = useState<string | null>(null);
-  const [editBuf, setEditBuf]         = useState({ name: "", product_type: "", product_status: "in_stock" as Status });
+  const [editBuf, setEditBuf]         = useState({ name: "", category: "", active: true });
   const [editSaving, setEditSaving]   = useState(false);
 
   useEffect(() => {
@@ -108,18 +88,18 @@ export default function PricingProductsPage() {
     const res = await fetch("/api/pricing-hub/products", {
       method: "POST", credentials: "include",
       headers: { "Content-Type": "application/json", "x-tenant-id": user?.tenantId ?? "" },
-      body: JSON.stringify({ name: newName.trim(), product_type: newType.trim() || null, product_status: newStatus }),
+      body: JSON.stringify({ name: newName.trim(), category: newCategory.trim() || null, active: newActive }),
     });
     const data = await res.json();
     setSaving(false);
     if (!res.ok) { setFormError(data.error ?? "Failed"); return; }
-    setNewName(""); setNewType(""); setNewStatus("in_stock"); setShowForm(false);
+    setNewName(""); setNewCategory(""); setNewActive(true); setShowForm(false);
     load();
   }
 
   function startEdit(p: Product) {
     setEditingId(p.id);
-    setEditBuf({ name: p.name, product_type: p.product_type ?? "", product_status: (p.product_status ?? "in_stock") as Status });
+    setEditBuf({ name: p.name, category: p.category ?? "", active: p.active });
   }
 
   async function saveEdit(id: string) {
@@ -127,7 +107,7 @@ export default function PricingProductsPage() {
     await fetch(`/api/pricing-hub/products/${id}`, {
       method: "PATCH", credentials: "include",
       headers: { "Content-Type": "application/json", "x-tenant-id": user?.tenantId ?? "" },
-      body: JSON.stringify({ name: editBuf.name, product_type: editBuf.product_type || null, product_status: editBuf.product_status }),
+      body: JSON.stringify({ name: editBuf.name, category: editBuf.category || null, active: editBuf.active }),
     });
     setEditSaving(false); setEditingId(null);
     load();
@@ -176,13 +156,14 @@ export default function PricingProductsPage() {
               <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Diamond Solitaire Ring" style={inputStyle} />
             </div>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Type</label>
-              <input value={newType} onChange={e => setNewType(e.target.value)} placeholder="e.g. Ring" style={inputStyle} />
+              <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Category</label>
+              <input value={newCategory} onChange={e => setNewCategory(e.target.value)} placeholder="e.g. Ring" style={inputStyle} />
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Status</label>
-              <select value={newStatus} onChange={e => setNewStatus(e.target.value as Status)} style={{ ...inputStyle, width: "100%" }}>
-                {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+              <select value={newActive ? "active" : "inactive"} onChange={e => setNewActive(e.target.value === "active")} style={{ ...inputStyle, width: "100%" }}>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
               </select>
             </div>
             <button onClick={createProduct} disabled={saving} style={{ padding: "7px 16px", background: saving ? "#E8E8F0" : "#635BFF", color: saving ? "#9CA3AF" : "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: saving ? "wait" : "pointer", whiteSpace: "nowrap" as const }}>
@@ -201,7 +182,7 @@ export default function PricingProductsPage() {
           <thead>
             <tr>
               <th style={thStyle}>Product</th>
-              <th style={thStyle}>Type</th>
+              <th style={thStyle}>Category</th>
               <th style={thStyle}>Status</th>
               <th style={{ ...thStyle, textAlign: "center" }}>Variants</th>
               <th style={thStyle}>Pricing Mode</th>
@@ -225,16 +206,17 @@ export default function PricingProductsPage() {
                   </td>
                   <td style={{ padding: "10px 14px" }}>
                     {isEditing
-                      ? <input value={editBuf.product_type} onChange={e => setEditBuf(b => ({ ...b, product_type: e.target.value }))} placeholder="Type" style={{ ...inputStyle, width: 100 }} />
-                      : <span style={{ fontSize: 13, color: "#6B7280" }}>{p.product_type ?? "—"}</span>
+                      ? <input value={editBuf.category} onChange={e => setEditBuf(b => ({ ...b, category: e.target.value }))} placeholder="Category" style={{ ...inputStyle, width: 100 }} />
+                      : <span style={{ fontSize: 13, color: "#6B7280" }}>{p.category ?? "—"}</span>
                     }
                   </td>
                   <td style={{ padding: "10px 14px" }}>
                     {isEditing
-                      ? <select value={editBuf.product_status} onChange={e => setEditBuf(b => ({ ...b, product_status: e.target.value as Status }))} style={{ ...inputStyle, width: 140 }}>
-                          {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+                      ? <select value={editBuf.active ? "active" : "inactive"} onChange={e => setEditBuf(b => ({ ...b, active: e.target.value === "active" }))} style={{ ...inputStyle, width: 110 }}>
+                          <option value="active">Active</option>
+                          <option value="inactive">Inactive</option>
                         </select>
-                      : statusBadge(p.product_status)
+                      : statusBadge(p.active)
                     }
                   </td>
                   <td style={{ padding: "10px 14px", textAlign: "center", fontSize: 13, color: "#374151" }}>
