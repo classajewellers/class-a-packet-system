@@ -94,7 +94,7 @@ export default function PricingProductsPage() {
     setSaving(false);
     if (!res.ok) { setFormError(data.error ?? "Failed"); return; }
     setNewName(""); setNewCategory(""); setNewActive(true); setShowForm(false);
-    load();
+    await load();
   }
 
   function startEdit(p: Product) {
