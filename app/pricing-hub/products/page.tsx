@@ -2,7 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import Link from "next/link";
@@ -47,6 +47,7 @@ export default function PricingProductsPage() {
 
   const [products, setProducts]       = useState<Product[]>([]);
   const [loading, setLoading]         = useState(true);
+  const [refreshKey, setRefreshKey]   = useState(0);
   const [showForm, setShowForm]       = useState(false);
   const [saving, setSaving]           = useState(false);
   const [formError, setFormError]     = useState<string | null>(null);
@@ -65,19 +66,21 @@ export default function PricingProductsPage() {
     if (hydrated && user && user.role !== "admin") router.replace("/");
   }, [hydrated, user, router]);
 
-  const load = useCallback(async () => {
+  // Fetch products whenever refreshKey bumps — cache: no-store prevents stale GET responses
+  useEffect(() => {
     if (!hydrated || !user || user.role !== "admin") return;
+    let cancelled = false;
     setLoading(true);
-    const res = await fetch("/api/pricing-hub/products", {
+    fetch("/api/pricing-hub/products", {
       credentials: "include",
+      cache: "no-store",
       headers: { "x-tenant-id": user.tenantId ?? "" },
-    });
-    const data = await res.json();
-    setProducts(Array.isArray(data) ? data : []);
-    setLoading(false);
-  }, [hydrated, user]);
-
-  useEffect(() => { load(); }, [load]);
+    })
+      .then(r => r.json())
+      .then(data => { if (!cancelled) { setProducts(Array.isArray(data) ? data : []); setLoading(false); } })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [hydrated, user, refreshKey]);
 
   if (!hydrated || !user) return null;
   if (user.role !== "admin") return null;
@@ -94,7 +97,7 @@ export default function PricingProductsPage() {
     setSaving(false);
     if (!res.ok) { setFormError(data.error ?? "Failed"); return; }
     setNewName(""); setNewCategory(""); setNewActive(true); setShowForm(false);
-    await load();
+    setRefreshKey(k => k + 1);
   }
 
   function startEdit(p: Product) {
@@ -110,7 +113,7 @@ export default function PricingProductsPage() {
       body: JSON.stringify({ name: editBuf.name, category: editBuf.category || null, active: editBuf.active }),
     });
     setEditSaving(false); setEditingId(null);
-    load();
+    setRefreshKey(k => k + 1);
   }
 
   async function deleteProduct(id: string) {
@@ -119,7 +122,7 @@ export default function PricingProductsPage() {
       method: "DELETE", credentials: "include",
       headers: { "x-tenant-id": user?.tenantId ?? "" },
     });
-    load();
+    setRefreshKey(k => k + 1);
   }
 
   const PencilIcon = () => (
