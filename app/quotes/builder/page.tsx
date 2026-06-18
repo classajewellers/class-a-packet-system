@@ -11,6 +11,7 @@ import { generateQuoteHTML } from "@/lib/quoteGenerator";
 import { calculateRetailPrice, calculateBlendedRetailFromBrackets, calculateMultiplier, multiplierColour } from "@/lib/marginCalculator";
 import type { BlendedBreakdownLine } from "@/lib/marginCalculator";
 import NivodaModal, { type NivodaStone } from "@/components/NivodaModal";
+import CharmNecklaceBuilder, { type CharmLineItem } from "@/components/CharmNecklaceBuilder";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -747,7 +748,12 @@ function QuoteBuilderPageInner() {
         if (q.customer_first_name) setCustomerSearch(`${q.customer_first_name ?? ""} ${q.customer_last_name ?? ""}`.trim());
         // Store existing builder data so we can append to it
         if (q.quote_builder_data && typeof q.quote_builder_data === "object") {
-          setExistingQbd(q.quote_builder_data as Record<string, unknown>);
+          const qbd = q.quote_builder_data as Record<string, unknown>;
+          setExistingQbd(qbd);
+          // Restore any charm items already on the quote
+          if (Array.isArray(qbd.charm_items)) {
+            setCharmItems(qbd.charm_items as CharmLineItem[]);
+          }
         }
       })
       .catch(() => {});
@@ -772,6 +778,11 @@ function QuoteBuilderPageInner() {
 
   // Items
   const [items, setItems] = useState<BuilderItem[]>([newItem(0)]);
+
+  // Charm necklace builder
+  const [featureConfigurableProducts, setFeatureConfigurableProducts] = useState(false);
+  const [showCharmBuilder, setShowCharmBuilder] = useState<"necklace" | "bracelet" | null>(null);
+  const [charmItems, setCharmItems] = useState<CharmLineItem[]>([]);
 
   // Nivoda
   const [showNivodaModal, setShowNivodaModal] = useState(false);
@@ -803,6 +814,16 @@ function QuoteBuilderPageInner() {
       .catch(() => {});
   }, [user?.tenantId]);
 
+  // ── Tenant features ────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!user?.tenantId) return;
+    fetch("/api/pricing-hub/tenant-features", { headers: { "x-tenant-id": user.tenantId } })
+      .then(r => r.json())
+      .then(json => { if (json.feature_configurable_products) setFeatureConfigurableProducts(true); })
+      .catch(() => {});
+  }, [user?.tenantId]);
+
   // ── Customer search ────────────────────────────────────────────────────────
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -830,7 +851,8 @@ function QuoteBuilderPageInner() {
     [items, metalRates, fixedCosts, marginBrackets, isManager]
   );
 
-  const grandTotal = useMemo(() => allPricings.reduce((sum, p) => sum + p.finalPrice, 0), [allPricings]);
+  const charmTotal = useMemo(() => charmItems.reduce((sum, c) => sum + Number(c.retail_price), 0), [charmItems]);
+  const grandTotal = useMemo(() => allPricings.reduce((sum, p) => sum + p.finalPrice, 0) + charmTotal, [allPricings, charmTotal]);
 
   // ── Nivoda stone selection ─────────────────────────────────────────────────
 
@@ -926,6 +948,7 @@ function QuoteBuilderPageInner() {
       const qbd = {
         version: 2,
         builder_items: builderItemsData,
+        charm_items: charmItems.length > 0 ? charmItems : undefined,
         total_quoted_price: grandTotal,
       };
 
@@ -941,10 +964,12 @@ function QuoteBuilderPageInner() {
         const existingItems = (existingQbd && Array.isArray(existingQbd.builder_items))
           ? (existingQbd.builder_items as Array<Record<string, unknown>>)
           : [];
+        const mergedCharmItems = charmItems.length > 0 ? charmItems : undefined;
         const mergedQbd = {
           version: 2,
           builder_items: [...existingItems, ...builderItemsData],
-          total_quoted_price: grandTotal + (typeof existingQbd?.total_quoted_price === "number" ? existingQbd.total_quoted_price : 0),
+          charm_items: mergedCharmItems,
+          total_quoted_price: grandTotal,
         };
         res = await fetch(`/api/quotes/${appendToQuoteId}`, {
           method: "PATCH",
@@ -1163,10 +1188,52 @@ function QuoteBuilderPageInner() {
 
           <button
             onClick={() => setItems(prev => [...prev, newItem(prev.length)])}
-            style={{ ...addBtnStyle, width: "100%", justifyContent: "center", padding: "12px 0", fontSize: 14, marginBottom: 16 }}
+            style={{ ...addBtnStyle, width: "100%", justifyContent: "center", padding: "12px 0", fontSize: 14, marginBottom: 8 }}
             onMouseEnter={e => (e.currentTarget.style.background = "#E0E7FF")}
             onMouseLeave={e => (e.currentTarget.style.background = "#EEF2FF")}
           >+ Add Another Item</button>
+
+          {/* Charm builder buttons — feature-gated */}
+          {featureConfigurableProducts && (
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              <button
+                onClick={() => setShowCharmBuilder("necklace")}
+                style={{ ...addBtnStyle, flex: 1, justifyContent: "center", padding: "12px 0", fontSize: 14, borderColor: "#7C3AED", color: "#7C3AED" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "#EDE9FE")}
+                onMouseLeave={e => (e.currentTarget.style.background = "#EEF2FF")}
+              >✦ Add Charm Necklace</button>
+              <button
+                onClick={() => setShowCharmBuilder("bracelet")}
+                style={{ ...addBtnStyle, flex: 1, justifyContent: "center", padding: "12px 0", fontSize: 14, borderColor: "#7C3AED", color: "#7C3AED" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "#EDE9FE")}
+                onMouseLeave={e => (e.currentTarget.style.background = "#EEF2FF")}
+              >✦ Add Charm Bracelet</button>
+            </div>
+          )}
+
+          {/* Charm line items */}
+          {charmItems.map(ci => (
+            <div key={ci.id} style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, padding: "16px 20px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <span style={{ fontSize: 10, background: "#EDE9FE", color: "#4C1D95", padding: "1px 8px", borderRadius: 10, fontWeight: 700, textTransform: "uppercase" }}>CLASS A CUSTOM</span>
+                  <span style={{ fontSize: 12, color: "#6B7280" }}>{ci.product_type === "bracelet" ? "Charm Bracelet" : "Charm Necklace"}</span>
+                </div>
+                <p style={{ fontSize: 13, color: "#374151", margin: "0 0 4px", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ci.description}</p>
+                <p style={{ fontSize: 12, color: "#9CA3AF", margin: 0 }}>
+                  {ci.selected_charms?.filter(c => c.from_stock).length ?? 0} from stock,{" "}
+                  {ci.selected_charms?.filter(c => !c.from_stock).length ?? 0} to order
+                </p>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+                <span style={{ fontSize: 18, fontWeight: 800, color: "#1A1760" }}>${Number(ci.retail_price).toLocaleString("en-AU")}</span>
+                <button
+                  onClick={() => setCharmItems(prev => prev.filter(x => x.id !== ci.id))}
+                  style={{ background: "#FEE2E2", border: "none", borderRadius: 6, width: 28, height: 28, cursor: "pointer", color: "#DC2626", fontSize: 14, fontWeight: 700 }}
+                >×</button>
+              </div>
+            </div>
+          ))}
 
           {/* Notes */}
           <div style={cardStyle}>
@@ -1189,15 +1256,15 @@ function QuoteBuilderPageInner() {
 
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>
-                {items.length > 1 ? "Grand Total (incl. GST)" : "Quoted Price (incl. GST)"}
+                {(items.length > 1 || charmItems.length > 0) ? "Grand Total (incl. GST)" : "Quoted Price (incl. GST)"}
               </div>
               <div style={{ fontSize: 40, fontWeight: 800, color: "#1A1A2E", lineHeight: 1 }}>
                 {grandTotal > 0 ? `$${grandTotal.toLocaleString("en-AU")}` : "—"}
               </div>
             </div>
 
-            {/* Per-item breakdown when multiple */}
-            {items.length > 1 && (
+            {/* Per-item breakdown when multiple items or charm items */}
+            {(items.length > 1 || charmItems.length > 0) && (
               <div style={{ marginBottom: 20, fontSize: 13 }}>
                 {items.map((item, idx) => {
                   const p = allPricings[idx];
@@ -1211,6 +1278,12 @@ function QuoteBuilderPageInner() {
                     </div>
                   );
                 })}
+                {charmItems.map(ci => (
+                  <div key={ci.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, padding: "6px 0", borderBottom: "1px solid #F3F4F6" }}>
+                    <span style={{ color: "#7C3AED", fontSize: 12 }}>✦ {ci.product_type === "bracelet" ? "Charm Bracelet" : "Charm Necklace"}</span>
+                    <span style={{ fontWeight: 600, color: "#7C3AED" }}>${Number(ci.retail_price).toLocaleString("en-AU")}</span>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -1234,6 +1307,18 @@ function QuoteBuilderPageInner() {
         onSelectStone={handleSelectNivodaStone}
         tenantId={user?.tenantId ?? ""}
       />
+
+      {showCharmBuilder && (
+        <CharmNecklaceBuilder
+          open={!!showCharmBuilder}
+          productType={showCharmBuilder}
+          tenantId={user?.tenantId ?? ""}
+          isManager={isManager}
+          quoteId={appendToQuoteId ?? undefined}
+          onClose={() => setShowCharmBuilder(null)}
+          onConfirm={item => setCharmItems(prev => [...prev, item])}
+        />
+      )}
 
       {toast && (
         <div style={{ position: "fixed", bottom: 24, right: 24, background: "#1A1A2E", color: "#fff", borderRadius: 10, padding: "12px 20px", fontSize: 14, fontWeight: 500, zIndex: 1000, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>

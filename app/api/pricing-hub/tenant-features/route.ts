@@ -49,18 +49,19 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
   const tenantId = await getTenantId(req);
   if (!tenantId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  let body: { fx_usd_aud?: number };
+  let body: { fx_usd_aud?: number; feature_configurable_products?: boolean };
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
   const db = createServerSupabaseClient();
 
+  const patch: Record<string, unknown> = { tenant_id: tenantId, updated_at: new Date().toISOString() };
+  if (typeof body.fx_usd_aud === "number") patch.fx_usd_aud = body.fx_usd_aud;
+  if (typeof body.feature_configurable_products === "boolean") patch.feature_configurable_products = body.feature_configurable_products;
+
   // Upsert — create the row if it doesn't exist yet
   const { data, error } = await db
     .from("tenant_features")
-    .upsert(
-      { tenant_id: tenantId, fx_usd_aud: body.fx_usd_aud ?? 1.58, updated_at: new Date().toISOString() },
-      { onConflict: "tenant_id" }
-    )
+    .upsert(patch, { onConflict: "tenant_id" })
     .select()
     .single();
 

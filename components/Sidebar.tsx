@@ -256,11 +256,12 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
               />
               {pricingHubExpanded && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
-                  <SubLink href="/pricing-hub"           label="Dashboard" />
-                  <SubLink href="/pricing-hub/products"  label="Products" />
-                  <SubLink href="/pricing-hub/suppliers" label="Suppliers" />
-                  <SubLink href="/pricing-hub/audit"     label="Audit" />
-                  <SubLink href="/pricing-hub/settings"  label="Settings" />
+                  <SubLink href="/pricing-hub"                  label="Dashboard" />
+                  <SubLink href="/pricing-hub/products"         label="Products" />
+                  <SubLink href="/pricing-hub/suppliers"        label="Suppliers" />
+                  <SubLink href="/pricing-hub/audit"            label="Audit" />
+                  <SubLink href="/pricing-hub/settings"         label="Settings" />
+                  <SubLink href="/pricing-hub/charm-library"    label="Charm Library" />
                 </div>
               )}
             </div>

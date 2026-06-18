@@ -263,7 +263,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
   // ── 8. Mark quote as converted (if this order was created from a quote) ─────
   if (formData.from_quote_id) {
     console.log("[submit] Marking quote as converted:", formData.from_quote_id);
-    const { error: quoteErr } = await supabase
+    const { data: quoteRow, error: quoteErr } = await supabase
       .from("quotes")
       .update({
         status:                 "converted",
@@ -271,10 +271,76 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
         converted_at:           new Date().toISOString(),
         packet_reference:       packet.reference_number,
       })
-      .eq("id", formData.from_quote_id);
+      .eq("id", formData.from_quote_id)
+      .select("quote_builder_data")
+      .single();
     if (quoteErr) {
       console.warn("[submit] Failed to mark quote as converted:", quoteErr.message);
     }
+
+    // ── 8a. Generate charm purchase orders for non-stock charms (fire-and-forget)
+    void (async () => {
+      try {
+        const qbd = quoteRow?.quote_builder_data as Record<string, unknown> | null;
+        const charmItems = Array.isArray(qbd?.charm_items) ? qbd.charm_items as Array<{ config_id?: string }> : [];
+        if (!charmItems.length) return;
+
+        const METAL_SUFFIX: Record<string, string> = {
+          "9ct_yellow": "9YG", "9ct_white": "9WG",
+          "18ct_yellow": "18YG", "18ct_white": "18WG",
+        };
+
+        for (const ci of charmItems) {
+          if (!ci.config_id) continue;
+          const { data: config } = await supabase
+            .from("charm_necklace_configs")
+            .select("*")
+            .eq("id", ci.config_id)
+            .eq("tenant_id", tenantId)
+            .single();
+          if (!config) continue;
+
+          type SelectedCharm = { component_id: string; name: string; supplier_code: string | null; cost: number | null; from_stock: boolean };
+          const selectedCharms: SelectedCharm[] = Array.isArray(config.selected_charms) ? config.selected_charms as SelectedCharm[] : [];
+          const toOrder = selectedCharms.filter(c => !c.from_stock);
+          if (!toOrder.length) continue;
+
+          const metalSuffix = METAL_SUFFIX[config.metal] ?? config.metal;
+          const poItems = toOrder.map(c => ({
+            supplier_code: c.supplier_code ? `${c.supplier_code}-${metalSuffix}` : null,
+            name: c.name, metal: config.metal, qty: 1, unit_cost: c.cost ?? 0,
+          }));
+          const totalCost = poItems.reduce((sum, i) => sum + i.unit_cost, 0);
+
+          const now = new Date();
+          const dateStr = now.toISOString().split("T")[0];
+          const datePart = dateStr.replace(/-/g, "");
+          const { count } = await supabase
+            .from("charm_purchase_orders")
+            .select("id", { count: "exact", head: true })
+            .eq("tenant_id", tenantId)
+            .gte("created_at", `${dateStr}T00:00:00Z`);
+          const seq = String((count ?? 0) + 1).padStart(4, "0");
+
+          await supabase.from("charm_purchase_orders").insert({
+            tenant_id: tenantId,
+            order_reference: `PO-${datePart}-${seq}`,
+            quote_id: formData.from_quote_id,
+            charm_necklace_config_id: config.id,
+            supplier: "McCaskills",
+            status: "pending",
+            items: poItems,
+            total_cost: totalCost,
+            notes: `Auto-generated on quote conversion — ${packet.reference_number}`,
+          });
+          await supabase.from("charm_necklace_configs")
+            .update({ purchase_order_generated: true, updated_at: now.toISOString() })
+            .eq("id", config.id);
+        }
+      } catch (err) {
+        console.warn("[submit] Charm PO generation failed:", err instanceof Error ? err.message : String(err));
+      }
+    })();
   }
 
   // ── 9. Return success ─────────────────────────────────────────────────────
