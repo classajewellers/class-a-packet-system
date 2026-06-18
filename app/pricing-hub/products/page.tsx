@@ -67,20 +67,25 @@ export default function PricingProductsPage() {
   }, [hydrated, user, router]);
 
   // Fetch products whenever refreshKey bumps — cache: no-store prevents stale GET responses
+  // Derive stable primitives so the effect doesn't re-run on every render due
+  // to the user object being a new reference each time useUser() is called.
+  const userRole     = user?.role ?? "";
+  const userTenantId = user?.tenantId ?? "";
+
   useEffect(() => {
-    if (!hydrated || !user || user.role !== "admin") return;
+    if (!hydrated || userRole !== "admin") return;
     let cancelled = false;
     setLoading(true);
     fetch("/api/pricing-hub/products", {
       credentials: "include",
       cache: "no-store",
-      headers: { "x-tenant-id": user.tenantId ?? "" },
+      headers: { "x-tenant-id": userTenantId },
     })
       .then(r => r.json())
       .then(data => { if (!cancelled) { setProducts(Array.isArray(data) ? data : []); setLoading(false); } })
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [hydrated, user, refreshKey]);
+  }, [hydrated, userRole, userTenantId, refreshKey]);
 
   if (!hydrated || !user) return null;
   if (user.role !== "admin") return null;

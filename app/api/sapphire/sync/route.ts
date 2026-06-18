@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSapphireCredentials, clearSapphireTokenCache } from "@/lib/sapphire-auth";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { createServerClient } from "@supabase/ssr";
 
 export const dynamic    = "force-dynamic";
 export const revalidate = 0;
@@ -78,13 +79,30 @@ async function fetchStockPage(
 export async function GET(req: NextRequest): Promise<NextResponse> {
   console.log("[sapphire/sync] handler invoked");
 
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  // Use @supabase/ssr to create a session-aware client that reads the auth
+  // cookie from the request. createServerSupabaseClient() uses the service-role
+  // key which cannot identify the calling user, so auth.getUser() always
+  // returned null and the route incorrectly responded 401.
+  const sessionClient = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return req.cookies.getAll(); },
+        setAll() { /* route handlers cannot set cookies */ },
+      },
+    }
+  );
+
+  const { data: { user }, error: userError } = await sessionClient.auth.getUser();
   console.log("[sapphire/sync] getUser result — user:", user?.id ?? "null", "error:", userError?.message ?? "none");
   if (!user) {
     console.log("[sapphire/sync] returning 401 — no authenticated user");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  // Use service-role client for the profile lookup (bypasses RLS)
+  const supabase = createServerSupabaseClient();
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("role")
