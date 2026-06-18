@@ -214,10 +214,13 @@ async function runSearch(token: string, body: Record<string, unknown>, tenantId?
   }
 
   const raw = j.data?.as?.diamonds_by_query;
-  if (!raw?.items) {
-    console.error("[nivoda/search] Unexpected response shape:", JSON.stringify(j).slice(0, 500));
+  if (!raw) {
+    console.error("[nivoda/search] Unexpected response shape — diamonds_by_query missing:", JSON.stringify(j).slice(0, 500));
     return NextResponse.json({ error: "Unexpected Nivoda response shape" }, { status: 502 });
   }
+
+  // Nivoda returns items: null (not []) when no results match — treat both as empty
+  const rawItems = raw.items ?? [];
 
   type RawItem = {
     id: string; price: number;
@@ -227,7 +230,7 @@ async function runSearch(token: string, body: Record<string, unknown>, tenantId?
     };
   };
 
-  const results: NivodaResult[] = ((raw.items ?? []) as RawItem[]).map(item => ({
+  const results: NivodaResult[] = (rawItems as RawItem[]).map(item => ({
     id:            item.id,
     price:         item.price,
     carats:        item.diamond?.certificate?.carats       ?? 0,
