@@ -55,7 +55,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const { data, error } = await query;
   if (error) {
-    console.error("[pricing-hub/products] query error:", error.message);
+    console.error("[pricing-hub/products] query error:", {
+      message: error.message,
+      code:    (error as any).code,
+      hint:    (error as any).hint,
+      details: (error as any).details,
+    });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   console.log("[pricing-hub/products] returned", data?.length ?? 0, "products");
