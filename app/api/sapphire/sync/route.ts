@@ -79,18 +79,23 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   console.log("[sapphire/sync] handler invoked");
 
   const supabase = createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  console.log("[sapphire/sync] getUser result — user:", user?.id ?? "null", "error:", userError?.message ?? "none");
   if (!user) {
+    console.log("[sapphire/sync] returning 401 — no authenticated user");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("role")
     .eq("id", user.id)
     .single();
+  console.log("[sapphire/sync] profile role:", profile?.role ?? "null", "error:", profileError?.message ?? "none");
   if (profile?.role !== "manager" && profile?.role !== "admin") {
+    console.log("[sapphire/sync] returning 403 — role", profile?.role ?? "null", "not permitted");
     return NextResponse.json({ error: "Forbidden — manager or admin only" }, { status: 403 });
   }
+  console.log("[sapphire/sync] auth passed — role:", profile.role);
 
   try {
     let creds = await getSapphireCredentials();

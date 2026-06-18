@@ -36,6 +36,7 @@ export default function SettingsPage() {
     setSyncResult(null);
     try {
       const res  = await fetch("/api/sapphire/sync", {
+        credentials: "include",
         headers: { "x-tenant-id": user?.tenantId ?? "" },
       });
       const json = await res.json() as SyncResult;
