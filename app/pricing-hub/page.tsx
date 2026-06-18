@@ -105,7 +105,7 @@ export default function PricingHubDashboard() {
             { href: "/pricing-hub/products",  label: "Manage Products & Variants", desc: "Add, edit, price products" },
             { href: "/pricing-hub/suppliers",  label: "Supplier Costs",             desc: "Review supplier pricing" },
             { href: "/pricing-hub/audit",      label: "Pricing Audit",              desc: "Flag pricing issues" },
-            { href: "/pricing-hub/settings",   label: "Rates & Settings",           desc: "Gold prices, labour rates" },
+            { href: "/pricing",                  label: "Metal Prices & Margins",     desc: "Metal rates, margin brackets" },
           ].map(l => (
             <Link
               key={l.href}
