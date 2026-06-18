@@ -18,6 +18,7 @@ import {
   Package,
   ClipboardList,
   X,
+  Tag,
 } from "lucide-react";
 import { canManage, hasPermission } from "@/lib/userTypes";
 
@@ -46,12 +47,13 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
   // Settings group is visible if user has pricing OR settings permission
   const showSettings = can("pricing") || can("settings") || isManager;
 
-  const quotesExpanded    = pathname.startsWith("/quotes");
-  const inventoryExpanded = pathname.startsWith("/inventory");
-  const workshopExpanded  = pathname.startsWith("/workshop");
-  const settingsExpanded  = pathname.startsWith("/settings") ||
-                            pathname.startsWith("/pricing") ||
-                            pathname.startsWith("/admin/users");
+  const quotesExpanded     = pathname.startsWith("/quotes");
+  const inventoryExpanded  = pathname.startsWith("/inventory");
+  const workshopExpanded   = pathname.startsWith("/workshop");
+  const pricingHubExpanded = pathname.startsWith("/pricing-hub");
+  const settingsExpanded   = pathname.startsWith("/settings") ||
+                             pathname.startsWith("/pricing") ||
+                             pathname.startsWith("/admin/users");
 
   const initials = (name: string) =>
     name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
@@ -245,6 +247,24 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
 
           {can("vault_brain") && <NavLink href="/vault/brain" icon={Brain}  label="Vault Brain" />}
           {can("reporting")  && <NavLink href="/reporting"  icon={BarChart2} label="Reporting" />}
+
+          {isAdmin && (
+            <div>
+              <ExpandLink
+                icon={Tag} label="Pricing Hub" expanded={pricingHubExpanded}
+                onClick={() => { router.push("/pricing-hub"); onClose(); }}
+              />
+              {pricingHubExpanded && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
+                  <SubLink href="/pricing-hub"           label="Dashboard" />
+                  <SubLink href="/pricing-hub/products"  label="Products" />
+                  <SubLink href="/pricing-hub/suppliers" label="Suppliers" />
+                  <SubLink href="/pricing-hub/audit"     label="Audit" />
+                  <SubLink href="/pricing-hub/settings"  label="Settings" />
+                </div>
+              )}
+            </div>
+          )}
 
           {showSettings && (
             <div>
