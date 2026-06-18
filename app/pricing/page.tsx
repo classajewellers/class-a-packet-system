@@ -9,7 +9,7 @@ import { hasPermission } from "@/lib/userTypes";
 
 interface MetalRate { id: string; metal_type: string; price_per_gram: number; updated_at: string; }
 interface FixedCost { id: string; key: string; label: string; amount: number; updated_at: string; }
-interface MarginBracket { id: string; cost_min: number; cost_max: number | null; multiplier: number; }
+interface MarginBracket { id: string; cost_min: number; cost_max: number | null; multiplier: number; stone_type: string | null; }
 interface MeleeStone { id: string; size_label: string; stone_type: string; price_per_stone: number; updated_at: string; }
 
 type SaveState = Record<string, 'saving' | 'saved' | 'error'>;
@@ -233,29 +233,40 @@ export default function PricingPage() {
           {/* Tab: Margin Brackets */}
           {tab === 'margin' && (
             <>
-              <div style={card}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr>
-                      <th style={thStyle}>Cost Range</th>
-                      <th style={thStyle}>Multiplier</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {marginBrackets.map(r => (
-                      <tr key={r.id}>
-                        <td style={tdStyle}>
-                          ${Number(r.cost_min).toLocaleString()} – {r.cost_max != null ? `$${Number(r.cost_max).toLocaleString()}` : 'above'}
-                        </td>
-                        <td style={{ ...tdStyle, fontFamily: 'monospace', fontWeight: 600, color: '#635BFF' }}>
-                          ×{Number(r.multiplier).toFixed(3)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div style={{ ...card, padding: 20, marginTop: 16 }}>
+              {(['natural', 'lab'] as const).map(stoneType => {
+                const brackets = marginBrackets.filter(r => r.stone_type === stoneType);
+                const heading = stoneType === 'natural' ? 'Natural Stone Brackets' : 'Lab Grown Stone Brackets';
+                return (
+                  <div key={stoneType} style={{ marginBottom: 24 }}>
+                    <h2 style={{ fontSize: 15, fontWeight: 600, color: '#1A1A2E', marginBottom: 10 }}>{heading}</h2>
+                    <div style={card}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr>
+                            <th style={thStyle}>Cost Range</th>
+                            <th style={thStyle}>Multiplier</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {brackets.length === 0 ? (
+                            <tr><td colSpan={2} style={{ ...tdStyle, color: '#9CA3AF', textAlign: 'center' }}>No brackets found.</td></tr>
+                          ) : brackets.map(r => (
+                            <tr key={r.id}>
+                              <td style={tdStyle}>
+                                ${Number(r.cost_min).toLocaleString()} – {r.cost_max != null ? `$${Number(r.cost_max).toLocaleString()}` : 'above'}
+                              </td>
+                              <td style={{ ...tdStyle, fontFamily: 'monospace', fontWeight: 600, color: '#635BFF' }}>
+                                ×{Number(r.multiplier).toFixed(3)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{ ...card, padding: 20 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 6 }}>Example Calculation</div>
                 <div style={{ fontSize: 14, color: '#374151' }}>Total cost <strong>$3,000</strong> → bracket <strong>×2.5</strong> → Quoted price <strong>$7,500</strong></div>
                 <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 8 }}>Contact Josh to update margin brackets.</div>
