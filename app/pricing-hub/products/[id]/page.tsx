@@ -10,9 +10,6 @@ import Link from "next/link";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-interface GoldPrice   { id: string; metal_type: string; price_per_gram: number; }
-interface RateCard    { id: string; card_type: string; label: string; amount: number; unit: string; }
-
 interface BuildComponent  { id: string; component_type: string; description: string; quantity: number; unit_cost: number | null; total_cost: number | null; }
 interface SupplierCost    { id: string; supplier_name: string; cost_ex_gst: number; currency: string; price_list_date: string; }
 
@@ -33,45 +30,29 @@ interface Variant {
 interface Product {
   id: string;
   name: string;
-  product_type: string | null;
-  product_status: string | null;
   active: boolean;
   pricing_product_variants: Variant[];
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-const STATUS_LABELS: Record<string, string> = {
-  in_stock: "In Stock", made_to_order: "Made to Order", custom_order: "Custom Order",
-};
-
-function findGoldPrice(goldPrices: GoldPrice[], metalType: string | null): GoldPrice | null {
-  if (!metalType) return null;
-  const exact = goldPrices.find(g => g.metal_type === metalType);
-  if (exact) return exact;
-  const lower = metalType.toLowerCase();
-  return goldPrices.find(g =>
-    lower.includes(g.metal_type.toLowerCase()) || g.metal_type.toLowerCase().includes(lower)
-  ) ?? null;
+// Server-side calculation result shape (mirrors POST /api/pricing-hub/calculate response)
+interface CalcResult {
+  metalCost: number;
+  labourCost: number;
+  fixedCost: number;
+  totalCost: number;
+  multiplier: number | null;
+  recommendedRetail: number | null;
+  goldRatePerGram: number | null;
+  pricingMode: string;
+  breakdown: { type: string; label: string; amount: number }[];
+  diamondNote: string | null;
 }
 
-function calcLiveCost(v: Variant, goldPrices: GoldPrice[], rateCards: RateCard[]): { total: number | null; breakdown: string } {
-  if (!v.metal_grams) return { total: null, breakdown: "⚠ Weight needed" };
-
-  const gp = findGoldPrice(goldPrices, v.metal_type);
-  const goldCost = gp ? Number(v.metal_grams) * Number(gp.price_per_gram) : 0;
-
-  const mode = v.pricing_mode ?? "our_build";
-  const cards = rateCards.filter(r => r.card_type === mode);
-  const rateCost = cards.reduce((s, r) => s + Number(r.amount), 0);
-
-  let diamondNote = "";
-  if (v.diamond_type === "natural") diamondNote = " + Rap TBC";
-  else if (v.diamond_type === "lab")     diamondNote = " + Lab TBC";
-
-  const total = goldCost + rateCost;
-  const breakdown = `$${goldCost.toFixed(2)} metal + $${rateCost.toFixed(2)} rates${diamondNote}`;
-  return { total, breakdown };
+// Per-variant calculation state
+interface VariantCalc {
+  loading: boolean;
+  error: string | null;
+  result: CalcResult | null;
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -83,14 +64,15 @@ export default function ProductDetailPage() {
   const id      = params?.id as string;
 
   const [product, setProduct]       = useState<Product | null>(null);
-  const [goldPrices, setGoldPrices] = useState<GoldPrice[]>([]);
-  const [rateCards, setRateCards]   = useState<RateCard[]>([]);
   const [loading, setLoading]       = useState(true);
   const [expanded, setExpanded]     = useState<Set<string>>(new Set());
 
+  // Server-side pricing results, keyed by variantId
+  const [calcs, setCalcs] = useState<Map<string, VariantCalc>>(new Map());
+
   // Header inline edit
   const [editHeader, setEditHeader] = useState(false);
-  const [hdrBuf, setHdrBuf]         = useState({ name: "", product_type: "", product_status: "in_stock" });
+  const [hdrBuf, setHdrBuf]         = useState({ name: "" });
   const [hdrSaving, setHdrSaving]   = useState(false);
 
   // Variant edit
@@ -110,21 +92,81 @@ export default function ProductDetailPage() {
     if (hydrated && user && user.role !== "admin") router.replace("/");
   }, [hydrated, user, router]);
 
+  // Fetch pricing from the server-side engine for all variants
+  const fetchCalcs = useCallback(async (variants: Variant[], tid: string) => {
+    if (!variants.length) return;
+
+    // Mark all variants as loading
+    setCalcs(prev => {
+      const next = new Map(prev);
+      for (const v of variants) {
+        next.set(v.id, { loading: true, error: null, result: null });
+      }
+      return next;
+    });
+
+    // Call calculate endpoint for each variant in parallel
+    await Promise.all(
+      variants.map(async (v) => {
+        try {
+          const res = await fetch("/api/pricing-hub/calculate", {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              "x-tenant-id": tid,
+            },
+            body: JSON.stringify({ variantId: v.id }),
+          });
+          const data = await res.json();
+
+          if (!res.ok) {
+            setCalcs(prev => {
+              const next = new Map(prev);
+              next.set(v.id, {
+                loading: false,
+                error: data.error ?? `Calculation failed (${res.status})`,
+                result: null,
+              });
+              return next;
+            });
+          } else {
+            setCalcs(prev => {
+              const next = new Map(prev);
+              next.set(v.id, { loading: false, error: null, result: data as CalcResult });
+              return next;
+            });
+          }
+        } catch {
+          setCalcs(prev => {
+            const next = new Map(prev);
+            next.set(v.id, { loading: false, error: "Network error", result: null });
+            return next;
+          });
+        }
+      })
+    );
+  }, []);
+
   const load = useCallback(async () => {
     if (!id || !hydrated || !user || user.role !== "admin") return;
     setLoading(true);
     const tid = user.tenantId ?? "";
-    const [pRes, gRes, rRes] = await Promise.all([
-      fetch(`/api/pricing-hub/products/${id}`,     { credentials: "include", headers: { "x-tenant-id": tid } }),
-      fetch("/api/pricing-hub/gold-prices",         { credentials: "include", headers: { "x-tenant-id": tid } }),
-      fetch("/api/pricing-hub/rate-cards",          { credentials: "include", headers: { "x-tenant-id": tid } }),
-    ]);
-    const [pData, gData, rData] = await Promise.all([pRes.json(), gRes.json(), rRes.json()]);
-    setProduct(pRes.ok ? pData : null);
-    setGoldPrices(Array.isArray(gData) ? gData : []);
-    setRateCards(Array.isArray(rData) ? rData : []);
+
+    const res  = await fetch(`/api/pricing-hub/products/${id}`, {
+      credentials: "include",
+      headers: { "x-tenant-id": tid },
+    });
+    const data = await res.json();
+    const product: Product | null = res.ok ? data : null;
+    setProduct(product);
     setLoading(false);
-  }, [id, hydrated, user]);
+
+    // Trigger server-side pricing calculation for all variants
+    if (product) {
+      fetchCalcs(product.pricing_product_variants ?? [], tid);
+    }
+  }, [id, hydrated, user, fetchCalcs]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -139,7 +181,7 @@ export default function ProductDetailPage() {
     await fetch(`/api/pricing-hub/products/${product.id}`, {
       method: "PATCH", credentials: "include",
       headers: { "Content-Type": "application/json", "x-tenant-id": tid },
-      body: JSON.stringify({ name: hdrBuf.name, product_type: hdrBuf.product_type || null, product_status: hdrBuf.product_status }),
+      body: JSON.stringify({ name: hdrBuf.name }),
     });
     setHdrSaving(false); setEditHeader(false);
     load();
@@ -147,13 +189,17 @@ export default function ProductDetailPage() {
 
   function startEditHeader() {
     if (!product) return;
-    setHdrBuf({ name: product.name, product_type: product.product_type ?? "", product_status: product.product_status ?? "in_stock" });
+    setHdrBuf({ name: product.name });
     setEditHeader(true);
   }
 
   function startEditVariant(v: Variant) {
     setEditingVid(v.id);
-    setVBuf({ name: v.name, metal_type: v.metal_type, metal_grams: v.metal_grams, diamond_type: v.diamond_type, pricing_mode: v.pricing_mode, last_direct_cost: v.last_direct_cost });
+    setVBuf({
+      name: v.name, metal_type: v.metal_type, metal_grams: v.metal_grams,
+      diamond_type: v.diamond_type, pricing_mode: v.pricing_mode,
+      last_direct_cost: v.last_direct_cost,
+    });
   }
 
   async function saveVariant(vid: string) {
@@ -193,10 +239,10 @@ export default function ProductDetailPage() {
       method: "POST", credentials: "include",
       headers: { "Content-Type": "application/json", "x-tenant-id": tid },
       body: JSON.stringify({
-        product_id:  id,
-        name:        vNew.name.trim(),
-        metal_type:  vNew.metal_type   || null,
-        metal_grams: vNew.metal_grams  ? Number(vNew.metal_grams) : null,
+        product_id:   id,
+        name:         vNew.name.trim(),
+        metal_type:   vNew.metal_type   || null,
+        metal_grams:  vNew.metal_grams  ? Number(vNew.metal_grams) : null,
         diamond_type: vNew.diamond_type,
         pricing_mode: vNew.pricing_mode,
       }),
@@ -212,12 +258,15 @@ export default function ProductDetailPage() {
   const toggleExpand = (vid: string) =>
     setExpanded(prev => { const n = new Set(prev); n.has(vid) ? n.delete(vid) : n.add(vid); return n; });
 
-  const inputSm: React.CSSProperties = { padding: "4px 8px", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 12, boxSizing: "border-box" as const };
-  const thStyle: React.CSSProperties = { padding: "8px 12px", fontSize: 11, fontWeight: 600, color: "#6B7280", textAlign: "left" as const, textTransform: "uppercase" as const, letterSpacing: "0.04em", background: "#F9FAFB", borderBottom: "1px solid #E8E8F0" };
-
-  const metalOptions = goldPrices.length
-    ? goldPrices.map(g => g.metal_type)
-    : ["9ct Yellow", "9ct White", "18ct Yellow", "18ct White", "Platinum"];
+  const inputSm: React.CSSProperties = {
+    padding: "4px 8px", border: "1px solid #D1D5DB", borderRadius: 6,
+    fontSize: 12, boxSizing: "border-box" as const,
+  };
+  const thStyle: React.CSSProperties = {
+    padding: "8px 12px", fontSize: 11, fontWeight: 600, color: "#6B7280",
+    textAlign: "left" as const, textTransform: "uppercase" as const,
+    letterSpacing: "0.04em", background: "#F9FAFB", borderBottom: "1px solid #E8E8F0",
+  };
 
   if (loading) return <div style={{ padding: "32px 40px", color: "#9CA3AF", fontSize: 14 }}>Loading…</div>;
   if (!product) return (
@@ -241,25 +290,15 @@ export default function ProductDetailPage() {
       {/* Product header */}
       <div style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, padding: 24, marginBottom: 24 }}>
         {editHeader ? (
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr auto auto", gap: 10, alignItems: "flex-end" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr auto auto", gap: 10, alignItems: "flex-end" }}>
             <div>
               <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Product Name</label>
-              <input value={hdrBuf.name} onChange={e => setHdrBuf(b => ({ ...b, name: e.target.value }))}
-                style={{ width: "100%", padding: "7px 10px", border: "1px solid #D1D5DB", borderRadius: 8, fontSize: 14, boxSizing: "border-box" as const }} autoFocus />
-            </div>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Type</label>
-              <input value={hdrBuf.product_type} onChange={e => setHdrBuf(b => ({ ...b, product_type: e.target.value }))}
-                placeholder="e.g. Ring" style={{ width: "100%", padding: "7px 10px", border: "1px solid #D1D5DB", borderRadius: 8, fontSize: 13, boxSizing: "border-box" as const }} />
-            </div>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Status</label>
-              <select value={hdrBuf.product_status} onChange={e => setHdrBuf(b => ({ ...b, product_status: e.target.value }))}
-                style={{ width: "100%", padding: "7px 10px", border: "1px solid #D1D5DB", borderRadius: 8, fontSize: 13 }}>
-                <option value="in_stock">In Stock</option>
-                <option value="made_to_order">Made to Order</option>
-                <option value="custom_order">Custom Order</option>
-              </select>
+              <input
+                value={hdrBuf.name}
+                onChange={e => setHdrBuf(b => ({ ...b, name: e.target.value }))}
+                style={{ width: "100%", padding: "7px 10px", border: "1px solid #D1D5DB", borderRadius: 8, fontSize: 14, boxSizing: "border-box" as const }}
+                autoFocus
+              />
             </div>
             <button onClick={saveHeader} disabled={hdrSaving}
               style={{ padding: "7px 16px", background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
@@ -274,16 +313,13 @@ export default function ProductDetailPage() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div>
               <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1A1760", marginBottom: 6 }}>{product.name}</h1>
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                {product.product_type && <span style={{ fontSize: 13, color: "#6B7280" }}>{product.product_type}</span>}
-                <span style={{
-                  display: "inline-block", padding: "2px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600,
-                  background: product.product_status === "in_stock" ? "#F0FDF4" : product.product_status === "made_to_order" ? "#FFFBEB" : "#EEF2FF",
-                  color: product.product_status === "in_stock" ? "#16A34A" : product.product_status === "made_to_order" ? "#D97706" : "#635BFF",
-                }}>
-                  {STATUS_LABELS[product.product_status ?? "in_stock"] ?? product.product_status}
-                </span>
-              </div>
+              <span style={{
+                display: "inline-block", padding: "2px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600,
+                background: product.active ? "#F0FDF4" : "#F3F4F6",
+                color: product.active ? "#16A34A" : "#6B7280",
+              }}>
+                {product.active ? "Active" : "Inactive"}
+              </span>
             </div>
             <button onClick={startEditHeader}
               style={{ background: "transparent", border: "1px solid #E8E8F0", borderRadius: 8, padding: "6px 14px", fontSize: 13, color: "#6B7280", cursor: "pointer" }}>
@@ -295,7 +331,9 @@ export default function ProductDetailPage() {
 
       {/* Variants */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700, color: "#1A1760" }}>Variants <span style={{ fontSize: 13, color: "#9CA3AF", fontWeight: 400 }}>({variants.length})</span></h2>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: "#1A1760" }}>
+          Variants <span style={{ fontSize: 13, color: "#9CA3AF", fontWeight: 400 }}>({variants.length})</span>
+        </h2>
         <button onClick={() => setShowAdd(v => !v)}
           style={{ padding: "8px 16px", background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
           + Add Variant
@@ -308,24 +346,37 @@ export default function ProductDetailPage() {
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
             <div>
               <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Size / Descriptor *</label>
-              <input value={vNew.name} onChange={e => setVNew(v => ({ ...v, name: e.target.value }))} placeholder="e.g. 0.50ct RBC" style={{ width: "100%", padding: "7px 10px", border: "1px solid #D1D5DB", borderRadius: 7, fontSize: 13, boxSizing: "border-box" as const }} />
+              <input
+                value={vNew.name}
+                onChange={e => setVNew(v => ({ ...v, name: e.target.value }))}
+                placeholder="e.g. 0.50ct RBC"
+                style={{ width: "100%", padding: "7px 10px", border: "1px solid #D1D5DB", borderRadius: 7, fontSize: 13, boxSizing: "border-box" as const }}
+              />
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Metal</label>
-              <select value={vNew.metal_type} onChange={e => setVNew(v => ({ ...v, metal_type: e.target.value }))}
-                style={{ width: "100%", padding: "7px 10px", border: "1px solid #D1D5DB", borderRadius: 7, fontSize: 13 }}>
-                <option value="">— Select —</option>
-                {metalOptions.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
+              <input
+                value={vNew.metal_type}
+                onChange={e => setVNew(v => ({ ...v, metal_type: e.target.value }))}
+                placeholder="e.g. 18ct Yellow"
+                style={{ width: "100%", padding: "7px 10px", border: "1px solid #D1D5DB", borderRadius: 7, fontSize: 13, boxSizing: "border-box" as const }}
+              />
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Gram Weight</label>
-              <input type="number" step="0.01" min="0" value={vNew.metal_grams} onChange={e => setVNew(v => ({ ...v, metal_grams: e.target.value }))} placeholder="e.g. 3.50"
-                style={{ width: "100%", padding: "7px 10px", border: "1px solid #D1D5DB", borderRadius: 7, fontSize: 13, boxSizing: "border-box" as const }} />
+              <input
+                type="number" step="0.01" min="0"
+                value={vNew.metal_grams}
+                onChange={e => setVNew(v => ({ ...v, metal_grams: e.target.value }))}
+                placeholder="e.g. 3.50"
+                style={{ width: "100%", padding: "7px 10px", border: "1px solid #D1D5DB", borderRadius: 7, fontSize: 13, boxSizing: "border-box" as const }}
+              />
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Diamond</label>
-              <select value={vNew.diamond_type} onChange={e => setVNew(v => ({ ...v, diamond_type: e.target.value }))}
+              <select
+                value={vNew.diamond_type}
+                onChange={e => setVNew(v => ({ ...v, diamond_type: e.target.value }))}
                 style={{ width: "100%", padding: "7px 10px", border: "1px solid #D1D5DB", borderRadius: 7, fontSize: 13 }}>
                 <option value="none">None</option>
                 <option value="natural">Natural</option>
@@ -334,7 +385,9 @@ export default function ProductDetailPage() {
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Pricing Mode</label>
-              <select value={vNew.pricing_mode} onChange={e => setVNew(v => ({ ...v, pricing_mode: e.target.value }))}
+              <select
+                value={vNew.pricing_mode}
+                onChange={e => setVNew(v => ({ ...v, pricing_mode: e.target.value }))}
                 style={{ width: "100%", padding: "7px 10px", border: "1px solid #D1D5DB", borderRadius: 7, fontSize: 13 }}>
                 <option value="our_build">Our Build</option>
                 <option value="supplier">Supplier</option>
@@ -370,20 +423,23 @@ export default function ProductDetailPage() {
                 <th style={thStyle}>Diamond</th>
                 <th style={thStyle}>Mode</th>
                 <th style={{ ...thStyle, textAlign: "right" as const }}>Live Cost</th>
+                <th style={{ ...thStyle, textAlign: "right" as const }}>Retail Est.</th>
                 <th style={{ ...thStyle, textAlign: "right" as const }}>Last Direct</th>
                 <th style={{ ...thStyle, width: 110 }}></th>
               </tr>
             </thead>
             <tbody>
-              {variants.map((v, i) => {
+              {variants.map((v) => {
                 const isEditing = editingVid === v.id;
                 const isOpen    = expanded.has(v.id);
-                const { total: liveCost, breakdown } = calcLiveCost(v, goldPrices, rateCards);
+                const calc      = calcs.get(v.id);
 
                 return (
                   <React.Fragment key={v.id}>
-                    <tr style={{ borderBottom: "1px solid #F3F4F6", cursor: "pointer" }}
-                      onClick={() => !isEditing && toggleExpand(v.id)}>
+                    <tr
+                      style={{ borderBottom: "1px solid #F3F4F6", cursor: "pointer" }}
+                      onClick={() => !isEditing && toggleExpand(v.id)}
+                    >
                       {/* Size descriptor */}
                       <td style={{ padding: "11px 14px", fontSize: 13, fontWeight: 600, color: "#1A1760" }}
                         onClick={e => isEditing && e.stopPropagation()}>
@@ -391,16 +447,15 @@ export default function ProductDetailPage() {
                           ? <input value={String(vBuf.name ?? "")} onChange={e => setVBuf(b => ({ ...b, name: e.target.value }))} style={{ ...inputSm, width: 120 }} autoFocus />
                           : v.name}
                       </td>
+
                       {/* Metal */}
                       <td style={{ padding: "11px 14px", fontSize: 13, color: "#374151" }}
                         onClick={e => isEditing && e.stopPropagation()}>
                         {isEditing
-                          ? <select value={String(vBuf.metal_type ?? "")} onChange={e => setVBuf(b => ({ ...b, metal_type: e.target.value }))} style={{ ...inputSm, width: 120 }}>
-                              <option value="">—</option>
-                              {metalOptions.map(m => <option key={m} value={m}>{m}</option>)}
-                            </select>
+                          ? <input value={String(vBuf.metal_type ?? "")} onChange={e => setVBuf(b => ({ ...b, metal_type: e.target.value }))} style={{ ...inputSm, width: 120 }} />
                           : v.metal_type ?? "—"}
                       </td>
+
                       {/* Grams */}
                       <td style={{ padding: "11px 14px", fontSize: 13, color: "#374151", textAlign: "right" }}
                         onClick={e => isEditing && e.stopPropagation()}>
@@ -409,6 +464,7 @@ export default function ProductDetailPage() {
                           : v.metal_grams != null ? `${Number(v.metal_grams).toFixed(2)}g` : <span style={{ color: "#F59E0B" }}>⚠</span>
                         }
                       </td>
+
                       {/* Diamond */}
                       <td style={{ padding: "11px 14px", fontSize: 13, color: "#374151" }}
                         onClick={e => isEditing && e.stopPropagation()}>
@@ -421,6 +477,7 @@ export default function ProductDetailPage() {
                           : <span style={{ textTransform: "capitalize" as const }}>{v.diamond_type ?? "none"}</span>
                         }
                       </td>
+
                       {/* Mode toggle */}
                       <td style={{ padding: "11px 14px" }} onClick={e => { e.stopPropagation(); if (!isEditing) togglePricingMode(v); }}>
                         <span style={{
@@ -431,13 +488,27 @@ export default function ProductDetailPage() {
                           {(v.pricing_mode ?? "our_build") === "our_build" ? "Our Build" : "Supplier"}
                         </span>
                       </td>
-                      {/* Live cost */}
+
+                      {/* Live cost — from server */}
                       <td style={{ padding: "11px 14px", textAlign: "right", fontSize: 13 }}>
-                        {liveCost != null
-                          ? <span style={{ fontWeight: 600, color: "#1A1760" }}>${liveCost.toFixed(2)}</span>
-                          : <span style={{ color: "#F59E0B", fontSize: 12 }}>⚠ Weight needed</span>
+                        {!calc || calc.loading
+                          ? <span style={{ color: "#D1D5DB", fontSize: 12 }}>…</span>
+                          : calc.error
+                          ? <span style={{ color: "#F59E0B", fontSize: 11 }} title={calc.error}>⚠</span>
+                          : <span style={{ fontWeight: 600, color: "#1A1760" }}>${calc.result!.totalCost.toFixed(2)}</span>
                         }
                       </td>
+
+                      {/* Recommended retail — from server */}
+                      <td style={{ padding: "11px 14px", textAlign: "right", fontSize: 13 }}>
+                        {!calc || calc.loading
+                          ? <span style={{ color: "#D1D5DB", fontSize: 12 }}>…</span>
+                          : calc.error || !calc.result?.recommendedRetail
+                          ? <span style={{ color: "#9CA3AF" }}>—</span>
+                          : <span style={{ color: "#374151" }}>${calc.result!.recommendedRetail.toFixed(2)}</span>
+                        }
+                      </td>
+
                       {/* Last direct cost */}
                       <td style={{ padding: "11px 14px", textAlign: "right", fontSize: 13 }}
                         onClick={e => isEditing && e.stopPropagation()}>
@@ -446,6 +517,7 @@ export default function ProductDetailPage() {
                           : v.last_direct_cost != null ? `$${Number(v.last_direct_cost).toFixed(2)}` : <span style={{ color: "#9CA3AF" }}>—</span>
                         }
                       </td>
+
                       {/* Actions */}
                       <td style={{ padding: "11px 14px" }} onClick={e => e.stopPropagation()}>
                         <div style={{ display: "flex", gap: 4, justifyContent: "flex-end", alignItems: "center" }}>
@@ -481,61 +553,122 @@ export default function ProductDetailPage() {
                       </td>
                     </tr>
 
-                    {/* Expanded row */}
+                    {/* Expanded detail row */}
                     {isOpen && !isEditing && (
                       <tr>
-                        <td colSpan={8} style={{ padding: "0 14px 14px", background: "#FAFAFA", borderBottom: "1px solid #E8E8F0" }}>
-                          <div style={{ paddingTop: 12, fontSize: 12, color: "#6B7280" }}>
-                            <strong style={{ color: "#374151" }}>Cost breakdown:</strong> {breakdown}
+                        <td colSpan={9} style={{ padding: "0 14px 14px", background: "#FAFAFA", borderBottom: "1px solid #E8E8F0" }}>
+                          <div style={{ paddingTop: 12 }}>
+
+                            {/* Server-side cost breakdown */}
+                            {!calc || calc.loading ? (
+                              <p style={{ fontSize: 12, color: "#9CA3AF", margin: 0 }}>Calculating…</p>
+                            ) : calc.error ? (
+                              <div style={{
+                                display: "inline-flex", alignItems: "center", gap: 6,
+                                background: "#FEF3C7", border: "1px solid #FDE68A",
+                                borderRadius: 6, padding: "6px 10px", fontSize: 12, color: "#92400E",
+                              }}>
+                                <span>⚠</span>
+                                <span>{calc.error}</span>
+                              </div>
+                            ) : (
+                              <div>
+                                <div style={{ fontSize: 11, fontWeight: 600, color: "#374151", marginBottom: 6, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>
+                                  Cost Breakdown
+                                </div>
+                                <table style={{ fontSize: 12, borderCollapse: "collapse", minWidth: 360, marginBottom: 8 }}>
+                                  <tbody>
+                                    {calc.result!.breakdown.map((item, i) => (
+                                      <tr key={i}>
+                                        <td style={{ padding: "3px 12px 3px 0", color: "#6B7280", width: 100, textTransform: "capitalize" as const }}>
+                                          {item.type}
+                                        </td>
+                                        <td style={{ padding: "3px 12px 3px 0", color: "#374151" }}>{item.label}</td>
+                                        <td style={{ padding: "3px 0", textAlign: "right" as const, fontWeight: 500, color: "#1A1760", fontFamily: "monospace" }}>
+                                          ${item.amount.toFixed(2)}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                    <tr>
+                                      <td colSpan={2} style={{ padding: "6px 12px 3px 0", fontWeight: 700, color: "#1A1760", borderTop: "1px solid #E8E8F0" }}>
+                                        Total Cost
+                                      </td>
+                                      <td style={{ padding: "6px 0 3px", textAlign: "right" as const, fontWeight: 700, color: "#1A1760", fontFamily: "monospace", borderTop: "1px solid #E8E8F0" }}>
+                                        ${calc.result!.totalCost.toFixed(2)}
+                                      </td>
+                                    </tr>
+                                    {calc.result!.multiplier != null && (
+                                      <tr>
+                                        <td colSpan={2} style={{ padding: "3px 12px 3px 0", color: "#6B7280" }}>
+                                          Margin ({calc.result!.multiplier.toFixed(2)}×)
+                                        </td>
+                                        <td style={{ padding: "3px 0", textAlign: "right" as const, fontWeight: 600, color: "#059669", fontFamily: "monospace" }}>
+                                          ${calc.result!.recommendedRetail!.toFixed(2)}
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </tbody>
+                                </table>
+                                {calc.result!.diamondNote && (
+                                  <p style={{ fontSize: 11, color: "#9CA3AF", margin: "4px 0 0", fontStyle: "italic" }}>
+                                    {calc.result!.diamondNote}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Build components */}
+                            {v.pricing_build_components?.length > 0 && (
+                              <div style={{ marginTop: 14 }}>
+                                <div style={{ fontSize: 11, fontWeight: 600, color: "#374151", marginBottom: 6, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Build Components</div>
+                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                                  <thead>
+                                    <tr>
+                                      {["Type", "Description", "Qty", "Unit Cost", "Total"].map(h => (
+                                        <th key={h} style={{ padding: "4px 8px", textAlign: h === "Total" || h === "Unit Cost" || h === "Qty" ? "right" as const : "left" as const, color: "#9CA3AF", fontWeight: 600 }}>{h}</th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {v.pricing_build_components.map(c => (
+                                      <tr key={c.id} style={{ borderTop: "1px solid #F3F4F6" }}>
+                                        <td style={{ padding: "4px 8px", textTransform: "capitalize" as const }}>{c.component_type}</td>
+                                        <td style={{ padding: "4px 8px" }}>{c.description}</td>
+                                        <td style={{ padding: "4px 8px", textAlign: "right" as const }}>{c.quantity}</td>
+                                        <td style={{ padding: "4px 8px", textAlign: "right" as const }}>{c.unit_cost != null ? `$${Number(c.unit_cost).toFixed(2)}` : "—"}</td>
+                                        <td style={{ padding: "4px 8px", textAlign: "right" as const, fontWeight: 600 }}>{c.total_cost != null ? `$${Number(c.total_cost).toFixed(2)}` : "—"}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+
+                            {/* Supplier costs */}
+                            {v.pricing_supplier_costs?.length > 0 && (
+                              <div style={{ marginTop: 14 }}>
+                                <div style={{ fontSize: 11, fontWeight: 600, color: "#374151", marginBottom: 6, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Supplier Costs</div>
+                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                                  <thead>
+                                    <tr>
+                                      {["Supplier", "Cost (ex GST)", "Date"].map(h => (
+                                        <th key={h} style={{ padding: "4px 8px", textAlign: h !== "Supplier" ? "right" as const : "left" as const, color: "#9CA3AF", fontWeight: 600 }}>{h}</th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {v.pricing_supplier_costs.map(sc => (
+                                      <tr key={sc.id} style={{ borderTop: "1px solid #F3F4F6" }}>
+                                        <td style={{ padding: "4px 8px" }}>{sc.supplier_name}</td>
+                                        <td style={{ padding: "4px 8px", textAlign: "right" as const, fontWeight: 600 }}>${Number(sc.cost_ex_gst).toFixed(2)} {sc.currency}</td>
+                                        <td style={{ padding: "4px 8px", textAlign: "right" as const }}>{new Date(sc.price_list_date).toLocaleDateString("en-AU")}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
                           </div>
-                          {v.pricing_build_components?.length > 0 && (
-                            <div style={{ marginTop: 10 }}>
-                              <div style={{ fontSize: 11, fontWeight: 600, color: "#374151", marginBottom: 6, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Build Components</div>
-                              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                                <thead>
-                                  <tr>
-                                    {["Type", "Description", "Qty", "Unit Cost", "Total"].map(h => (
-                                      <th key={h} style={{ padding: "4px 8px", textAlign: h === "Total" || h === "Unit Cost" || h === "Qty" ? "right" as const : "left" as const, color: "#9CA3AF", fontWeight: 600 }}>{h}</th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {v.pricing_build_components.map(c => (
-                                    <tr key={c.id} style={{ borderTop: "1px solid #F3F4F6" }}>
-                                      <td style={{ padding: "4px 8px", textTransform: "capitalize" as const }}>{c.component_type}</td>
-                                      <td style={{ padding: "4px 8px" }}>{c.description}</td>
-                                      <td style={{ padding: "4px 8px", textAlign: "right" as const }}>{c.quantity}</td>
-                                      <td style={{ padding: "4px 8px", textAlign: "right" as const }}>{c.unit_cost != null ? `$${Number(c.unit_cost).toFixed(2)}` : "—"}</td>
-                                      <td style={{ padding: "4px 8px", textAlign: "right" as const, fontWeight: 600 }}>{c.total_cost != null ? `$${Number(c.total_cost).toFixed(2)}` : "—"}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-                          {v.pricing_supplier_costs?.length > 0 && (
-                            <div style={{ marginTop: 10 }}>
-                              <div style={{ fontSize: 11, fontWeight: 600, color: "#374151", marginBottom: 6, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Supplier Costs</div>
-                              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                                <thead>
-                                  <tr>
-                                    {["Supplier", "Cost (ex GST)", "Date"].map(h => (
-                                      <th key={h} style={{ padding: "4px 8px", textAlign: h !== "Supplier" ? "right" as const : "left" as const, color: "#9CA3AF", fontWeight: 600 }}>{h}</th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {v.pricing_supplier_costs.map(sc => (
-                                    <tr key={sc.id} style={{ borderTop: "1px solid #F3F4F6" }}>
-                                      <td style={{ padding: "4px 8px" }}>{sc.supplier_name}</td>
-                                      <td style={{ padding: "4px 8px", textAlign: "right" as const, fontWeight: 600 }}>${Number(sc.cost_ex_gst).toFixed(2)} {sc.currency}</td>
-                                      <td style={{ padding: "4px 8px", textAlign: "right" as const }}>{new Date(sc.price_list_date).toLocaleDateString("en-AU")}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
                         </td>
                       </tr>
                     )}
@@ -549,4 +682,3 @@ export default function ProductDetailPage() {
     </div>
   );
 }
-
