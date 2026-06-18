@@ -57,6 +57,22 @@ export default function PricingHubDashboard() {
     padding: "20px 24px",
   };
 
+  const METAL_NAMES: Record<string, string> = {
+    "18ct_yellow": "18ct Yellow Gold",
+    "18ct_white":  "18ct White Gold",
+    "18ct_rose":   "18ct Rose Gold",
+    "9ct_yellow":  "9ct Yellow Gold",
+    "9ct_white":   "9ct White Gold",
+    "9ct_rose":    "9ct Rose Gold",
+    "platinum":    "Platinum",
+    "silver":      "Silver",
+  };
+
+  function formatMetal(raw: string): string {
+    return METAL_NAMES[raw.toLowerCase()] ??
+      raw.replace(/_/g, " ").replace(/^\w/, c => c.toUpperCase());
+  }
+
   const statCards = [
     { label: "Products",         value: loading ? "—" : products.length },
     { label: "Variants",         value: loading ? "—" : totalVariants },
@@ -97,7 +113,7 @@ export default function PricingHubDashboard() {
               <tbody>
                 {goldPrices.map(g => (
                   <tr key={g.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                    <td style={{ padding: "7px 0", color: "#374151", fontWeight: 500 }}>{g.metal_type}</td>
+                    <td style={{ padding: "7px 0", color: "#374151", fontWeight: 500 }}>{formatMetal(g.metal_type)}</td>
                     <td style={{ padding: "7px 0", color: "#1A1760", fontWeight: 600, textAlign: "right" }}>
                       ${Number(g.price_per_gram).toFixed(2)}<span style={{ color: "#9CA3AF", fontWeight: 400 }}>/g</span>
                     </td>
