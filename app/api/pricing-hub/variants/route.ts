@@ -4,18 +4,8 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 export const dynamic    = "force-dynamic";
 export const revalidate = 0;
 
-async function requireAdmin(supabase: ReturnType<typeof createServerSupabaseClient>) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "admin") return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
-  return { error: null };
-}
-
 export async function GET(): Promise<NextResponse> {
   const db = createServerSupabaseClient();
-  const { error: authErr } = await requireAdmin(db);
-  if (authErr) return authErr;
 
   const { data, error } = await db
     .from("pricing_product_variants")
@@ -31,10 +21,6 @@ export async function GET(): Promise<NextResponse> {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const db = createServerSupabaseClient();
-  const { error: authErr } = await requireAdmin(db);
-  if (authErr) return authErr;
-
   let body: {
     product_id?: string;
     name?: string;
@@ -50,6 +36,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!body.product_id) return NextResponse.json({ error: "product_id is required" }, { status: 400 });
   if (!body.name?.trim()) return NextResponse.json({ error: "name is required" }, { status: 400 });
 
+  const db = createServerSupabaseClient();
   const { data, error } = await db
     .from("pricing_product_variants")
     .insert({

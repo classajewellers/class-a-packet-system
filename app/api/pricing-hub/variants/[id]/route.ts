@@ -4,21 +4,11 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 export const dynamic    = "force-dynamic";
 export const revalidate = 0;
 
-async function requireAdmin(supabase: ReturnType<typeof createServerSupabaseClient>) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "admin") return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
-  return { error: null };
-}
-
 export async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
   const db = createServerSupabaseClient();
-  const { error: authErr } = await requireAdmin(db);
-  if (authErr) return authErr;
 
   const { data, error } = await db
     .from("pricing_product_variants")
@@ -38,10 +28,6 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
-  const db = createServerSupabaseClient();
-  const { error: authErr } = await requireAdmin(db);
-  if (authErr) return authErr;
-
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
@@ -55,6 +41,7 @@ export async function PATCH(
     if (key in body) patch[key] = body[key];
   }
 
+  const db = createServerSupabaseClient();
   const { data, error } = await db
     .from("pricing_product_variants")
     .update(patch)
@@ -71,8 +58,6 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
   const db = createServerSupabaseClient();
-  const { error: authErr } = await requireAdmin(db);
-  if (authErr) return authErr;
 
   const { error } = await db
     .from("pricing_product_variants")
