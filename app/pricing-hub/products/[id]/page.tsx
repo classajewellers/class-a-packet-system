@@ -74,6 +74,7 @@ export default function ProductDetailPage() {
 
   const [product, setProduct]       = useState<Product | null>(null);
   const [loading, setLoading]       = useState(true);
+  const [pageError, setPageError]   = useState<string | null>(null);
   const [expanded, setExpanded]     = useState<Set<string>>(new Set());
 
   // Server-side pricing results, keyed by variantId
@@ -161,26 +162,36 @@ export default function ProductDetailPage() {
   const load = useCallback(async () => {
     if (!id || !hydrated || !user || user.role !== "admin") return;
     setLoading(true);
+    setPageError(null);
     const tid = user.tenantId ?? "";
-
-    const res  = await fetch(`/api/pricing-hub/products/${id}`, {
-      credentials: "include",
-      headers: { "x-tenant-id": tid },
-    });
-    const data = await res.json();
-    const product: Product | null = res.ok ? data : null;
-    setProduct(product);
-    setLoading(false);
-
-    // Trigger server-side pricing calculation for all variants
-    if (product) {
-      fetchCalcs(product.pricing_product_variants ?? [], tid);
+    try {
+      const res  = await fetch(`/api/pricing-hub/products/${id}`, {
+        credentials: "include",
+        headers: { "x-tenant-id": tid },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("[product-detail] fetch failed:", res.status, data);
+        setPageError(data?.error ?? `Failed to load product (${res.status})`);
+        setProduct(null);
+        return;
+      }
+      const product: Product | null = data ?? null;
+      setProduct(product);
+      if (product) {
+        fetchCalcs(product.pricing_product_variants ?? [], tid);
+      }
+    } catch (err) {
+      console.error("[product-detail] load error:", err);
+      setPageError("Failed to load product. Check console for details.");
+    } finally {
+      setLoading(false);
     }
   }, [id, hydrated, user, fetchCalcs]);
 
   useEffect(() => { load(); }, [load]);
 
-  if (!hydrated || !user) return null;
+  if (!hydrated || !user) return <div style={{ padding: "32px 40px", color: "#9CA3AF", fontSize: 14 }}>Loading…</div>;
   if (user.role !== "admin") return null;
 
   const tid = user.tenantId ?? "";
@@ -285,6 +296,12 @@ export default function ProductDetailPage() {
   };
 
   if (loading) return <div style={{ padding: "32px 40px", color: "#9CA3AF", fontSize: 14 }}>Loading…</div>;
+  if (pageError) return (
+    <div style={{ padding: "32px 40px" }}>
+      <p style={{ color: "#DC2626", fontSize: 14, marginBottom: 8 }}>Error: {pageError}</p>
+      <Link href="/pricing-hub/products" style={{ color: "#635BFF", fontSize: 13 }}>← Back to Products</Link>
+    </div>
+  );
   if (!product) return (
     <div style={{ padding: "32px 40px" }}>
       <p style={{ color: "#DC2626", fontSize: 14 }}>Product not found.</p>

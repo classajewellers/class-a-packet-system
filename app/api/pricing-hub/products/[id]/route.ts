@@ -23,7 +23,15 @@ export async function GET(
     .eq("id", params.id)
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 404 });
+  if (error) {
+    console.error("[pricing-hub/products/[id]] GET error:", {
+      message: error.message,
+      code:    (error as any).code,
+      hint:    (error as any).hint,
+      details: (error as any).details,
+    });
+    return NextResponse.json({ error: error.message }, { status: 404 });
+  }
   return NextResponse.json(data);
 }
 
