@@ -1,7 +1,6 @@
 "use client";
 
-export const dynamic    = "force-dynamic";
-export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
