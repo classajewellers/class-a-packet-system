@@ -46,7 +46,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // ── SALES ──────────────────────────────────────────────────────────────────
     if (section === "sales") {
       // Use select("*") and plain date strings (matching admin/packets API pattern)
-      const { data: packets, error } = await supabase
+      const salesQ = supabase
         .from("packets")
         .select("*")
         .gte("created_at", start)
@@ -54,6 +54,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         .neq("packet_type", "client_intake")
         .gt("total_charges", 0)
         .order("created_at", { ascending: true });
+      const { data: packets, error } = await (tenantId ? salesQ.eq("tenant_id", tenantId) : salesQ);
 
       console.log(
         "[reporting:sales] packets:",
@@ -78,13 +79,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const priorEnd = addDays(start, -1);
       const priorStart = addDays(priorEnd, -(duration - 1));
 
-      const { data: priorPackets } = await supabase
+      const priorQ = supabase
         .from("packets")
         .select("total_charges")
         .gte("created_at", priorStart)
         .lt("created_at", start)
         .neq("packet_type", "client_intake")
         .gt("total_charges", 0);
+      const { data: priorPackets } = await (tenantId ? priorQ.eq("tenant_id", tenantId) : priorQ);
 
       const priorRows = priorPackets ?? [];
       const priorRevenue = priorRows.reduce(
@@ -183,12 +185,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     // ── ORDERS ─────────────────────────────────────────────────────────────────
     if (section === "orders") {
-      const { data: packets, error } = await supabase
+      const ordersQ = supabase
         .from("packets")
         .select("*")
         .gte("created_at", start)
         .lt("created_at", endPlusOne)
         .order("created_at", { ascending: true });
+      const { data: packets, error } = await (tenantId ? ordersQ.eq("tenant_id", tenantId) : ordersQ);
 
       console.log(
         "[reporting:orders] packets:",
@@ -215,7 +218,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
       // Overdue: repair + custom_order, past due date, not yet label-printed
       // Fetch candidates then filter in JS to avoid complex OR syntax
-      const { data: overduePackets } = await supabase
+      const overdueQ = supabase
         .from("packets")
         .select(
           "id, reference_number, packet_type, due_date, customer_first_name, customer_last_name, label_printed"
@@ -224,6 +227,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         .lt("due_date", today)
         .order("due_date", { ascending: true })
         .limit(200);
+      const { data: overduePackets } = await (tenantId ? overdueQ.eq("tenant_id", tenantId) : overdueQ);
 
       console.log(
         "[reporting:orders] overduePackets (pre-filter):",
@@ -287,10 +291,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     // ── WORKSHOP ───────────────────────────────────────────────────────────────
     if (section === "workshop") {
-      const { data: jobs, error } = await supabase
-        .from("workshop_jobs")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const jobsQ = supabase.from("workshop_jobs").select("*").order("created_at", { ascending: false });
+      const { data: jobs, error } = await (tenantId ? jobsQ.eq("tenant_id", tenantId) : jobsQ);
 
       console.log(
         "[reporting:workshop] jobs:",
@@ -395,12 +397,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     // ── QUOTES ─────────────────────────────────────────────────────────────────
     if (section === "quotes") {
-      const { data: quotes, error } = await supabase
+      const quotesQ = supabase
         .from("quotes")
         .select("*")
         .gte("created_at", start)
         .lt("created_at", endPlusOne)
         .order("created_at", { ascending: true });
+      const { data: quotes, error } = await (tenantId ? quotesQ.eq("tenant_id", tenantId) : quotesQ);
 
       console.log(
         "[reporting:quotes] quotes:",
@@ -539,7 +542,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // ── CUSTOMERS ──────────────────────────────────────────────────────────────
     if (section === "customers") {
       // Query all packets that have a customer email
-      const { data: packets, error } = await supabase
+      const custPacketsQ = supabase
         .from("packets")
         .select(
           "customer_email, customer_first_name, customer_last_name, customer_phone, total_charges, created_at"
@@ -547,6 +550,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         .not("customer_email", "is", null)
         .neq("customer_email", "")
         .order("created_at", { ascending: true });
+      const { data: packets, error } = await (tenantId ? custPacketsQ.eq("tenant_id", tenantId) : custPacketsQ);
 
       console.log(
         "[reporting:customers] packets:",
@@ -682,12 +686,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     // ── STAFF ──────────────────────────────────────────────────────────────────
     if (section === "staff") {
-      const { data: packets, error: pe } = await supabase
+      const staffPacketsQ = supabase
         .from("packets")
         .select("staff_member, total_charges, created_at, packet_type")
         .gte("created_at", start)
         .lt("created_at", endPlusOne)
         .neq("packet_type", "client_intake");
+      const { data: packets, error: pe } = await (tenantId ? staffPacketsQ.eq("tenant_id", tenantId) : staffPacketsQ);
 
       console.log(
         "[reporting:staff] packets:",
@@ -696,11 +701,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         pe?.message ?? "none"
       );
 
-      const { data: quotes, error: qe } = await supabase
+      const staffQuotesQ = supabase
         .from("quotes")
         .select("assigned_to, staff_member, status")
         .gte("created_at", start)
         .lt("created_at", endPlusOne);
+      const { data: quotes, error: qe } = await (tenantId ? staffQuotesQ.eq("tenant_id", tenantId) : staffQuotesQ);
 
       console.log(
         "[reporting:staff] quotes:",

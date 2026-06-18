@@ -23,11 +23,8 @@ export async function POST(
   const supabase = await createTenantSupabaseClient(tenantId);
 
   // Fetch the quote
-  const { data, error } = await supabase
-    .from("quotes")
-    .select("*")
-    .eq("id", params.id)
-    .single();
+  const q = supabase.from("quotes").select("*").eq("id", params.id);
+  const { data, error } = await (tenantId ? q.eq("tenant_id", tenantId) : q).single();
 
   if (error || !data) {
     return NextResponse.json({ error: "Quote not found" }, { status: 404 });
@@ -95,14 +92,12 @@ export async function POST(
   });
 
   // Save to quote
-  await supabase
-    .from("quotes")
-    .update({
-      stripe_payment_link_id: paymentLink.id,
-      stripe_payment_link_url: paymentLink.url,
-      deposit_amount: depositAmount,
-    })
-    .eq("id", params.id);
+  const upd = supabase.from("quotes").update({
+    stripe_payment_link_id: paymentLink.id,
+    stripe_payment_link_url: paymentLink.url,
+    deposit_amount: depositAmount,
+  }).eq("id", params.id);
+  await (tenantId ? upd.eq("tenant_id", tenantId) : upd);
 
   return NextResponse.json({
     payment_link_url: paymentLink.url,

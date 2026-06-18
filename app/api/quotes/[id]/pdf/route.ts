@@ -14,11 +14,8 @@ async function generatePDF(
   const tenantId = req.headers.get("x-tenant-id") ?? "";
   const supabase = await createTenantSupabaseClient(tenantId);
 
-  const { data, error } = await supabase
-    .from("quotes")
-    .select("*")
-    .eq("id", params.id)
-    .single();
+  const q = supabase.from("quotes").select("*").eq("id", params.id);
+  const { data, error } = await (tenantId ? q.eq("tenant_id", tenantId) : q).single();
 
   if (error || !data) {
     return NextResponse.json({ error: "Quote not found" }, { status: 404 });

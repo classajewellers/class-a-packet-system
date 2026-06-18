@@ -18,26 +18,14 @@ export async function GET(
     const tenantId = req.headers.get('x-tenant-id') ?? ''
     const supabase = await createTenantSupabaseClient(tenantId);
 
+    const pkQ = supabase.from("packets").select("*").ilike("customer_email", email).order("created_at", { ascending: false });
+    const qtQ = supabase.from("quotes").select("*").ilike("customer_email", email).is("converted_to_packet_id", null).order("created_at", { ascending: false });
+    const custQ = supabase.from("customers").select("notes, id").ilike("email", email);
+
     const [packetsResult, quotesResult, notesResult] = await Promise.all([
-      supabase
-        .from("packets")
-        .select("*")
-        .ilike("customer_email", email)
-        .order("created_at", { ascending: false }),
-
-      supabase
-        .from("quotes")
-        .select("*")
-        .ilike("customer_email", email)
-        .is("converted_to_packet_id", null)
-        .order("created_at", { ascending: false }),
-
-      // Fetch notes from customers table (may not exist — handle gracefully)
-      supabase
-        .from("customers")
-        .select("notes, id")
-        .ilike("email", email)
-        .maybeSingle(),
+      (tenantId ? pkQ.eq("tenant_id", tenantId) : pkQ),
+      (tenantId ? qtQ.eq("tenant_id", tenantId) : qtQ),
+      (tenantId ? custQ.eq("tenant_id", tenantId) : custQ).maybeSingle(),
     ]);
 
     const packets = packetsResult.data ?? [];

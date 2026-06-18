@@ -25,12 +25,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const supabase = await createTenantSupabaseClient(tenantId);
 
     // Fetch packets — only columns needed for aggregation
-    const { data: packets, error: pErr } = await supabase
+    const packetsQ = supabase
       .from("packets")
       .select(
         "customer_email, customer_phone, customer_first_name, customer_last_name, total_charges, created_at, articles, instructions"
       )
       .order("created_at", { ascending: false });
+    const { data: packets, error: pErr } = await (tenantId ? packetsQ.eq("tenant_id", tenantId) : packetsQ);
 
     if (pErr) {
       return NextResponse.json({ customers: [], error: pErr.message }, { status: 500 });
@@ -39,10 +40,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // Fetch quotes — only columns needed
     let quotes: { customer_email: string | null; customer_phone: string | null; customer_first_name: string | null; customer_last_name: string | null; created_at: string }[] = [];
     try {
-      const { data: qData } = await supabase
+      const quotesQ = supabase
         .from("quotes")
         .select("customer_email, customer_phone, customer_first_name, customer_last_name, created_at")
         .order("created_at", { ascending: false });
+      const { data: qData } = await (tenantId ? quotesQ.eq("tenant_id", tenantId) : quotesQ);
       quotes = qData ?? [];
     } catch {
       // quotes table may not exist

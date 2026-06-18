@@ -11,11 +11,8 @@ export async function GET(
 ): Promise<NextResponse> {
   const tenantId = req.headers.get('x-tenant-id') ?? ''
   const supabase = await createTenantSupabaseClient(tenantId);
-  const { data, error } = await supabase
-    .from("quotes")
-    .select("*")
-    .eq("id", params.id)
-    .single();
+  const q = supabase.from("quotes").select("*").eq("id", params.id);
+  const { data, error } = await (tenantId ? q.eq("tenant_id", tenantId) : q).single();
 
   if (error || !data) {
     console.error("[quotes/[id]] GET failed:", { id: params.id, code: error?.code, message: error?.message });
@@ -93,12 +90,8 @@ export async function PATCH(
 
   const tenantId = req.headers.get('x-tenant-id') ?? ''
   const supabase = await createTenantSupabaseClient(tenantId);
-  const { data, error } = await supabase
-    .from("quotes")
-    .update(updates)
-    .eq("id", params.id)
-    .select()
-    .single();
+  const pq = supabase.from("quotes").update(updates).eq("id", params.id);
+  const { data, error } = await (tenantId ? pq.eq("tenant_id", tenantId) : pq).select().single();
 
   if (error || !data) {
     return NextResponse.json(
@@ -136,10 +129,8 @@ export async function DELETE(
     console.warn("[DELETE quote] notifications clear failed (non-fatal):", notifErr.message);
   }
 
-  const { error } = await supabase
-    .from("quotes")
-    .delete()
-    .eq("id", params.id);
+  const dq = supabase.from("quotes").delete().eq("id", params.id);
+  const { error } = await (tenantId ? dq.eq("tenant_id", tenantId) : dq);
 
   if (error) {
     console.error("[DELETE quote] error:", error);

@@ -25,6 +25,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     .gt("total_charges", 0)
     .order("created_at", { ascending: true });
 
+  if (tenantId) query = query.eq("tenant_id", tenantId);
+
   if (type !== "all") {
     query = query.eq("packet_type", type);
   }

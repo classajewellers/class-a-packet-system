@@ -8,10 +8,8 @@ export async function GET(req: NextRequest) {
   try {
     const tenantId = req.headers.get('x-tenant-id') ?? ''
     const supabase = await createTenantSupabaseClient(tenantId)
-    const { data, error } = await supabase
-      .from('quotes')
-      .select('*')
-      .order('created_at', { ascending: false })
+    const quotesQ = supabase.from('quotes').select('*').order('created_at', { ascending: false })
+    const { data, error } = await (tenantId ? quotesQ.eq('tenant_id', tenantId) : quotesQ)
 
     if (error) {
       console.error('[quotes] Error:', error)

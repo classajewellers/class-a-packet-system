@@ -24,6 +24,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     .limit(query.limit ?? 100)
     .range(query.offset ?? 0, (query.offset ?? 0) + (query.limit ?? 100) - 1);
 
+  if (tenantId) dbQuery = dbQuery.eq("tenant_id", tenantId);
+
   if (query.search) {
     const s = `%${query.search}%`;
     dbQuery = dbQuery.or(
@@ -75,12 +77,8 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
 
   const tenantId = req.headers.get('x-tenant-id') ?? ''
   const supabase = await createTenantSupabaseClient(tenantId);
-  const { data, error } = await supabase
-    .from("packets")
-    .update(updates)
-    .eq("id", id)
-    .select()
-    .single();
+  const pq = supabase.from("packets").update(updates).eq("id", id);
+  const { data, error } = await (tenantId ? pq.eq("tenant_id", tenantId) : pq).select().single();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

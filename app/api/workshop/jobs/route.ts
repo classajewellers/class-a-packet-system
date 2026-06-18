@@ -16,6 +16,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       .select("*")
       .order("created_at", { ascending: false });
 
+    if (tenantId) query = query.eq("tenant_id", tenantId);
+
     if (stage) {
       query = query.eq("stage", stage);
     } else {

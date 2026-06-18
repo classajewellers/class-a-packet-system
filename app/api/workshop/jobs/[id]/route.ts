@@ -10,11 +10,8 @@ export async function GET(
   try {
     const tenantId = req.headers.get('x-tenant-id') ?? ''
     const supabase = await createTenantSupabaseClient(tenantId);
-    const { data, error } = await supabase
-      .from("workshop_jobs")
-      .select("*")
-      .eq("id", params.id)
-      .single();
+    const q = supabase.from("workshop_jobs").select("*").eq("id", params.id);
+    const { data, error } = await (tenantId ? q.eq("tenant_id", tenantId) : q).single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 404 });
     return NextResponse.json({ job: data });
@@ -39,12 +36,8 @@ export async function PATCH(
       updates.stage_changed_at = new Date().toISOString();
     }
 
-    const { data, error } = await supabase
-      .from("workshop_jobs")
-      .update(updates)
-      .eq("id", params.id)
-      .select()
-      .single();
+    const pq = supabase.from("workshop_jobs").update(updates).eq("id", params.id);
+    const { data, error } = await (tenantId ? pq.eq("tenant_id", tenantId) : pq).select().single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ job: data });
@@ -61,10 +54,8 @@ export async function DELETE(
   try {
     const tenantId = req.headers.get('x-tenant-id') ?? ''
     const supabase = await createTenantSupabaseClient(tenantId);
-    const { error } = await supabase
-      .from("workshop_jobs")
-      .delete()
-      .eq("id", params.id);
+    const dq = supabase.from("workshop_jobs").delete().eq("id", params.id);
+    const { error } = await (tenantId ? dq.eq("tenant_id", tenantId) : dq);
 
     if (error) {
       console.error("[DELETE workshop job] error:", error);

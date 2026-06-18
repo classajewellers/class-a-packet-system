@@ -35,10 +35,8 @@ export async function DELETE(
     }
 
     // Step 3: Now delete the packet
-    const { error } = await supabase
-      .from('packets')
-      .delete()
-      .eq('id', params.id)
+    const delQ = supabase.from('packets').delete().eq('id', params.id)
+    const { error } = await (tenantId ? delQ.eq('tenant_id', tenantId) : delQ)
 
     if (error) {
       console.error('[DELETE] Supabase error:', error)
@@ -59,11 +57,8 @@ export async function GET(
 ) {
   const tenantId = req.headers.get('x-tenant-id') ?? ''
   const supabase = await createTenantSupabaseClient(tenantId)
-  const { data, error } = await supabase
-    .from('packets')
-    .select('*')
-    .eq('id', params.id)
-    .single()
+  const q = supabase.from('packets').select('*').eq('id', params.id)
+  const { data, error } = await (tenantId ? q.eq('tenant_id', tenantId) : q).single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ packet: data }, { headers: { 'Cache-Control': 'no-store' } })
 }
@@ -75,12 +70,8 @@ export async function PATCH(
   const tenantId = req.headers.get('x-tenant-id') ?? ''
   const supabase = await createTenantSupabaseClient(tenantId)
   const body = await req.json()
-  const { data, error } = await supabase
-    .from('packets')
-    .update(body)
-    .eq('id', params.id)
-    .select()
-    .single()
+  const pq = supabase.from('packets').update(body).eq('id', params.id)
+  const { data, error } = await (tenantId ? pq.eq('tenant_id', tenantId) : pq).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ packet: data, success: true })
 }

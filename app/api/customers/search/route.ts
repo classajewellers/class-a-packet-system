@@ -12,11 +12,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const tenantId = req.headers.get("x-tenant-id") ?? "";
     const supabase = await createTenantSupabaseClient(tenantId);
 
-    const { data, error } = await supabase
+    const searchQ = supabase
       .from("customers")
       .select("first_name, last_name, email, phone")
       .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`)
       .limit(8);
+    const { data, error } = await (tenantId ? searchQ.eq("tenant_id", tenantId) : searchQ);
 
     if (error) return NextResponse.json({ results: [] });
     return NextResponse.json({ results: data ?? [] });
