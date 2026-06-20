@@ -155,6 +155,61 @@ export default function VipTiersPage() {
         </button>
       </div>
 
+      {/* Example defaults guide */}
+      <div>
+        <p style={{ fontSize: 12, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+          Example defaults
+        </p>
+        <div style={{ ...CARD, padding: 0, opacity: 0.4, pointerEvents: "none", overflow: "hidden" }}>
+          <div className="overflow-x-auto">
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #E8E8F0" }}>
+                  {["Order", "Tier Name", "Colour", "Min Spend ($)", "Min Orders", "Preview"].map(h => (
+                    <th key={h} style={{ ...SEC, padding: "0 12px 10px", textAlign: "left", whiteSpace: "nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { order: 1, name: "Silver",   colour: "#9CA3AF", spend: "5,000",  orders: 3  },
+                  { order: 2, name: "Gold",     colour: "#F59E0B", spend: "10,000", orders: 6  },
+                  { order: 3, name: "Platinum", colour: "#6366F1", spend: "15,000", orders: 10 },
+                  { order: 4, name: "Diamond",  colour: "#06B6D4", spend: "20,000", orders: 15 },
+                  { order: 5, name: "Argyle",   colour: "#F43F5E", spend: "30,000", orders: 20 },
+                ].map(row => (
+                  <tr key={row.name} style={{ borderBottom: "1px solid #F0F0F5" }}>
+                    <td style={{ padding: "10px 12px", width: 60 }}>
+                      <div style={{ ...INPUT, width: 52, textAlign: "center", display: "inline-block" }}>{row.order}</div>
+                    </td>
+                    <td style={{ padding: "10px 12px", minWidth: 120 }}>
+                      <div style={{ ...INPUT }}>{row.name}</div>
+                    </td>
+                    <td style={{ padding: "10px 12px", width: 100 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ width: 36, height: 30, border: "1px solid #E8E8F0", borderRadius: 6, background: row.colour }} />
+                        <span style={{ fontSize: 11, color: "#9CA3AF", fontFamily: "monospace" }}>{row.colour}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: "10px 12px", width: 130 }}>
+                      <div style={{ ...INPUT }}>${row.spend}</div>
+                    </td>
+                    <td style={{ padding: "10px 12px", width: 110 }}>
+                      <div style={{ ...INPUT }}>{row.orders}</div>
+                    </td>
+                    <td style={{ padding: "10px 12px" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, background: `${row.colour}22`, color: row.colour, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                        {row.name}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       {/* Tiers table */}
       <div style={CARD}>
         {loading ? (
