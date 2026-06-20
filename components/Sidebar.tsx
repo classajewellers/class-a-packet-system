@@ -201,7 +201,6 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
                 <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
                   <SubLink href="/quotes"                   label="Quotes Pipeline" />
                   <SubLink href="/quotes/builder"           label="Build Quote" />
-                  <SubLink href="/quotes/charm-necklace"    label="Charm Necklace / Bracelet" />
                 </div>
               )}
             </div>
