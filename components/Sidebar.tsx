@@ -6,7 +6,6 @@ import { useUser } from "@/context/UserContext";
 import {
   LayoutDashboard,
   ShoppingBag,
-  Globe,
   Wrench,
   FileText,
   Users,
@@ -16,9 +15,7 @@ import {
   ChevronDown,
   Brain,
   Package,
-  ClipboardList,
   X,
-  Tag,
 } from "lucide-react";
 import { canManage, hasPermission } from "@/lib/userTypes";
 
@@ -50,7 +47,6 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
   const quotesExpanded     = pathname.startsWith("/quotes");
   const inventoryExpanded  = pathname.startsWith("/inventory");
   const workshopExpanded   = pathname.startsWith("/workshop");
-  const pricingHubExpanded = pathname.startsWith("/pricing-hub");
   const settingsExpanded   = pathname.startsWith("/settings") ||
                              pathname.startsWith("/pricing") ||
                              pathname.startsWith("/admin/users");
@@ -194,7 +190,6 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
           <NavLink href="/" icon={LayoutDashboard} label="Dashboard" />
 
           {can("orders")    && <NavLink href="/orders"    icon={ShoppingBag} label="Orders" />}
-          {can("online")    && <NavLink href="/online"    icon={Globe}       label="Online" />}
 
           {can("quotes") && (
             <div>
@@ -204,8 +199,9 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
               />
               {quotesExpanded && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
-                  <SubLink href="/quotes"         label="Quotes Pipeline" />
-                  <SubLink href="/quotes/builder" label="Build Quote" />
+                  <SubLink href="/quotes"                   label="Quotes Pipeline" />
+                  <SubLink href="/quotes/builder"           label="Build Quote" />
+                  <SubLink href="/quotes/charm-necklace"    label="Charm Necklace / Bracelet" />
                 </div>
               )}
             </div>
@@ -236,36 +232,18 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
               />
               {inventoryExpanded && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
-                  <SubLink href="/inventory"                         label="Stock Register" />
-                  <SubLink href="/inventory/products"               label="Products" />
-                  {isManager && <SubLink href="/inventory/purchase-orders" label="Purchase Orders" />}
-                  {isManager && <SubLink href="/inventory/settings"        label="Settings" />}
+                  <SubLink href="/inventory"                              label="Stock Register" />
+                  <SubLink href="/inventory/products"                    label="Products" />
+                  {isManager && <SubLink href="/inventory/purchase-orders"    label="Purchase Orders" />}
+                  {isManager && <SubLink href="/inventory/settings"           label="Settings" />}
+                  <SubLink href="/inventory/product-templates"           label="Product Templates" />
                 </div>
               )}
             </div>
           )}
 
-          {can("vault_brain") && <NavLink href="/vault/brain" icon={Brain}  label="Vault Brain" />}
+          {can("vault_brain") && <NavLink href="/vault/brain" icon={Brain}    label="Vault Brain" />}
           {can("reporting")  && <NavLink href="/reporting"  icon={BarChart2} label="Reporting" />}
-
-          {isAdmin && (
-            <div>
-              <ExpandLink
-                icon={Tag} label="Pricing Hub" expanded={pricingHubExpanded}
-                onClick={() => { router.push("/pricing-hub"); onClose(); }}
-              />
-              {pricingHubExpanded && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
-                  <SubLink href="/pricing-hub"                  label="Dashboard" />
-                  <SubLink href="/pricing-hub/products"         label="Products" />
-                  <SubLink href="/pricing-hub/suppliers"        label="Suppliers" />
-                  <SubLink href="/pricing-hub/audit"            label="Audit" />
-                  <SubLink href="/pricing-hub/settings"         label="Settings" />
-                  <SubLink href="/pricing-hub/charm-library"    label="Charm Library" />
-                </div>
-              )}
-            </div>
-          )}
 
           {showSettings && (
             <div>

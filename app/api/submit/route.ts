@@ -172,7 +172,8 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
   const isNotOnlineOrder = packet.packet_type !== "online_order";
   const hasPhone         = !!packet.customer_phone;
   const isNotShopify     = (packet.order_source ?? "").toLowerCase() !== "shopify";
-  const shouldAutoSend   = isAutoSendType && isNotOnlineOrder && hasPhone && isNotShopify;
+  const prefersText      = (packet.contact_preference as unknown as string) === "text";
+  const shouldAutoSend   = isAutoSendType && isNotOnlineOrder && hasPhone && isNotShopify && prefersText;
   const confirmWebhook   = process.env.ZAPIER_ORDER_CONFIRMATION_WEBHOOK;
 
   console.log("[submit] Auto-send SMS:", {

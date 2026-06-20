@@ -11,7 +11,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     type: (searchParams.get("type") as AdminPacketsQuery["type"]) ?? undefined,
     from: searchParams.get("from") ?? undefined,
     to: searchParams.get("to") ?? undefined,
-    limit: parseInt(searchParams.get("limit") ?? "100"),
+    limit: parseInt(searchParams.get("limit") ?? "2000"),
     offset: parseInt(searchParams.get("offset") ?? "0"),
   };
 
@@ -21,8 +21,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     .from("packets")
     .select("*")
     .order("created_at", { ascending: false })
-    .limit(query.limit ?? 100)
-    .range(query.offset ?? 0, (query.offset ?? 0) + (query.limit ?? 100) - 1);
+    .limit(query.limit ?? 2000)
+    .range(query.offset ?? 0, (query.offset ?? 0) + (query.limit ?? 2000) - 1);
 
   if (tenantId) dbQuery = dbQuery.eq("tenant_id", tenantId);
 

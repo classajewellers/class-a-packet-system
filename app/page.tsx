@@ -118,14 +118,10 @@ export default function DashboardPage() {
 
     const monthStart = startOfMonthISO();
     const today = todayISO();
-    fetch(`/api/revenue?from=${monthStart}&to=${today}`, { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } })
+    fetch(`/api/reporting?section=sales&start=${monthStart}&end=${today}`, { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } })
       .then((r) => r.json())
       .then((json) => {
         if (typeof json.totalRevenue === "number") setRevenueThisMonth(json.totalRevenue);
-        else if (Array.isArray(json.data)) {
-          const total = json.data.reduce((sum: number, d: { revenue?: number }) => sum + (d.revenue ?? 0), 0);
-          setRevenueThisMonth(total);
-        }
       })
       .catch(() => {});
 
@@ -155,7 +151,6 @@ export default function DashboardPage() {
       !ONLINE_SOURCES.includes((p as any).order_source ?? "") &&
       (p as any).order_type !== "online"
   ).length;
-  const unprintedOnline = packets.filter((p) => p.packet_type === "online_order" && !p.label_printed).length;
 
   const recentOrders = [...packets]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -216,15 +211,14 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Stat cards ── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
         {loading ? (
-          Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
+          Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)
         ) : (
           <>
-            <StatCard label="Today's Orders"   value={todaysOrders}    sub="submitted today"     href="/orders?filter=today" />
-            <StatCard label="Due Today"         value={dueToday}        sub="awaiting collection" href="/orders?filter=due_today" />
-            <StatCard label="Overdue"           value={overdueRepairs}  sub="past due date"       href="/orders?filter=overdue" />
-            <StatCard label="Unprinted Online"  value={unprintedOnline} sub="need labels"         href="/online?filter=unprinted" />
+            <StatCard label="Today's Orders" value={todaysOrders}   sub="submitted today"     href="/orders?filter=today" />
+            <StatCard label="Due Today"       value={dueToday}       sub="awaiting collection" href="/orders?filter=due_today" />
+            <StatCard label="Overdue"         value={overdueRepairs} sub="past due date"       href="/orders?filter=overdue" />
             <StatCard
               label="Revenue MTD"
               value={revenueThisMonth != null ? formatCurrency(revenueThisMonth) : "—"}

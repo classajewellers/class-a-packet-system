@@ -11,18 +11,17 @@ import { hasPermission } from "@/lib/userTypes";
 import AdminTable from "@/components/AdminTable";
 import PacketDetailDrawer from "@/components/PacketDetailDrawer";
 
-type OrderFilter = "all" | "shopify" | "in-store" | PacketType;
+type OrderFilter = "all" | "shopify" | "in-store" | "repair";
 type UrlFilter   = "today" | "due_today" | "overdue" | null;
 
 const ORDER_FILTERS: { value: OrderFilter; label: string }[] = [
-  { value: "all",           label: "All Orders" },
-  { value: "shopify",       label: "Shopify" },
-  { value: "in-store",      label: "In-Store" },
-  { value: "repair",        label: "Repair" },
-  { value: "custom_order",  label: "Custom Order" },
-  { value: "layby",         label: "Layby" },
-  { value: "client_intake", label: "Client Intake" },
+  { value: "all",      label: "All Orders" },
+  { value: "shopify",  label: "Shopify" },
+  { value: "in-store", label: "In-Store" },
+  { value: "repair",   label: "Repair" },
 ];
+
+const PAGE_SIZE = 25;
 
 function OrdersPageInner() {
   const { user, hydrated } = useUser();
@@ -42,6 +41,7 @@ function OrdersPageInner() {
   const [search, setSearch] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [page, setPage] = useState(1);
 
   // Apply filter from URL param on mount
   useEffect(() => {
@@ -106,7 +106,8 @@ function OrdersPageInner() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  useEffect(() => { setSelectedIds(new Set()); }, [orderFilter]);
+  useEffect(() => { setSelectedIds(new Set()); setPage(1); }, [orderFilter]);
+  useEffect(() => { setPage(1); }, [search, from, to, urlFilter]);
 
   function handleUpdate(updated: Packet) {
     setPackets((prev) => prev.map((p) => p.id === updated.id ? updated : p));
@@ -173,6 +174,9 @@ function OrdersPageInner() {
     [packets]
   );
 
+  const totalPages  = Math.max(1, Math.ceil(filteredPackets.length / PAGE_SIZE));
+  const pagedPackets = filteredPackets.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   return (
     <>
       {selectedPacket && (
@@ -233,8 +237,25 @@ function OrdersPageInner() {
 
         {/* Table wrap */}
         <div className="ds-table-wrap">
-          {/* Filters toolbar */}
-          <div className="ds-table-header" style={{ flexWrap: "wrap", gap: 12 }}>
+          {/* Search — full width, prominent */}
+          <div style={{ padding: "16px 16px 0" }}>
+            <div style={{ position: "relative" }}>
+              <svg style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "var(--text-dim)" }} width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search by name, reference, email or phone…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="ds-input"
+                style={{ paddingLeft: 42, width: "100%", height: 40, fontSize: 14, boxSizing: "border-box" }}
+              />
+            </div>
+          </div>
+
+          {/* Filters + date range row */}
+          <div className="ds-table-header" style={{ flexWrap: "wrap", gap: 10, paddingTop: 10 }}>
             <div className="ds-filters">
               {ORDER_FILTERS.map((f) => {
                 const isActive  = orderFilter === f.value;
@@ -261,23 +282,8 @@ function OrdersPageInner() {
                 );
               })}
             </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              {/* Search */}
-              <div style={{ position: "relative" }}>
-                <svg style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-dim)" }} width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                </svg>
-                <input
-                  type="text"
-                  placeholder="Search orders…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="ds-input"
-                  style={{ paddingLeft: 32, width: 220, height: 32, fontSize: 13 }}
-                />
-              </div>
-              {/* Date range */}
+            {/* Date range */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
               <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="ds-input" style={{ width: 140, height: 32, fontSize: 13 }} title="From date" />
               <span style={{ color: "var(--text-dim)", fontSize: 13 }}>–</span>
               <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="ds-input" style={{ width: 140, height: 32, fontSize: 13 }} title="To date" />
@@ -326,11 +332,44 @@ function OrdersPageInner() {
             </div>
           ) : (
             <AdminTable
-              packets={filteredPackets}
+              packets={pagedPackets}
               onRowClick={setSelectedPacket}
               selectedIds={selectedIds}
               onSelectionChange={setSelectedIds}
             />
+          )}
+
+          {/* Pagination */}
+          {!loading && filteredPackets.length > PAGE_SIZE && (
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "12px 16px", borderTop: "1px solid var(--border-subtle)",
+            }}>
+              <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
+                {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, filteredPackets.length)} of {filteredPackets.length} orders
+              </span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="ds-btn ds-btn-secondary ds-btn-sm"
+                  style={{ opacity: page === 1 ? 0.4 : 1 }}
+                >
+                  ← Previous
+                </button>
+                <span style={{ fontSize: 13, color: "var(--text-2)", padding: "0 4px", lineHeight: "30px" }}>
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="ds-btn ds-btn-secondary ds-btn-sm"
+                  style={{ opacity: page === totalPages ? 0.4 : 1 }}
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>
