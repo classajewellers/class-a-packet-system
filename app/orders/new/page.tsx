@@ -391,7 +391,7 @@ function NewOrderPageInner() {
                 </Card>
 
                 {(formData.packet_type === "repair" || formData.packet_type === "custom_order") && (
-                  <Card title="Valuation & Contact">
+                  <Card title="Certificate & Contact">
                     <ValueContactSection
                       data={formData}
                       onChange={(f, v) => handleChange(f, v as boolean | string[])}

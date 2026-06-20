@@ -79,7 +79,18 @@
       "mcp__Claude_Preview__preview_click",
       "mcp__Claude_Preview__preview_fill",
       "mcp__Claude_Preview__preview_inspect",
-      "mcp__Claude_Preview__preview_resize"
+      "mcp__Claude_Preview__preview_resize",
+      "Bash(xxd \"app/pricing-hub/products/[id]/page.tsx\")",
+      "Bash(cd /Users/joshmucklow/Downloads/Projects && npx create-next-app@14 vault-landing --typescript --tailwind --eslint --app --src-dir=false --import-alias=\"@/*\" --no-git 2>&1)",
+      "Bash(cat)",
+      "Bash(ls /Users/joshmucklow/Downloads/Projects/outputs 2>/dev/null || mkdir -p /Users/joshmucklow/Downloads/Projects/outputs && echo \"ready\")",
+      "Bash(find /Users/joshmucklow/Downloads -name \"vault-welcome-email.html\" 2>/dev/null)",
+      "Bash(cp \"/Users/joshmucklow/Downloads/vault-welcome-email.html\" \"/Users/joshmucklow/Downloads/Projects/outputs/vault-welcome-email.html\")",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "Bash(cat next.config.ts)",
+      "Bash(cat next.config.js)",
+      "Bash(cat next.config.mjs)"
     ],
     "deny": [
       "Bash(git push --force*)",

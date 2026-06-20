@@ -101,7 +101,7 @@ export default function WorkshopPage() {
             onClick={() => setTab(t)}
             style={{ padding: '10px 20px', fontSize: 14, fontWeight: 600, border: 'none', background: 'transparent', cursor: 'pointer', borderBottom: `2px solid ${tab === t ? '#635BFF' : 'transparent'}`, color: tab === t ? '#635BFF' : '#6B7280', transition: 'all .15s', marginBottom: -1, textTransform: 'capitalize' }}
           >
-            {t.charAt(0).toUpperCase() + t.slice(1)}
+            {t === 'valuations' ? 'Certificates' : 'Workshop'}
           </button>
         ))}
       </div>
@@ -121,7 +121,7 @@ export default function WorkshopPage() {
             style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: valuationFilter ? '#FEF3C7' : '#F9FAFB', color: valuationFilter ? '#92400E' : '#6B7280', border: `1px solid ${valuationFilter ? '#D97706' : '#E8E8F0'}`, cursor: 'pointer', transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 5 }}
           >
             <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01z"/></svg>
-            Valuation
+            Certificate
           </button>
         </div>
         {jewellers.length > 0 && (
@@ -180,7 +180,7 @@ export default function WorkshopPage() {
                         {j.valuation_required && (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A' }}>
                             <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01z"/></svg>
-                            Valuation
+                            Certificate
                           </span>
                         )}
                       </div>
@@ -227,7 +227,7 @@ export default function WorkshopPage() {
                         {j.valuation_required && (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A', whiteSpace: 'nowrap' }}>
                             <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01z"/></svg>
-                            Valuation
+                            Certificate
                           </span>
                         )}
                       </td>

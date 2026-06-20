@@ -393,7 +393,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
     if (json.packet) {
       setLocal(json.packet);
       onUpdate(json.packet);
-      setToast({ type: "success", message: "✓ Valuation approved — opening certificate…" });
+      setToast({ type: "success", message: "✓ Certificate approved — opening certificate…" });
       setLocal(json.packet);
       generateValuationCertificate(json.packet, null);
     }
@@ -645,7 +645,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
               <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75l3 3m0 0l3-3m-3 3v-7.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              Print Valuation Certificate
+              Print Certificate of Authenticity
             </button>
           )}
 
@@ -907,7 +907,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
               {/* Valuation Required toggle — shown for repair and custom orders */}
               {(local.packet_type === 'repair' || local.packet_type === 'custom_order') && (
                 <div>
-                  <Label>Valuation Required</Label>
+                  <Label>Certificate Required</Label>
                   <button
                     type="button"
                     onClick={() => {
@@ -928,7 +928,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01z" />
                     </svg>
-                    {local.valuation_required ? "YES — Valuation Required" : "NO — No Valuation"}
+                    {local.valuation_required ? "YES — Certificate Required" : "NO — No Certificate"}
                   </button>
                 </div>
               )}
@@ -1229,7 +1229,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
 
           {/* ── Valuation Photo ── */}
           {local.valuation_required && (
-            <Section title="Valuation Photo">
+            <Section title="Certificate Photo">
               <input
                 ref={valPhotoInputRef}
                 type="file"
@@ -1250,7 +1250,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   {valPhotoSignedUrl && (
                     <img
                       src={valPhotoSignedUrl}
-                      alt="Valuation photo"
+                      alt="Certificate photo"
                       style={{ width: "100%", borderRadius: 10, border: "1px solid #E8E8F0", marginBottom: 8, objectFit: "cover", maxHeight: 220 }}
                     />
                   )}
@@ -1271,7 +1271,7 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                     <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
                   </svg>
                   <span style={{ fontSize: 13, color: "#6B7280" }}>
-                    <span style={{ fontWeight: 600, color: "#635BFF" }}>Upload valuation photo</span> for certificate
+                    <span style={{ fontWeight: 600, color: "#635BFF" }}>Upload certificate photo</span> for certificate
                   </span>
                   <span style={{ fontSize: 11, color: "#9CA3AF" }}>Photo will appear on the printed certificate</span>
                 </button>

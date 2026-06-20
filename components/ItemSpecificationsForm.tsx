@@ -164,7 +164,7 @@ export default function ItemSpecificationsForm({ packetId: _packetId, specs: ini
         style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#F9FAFB', border: 'none', cursor: 'pointer' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Specifications &amp; Valuation</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Specifications &amp; Certificate</span>
           {valuationStatus && valuationStatus !== "draft" && (
             <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600,
               ...(valuationStatus === "approved" ? { background: '#DCFCE7', color: '#166534' } :
@@ -359,7 +359,7 @@ export default function ItemSpecificationsForm({ packetId: _packetId, specs: ini
                   onChange={(e) => update("item_description", e.target.value)}
                   onBlur={handleBlur}
                   style={{ width: '100%', border: '1px solid #E8E8F0', borderRadius: 8, background: '#fff', fontSize: 14, padding: '8px 12px', color: '#1A1A2E', outline: 'none', fontFamily: 'inherit', resize: 'vertical' as const }}
-                  placeholder="Professional jewellery description for the valuation certificate…"
+                  placeholder="Professional jewellery description for the certificate of authenticity…"
                 />
               </div>
             </div>
@@ -403,7 +403,7 @@ export default function ItemSpecificationsForm({ packetId: _packetId, specs: ini
               disabled={submitting || submitted}
               style={{ width: '100%', background: '#635BFF', color: '#fff', fontWeight: 600, padding: '12px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 14, opacity: (submitting || submitted) ? 0.4 : 1 }}
             >
-              {submitting ? "Submitting…" : submitted ? "Sent to Sam for review ✓" : "Submit for Valuation Review"}
+              {submitting ? "Submitting…" : submitted ? "Sent to Sam for review ✓" : "Submit for Certificate Review"}
             </button>
           )}
 

@@ -50,7 +50,7 @@ export function generateValuationCertificate(packet: Packet, photoUrl?: string |
 <html>
 <head>
 <meta charset="utf-8">
-<title>Valuation Certificate — ${esc(certNumber ?? "DRAFT")}</title>
+<title>Certificate of Authenticity — ${esc(certNumber ?? "DRAFT")}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   @page { size: A4 portrait; margin: 0; }
@@ -153,7 +153,7 @@ export function generateValuationCertificate(packet: Packet, photoUrl?: string |
     </div>
     <div class="cert-meta">
       <strong>Certificate No: ${esc(certNumber ?? "DRAFT")}</strong><br>
-      Date of Valuation: ${esc(certDate)}<br>
+      Date of Issue: ${esc(certDate)}<br>
       Ref: ${esc(packet.reference_number)}
     </div>
   </div>
@@ -162,7 +162,7 @@ export function generateValuationCertificate(packet: Packet, photoUrl?: string |
 
     <!-- Title -->
     <div class="cert-title">
-      <h1>JEWELLERY VALUATION CERTIFICATE</h1>
+      <h1>CERTIFICATE OF AUTHENTICITY</h1>
       <p>For Insurance Replacement Purposes</p>
     </div>
 
@@ -207,14 +207,14 @@ export function generateValuationCertificate(packet: Packet, photoUrl?: string |
     <!-- Finished ring photo -->
     <div class="photo-section">
       <img src="${photoUrl}" alt="Finished item photograph" />
-      <p>Photograph of the item as presented for valuation</p>
+      <p>Photograph of the item as presented for certification</p>
     </div>` : ""}
 
     <!-- Valuation -->
     <div class="valuation-box">
       <div class="erv-label">Estimated Replacement Value</div>
       <div class="erv-value">${formatCurrencyAU(erv)} AUD</div>
-      <div class="erv-note">This valuation represents the estimated retail replacement cost at current market rates.</div>
+      <div class="erv-note">This certificate represents the estimated retail replacement cost at current market rates.</div>
     </div>
 
     <!-- Signature -->
@@ -232,7 +232,7 @@ export function generateValuationCertificate(packet: Packet, photoUrl?: string |
     <!-- Footer -->
     <div class="footer">
       This certificate is valid for 3 years from the date of issue.<br>
-      Vault recommends updating your valuation every 3 years.<br>
+      Vault recommends updating your certificate every 3 years.<br>
       Vault &bull; 40 North East Road Walkerville SA 5081 &bull; www.classa.com.au
     </div>
 

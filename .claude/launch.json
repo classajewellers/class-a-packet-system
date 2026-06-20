@@ -19,5 +19,11 @@
       "runtimeArgs": ["-c", "cd /Users/joshmucklow/Downloads/Projects/class-a-marketing-dashboard/client && npm run dev -- --port 5174"],
       "port": 5174
     }
+  ,{
+      "name": "vault-welcome-email",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "/Users/joshmucklow/Downloads/Projects/outputs", "-p", "4500", "--no-clipboard"],
+      "port": 4500
+    }
   ]
 }

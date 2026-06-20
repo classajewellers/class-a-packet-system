@@ -48,7 +48,7 @@ export default function ValuationReviewQueue() {
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>
-        <p style={{ fontSize: 14 }}>Loading valuation queue…</p>
+        <p style={{ fontSize: 14 }}>Loading certificate queue…</p>
       </div>
     );
   }
@@ -68,7 +68,7 @@ export default function ValuationReviewQueue() {
       {packets.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '64px 0', background: '#FFFFFF', borderRadius: 12, border: '1px solid #E8E8F0' }}>
           <div style={{ fontSize: 36, marginBottom: 12 }}>✓</div>
-          <p style={{ color: '#6B7280', fontWeight: 500, fontSize: 14 }}>No valuations pending review</p>
+          <p style={{ color: '#6B7280', fontWeight: 500, fontSize: 14 }}>No certificates pending review</p>
           <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>All caught up!</p>
         </div>
       ) : (

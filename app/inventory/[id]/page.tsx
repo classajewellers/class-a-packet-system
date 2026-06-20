@@ -552,14 +552,14 @@ export default function InventoryItemPage({ params }: Params) {
         <>
           {/* Edit mode: all cost inputs */}
           {editing && (
-            <SectionWrap title="Pricing & Valuation">
+            <SectionWrap title="Pricing & Certificate">
               <EF label="Locked cost (actual cost paid)" field="locked_cost" type="number" />
               <EF label="Stone cost" field="stone_cost" type="number" />
               <EF label="Labour cost" field="labour_cost" type="number" />
               <EF label="Retail Price" field="retail_price" type="number" />
               <EF label="Cost Price" field="cost_price" type="number" />
-              <EF label="Valuation Number" field="valuation_number" />
-              <EF label="Valuation Amount" field="valuation_amount" type="number" />
+              <EF label="Certificate Number" field="valuation_number" />
+              <EF label="Certificate Amount" field="valuation_amount" type="number" />
             </SectionWrap>
           )}
 
@@ -567,7 +567,7 @@ export default function InventoryItemPage({ params }: Params) {
           {!editing && (
             <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 24, marginBottom: 16 }}>
               <h3 style={{ margin: "0 0 20px", fontSize: 12, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                Pricing &amp; Valuation
+                Pricing &amp; Certificate
               </h3>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
@@ -680,8 +680,8 @@ export default function InventoryItemPage({ params }: Params) {
               {/* Valuation — below panels */}
               {(piece.valuation_number || piece.valuation_amount) && (
                 <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid #E5E7EB", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 24px" }}>
-                  <FieldView label="Valuation Number" value={piece.valuation_number} />
-                  <FieldView label="Valuation Amount" value={piece.valuation_amount} />
+                  <FieldView label="Certificate Number" value={piece.valuation_number} />
+                  <FieldView label="Certificate Amount" value={piece.valuation_amount} />
                 </div>
               )}
             </div>

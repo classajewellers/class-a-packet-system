@@ -97,7 +97,7 @@ export default function WorkshopJobCard({ job, onClick }: Props) {
             <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
               <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01z" />
             </svg>
-            VALUATION
+            CERTIFICATE
           </span>
         )}
         {job.complexity === "complex" && (

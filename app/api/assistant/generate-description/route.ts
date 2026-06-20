@@ -12,11 +12,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const response = await client.messages.create({
       model: "claude-sonnet-4-5",
       max_tokens: 300,
-      system: "You are a professional jewellery valuer writing descriptions for official insurance valuation certificates in Australia. Write precise, formal descriptions using correct jewellery industry terminology. Be specific and factual. Do not include pricing or opinions. Write exactly 2-3 sentences.",
+      system: "You are a professional jewellery valuer writing descriptions for official certificates of authenticity in Australia. Write precise, formal descriptions using correct jewellery industry terminology. Be specific and factual. Do not include pricing or opinions. Write exactly 2-3 sentences.",
       messages: [
         {
           role: "user",
-          content: `Write a 2-3 sentence professional jewellery valuation description for the following item:\n${prompt}`,
+          content: `Write a 2-3 sentence professional jewellery description for the following item:\n${prompt}`,
         },
       ],
     });

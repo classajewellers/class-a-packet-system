@@ -25,10 +25,10 @@ export default function ValueContactSection({ data, onChange, errors }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Valuation Required */}
+      {/* Certificate Required */}
       <div>
         <label className="block text-sm font-semibold text-black mb-2">
-          Valuation Required?
+          Certificate Required?
         </label>
         <div className="flex gap-3">
           {[true, false].map((val) => (

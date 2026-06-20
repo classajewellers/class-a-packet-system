@@ -122,7 +122,7 @@ export default function LabelPreview({ data }: Props) {
           <Row label="In Date" value={data.in_date ? formatDateAU(data.in_date) : "—"} />
           <Row label="Cust #" value={data.customer_number || "—"} />
           <Row label="Stock #" value={data.stock_number || "—"} />
-          <Row label="Valuation" value={data.valuation_required ? "YES" : "NO"} />
+          <Row label="Certificate" value={data.valuation_required ? "YES" : "NO"} />
           <Row label="Contact" value={contactPref} />
           {isOnline && (
             <>
