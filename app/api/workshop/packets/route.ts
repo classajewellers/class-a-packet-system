@@ -55,6 +55,17 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 }
 
+function deriveJobType(rawJobType: string | undefined, packetType: string | undefined): string {
+  // If an explicit workshop job_type was provided, trust it
+  if (rawJobType && WORKSHOP_JOB_TYPES.includes(rawJobType)) return rawJobType;
+  // Derive from packet_type string
+  const pt = (packetType ?? "").toLowerCase();
+  if (/repair|service/.test(pt)) return "repair";
+  if (/custom|bespoke|commission/.test(pt)) return "custom_order";
+  if (/stock|internal/.test(pt)) return "stock_work";
+  return "repair";
+}
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
   try {
@@ -63,11 +74,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const referenceNumber = await generateReferenceNumber(undefined, "repair");
 
+    const jobType = deriveJobType(body.job_type, body.packet_type);
+
     const insert: Record<string, unknown> = {
       tenant_id: tenantId || null,
       reference_number: referenceNumber,
-      packet_type: body.job_type === "stock_work" ? "repair" : (body.job_type ?? "repair"),
-      job_type: body.job_type ?? "repair",
+      packet_type: body.packet_type || jobType,
+      job_type: jobType,
       status: "intake",
       status_updated_at: new Date().toISOString(),
       customer_first_name: body.customer_first_name || null,

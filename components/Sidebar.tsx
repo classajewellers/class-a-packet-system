@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
@@ -44,11 +45,18 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
   // Settings group is visible if user has pricing OR settings permission
   const showSettings = can("pricing") || can("settings") || isManager;
 
-  const quotesExpanded     = pathname.startsWith("/quotes");
-  const inventoryExpanded  = pathname.startsWith("/inventory");
-  const settingsExpanded   = pathname.startsWith("/settings") ||
-                             pathname.startsWith("/pricing") ||
-                             pathname.startsWith("/admin/users");
+  const [quotesOpen, setQuotesOpen]       = useState(pathname.startsWith("/quotes"));
+  const [inventoryOpen, setInventoryOpen] = useState(pathname.startsWith("/inventory"));
+  const [settingsOpen, setSettingsOpen]   = useState(
+    pathname.startsWith("/settings") || pathname.startsWith("/pricing") || pathname.startsWith("/admin/users")
+  );
+
+  // Auto-expand the relevant section when navigating directly to a sub-route
+  useEffect(() => {
+    if (pathname.startsWith("/quotes"))    setQuotesOpen(true);
+    if (pathname.startsWith("/inventory")) setInventoryOpen(true);
+    if (pathname.startsWith("/settings") || pathname.startsWith("/pricing") || pathname.startsWith("/admin/users")) setSettingsOpen(true);
+  }, [pathname]);
 
   const initials = (name: string) =>
     name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
@@ -193,13 +201,16 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
           {can("quotes") && (
             <div>
               <ExpandLink
-                icon={FileText} label="Quotes" expanded={quotesExpanded}
-                onClick={() => { router.push("/quotes"); onClose(); }}
+                icon={FileText} label="Quotes" expanded={quotesOpen}
+                onClick={() => {
+                  if (quotesOpen) { setQuotesOpen(false); }
+                  else { setQuotesOpen(true); router.push("/quotes"); onClose(); }
+                }}
               />
-              {quotesExpanded && (
+              {quotesOpen && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
-                  <SubLink href="/quotes"                   label="Quotes Pipeline" />
-                  <SubLink href="/quotes/builder"           label="Build Quote" />
+                  <SubLink href="/quotes"         label="Quotes Pipeline" />
+                  <SubLink href="/quotes/builder" label="Build Quote" />
                 </div>
               )}
             </div>
@@ -211,16 +222,19 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
           {can("inventory") && (
             <div>
               <ExpandLink
-                icon={Package} label="Inventory" expanded={inventoryExpanded}
-                onClick={() => { router.push("/inventory"); onClose(); }}
+                icon={Package} label="Inventory" expanded={inventoryOpen}
+                onClick={() => {
+                  if (inventoryOpen) { setInventoryOpen(false); }
+                  else { setInventoryOpen(true); router.push("/inventory"); onClose(); }
+                }}
               />
-              {inventoryExpanded && (
+              {inventoryOpen && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
-                  <SubLink href="/inventory"                              label="Stock Register" />
-                  <SubLink href="/inventory/products"                    label="Products" />
-                  {isManager && <SubLink href="/inventory/purchase-orders"    label="Purchase Orders" />}
-                  {isManager && <SubLink href="/inventory/settings"           label="Settings" />}
-                  <SubLink href="/inventory/product-templates"           label="Product Templates" />
+                  <SubLink href="/inventory"                         label="Stock Register" />
+                  <SubLink href="/inventory/products"                label="Products" />
+                  {isManager && <SubLink href="/inventory/purchase-orders" label="Purchase Orders" />}
+                  {isManager && <SubLink href="/inventory/settings"        label="Settings" />}
+                  <SubLink href="/inventory/product-templates"       label="Product Templates" />
                 </div>
               )}
             </div>
@@ -232,16 +246,20 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
           {showSettings && (
             <div>
               <ExpandLink
-                icon={Settings} label="Settings" expanded={settingsExpanded}
-                onClick={() => { router.push(can("settings") ? "/settings/users" : "/pricing"); onClose(); }}
+                icon={Settings} label="Settings" expanded={settingsOpen}
+                onClick={() => {
+                  if (settingsOpen) { setSettingsOpen(false); }
+                  else { setSettingsOpen(true); router.push(can("settings") ? "/settings/users" : "/pricing"); onClose(); }
+                }}
               />
-              {settingsExpanded && (
+              {settingsOpen && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
-                  {can("pricing")  && <SubLink href="/pricing"               label="Pricing" />}
-                  {can("settings") && <SubLink href="/settings/users"        label="Users" />}
-                  {can("settings") && <SubLink href="/settings/vip-tiers"    label="VIP Tiers" />}
+                  {can("pricing")  && <SubLink href="/pricing"            label="Pricing" />}
+                  {can("settings") && <SubLink href="/settings/users"     label="Users" />}
+                  {can("settings") && <SubLink href="/settings/staff"     label="Staff" />}
+                  {can("settings") && <SubLink href="/settings/vip-tiers" label="VIP Tiers" />}
                   {can("settings") && isManager && <SubLink href="/settings/tenants" label="Stores" />}
-                  {isAdmin         && <SubLink href="/admin/users"            label="Admin Users" />}
+                  {isAdmin         && <SubLink href="/admin/users"         label="Admin Users" />}
                 </div>
               )}
             </div>
