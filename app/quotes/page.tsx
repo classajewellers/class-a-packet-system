@@ -37,6 +37,7 @@ export default function QuotesPage() {
 
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tierMap, setTierMap] = useState<Record<string, { tier_name: string; colour: string } | null>>({});
   const [quoteView, setQuoteView] = useState<"board" | "list">("board");
   const [showConverted, setShowConverted] = useState(false);
   const [quoteListFilter, setQuoteListFilter] = useState<"active" | "all" | "converted">("active");
@@ -49,13 +50,26 @@ export default function QuotesPage() {
       const res = await fetch("/api/quotes", { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } });
       const json = await res.json();
       if (!res.ok) { setQuotes([]); return; }
-      setQuotes(json.quotes ?? []);
+      const loaded: Quote[] = json.quotes ?? [];
+      setQuotes(loaded);
+      // Batch-fetch VIP tiers for all unique customer emails
+      const emails = Array.from(new Set(
+        loaded.map(q => (q.customer_email ?? "").toLowerCase().trim()).filter(Boolean)
+      ));
+      if (emails.length) {
+        fetch(`/api/vip-tier/customer?emails=${emails.join(",")}`, {
+          headers: { 'x-tenant-id': user?.tenantId ?? '' }
+        })
+          .then(r => r.json())
+          .then(j => { if (j.results) setTierMap(j.results); })
+          .catch(() => {/* non-critical */});
+      }
     } catch {
       setQuotes([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user?.tenantId]);
 
   useEffect(() => { fetchQuotes(); }, [fetchQuotes]);
 
@@ -240,6 +254,7 @@ export default function QuotesPage() {
             onQuoteClick={(q) => router.push(`/quotes/${q.id}`)}
             onUpdate={handleUpdate}
             showConverted={showConverted}
+            tierMap={tierMap}
           />
         ) : (
           <div style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, overflow: 'hidden' }}>
@@ -256,6 +271,7 @@ export default function QuotesPage() {
             <div className="md:hidden divide-y divide-gray-100">
               {filteredListQuotes.map((q) => {
                 const name = [q.customer_first_name, q.customer_last_name].filter(Boolean).join(" ") || "—";
+                const tierInfo = q.customer_email ? (tierMap[q.customer_email.toLowerCase().trim()] ?? null) : null;
                 return (
                   <div
                     key={q.id}
@@ -264,7 +280,14 @@ export default function QuotesPage() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div style={{ fontWeight: 600, color: '#1A1A2E', fontSize: 14 }}>{name}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 600, color: '#1A1A2E', fontSize: 14 }}>{name}</span>
+                          {tierInfo && (
+                            <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: `${tierInfo.colour}22`, color: tierInfo.colour, letterSpacing: '0.05em', textTransform: 'uppercase', lineHeight: 1.6 }}>
+                              {tierInfo.tier_name}
+                            </span>
+                          )}
+                        </div>
                         <div style={{ fontFamily: 'monospace', fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>{q.reference_number}</div>
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
                           <span style={{ fontSize: 12, color: '#374151', textTransform: 'capitalize' }}>{q.status?.replace(/_/g, " ") || "—"}</span>
@@ -310,6 +333,7 @@ export default function QuotesPage() {
                 <tbody>
                   {filteredListQuotes.map((q) => {
                     const name = [q.customer_first_name, q.customer_last_name].filter(Boolean).join(" ") || "—";
+                    const rowTier = q.customer_email ? (tierMap[q.customer_email.toLowerCase().trim()] ?? null) : null;
                     return (
                       <tr
                         key={q.id}
@@ -333,7 +357,16 @@ export default function QuotesPage() {
                           />
                         </td>
                         <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: 12, color: '#6B7280' }}>{q.reference_number}</td>
-                        <td style={{ padding: '12px 16px', fontWeight: 500, color: '#1A1A2E' }}>{name}</td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontWeight: 500, color: '#1A1A2E' }}>{name}</span>
+                            {rowTier && (
+                              <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: `${rowTier.colour}22`, color: rowTier.colour, letterSpacing: '0.05em', textTransform: 'uppercase', lineHeight: 1.6 }}>
+                                {rowTier.tier_name}
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td style={{ padding: '12px 16px', color: '#374151' }} className="capitalize">{q.assigned_to || "—"}</td>
                         <td style={{ padding: '12px 16px', color: '#374151' }} className="capitalize">{q.status?.replace(/_/g, " ") || "—"}</td>
                         <td style={{ padding: '12px 16px', color: '#6B7280' }}>{formatDateAU(q.follow_up_date) || "—"}</td>

@@ -786,6 +786,7 @@ function QuoteBuilderPageInner() {
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerResults, setCustomerResults] = useState<CustomerResult[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [vipTier, setVipTier] = useState<{ tier_name: string; colour: string } | null>(null);
 
   // Notes (customer-visible, shown on PDF)
   const [notes, setNotes] = useState("");
@@ -857,6 +858,24 @@ function QuoteBuilderPageInner() {
     setFirstName(c.first_name ?? ""); setLastName(c.last_name ?? ""); setEmail(c.email ?? ""); setPhone(c.phone ?? "");
     setCustomerSearch(`${c.first_name ?? ""} ${c.last_name ?? ""}`.trim()); setShowDropdown(false);
   }
+
+  // ── VIP tier lookup ────────────────────────────────────────────────────────
+
+  const tierTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (tierTimer.current) clearTimeout(tierTimer.current);
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed) { setVipTier(null); return; }
+    tierTimer.current = setTimeout(() => {
+      fetch(`/api/vip-tier/customer?emails=${encodeURIComponent(trimmed)}`, {
+        headers: { "x-tenant-id": user?.tenantId ?? "" }
+      })
+        .then(r => r.json())
+        .then(j => { setVipTier(j.results?.[trimmed] ?? null); })
+        .catch(() => {});
+    }, 400);
+    return () => { if (tierTimer.current) clearTimeout(tierTimer.current); };
+  }, [email, user?.tenantId]);
 
   // ── Pricing ────────────────────────────────────────────────────────────────
 
@@ -1141,7 +1160,14 @@ function QuoteBuilderPageInner() {
 
           {/* Customer Details */}
           <div style={cardStyle}>
-            <div style={headingStyle}>Customer Details</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, paddingBottom: 8, borderBottom: "1px solid #E8E8F0" }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Customer Details</span>
+              {vipTier && (
+                <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: `${vipTier.colour}22`, color: vipTier.colour, letterSpacing: "0.05em", textTransform: "uppercase", lineHeight: 1.6 }}>
+                  {vipTier.tier_name}
+                </span>
+              )}
+            </div>
             <div style={{ marginBottom: 14, position: "relative" }}>
               <label style={labelStyle}>Search Existing Customer</label>
               <input style={inputStyle} type="text" value={customerSearch} onChange={e => setCustomerSearch(e.target.value)} onFocus={onFocus} onBlur={e => { onBlurField(e); setTimeout(() => setShowDropdown(false), 200); }} placeholder="Type name or email to search…" />

@@ -3,12 +3,18 @@
 import { Quote } from "@/lib/types";
 import { isOverdue, quoteStage } from "@/lib/pipeline";
 
+interface TierInfo {
+  tier_name: string;
+  colour: string;
+}
+
 interface Props {
   quote: Quote;
   onClick: () => void;
+  tierInfo?: TierInfo | null;
 }
 
-export default function QuoteCard({ quote, onClick }: Props) {
+export default function QuoteCard({ quote, onClick, tierInfo }: Props) {
   const customerName =
     [quote.customer_first_name, quote.customer_last_name].filter(Boolean).join(" ") || "—";
 
@@ -35,9 +41,16 @@ export default function QuoteCard({ quote, onClick }: Props) {
       onClick={onClick}
       style={{ background: '#FFFFFF', borderRadius: 10, border: '1px solid #E8E8F0', padding: 12, cursor: 'pointer', userSelect: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}
     >
-      {/* Name + converted badge */}
+      {/* Name + tier + converted badge */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 4, marginBottom: 4 }}>
-        <p style={{ fontWeight: 600, fontSize: 14, color: '#1A1A2E', lineHeight: 1.2, margin: 0 }}>{customerName}</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, flexWrap: 'wrap' }}>
+          <p style={{ fontWeight: 600, fontSize: 14, color: '#1A1A2E', lineHeight: 1.2, margin: 0 }}>{customerName}</p>
+          {tierInfo && (
+            <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: `${tierInfo.colour}22`, color: tierInfo.colour, letterSpacing: '0.05em', textTransform: 'uppercase', lineHeight: 1.6 }}>
+              {tierInfo.tier_name}
+            </span>
+          )}
+        </div>
         {isConverted && (
           <span style={{ flexShrink: 0, fontSize: 11, background: '#DBEAFE', color: '#1E40AF', borderRadius: 999, padding: '2px 6px', fontWeight: 500, lineHeight: 1.4, textAlign: 'right' }}>
             ✓ {quote.packet_reference ?? "Converted"}

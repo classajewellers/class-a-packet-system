@@ -328,6 +328,7 @@ export default function QuoteViewPage() {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [vipTier, setVipTier] = useState<{ tier_name: string; colour: string } | null>(null);
   const [acceptingIdx, setAcceptingIdx] = useState<number | null>(null);
   const [converting, setConverting] = useState(false);
   const [downloading] = useState(false); // kept for ref safety, replaced by downloadingSize
@@ -373,9 +374,17 @@ export default function QuoteViewPage() {
         else {
           setQuote(json.quote);
           setFollowUpNotes(json.quote.follow_up_notes ?? "");
-          // Pre-populate payment link if already generated
           if (json.quote.stripe_payment_link_url) {
             setPaymentLinkUrl(json.quote.stripe_payment_link_url);
+          }
+          const email = (json.quote.customer_email ?? "").trim().toLowerCase();
+          if (email) {
+            fetch(`/api/vip-tier/customer?emails=${encodeURIComponent(email)}`, {
+              headers: { "x-tenant-id": user?.tenantId ?? "" }
+            })
+              .then(r => r.json())
+              .then(j => { setVipTier(j.results?.[email] ?? null); })
+              .catch(() => {/* non-critical */});
           }
         }
       })
@@ -752,7 +761,14 @@ export default function QuoteViewPage() {
         {/* ── Customer ────────────────────────────────────────────────────── */}
         <div className="quote-customer-card" style={CARD}>
           <span style={SEC_LABEL}>Customer</span>
-          <div className="quote-customer-name" style={{ fontSize: 18, fontWeight: 700, color: "#1A1A2E", marginBottom: 6 }}>{customerName}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+            <span className="quote-customer-name" style={{ fontSize: 18, fontWeight: 700, color: "#1A1A2E" }}>{customerName}</span>
+            {vipTier && (
+              <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: `${vipTier.colour}22`, color: vipTier.colour, letterSpacing: "0.05em", textTransform: "uppercase", lineHeight: 1.6 }}>
+                {vipTier.tier_name}
+              </span>
+            )}
+          </div>
           <div className="quote-customer-contact" style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
             {quote.customer_email && <span style={{ fontSize: 13, color: "#6B7280" }}>{quote.customer_email}</span>}
             {quote.customer_phone && <span style={{ fontSize: 13, color: "#6B7280" }}>{quote.customer_phone}</span>}

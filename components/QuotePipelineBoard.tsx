@@ -18,11 +18,17 @@ import {
 } from "@/lib/pipeline";
 import QuoteCard from "@/components/QuoteCard";
 
+interface TierInfo {
+  tier_name: string;
+  colour: string;
+}
+
 interface Props {
   quotes: Quote[];
   onQuoteClick: (quote: Quote) => void;
   onUpdate: (updated: Quote) => void;
   showConverted?: boolean;
+  tierMap?: Record<string, TierInfo | null>;
 }
 
 function sortCards(cards: Quote[]): Quote[] {
@@ -44,7 +50,7 @@ function sortCards(cards: Quote[]): Quote[] {
   });
 }
 
-export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate, showConverted = true }: Props) {
+export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate, showConverted = true, tierMap = {} }: Props) {
   const { user } = useUser();
   // Local copy for optimistic updates during drag
   const [localQuotes, setLocalQuotes] = useState<Quote[]>(quotes ?? []);
@@ -191,6 +197,7 @@ export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate, sho
                             <QuoteCard
                               quote={q}
                               onClick={() => onQuoteClick(q)}
+                              tierInfo={q.customer_email ? (tierMap[q.customer_email.toLowerCase().trim()] ?? null) : null}
                             />
                           </div>
                         )}
