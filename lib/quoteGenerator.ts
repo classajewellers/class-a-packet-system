@@ -34,11 +34,20 @@ export function generateQuoteHTML(
     .join(" ");
   const lastName = (quote.customer_last_name ?? "").trim().replace(/\s+/g, "_") || "Customer";
 
+  // ── Shared row style constants ───────────────────────────────────────────────
+  const SL = `width:110px;padding:7px 16px 7px 0;font-size:8pt;color:#9CA3AF;vertical-align:top;border-bottom:1px solid #F0F0F5;`;
+  const SV = `padding:7px 0;font-size:9pt;color:#1A1A2E;border-bottom:1px solid #F0F0F5;`;
+  const PRICE_LBL = `width:110px;padding:12px 16px 4px 0;font-size:7.5pt;text-transform:uppercase;letter-spacing:0.08em;color:#9CA3AF;border-top:1px solid #E8E8F0;`;
+  const PRICE_VAL = `padding:12px 0 4px;font-size:15pt;font-weight:700;color:#1A1A2E;text-align:right;border-top:1px solid #E8E8F0;`;
+
+  const secHdr = (label: string) =>
+    `<tr><td colspan="2" style="padding:14px 0 0;"><div style="font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#635BFF;padding-bottom:7px;">${label}</div><div style="height:1px;background:#E8E8F0;"></div></td></tr>`;
+
   // ── Detect builder quote ────────────────────────────────────────────────────
   const builderData = quote.quote_builder_data as Record<string, unknown> | null | undefined;
   const isBuilderQuote = builderData != null;
 
-  // ── Builder quote: three-line layout ───────────────────────────────────────
+  // ── Builder quote ───────────────────────────────────────────────────────────
   let itemsSection = "";
   if (isBuilderQuote) {
     const priceNum = quote.quoted_price ?? quote.total ?? null;
@@ -48,15 +57,10 @@ export function generateQuoteHTML(
 
     const qbd = builderData as Record<string, unknown>;
 
-    // ── NEW: Multi-item builder format (builder_items array) ──────────────
+    // ── Multi-item builder (builder_items array) ──────────────────────────────
     if (Array.isArray(qbd.builder_items)) {
       const builderItems = qbd.builder_items as Array<Record<string, unknown>>;
       const multiItem = builderItems.length > 1;
-
-      const tdLbl = `padding:7px 12px;font-size:9pt;color:#555;border-right:1px solid #e8e8e8;width:110px;vertical-align:top;`;
-      const tdVal = `padding:7px 12px;font-size:9pt;color:#222;`;
-      const rowBg = `background:#f9f9f9;`;
-
       let rows = "";
 
       builderItems.forEach((item, itemIdx) => {
@@ -70,17 +74,16 @@ export function generateQuoteHTML(
         const stockSku = item.stock_sku as string | null | undefined;
         const itemPrice = typeof item.quoted_price === "number" ? item.quoted_price : null;
 
-        if (itemIdx > 0) rows += `<tr><td colspan="2" style="padding:0;height:8px;background:#fff;"></td></tr>`;
-        rows += `<tr style="background:#000"><th colspan="2" style="color:#fff;font-size:10pt;letter-spacing:0.5px;padding:8px 12px;text-align:left;">${multiItem ? `${itemIdx + 1}. ` : ""}${heading}</th></tr>`;
+        if (itemIdx > 0) rows += `<tr><td colspan="2" style="padding:0;height:10px;"></td></tr>`;
+        rows += secHdr(`${multiItem ? `${itemIdx + 1}. ` : ""}${heading}`);
 
         if (itemAiDesc) {
-          rows += `<tr style="background:#fff"><td colspan="2" style="padding:12px 12px 10px;font-size:10pt;line-height:1.7;color:#111;font-style:italic;">${esc(itemAiDesc)}</td></tr>`;
+          rows += `<tr><td colspan="2" style="padding:10px 0 12px;font-size:10.5pt;font-style:italic;line-height:1.85;color:#1A1A2E;">${esc(itemAiDesc)}</td></tr>`;
         }
-        rows += `<tr><td colspan="2" style="padding:0;height:1px;background:#e0e0e0;"></td></tr>`;
 
         itemMetals.filter(m => m.type).forEach(m => {
           const w = m.weight ? ` &mdash; ${m.weight}g` : "";
-          rows += `<tr style="${rowBg}"><td style="${tdLbl}">Metal</td><td style="${tdVal}">${esc(m.type ?? "")}${w}</td></tr>`;
+          rows += `<tr><td style="${SL}">Metal</td><td style="${SV}">${esc(m.type ?? "")}${w}</td></tr>`;
         });
 
         if (stoneOptions.length > 1) {
@@ -91,10 +94,11 @@ export function generateQuoteHTML(
                 .map(v => (v != null && v !== "" ? String(v) : null)).filter(Boolean).join(" ")
             ).filter(Boolean).join("; ");
             const optPrice = typeof opt.quoted_price === "number"
-              ? ` — $${opt.quoted_price.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              ? `$${opt.quoted_price.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
               : "";
-            const lbl = oi === 0 ? "Stone Options" : "&nbsp;";
-            rows += `<tr style="${rowBg}"><td style="${tdLbl};padding-top:${oi === 0 ? "9" : "4"}px;">${lbl}</td><td style="${tdVal}"><strong>${esc(String(opt.label || `Option ${oi + 1}`))}</strong>: ${esc(specsText)}${optPrice}</td></tr>`;
+            const optLabel = esc(String(opt.label || `Option ${oi + 1}`));
+            const priceSpan = optPrice ? `<span style="float:right;color:#635BFF;font-weight:600;">${optPrice}</span>` : "";
+            rows += `<tr><td style="${SL}"><span style="font-weight:600;">${optLabel}</span></td><td style="${SV}">${esc(specsText)}${priceSpan}</td></tr>`;
           });
         } else if (stoneOptions.length === 1) {
           const opt = stoneOptions[0];
@@ -103,7 +107,7 @@ export function generateQuoteHTML(
             const parts = [s.carat_weight != null ? `${s.carat_weight}ct` : null, s.colour, s.clarity, s.origin, s.shape]
               .map(v => (v != null && v !== "" ? String(v) : null)).filter(Boolean).join(" ");
             const lbl = stones.length === 1 ? "Stone" : `Stone ${si + 1}`;
-            if (parts) rows += `<tr style="${rowBg}"><td style="${tdLbl}">${lbl}</td><td style="${tdVal}">${esc(parts)}</td></tr>`;
+            if (parts) rows += `<tr><td style="${SL}">${lbl}</td><td style="${SV}">${esc(parts)}</td></tr>`;
           });
         }
 
@@ -111,7 +115,7 @@ export function generateQuoteHTML(
           const qty = (r.qty as number) || 1;
           const parts = [qty > 1 ? `${qty}×` : null, r.stone_type, r.shape, r.carat_weight ? `(${r.carat_weight}ct each)` : null]
             .map(v => (v != null && v !== "" ? String(v) : null)).filter(Boolean).join(" ");
-          if (parts) rows += `<tr style="${rowBg}"><td style="${tdLbl}">Melee</td><td style="${tdVal}">${esc(parts)}</td></tr>`;
+          if (parts) rows += `<tr><td style="${SL}">Melee</td><td style="${SV}">${esc(parts)}</td></tr>`;
         });
 
         if (addons) {
@@ -124,14 +128,15 @@ export function generateQuoteHTML(
           if (Array.isArray(addons.components)) {
             (addons.components as Array<{ name: string }>).forEach(c => { if (c.name) addonLines.push(c.name); });
           }
-          if (addonLines.length > 0) rows += `<tr style="${rowBg}"><td style="${tdLbl}">Inclusions</td><td style="${tdVal}">${addonLines.map(esc).join(", ")}</td></tr>`;
+          if (addonLines.length > 0) rows += `<tr><td style="${SL}">Inclusions</td><td style="${SV}">${addonLines.map(esc).join(", ")}</td></tr>`;
         }
 
-        if (fingerSize) rows += `<tr style="${rowBg}"><td style="${tdLbl}">Finger Size</td><td style="${tdVal}">${esc(fingerSize)}</td></tr>`;
-        if (stockSku) rows += `<tr style="${rowBg}"><td style="${tdLbl}">Stock Ref</td><td style="${tdVal};font-family:monospace;">${esc(stockSku)}</td></tr>`;
+        if (fingerSize) rows += `<tr><td style="${SL}">Finger Size</td><td style="${SV}">${esc(fingerSize)}</td></tr>`;
+        if (stockSku)   rows += `<tr><td style="${SL}">Stock Ref</td><td style="${SV};font-family:monospace;">${esc(stockSku)}</td></tr>`;
 
         if (multiItem && itemPrice != null) {
-          rows += `<tr style="background:#333"><td style="color:#ccc;font-size:8.5pt;padding:7px 12px;border-right:1px solid #555;">Item Price</td><td style="color:#fff;font-size:12pt;font-weight:700;padding:7px 12px;">$${itemPrice.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>`;
+          const ipStr = `$${itemPrice.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+          rows += `<tr><td style="width:110px;padding:9px 16px 9px 0;font-size:8pt;color:#9CA3AF;border-top:1px solid #E8E8F0;">Item Price</td><td style="padding:9px 0;font-size:12pt;font-weight:700;color:#1A1A2E;text-align:right;border-top:1px solid #E8E8F0;">${ipStr}</td></tr>`;
         }
       });
 
@@ -139,11 +144,12 @@ export function generateQuoteHTML(
       const gtText = grandTotal != null
         ? `$${Number(grandTotal).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
         : "&nbsp;";
-      rows += `<tr style="background:#000"><td style="color:#fff;font-weight:bold;padding:10px 12px;border-right:1px solid #444;width:110px;font-size:9pt;">${multiItem ? "Total " : ""}Price (incl. GST)</td><td style="color:#fff;font-weight:bold;font-size:15pt;padding:10px 12px;">${gtText}</td></tr>`;
+      const totalLabel = multiItem ? "Total Price (incl. GST)" : "Price (incl. GST)";
+      rows += `<tr><td style="${PRICE_LBL}">${totalLabel}</td><td style="${PRICE_VAL}">${gtText}</td></tr>`;
 
       itemsSection = `<table class="line-items"><tbody>${rows}</tbody></table>`;
 
-    // ── New detailed builder layout (metals array present) ────────────────
+    // ── Detailed builder (metals array) ───────────────────────────────────────
     } else if (Array.isArray(qbd.metals)) {
       const heading = esc(
         (qbd.subcategory as string | null) ||
@@ -179,23 +185,16 @@ export function generateQuoteHTML(
         if ((addons.additional_labour as number) > 0) addonLines.push("Additional Labour");
       }
 
-      const tdLabel = `padding:7px 12px;font-size:9pt;color:#555;border-right:1px solid #e8e8e8;width:110px;vertical-align:top;`;
-      const tdValue = `padding:7px 12px;font-size:9pt;color:#222;`;
-      const rowBg = `background:#f9f9f9;`;
-
       let rows = "";
-
-      rows += `<tr style="background:#000"><th colspan="2" style="color:#fff;font-size:10pt;letter-spacing:0.5px;padding:8px 12px;text-align:left;">${heading}</th></tr>`;
+      rows += secHdr(heading);
 
       if (aiDesc) {
-        rows += `<tr style="background:#fff"><td colspan="2" style="padding:12px 12px 10px;font-size:10pt;line-height:1.7;color:#111;font-style:italic;">${esc(aiDesc)}</td></tr>`;
+        rows += `<tr><td colspan="2" style="padding:10px 0 12px;font-size:10.5pt;font-style:italic;line-height:1.85;color:#1A1A2E;">${esc(aiDesc)}</td></tr>`;
       }
 
-      rows += `<tr><td colspan="2" style="padding:0;height:1px;background:#e0e0e0;"></td></tr>`;
-
-      metals.filter(m => m.type).forEach((m) => {
-        const weightStr = m.weight ? `${m.weight}g` : "";
-        rows += `<tr style="${rowBg}"><td style="${tdLabel}">Metal</td><td style="${tdValue}">${esc(m.type ?? "")}${weightStr ? ` &mdash; ${esc(weightStr)}` : ""}</td></tr>`;
+      metals.filter(m => m.type).forEach(m => {
+        const weightStr = m.weight ? ` &mdash; ${m.weight}g` : "";
+        rows += `<tr><td style="${SL}">Metal</td><td style="${SV}">${esc(m.type ?? "")}${weightStr}</td></tr>`;
       });
 
       mainStones.forEach((s, i) => {
@@ -204,184 +203,112 @@ export function generateQuoteHTML(
           s.colour, s.clarity, s.origin, s.shape,
         ].map(v => (v != null && v !== "" ? String(v) : null)).filter(Boolean).join(" ");
         const lbl = mainStones.length === 1 ? "Stone" : `Stone ${i + 1}`;
-        if (parts) {
-          rows += `<tr style="${rowBg}"><td style="${tdLabel}">${lbl}</td><td style="${tdValue}">${esc(parts)}</td></tr>`;
-        }
+        if (parts) rows += `<tr><td style="${SL}">${lbl}</td><td style="${SV}">${esc(parts)}</td></tr>`;
       });
 
-      meleeStones.filter(r => r.stone_type).forEach((r) => {
+      meleeStones.filter(r => r.stone_type).forEach(r => {
         const qty = (r.qty as number) || 1;
         const parts = [
           qty > 1 ? `${qty}×` : null,
-          r.stone_type,
-          r.shape,
+          r.stone_type, r.shape,
           r.carat_weight ? `(${r.carat_weight}ct each)` : null,
         ].map(v => (v != null && v !== "" ? String(v) : null)).filter(Boolean).join(" ");
-        if (parts) {
-          rows += `<tr style="${rowBg}"><td style="${tdLabel}">Melee</td><td style="${tdValue}">${esc(parts)}</td></tr>`;
-        }
+        if (parts) rows += `<tr><td style="${SL}">Melee</td><td style="${SV}">${esc(parts)}</td></tr>`;
       });
 
-      if (addonLines.length > 0) {
-        rows += `<tr style="${rowBg}"><td style="${tdLabel}">Inclusions</td><td style="${tdValue}">${addonLines.map(esc).join(", ")}</td></tr>`;
-      }
+      if (addonLines.length > 0) rows += `<tr><td style="${SL}">Inclusions</td><td style="${SV}">${addonLines.map(esc).join(", ")}</td></tr>`;
+      if (fingerSize) rows += `<tr><td style="${SL}">Finger Size</td><td style="${SV}">${esc(fingerSize)}</td></tr>`;
+      if (stockSku)   rows += `<tr><td style="${SL}">Stock Ref</td><td style="${SV};font-family:monospace;">${esc(stockSku)}</td></tr>`;
 
-      if (fingerSize) {
-        rows += `<tr style="${rowBg}"><td style="${tdLabel}">Finger Size</td><td style="${tdValue}">${esc(fingerSize)}</td></tr>`;
-      }
+      rows += `<tr><td style="${PRICE_LBL}">Price (incl. GST)</td><td style="${PRICE_VAL}">${priceText}</td></tr>`;
 
-      if (stockSku) {
-        rows += `<tr style="${rowBg}"><td style="${tdLabel}">Stock Ref</td><td style="${tdValue};font-family:monospace;">${esc(stockSku)}</td></tr>`;
-      }
+      itemsSection = `<table class="line-items"><tbody>${rows}</tbody></table>`;
 
-      rows += `<tr style="background:#000"><td style="color:#fff;font-weight:bold;padding:10px 12px;border-right:1px solid #444;width:110px;font-size:9pt;">Price (incl. GST)</td><td style="color:#fff;font-weight:bold;font-size:15pt;padding:10px 12px;">${priceText}</td></tr>`;
-
-      itemsSection = `
-  <table class="line-items">
-    <tbody>
-      ${rows}
-    </tbody>
-  </table>`;
-
-    // ── Legacy multi-item layout: qbd.items array (no metals key) ─────────
+    // ── Legacy multi-item layout (qbd.items array) ────────────────────────────
     } else if (Array.isArray(qbd.items) && (qbd.items as unknown[]).length > 0) {
       const items = qbd.items as Array<{ job_type?: string; description?: string; retail_price?: string }>;
-      const totalPrice = items.reduce((sum, item) => sum + (parseFloat(item.retail_price ?? '') || 0), 0);
+      const totalPrice = items.reduce((sum, item) => sum + (parseFloat(item.retail_price ?? "") || 0), 0);
       const multiItem = items.length > 1;
-
       let rows = "";
-      items.forEach((item) => {
+
+      items.forEach(item => {
         const jobType = item.job_type ? esc(item.job_type) : null;
         const desc = item.description ? esc(item.description).replace(/\n/g, "<br>") : null;
-        const itemPrice = parseFloat(item.retail_price ?? '') || 0;
+        const itemPrice = parseFloat(item.retail_price ?? "") || 0;
         const itemPriceText = `$${itemPrice.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-        if (jobType) {
-          rows += `<tr style="background:#000"><th colspan="2" style="color:#fff;font-size:10pt;letter-spacing:0.5px;padding:8px 12px;text-align:left;">${jobType}</th></tr>`;
-        }
-        if (desc) {
-          rows += `<tr style="background:#fff"><td colspan="2" style="padding:10px 12px;font-size:9.5pt;line-height:1.6;color:#222;">${desc}</td></tr>`;
-        }
+        if (jobType) rows += secHdr(jobType);
+        if (desc)    rows += `<tr><td colspan="2" style="padding:8px 0 10px;font-size:9.5pt;line-height:1.75;color:#1A1A2E;">${desc}</td></tr>`;
         if (multiItem && itemPrice > 0) {
-          rows += `<tr style="background:#f0f0f0"><td style="padding:8px 12px;font-size:9pt;color:#555;border-right:1px solid #ddd;width:80px;vertical-align:middle;">Price</td><td style="padding:10px 12px;font-size:12pt;font-weight:bold;color:#000;">${itemPriceText}</td></tr>`;
+          rows += `<tr><td style="width:110px;padding:8px 16px 8px 0;font-size:8pt;color:#9CA3AF;border-top:1px solid #E8E8F0;">Item Price</td><td style="padding:8px 0;font-size:12pt;font-weight:700;color:#1A1A2E;text-align:right;border-top:1px solid #E8E8F0;">${itemPriceText}</td></tr>`;
         }
       });
 
       if (multiItem) {
         const totalText = `$${totalPrice.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-        rows += `<tr style="background:#000"><td style="color:#fff;font-weight:bold;padding:10px 12px;border-right:1px solid #444;width:80px;">Total</td><td style="color:#fff;font-weight:bold;font-size:14pt;padding:10px 12px;">${totalText}</td></tr>`;
+        rows += `<tr><td style="${PRICE_LBL}">Total Price (incl. GST)</td><td style="${PRICE_VAL}">${totalText}</td></tr>`;
       } else {
-        rows += `<tr style="background:#f0f0f0"><td style="padding:8px 12px;font-size:9pt;color:#555;border-right:1px solid #ddd;width:80px;vertical-align:middle;">Price</td><td style="padding:10px 12px;font-size:14pt;font-weight:bold;color:#000;">${priceText}</td></tr>`;
+        rows += `<tr><td style="${PRICE_LBL}">Price (incl. GST)</td><td style="${PRICE_VAL}">${priceText}</td></tr>`;
       }
 
-      itemsSection = `
-  <table class="line-items">
-    <tbody>
-      ${rows}
-    </tbody>
-  </table>`;
+      itemsSection = `<table class="line-items"><tbody>${rows}</tbody></table>`;
 
-    // ── Legacy layout: job type heading + free-text description ─────────────
+    // ── Legacy: job type + free-text description ──────────────────────────────
     } else if (quote.job_description) {
       const jobTypeText = esc(quote.job_type ?? "Custom Order");
       const descText = esc(quote.job_description).replace(/\n/g, "<br>");
 
-      itemsSection = `
-  <table class="line-items">
-    <thead>
-      <tr>
-        <th colspan="2" style="font-size:11pt;letter-spacing:1px;">${jobTypeText}</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr style="background:#ffffff;">
-        <td colspan="2" style="padding:14px 12px;font-size:10pt;color:#222;line-height:1.6;">${descText}</td>
-      </tr>
-      <tr style="background:#f0f0f0;">
-        <td style="padding:8px 12px;font-size:9pt;color:#555;border-right:1px solid #ddd;vertical-align:middle;width:110px;">Price</td>
-        <td style="padding:10px 12px;font-size:14pt;font-weight:bold;color:#000;">${priceText}</td>
-      </tr>
-    </tbody>
-  </table>`;
+      itemsSection = `<table class="line-items"><tbody>
+        ${secHdr(jobTypeText)}
+        <tr><td colspan="2" style="padding:10px 0 12px;font-size:10pt;line-height:1.75;color:#1A1A2E;">${descText}</td></tr>
+        <tr><td style="${PRICE_LBL}">Price (incl. GST)</td><td style="${PRICE_VAL}">${priceText}</td></tr>
+      </tbody></table>`;
 
     } else {
-      // ── Legacy auto-generated layout: Design / Stone / Price ──────────────
-      const qbd = builderData!;
+      // ── Legacy auto-generated: Design / Stone / Price ─────────────────────
       const designText = typeof qbd.design === "string" ? esc(qbd.design) : "&nbsp;";
 
       let stoneText = "&nbsp;";
-
-      // main_stone is an array in the new format; fall back to wrapping legacy single object
       const rawMs = qbd.main_stone;
       const msArr: Array<Record<string, unknown>> = Array.isArray(rawMs)
         ? (rawMs as Array<Record<string, unknown>>)
-        : rawMs != null
-        ? [rawMs as Record<string, unknown>]
-        : [];
+        : rawMs != null ? [rawMs as Record<string, unknown>] : [];
 
       if (msArr.length > 0) {
-        // Check if all stones have identical specs
         const first = msArr[0];
         const allSame = msArr.length === 1 || msArr.every(s =>
-          s.carat_weight === first.carat_weight &&
-          s.shape === first.shape &&
-          s.colour === first.colour &&
-          s.clarity === first.clarity &&
-          s.origin === first.origin
+          s.carat_weight === first.carat_weight && s.shape === first.shape &&
+          s.colour === first.colour && s.clarity === first.clarity && s.origin === first.origin
         );
 
         if (allSame) {
           const qty = msArr.length;
           const carat = first.carat_weight != null ? `${first.carat_weight}ct ` : "";
           const parts = [first.colour, first.clarity, first.origin, first.shape]
-            .map(v => (v != null && v !== "" ? String(v) : null))
-            .filter(Boolean)
-            .join(" ");
+            .map(v => (v != null && v !== "" ? String(v) : null)).filter(Boolean).join(" ");
           stoneText = esc(`${qty > 1 ? `${qty}x ` : ""}${carat}${parts}`);
         } else {
-          // Different specs — one line per stone
           stoneText = msArr.map((s, i) => {
             const carat = s.carat_weight != null ? `${s.carat_weight}ct ` : "";
             const parts = [s.colour, s.clarity, s.origin, s.shape]
-              .map(v => (v != null && v !== "" ? String(v) : null))
-              .filter(Boolean)
-              .join(" ");
+              .map(v => (v != null && v !== "" ? String(v) : null)).filter(Boolean).join(" ");
             return esc(`Stone ${i + 1}: ${carat}${parts}`);
           }).join("<br>");
         }
       }
 
       const showStoneRow = msArr.length > 0;
-      const priceRowBg = showStoneRow ? "#ffffff" : "#f0f0f0";
 
-      itemsSection = `
-  <table class="line-items">
-    <thead>
-      <tr>
-        <th style="width:110px;">Item</th>
-        <th>Details</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr style="background:#ffffff;">
-        <td style="padding:8px 12px;font-size:9pt;color:#555;border-right:1px solid #ddd;vertical-align:top;">Design</td>
-        <td style="padding:8px 12px;font-size:9pt;color:#333;">${designText}</td>
-      </tr>
-      ${showStoneRow ? `<tr style="background:#f0f0f0;">
-        <td style="padding:8px 12px;font-size:9pt;color:#555;border-right:1px solid #ddd;vertical-align:top;">Stone/s</td>
-        <td style="padding:8px 12px;font-size:9pt;color:#333;">${stoneText}</td>
-      </tr>` : ""}
-      <tr style="background:${priceRowBg};">
-        <td style="padding:8px 12px;font-size:9pt;color:#555;border-right:1px solid #ddd;vertical-align:top;">Price</td>
-        <td style="padding:10px 12px;font-size:14pt;font-weight:bold;color:#000;">${priceText}</td>
-      </tr>
-    </tbody>
-  </table>`;
+      itemsSection = `<table class="line-items"><tbody>
+        ${designText !== "&nbsp;" ? `<tr><td style="${SL}">Design</td><td style="${SV}">${designText}</td></tr>` : ""}
+        ${showStoneRow ? `<tr><td style="${SL}">Stone</td><td style="${SV}">${stoneText}</td></tr>` : ""}
+        <tr><td style="${PRICE_LBL}">Price (incl. GST)</td><td style="${PRICE_VAL}">${priceText}</td></tr>
+      </tbody></table>`;
     }
-  } else {
-    // ── Regular quote: existing line items table ──────────────────────────────
-    const lineItems: LineItem[] = quote.line_items ?? [];
 
+  } else {
+    // ── Regular quote: line items table ──────────────────────────────────────
+    const lineItems: LineItem[] = quote.line_items ?? [];
     type FilledItem = LineItem & { _empty?: boolean };
     const MIN_ROWS = 8;
     const filledItems: FilledItem[] = [...lineItems];
@@ -389,46 +316,75 @@ export function generateQuoteHTML(
       filledItems.push({ design: "", stone: "", price: "", cost_price: "", _empty: true });
     }
 
-    const tableRows = filledItems
-      .map((li, i) => {
-        const isEven = i % 2 === 0;
-        const bg = isEven ? "#ffffff" : "#f0f0f0";
-        const isEmpty = li._empty;
-        const rowNum = isEmpty ? "" : String(i + 1);
-        const design = isEmpty ? "&nbsp;" : esc(li.design);
-        const stone  = isEmpty ? "&nbsp;" : esc(li.stone);
-        const price  = isEmpty ? "&nbsp;" : esc(li.price);
-        return `<tr style="background:${bg};">
-          <td style="padding:6px 10px;font-size:9pt;color:#333;border-right:1px solid #ddd;width:32px;text-align:center;">${rowNum}</td>
-          <td style="padding:6px 10px;font-size:9pt;color:#333;border-right:1px solid #ddd;">${design}</td>
-          <td style="padding:6px 10px;font-size:9pt;color:#333;border-right:1px solid #ddd;">${stone}</td>
-          <td style="padding:6px 10px;font-size:9pt;color:#333;text-align:right;white-space:nowrap;width:110px;">${price}</td>
-        </tr>`;
-      })
-      .join("");
+    const tableRows = filledItems.map((li, i) => {
+      const isEmpty = li._empty;
+      const rowNum = isEmpty ? "" : String(i + 1);
+      const design = isEmpty ? "&nbsp;" : esc(li.design);
+      const stone  = isEmpty ? "&nbsp;" : esc(li.stone);
+      const price  = isEmpty ? "&nbsp;" : esc(li.price);
+      return `<tr style="border-bottom:1px solid #F0F0F5;">
+        <td style="padding:7px 8px 7px 0;font-size:8.5pt;color:#9CA3AF;text-align:center;width:24px;">${rowNum}</td>
+        <td style="padding:7px 8px;font-size:9pt;color:#1A1A2E;">${design}</td>
+        <td style="padding:7px 8px;font-size:9pt;color:#1A1A2E;">${stone}</td>
+        <td style="padding:7px 0;font-size:9pt;color:#1A1A2E;text-align:right;white-space:nowrap;">${price}</td>
+      </tr>`;
+    }).join("");
 
-    itemsSection = `
-  <table class="line-items">
-    <thead>
-      <tr>
-        <th style="text-align:center;width:32px;">#</th>
-        <th>Design</th>
-        <th>Stone</th>
-        <th style="text-align:right;white-space:nowrap;">Price (incl. GST)</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${tableRows}
-    </tbody>
-  </table>`;
+    itemsSection = `<table class="line-items">
+      <thead>
+        <tr style="border-bottom:1px solid #E8E8F0;">
+          <th style="width:24px;padding:0 8px 8px 0;text-align:center;font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#635BFF;">#</th>
+          <th style="padding:0 8px 8px;font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#635BFF;text-align:left;">Design</th>
+          <th style="padding:0 8px 8px;font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#635BFF;text-align:left;">Stone</th>
+          <th style="padding:0 0 8px;font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#635BFF;text-align:right;white-space:nowrap;">Price (incl. GST)</th>
+        </tr>
+      </thead>
+      <tbody>${tableRows}</tbody>
+    </table>`;
   }
 
   const createdDate = formatDateAU(quote.created_at) || formatDateAU(new Date().toISOString());
   const staffName = esc(quote.staff_member ?? "");
   const staffEmailAddr = staffEmail(quote.staff_member);
+
   const notesSection = quote.notes
-    ? `<div style="margin:10px 0 0;padding:10px 12px;background:#f9f9f9;border-left:3px solid #555;font-size:9pt;color:#444;line-height:1.7;"><div style="font-weight:bold;font-size:7.5pt;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;color:#777;">Notes</div>${esc(quote.notes).replace(/\n/g, "<br>")}</div>`
+    ? `<div style="margin:12px 0 0;padding:10px 14px;background:#F9FAFB;border-left:2px solid #635BFF;border-radius:0 4px 4px 0;font-size:8.5pt;color:#6B7280;line-height:1.75;"><div style="font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#635BFF;margin-bottom:4px;">Notes</div>${esc(quote.notes).replace(/\n/g, "<br>")}</div>`
     : "";
+
+  // ── Payment / deposit box ───────────────────────────────────────────────────
+  const depositAmt = opts?.deposit_amount != null
+    ? `$${Number(opts.deposit_amount).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : null;
+
+  const paymentSection = !opts?.hidePayment && opts?.payment_link_url ? `
+<div style="margin:16px 0 0;">
+  <a href="${opts.payment_link_url}" style="text-decoration:none;display:block;border:1px solid #635BFF;border-radius:6px;padding:14px 20px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-size:6.5pt;text-transform:uppercase;letter-spacing:0.12em;color:#9CA3AF;font-weight:700;margin-bottom:4px;">30% Deposit Required</div>
+        <div style="font-size:19pt;font-weight:700;color:#635BFF;">${depositAmt ?? "&nbsp;"}</div>
+      </div>
+      <div style="font-size:10pt;font-weight:500;color:#635BFF;letter-spacing:0.03em;">Pay Now &rsaquo;</div>
+    </div>
+  </a>
+  <div style="text-align:center;margin-top:5px;font-size:7pt;color:#9CA3AF;">Secure payment powered by Stripe</div>
+</div>` : "";
+
+  // ── Bank details ────────────────────────────────────────────────────────────
+  const bankSection = (() => {
+    const bd = opts?.bankDetails;
+    if (!bd) return "";
+    const bdRows: string[] = [];
+    if (bd.bank_name)      bdRows.push(`<tr><td style="font-size:7.5pt;color:#9CA3AF;padding:3px 16px 3px 0;width:100px;">Bank</td><td style="font-size:8pt;color:#1A1A2E;">${esc(bd.bank_name)}</td></tr>`);
+    if (bd.account_name)   bdRows.push(`<tr><td style="font-size:7.5pt;color:#9CA3AF;padding:3px 16px 3px 0;">Account Name</td><td style="font-size:8pt;color:#1A1A2E;">${esc(bd.account_name)}</td></tr>`);
+    if (bd.bsb)            bdRows.push(`<tr><td style="font-size:7.5pt;color:#9CA3AF;padding:3px 16px 3px 0;">BSB</td><td style="font-size:8pt;color:#1A1A2E;">${esc(bd.bsb)}</td></tr>`);
+    if (bd.account_number) bdRows.push(`<tr><td style="font-size:7.5pt;color:#9CA3AF;padding:3px 16px 3px 0;">Account No.</td><td style="font-size:8.5pt;color:#1A1A2E;font-family:monospace;">${esc(bd.account_number)}</td></tr>`);
+    if (bdRows.length === 0) return "";
+    return `<div style="margin:12px 0 0;border:1px solid #E8E8F0;border-radius:6px;padding:10px 16px;">
+      <div style="font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#635BFF;margin-bottom:8px;">Bank Transfer</div>
+      <table style="border-collapse:collapse;width:100%;"><tbody>${bdRows.join("")}</tbody></table>
+    </div>`;
+  })();
 
   return `<!DOCTYPE html>
 <html>
@@ -439,36 +395,21 @@ export function generateQuoteHTML(
   * { box-sizing: border-box; margin: 0; padding: 0; }
   @page { size: 148mm 210mm portrait; margin: 10mm 10mm 10mm 10mm; }
 
-  /* ── Screen-only PDF save bar (hidden when printing) ── */
   @media screen {
     .pdf-bar {
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      background: #1d4ed8;
-      color: #fff;
+      position: fixed; top: 0; left: 0; right: 0;
+      background: #1d4ed8; color: #fff;
       padding: 12px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      z-index: 1000;
-      font-family: Arial, Helvetica, sans-serif;
-      font-size: 13px;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      z-index: 1000; font-family: Arial, Helvetica, sans-serif; font-size: 13px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.25);
     }
     .pdf-bar p { margin: 0; line-height: 1.4; }
     .pdf-bar strong { font-weight: bold; }
     .pdf-bar button {
-      background: #fff;
-      color: #1d4ed8;
-      border: none;
-      padding: 9px 22px;
-      border-radius: 7px;
-      font-weight: bold;
-      cursor: pointer;
-      font-size: 13px;
-      white-space: nowrap;
-      flex-shrink: 0;
+      background: #fff; color: #1d4ed8; border: none; padding: 9px 22px;
+      border-radius: 7px; font-weight: bold; cursor: pointer; font-size: 13px;
+      white-space: nowrap; flex-shrink: 0;
     }
     .pdf-bar button:hover { background: #e0e7ff; }
     body { margin-top: 56px; }
@@ -477,14 +418,15 @@ export function generateQuoteHTML(
     .pdf-bar { display: none !important; }
     body { margin-top: 0; }
   }
+
   body {
     font-family: Arial, Helvetica, sans-serif;
     font-size: 9pt;
-    color: #000;
+    color: #1A1A2E;
     background: #fff;
   }
 
-  /* ── Header ── */
+  /* ── Header ─────────────────────────────────────────────────────────── */
   .header {
     display: flex;
     justify-content: space-between;
@@ -492,149 +434,105 @@ export function generateQuoteHTML(
     margin-bottom: 14px;
   }
   .wordmark-logo {
-    max-height: 60px;
+    max-height: 54px;
     width: auto;
     object-fit: contain;
     display: block;
   }
-  .header-right {
-    text-align: right;
-  }
+  .header-right { text-align: right; }
   .quotation-title {
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 22pt;
-    font-weight: bold;
-    letter-spacing: 2px;
-    color: #000;
-    line-height: 1;
+    font-size: 14pt;
+    font-weight: 300;
+    letter-spacing: 0.25em;
+    color: #9CA3AF;
     text-transform: uppercase;
+    line-height: 1;
   }
   .header-address {
-    font-size: 8pt;
-    color: #333;
-    margin-top: 5px;
-    line-height: 1.6;
+    font-size: 7.5pt;
+    color: #9CA3AF;
+    margin-top: 6px;
+    line-height: 1.7;
   }
 
-  /* ── Divider ── */
+  /* ── Divider ─────────────────────────────────────────────────────────── */
   .divider {
     border: none;
-    border-top: 1.5px solid #000;
-    margin: 10px 0 16px 0;
+    border-top: 1px solid #E8E8F0;
+    margin: 10px 0 16px;
   }
 
-  /* ── Customer / Date row ── */
-  .customer-date-row {
+  /* ── Meta row (ref + date) ───────────────────────────────────────────── */
+  .meta-row {
     display: flex;
     justify-content: space-between;
-    align-items: flex-end;
-    margin-bottom: 20px;
-    gap: 20px;
-  }
-  .underline-field {
-    flex: 1;
-  }
-  .underline-field-right {
-    flex: 0 0 auto;
-    min-width: 140px;
-    text-align: right;
-  }
-  .field-label {
-    font-size: 8pt;
-    color: #555;
-    margin-bottom: 3px;
-  }
-  .field-underline {
-    font-size: 11pt;
-    font-weight: 600;
-    color: #000;
-    border-bottom: 1px solid #000;
-    padding-bottom: 2px;
-    min-height: 20px;
-  }
-
-  /* ── Reference number row ── */
-  .ref-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     margin-bottom: 14px;
   }
-  .ref-label {
-    font-size: 8pt;
-    color: #555;
+  .meta-label {
+    font-size: 6.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #9CA3AF;
+    font-weight: 700;
+    margin-bottom: 3px;
   }
-  .ref-number {
-    font-family: 'Courier New', monospace;
-    font-size: 9pt;
-    font-weight: bold;
-    color: #000;
+  .meta-value {
+    font-size: 11pt;
+    font-weight: 700;
+    color: #1A1A2E;
+  }
+  .meta-value.mono { font-family: 'Courier New', monospace; font-size: 10pt; }
+  .meta-right { text-align: right; }
+
+  /* ── Customer block ──────────────────────────────────────────────────── */
+  .customer-block {
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #E8E8F0;
+  }
+  .customer-name {
+    font-size: 13pt;
+    font-weight: 600;
+    color: #1A1A2E;
   }
 
-  /* ── Line items table ── */
+  /* ── Line items table ────────────────────────────────────────────────── */
   table.line-items {
     width: 100%;
     border-collapse: collapse;
-    border: 1px solid #ccc;
     margin-bottom: 0;
   }
-  table.line-items thead tr {
-    background: #000;
-  }
   table.line-items thead th {
-    padding: 8px 10px;
     text-align: left;
-    font-size: 8.5pt;
-    font-weight: bold;
-    color: #fff;
-    letter-spacing: 0.5px;
+    background: transparent;
   }
-  table.line-items thead th:last-child {
-    text-align: right;
-    white-space: nowrap;
-  }
-  table.line-items thead th:nth-child(3) {
-    width: 160px;
-  }
-  table.line-items thead th:first-child {
-    text-align: center;
-    width: 32px;
-  }
-  .table-divider {
-    border: none;
-    border-top: 1.5px solid #000;
-    margin: 0;
-  }
-  /* ── Footer ── */
+
+  /* ── Footer ──────────────────────────────────────────────────────────── */
   .footer {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
     gap: 24px;
-    margin-top: 10px;
-    padding-top: 12px;
-    border-top: 1px solid #ccc;
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid #E8E8F0;
   }
   .footer-terms {
     flex: 1;
-    font-size: 8pt;
-    color: #777;
+    font-size: 7.5pt;
+    color: #9CA3AF;
     font-style: italic;
-    line-height: 1.7;
+    line-height: 1.8;
   }
   .footer-staff {
     flex: 0 0 auto;
     text-align: right;
-    font-size: 9pt;
-    line-height: 1.7;
+    font-size: 8pt;
+    line-height: 1.8;
   }
-  .footer-staff-name {
-    font-weight: bold;
-    color: #000;
-  }
-  .footer-staff-contact {
-    color: #333;
-  }
+  .footer-staff-name { font-weight: 600; color: #1A1A2E; }
+  .footer-staff-contact { color: #9CA3AF; }
   .pdfshift-banner, [class*='pdfshift-'] { display: none !important; }
 </style>
 </head>
@@ -649,68 +547,46 @@ export function generateQuoteHTML(
       <div class="quotation-title">Quotation</div>
       <div class="header-address">
         40 North East Road, Walkerville SA 5081<br>
-        08 8344 7722 &nbsp;|&nbsp; classa.com.au
+        08 8344 7722 &nbsp;&middot;&nbsp; classa.com.au
       </div>
     </div>
   </div>
 
   <hr class="divider">
 
-  <!-- Reference row -->
-  <div class="ref-row">
-    <span class="ref-label">Reference: <span class="ref-number">${esc(quote.reference_number)}</span></span>
-  </div>
-
-  <!-- Customer / Date row -->
-  <div class="customer-date-row">
-    <div class="underline-field">
-      <div class="field-label">Customer Name</div>
-      <div class="field-underline">${esc(customerName) || "&nbsp;"}</div>
+  <!-- Reference + Date -->
+  <div class="meta-row">
+    <div>
+      <div class="meta-label">Reference</div>
+      <div class="meta-value mono">${esc(quote.reference_number)}</div>
     </div>
-    <div class="underline-field-right">
-      <div class="field-label">Date</div>
-      <div class="field-underline">${esc(createdDate)}</div>
+    <div class="meta-right">
+      <div class="meta-label">Date</div>
+      <div class="meta-value">${esc(createdDate)}</div>
     </div>
   </div>
 
-  <!-- Line items / builder section -->
+  <!-- Customer -->
+  <div class="customer-block">
+    <div class="meta-label">Prepared for</div>
+    <div class="customer-name">${esc(customerName) || "&nbsp;"}</div>
+  </div>
+
+  <!-- Items -->
   ${itemsSection}
   ${notesSection}
 
-  <hr class="table-divider">
+  <!-- Deposit / payment -->
+  ${paymentSection}
 
-  ${!opts?.hidePayment && opts?.payment_link_url ? `
-  <!-- Pay Now button -->
-  <div style="text-align:center;margin:14px 0 10px;">
-    <a href="${opts.payment_link_url}" style="display:inline-block;background:#000;color:#fff;font-family:Arial,Helvetica,sans-serif;font-size:13pt;font-weight:bold;padding:14px 36px;text-decoration:none;letter-spacing:0.5px;">
-      PAY NOW${opts.deposit_amount != null ? ` — $${Number(opts.deposit_amount).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ""}
-    </a>
-    <div style="margin-top:6px;font-size:7.5pt;color:#888;">Secure payment powered by Stripe</div>
-  </div>
-  <hr class="table-divider">
-  ` : ""}
-
-  ${(() => {
-    const bd = opts?.bankDetails;
-    if (!bd) return "";
-    const lines: string[] = [];
-    if (bd.bank_name)     lines.push(`<strong>Bank:</strong> ${esc(bd.bank_name)}`);
-    if (bd.account_name)  lines.push(`<strong>Account Name:</strong> ${esc(bd.account_name)}`);
-    if (bd.bsb)           lines.push(`<strong>BSB:</strong> ${esc(bd.bsb)}`);
-    if (bd.account_number) lines.push(`<strong>Account No:</strong> ${esc(bd.account_number)}`);
-    if (lines.length === 0) return "";
-    return `<!-- Bank Details -->
-  <div style="margin:10px 0 0;padding:10px 12px;background:#f9f9f9;border-left:3px solid #555;font-size:9pt;color:#444;line-height:1.9;">
-    <div style="font-weight:bold;font-size:7.5pt;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;color:#777;">Bank Transfer Details</div>
-    ${lines.join("<br>")}
-  </div>`;
-  })()}
+  <!-- Bank transfer -->
+  ${bankSection}
 
   <!-- Footer -->
   <div class="footer">
     <div class="footer-terms">
       Valid for 7 business days from the date of this quotation, subject to availability.<br>
-      A 20% deposit is required to commence work.
+      A 30% deposit is required to commence work.
     </div>
     <div class="footer-staff">
       ${staffName ? `<div class="footer-staff-name">${staffName}</div>` : ""}
@@ -721,8 +597,8 @@ export function generateQuoteHTML(
 
   <!-- Screen-only: PDF save bar -->
   <div class="pdf-bar">
-    <p>To save as PDF: click <strong>Save as PDF</strong> → choose <em>Save as PDF</em> as the printer → click Save.</p>
-    <button onclick="window.print()">🖨&nbsp; Save as PDF</button>
+    <p>To save as PDF: click <strong>Save as PDF</strong> &rarr; choose <em>Save as PDF</em> as the printer &rarr; click Save.</p>
+    <button onclick="window.print()">&#128438;&nbsp; Save as PDF</button>
   </div>
 
 </body>
