@@ -18,6 +18,9 @@ export async function POST(req: NextRequest) {
 
     const referenceNumber = await generateQuoteReferenceNumber()
     const now = new Date().toISOString()
+    const todayDate = new Date()
+    const addDays = (d: Date, n: number) => { const r = new Date(d); r.setDate(r.getDate() + n); return r.toISOString().split('T')[0]; };
+    const addMonths = (d: Date, n: number) => { const r = new Date(d); r.setMonth(r.getMonth() + n); return r.toISOString().split('T')[0]; };
 
     const tenantId = req.headers.get('x-tenant-id') ?? ''
 
@@ -46,6 +49,11 @@ export async function POST(req: NextRequest) {
         ai_description: aiDescription || null,
         finger_size: fingerSize || null,
         stock_sku: stockSku || null,
+        follow_up_7d:  addDays(todayDate, 7),
+        follow_up_14d: addDays(todayDate, 14),
+        follow_up_1m:  addMonths(todayDate, 1),
+        follow_up_3m:  addMonths(todayDate, 3),
+        follow_up_6m:  addMonths(todayDate, 6),
       })
       .select()
       .single()

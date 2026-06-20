@@ -27,8 +27,9 @@ interface StoneEntry {
 }
 interface MeleeRow {
   id: string; stoneType: string; quality: string; shape: string;
-  caratWeight: string; individualCost: string; qty: string;
+  caratWeight: string; individualCost: string; qty: string; location: string;
 }
+interface ComponentRow { id: string; name: string; cost: string; }
 interface StoneOption {
   id: string; label: string; stones: StoneEntry[];
 }
@@ -53,14 +54,11 @@ interface BuilderItem {
   // Add-ons
   smallSettings: boolean;
   smallSettingsQty: string;
-  butterflies: boolean;
-  chain: boolean;
-  additionalLabour: boolean;
-  additionalLabourAmount: string;
   handEngraving: boolean;
   handEngravingAmount: string;
   laserEngraving: boolean;
   laserEngravingAmount: string;
+  components: ComponentRow[];
   // AI description
   aiDesc: string;
   aiGenerating: boolean;
@@ -73,7 +71,7 @@ interface CustomerResult { first_name: string | null; last_name: string | null; 
 function uid() { return Math.random().toString(36).slice(2); }
 function newStone(): StoneEntry { return { id: uid(), caratWeight: "", shape: "", colour: "", clarity: "", origin: "Lab Grown", cost: "" }; }
 function newMetal(): MetalRow { return { id: uid(), type: "", weight: "" }; }
-function newMelee(): MeleeRow { return { id: uid(), stoneType: "", quality: "", shape: "", caratWeight: "", individualCost: "", qty: "1" }; }
+function newMelee(): MeleeRow { return { id: uid(), stoneType: "", quality: "", shape: "", caratWeight: "", individualCost: "", qty: "1", location: "" }; }
 function newStoneOption(index: number): StoneOption { return { id: uid(), label: `Option ${index + 1}`, stones: [newStone()] }; }
 function newItem(index = 0): BuilderItem {
   return {
@@ -85,10 +83,9 @@ function newItem(index = 0): BuilderItem {
     stoneOptions: [newStoneOption(0)],
     meleeRows: [],
     smallSettings: false, smallSettingsQty: "1",
-    butterflies: false, chain: false,
-    additionalLabour: false, additionalLabourAmount: "",
     handEngraving: false, handEngravingAmount: "150",
     laserEngraving: false, laserEngravingAmount: "80",
+    components: [],
     aiDesc: "", aiGenerating: false,
     retailPriceOverride: "", marginMultiplierOverride: "",
   };
@@ -133,7 +130,7 @@ interface ItemPricing {
   rawPrice: number; quotedPrice: number; finalPrice: number; suggestedRetail: number;
   breakdown: BlendedBreakdownLine[];
   mult: number | null; mColour: "green" | "orange" | "red" | null; costMap: Record<string, number>;
-  extraLabour: number; activeMultiplier: number | null; handEngravingCost: number; laserEngravingCost: number;
+  activeMultiplier: number | null; handEngravingCost: number; laserEngravingCost: number;
   // Stone option prices (index matches stoneOptions array)
   stoneOptionPrices: number[];
   baseWithoutMainStone: number;
@@ -170,17 +167,16 @@ function computeItemPricing(
 
   for (const fc of fixedCosts) {
     if (fc.key === "labour") { addonsCost += Number(fc.amount); costMap.labour = Number(fc.amount); }
-    if (fc.key === "butterflies" && item.butterflies) { addonsCost += Number(fc.amount); costMap.butterflies = Number(fc.amount); }
-    if (fc.key === "chain" && item.chain) { addonsCost += Number(fc.amount); costMap.chain = Number(fc.amount); }
   }
 
   if (item.smallSettings) {
     const sc = (parseInt(item.smallSettingsQty) || 0) * 30;
     addonsCost += sc; costMap.smallSettings = sc;
   }
-  const extraLabour = item.additionalLabour ? (parseFloat(item.additionalLabourAmount) || 0) : 0;
-  addonsCost += extraLabour;
 
+  const componentsCost = item.components.reduce((s, c) => s + (parseFloat(c.cost) || 0), 0);
+  addonsCost += componentsCost;
+  if (componentsCost > 0) costMap.components = componentsCost;
   const handEngravingCost = item.handEngraving ? (parseFloat(item.handEngravingAmount) || 150) : 0;
   const laserEngravingCost = item.laserEngraving ? (parseFloat(item.laserEngravingAmount) || 80) : 0;
   if (handEngravingCost > 0) { addonsCost += handEngravingCost; costMap.handEngraving = handEngravingCost; }
@@ -247,7 +243,7 @@ function computeItemPricing(
   return {
     metalCost, mainStoneCost, meleeCost, mainStoneSettingCost, mainStoneSettingRate,
     addonsCost, totalCost, rawPrice, quotedPrice, finalPrice, suggestedRetail, breakdown,
-    mult, mColour, costMap, extraLabour, activeMultiplier, handEngravingCost, laserEngravingCost,
+    mult, mColour, costMap, activeMultiplier, handEngravingCost, laserEngravingCost,
     stoneOptionPrices, baseWithoutMainStone,
   };
 }
@@ -331,7 +327,6 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                       onClick={() => { set("itemType", active ? "" : t); set("subcategory", ""); set("subcategoryOther", ""); }}
                       style={{ padding: "10px 4px", borderRadius: 10, border: `${active ? 2 : 1}px solid ${active ? "#635BFF" : "#E8E8F0"}`, background: active ? "#EEF2FF" : "#fff", cursor: "pointer", textAlign: "center", transition: "all .15s" }}
                     >
-                      <div style={{ fontSize: 20, marginBottom: 3 }}>{ITEM_ICONS[t]}</div>
                       <div style={{ fontSize: 12, fontWeight: 600, color: active ? "#635BFF" : "#374151" }}>{t}</div>
                     </button>
                   );
@@ -375,8 +370,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                 <input style={inputStyle} type="text" value={item.fingerSize} onChange={e => set("fingerSize", e.target.value)} onFocus={onFocus} onBlur={onBlurField} placeholder="e.g. N, O½, 7" />
               </div>
               <div>
-                <label style={labelStyle}>Stock SKU</label>
-                <input style={inputStyle} type="text" value={item.stockSku} onChange={e => set("stockSku", e.target.value)} onFocus={onFocus} onBlur={onBlurField} placeholder="e.g. SKU-1234" />
+                <input style={inputStyle} type="text" value={item.stockSku} onChange={e => set("stockSku", e.target.value)} onFocus={onFocus} onBlur={onBlurField} placeholder="if based on a specific product" />
               </div>
             </div>
           </div>
@@ -406,7 +400,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                     </div>
                     <div>
                       <label style={labelStyle}>Weight (grams)</label>
-                      <input style={inputStyle} type="number" step="0.1" min="0" value={m.weight} onChange={e => set("metals", item.metals.map(x => x.id === m.id ? { ...x, weight: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField} placeholder="e.g. 5.5" />
+                      <input style={inputStyle} type="number" step="any" min="0" value={m.weight} onChange={e => set("metals", item.metals.map(x => x.id === m.id ? { ...x, weight: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField} placeholder="e.g. 5.5" />
                       {isManager && m.weight && m.type && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>Metal cost: ${Number(metalCost).toFixed(2)}</div>}
                     </div>
                   </div>
@@ -457,7 +451,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                     {opt.stones.map((stone, si) => (
                       <div key={stone.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: opt.stones.length > 1 && si < opt.stones.length - 1 ? "1px dashed #E8E8F0" : "none" }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: "#6B7280" }}>Stone {opt.stones.length > 1 ? si + 1 : ""}{stone.nivodaId ? " (Nivoda)" : ""}</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: "#6B7280" }}>Stone {opt.stones.length > 1 ? si + 1 : ""}</span>
                           {opt.stones.length > 1 && (
                             <button onClick={() => set("stoneOptions", item.stoneOptions.map(o => o.id === opt.id ? { ...o, stones: o.stones.filter(s => s.id !== stone.id) } : o))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 16, color: "#9CA3AF" }}>×</button>
                           )}
@@ -522,9 +516,13 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                     <button onClick={() => set("meleeRows", item.meleeRows.filter(x => x.id !== r.id))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 18, color: "#9CA3AF" }}>×</button>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
-                    <div><label style={labelStyle}>Stone Type</label><input style={inputStyle} type="text" value={r.stoneType} onChange={e => set("meleeRows", item.meleeRows.map(x => x.id === r.id ? { ...x, stoneType: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField} placeholder="Round Brilliant Diamond" /></div>
+                    <div><label style={labelStyle}>Stone Shape</label><input style={inputStyle} type="text" value={r.stoneType} onChange={e => set("meleeRows", item.meleeRows.map(x => x.id === r.id ? { ...x, stoneType: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField} placeholder="Round Brilliant Diamond" /></div>
                     <div><label style={labelStyle}>Quality</label><input style={inputStyle} type="text" value={r.quality} onChange={e => set("meleeRows", item.meleeRows.map(x => x.id === r.id ? { ...x, quality: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField} placeholder="G/VS" /></div>
                     <div><label style={labelStyle}>Shape</label><input style={inputStyle} type="text" value={r.shape} onChange={e => set("meleeRows", item.meleeRows.map(x => x.id === r.id ? { ...x, shape: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField} placeholder="Round" /></div>
+                  </div>
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={labelStyle}>Location</label>
+                    <input style={inputStyle} type="text" value={r.location} onChange={e => set("meleeRows", item.meleeRows.map(x => x.id === r.id ? { ...x, location: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField} placeholder="e.g. hidden halo, halo, diamond band, band" />
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: isManager ? "1fr 1fr 1fr" : "1fr 1fr", gap: 10 }}>
                     <div><label style={labelStyle}>Carat / Stone</label><input style={inputStyle} type="number" step="0.001" min="0" value={r.caratWeight} onChange={e => set("meleeRows", item.meleeRows.map(x => x.id === r.id ? { ...x, caratWeight: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField} placeholder="0.05ct" /></div>
@@ -556,18 +554,30 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                 <Toggle on={item.smallSettings} onChange={v => set("smallSettings", v)}>Small Stone Settings</Toggle>
                 {item.smallSettings && <div style={{ marginTop: 8, paddingLeft: 50, display: "flex", alignItems: "center", gap: 8 }}><label style={{ ...labelStyle, marginBottom: 0 }}>Qty</label><input style={{ ...inputStyle, width: 80 }} type="number" min="1" value={item.smallSettingsQty} onChange={e => set("smallSettingsQty", e.target.value)} />{isManager && <span style={{ fontSize: 12, color: "#6B7280" }}>= ${Number((parseInt(item.smallSettingsQty) || 0) * 30).toFixed(2)}</span>}</div>}
               </div>
-              <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", userSelect: "none" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}><input type="checkbox" checked={item.butterflies} onChange={e => set("butterflies", e.target.checked)} style={{ accentColor: "#635BFF", width: 16, height: 16, cursor: "pointer" }} /><span style={{ fontSize: 14, color: "#374151" }}>Butterflies (earrings)</span></div>
-                {isManager && item.butterflies && <span style={{ fontSize: 13, color: "#6B7280" }}>${Number(fixedCosts.find(fc => fc.key === "butterflies")?.amount ?? 15).toFixed(2)}</span>}
-              </label>
-              <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", userSelect: "none" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}><input type="checkbox" checked={item.chain} onChange={e => set("chain", e.target.checked)} style={{ accentColor: "#635BFF", width: 16, height: 16, cursor: "pointer" }} /><span style={{ fontSize: 14, color: "#374151" }}>Chain (bracelet/necklace)</span></div>
-                {isManager && item.chain && <span style={{ fontSize: 13, color: "#6B7280" }}>${Number(fixedCosts.find(fc => fc.key === "chain")?.amount ?? 40).toFixed(2)}</span>}
-              </label>
-              <div>
-                <Toggle on={item.additionalLabour} onChange={v => set("additionalLabour", v)}>Additional Labour</Toggle>
-                {item.additionalLabour && <div style={{ marginTop: 8, paddingLeft: 50, display: "flex", alignItems: "center", gap: 8 }}><label style={{ ...labelStyle, marginBottom: 0 }}>Amount ($)</label><input style={{ ...inputStyle, width: 120 }} type="number" min="0" step="0.01" value={item.additionalLabourAmount} onChange={e => set("additionalLabourAmount", e.target.value)} placeholder="0.00" /></div>}
-              </div>
+
+              {/* Freeform components */}
+              {item.components.map((comp, ci) => (
+                <div key={comp.id} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, alignItems: "center" }}>
+                  <input
+                    style={inputStyle} type="text" value={comp.name}
+                    onChange={e => set("components", item.components.map(x => x.id === comp.id ? { ...x, name: e.target.value } : x))}
+                    onFocus={onFocus} onBlur={onBlurField} placeholder="Component name…"
+                  />
+                  <input
+                    style={{ ...inputStyle, width: 90, textAlign: "right" }} type="number" min="0" step="0.01" value={comp.cost}
+                    onChange={e => set("components", item.components.map(x => x.id === comp.id ? { ...x, cost: e.target.value } : x))}
+                    onFocus={onFocus} onBlur={onBlurField} placeholder="0.00"
+                  />
+                  <button onClick={() => set("components", item.components.filter(x => x.id !== comp.id))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 18, color: "#9CA3AF", lineHeight: 1, padding: "0 4px" }}>×</button>
+                </div>
+              ))}
+              <button
+                onClick={() => set("components", [...item.components, { id: uid(), name: "", cost: "" }])}
+                style={{ ...addBtnStyle, fontSize: 13 }}
+                onMouseEnter={e => (e.currentTarget.style.background = "#E0E7FF")}
+                onMouseLeave={e => (e.currentTarget.style.background = "#EEF2FF")}
+              >+ Add Component</button>
+
               <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", userSelect: "none" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}><input type="checkbox" checked={item.handEngraving} onChange={e => set("handEngraving", e.target.checked)} style={{ accentColor: "#635BFF", width: 16, height: 16 }} /><span style={{ fontSize: 14, color: "#374151" }}>Hand Engraving</span></div>
                 {isManager && <div style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ fontSize: 12, color: "#9CA3AF" }}>$</span><input type="number" min="0" step="1" value={item.handEngravingAmount} onChange={e => set("handEngravingAmount", e.target.value)} onClick={e => e.stopPropagation()} style={{ ...inputStyle, width: 72, padding: "4px 8px", fontSize: 13 }} /></div>}
@@ -595,7 +605,10 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                         subcategory: item.subcategory === "Other" ? item.subcategoryOther : item.subcategory,
                         design: item.design,
                         metals: item.metals.filter(m => m.type),
-                        mainStones: item.includeMainStone ? item.stoneOptions[activeOptIdx]?.stones ?? item.stoneOptions[0]?.stones ?? [] : [],
+                        mainStones: item.includeMainStone ? (item.stoneOptions[0]?.stones ?? []) : [],
+                        stoneOptions: item.includeMainStone && item.stoneOptions.length > 1
+                          ? item.stoneOptions.map(opt => ({ label: opt.label, stones: opt.stones }))
+                          : null,
                         meleeStones: item.meleeRows.filter(m => m.stoneType),
                         engraving: { hand: item.handEngraving, laser: item.laserEngraving },
                         fingerSize: item.fingerSize || null,
@@ -643,9 +656,9 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                 })}
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Labour</span><span style={{ fontWeight: 500 }}>${Number(pricing.costMap.labour ?? 0).toFixed(2)}</span></div>
                 {item.smallSettings && (parseInt(item.smallSettingsQty) || 0) > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Melee Settings: {item.smallSettingsQty} × $30.00</span><span style={{ fontWeight: 500 }}>${Number(pricing.costMap.smallSettings ?? 0).toFixed(2)}</span></div>}
-                {item.butterflies && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Butterflies</span><span style={{ fontWeight: 500 }}>${Number(pricing.costMap.butterflies ?? 0).toFixed(2)}</span></div>}
-                {item.chain && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Chain</span><span style={{ fontWeight: 500 }}>${Number(pricing.costMap.chain ?? 0).toFixed(2)}</span></div>}
-                {item.additionalLabour && pricing.extraLabour > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Additional Labour</span><span style={{ fontWeight: 500 }}>${Number(pricing.extraLabour).toFixed(2)}</span></div>}
+                {item.components.filter(c => c.name).map(c => (
+                  <div key={c.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>{c.name}</span><span style={{ fontWeight: 500 }}>${Number(parseFloat(c.cost) || 0).toFixed(2)}</span></div>
+                ))}
                 {item.handEngraving && pricing.handEngravingCost > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Hand Engraving</span><span style={{ fontWeight: 500 }}>${Number(pricing.handEngravingCost).toFixed(2)}</span></div>}
                 {item.laserEngraving && pricing.laserEngravingCost > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Laser Engraving</span><span style={{ fontWeight: 500 }}>${Number(pricing.laserEngravingCost).toFixed(2)}</span></div>}
                 <div style={{ borderTop: "1px solid #D1D5DB", margin: "8px 0", paddingTop: 8, display: "flex", justifyContent: "space-between" }}>
@@ -928,13 +941,11 @@ function QuoteBuilderPageInner() {
             labour: fixedCosts.find(fc => fc.key === "labour")?.amount ?? 300,
             small_settings_qty: item.smallSettings ? (parseInt(item.smallSettingsQty) || 0) : 0,
             small_settings_cost: p.costMap.smallSettings ?? 0,
-            butterflies: item.butterflies,
-            chain: item.chain,
-            additional_labour: parseFloat(item.additionalLabourAmount) || 0,
             hand_engraving: item.handEngraving,
             hand_engraving_cost: p.handEngravingCost,
             laser_engraving: item.laserEngraving,
             laser_engraving_cost: p.laserEngravingCost,
+            components: item.components.filter(c => c.name).map(c => ({ name: c.name, cost: parseFloat(c.cost) || 0 })),
           },
           ai_description: item.aiDesc || null,
           finger_size: item.fingerSize || null,
@@ -1076,9 +1087,9 @@ function QuoteBuilderPageInner() {
               carat_weight: parseFloat(r.caratWeight) || null, qty: parseInt(r.qty) || 0,
             })),
             addons: {
-              hand_engraving: item.handEngraving, laser_engraving: item.laserEngraving,
-              butterflies: item.butterflies, chain: item.chain,
-              additional_labour: parseFloat(item.additionalLabourAmount) || 0,
+              hand_engraving: item.handEngraving,
+              laser_engraving: item.laserEngraving,
+              components: item.components.filter(c => c.name).map(c => ({ name: c.name, cost: parseFloat(c.cost) || 0 })),
             },
             ai_description: item.aiDesc || null,
             finger_size: item.fingerSize || null,
@@ -1193,23 +1204,6 @@ function QuoteBuilderPageInner() {
             onMouseLeave={e => (e.currentTarget.style.background = "#EEF2FF")}
           >+ Add Another Item</button>
 
-          {/* Charm builder buttons — feature-gated */}
-          {featureConfigurableProducts && (
-            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-              <button
-                onClick={() => setShowCharmBuilder("necklace")}
-                style={{ ...addBtnStyle, flex: 1, justifyContent: "center", padding: "12px 0", fontSize: 14, borderColor: "#7C3AED", color: "#7C3AED" }}
-                onMouseEnter={e => (e.currentTarget.style.background = "#EDE9FE")}
-                onMouseLeave={e => (e.currentTarget.style.background = "#EEF2FF")}
-              >✦ Add Charm Necklace</button>
-              <button
-                onClick={() => setShowCharmBuilder("bracelet")}
-                style={{ ...addBtnStyle, flex: 1, justifyContent: "center", padding: "12px 0", fontSize: 14, borderColor: "#7C3AED", color: "#7C3AED" }}
-                onMouseEnter={e => (e.currentTarget.style.background = "#EDE9FE")}
-                onMouseLeave={e => (e.currentTarget.style.background = "#EEF2FF")}
-              >✦ Add Charm Bracelet</button>
-            </div>
-          )}
 
           {/* Charm line items */}
           {charmItems.map(ci => (

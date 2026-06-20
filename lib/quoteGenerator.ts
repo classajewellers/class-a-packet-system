@@ -18,9 +18,16 @@ function formatDateAU(iso: string | null | undefined): string {
   return `${d}/${m}/${y}`;
 }
 
+export interface BankDetails {
+  bank_name?: string | null;
+  account_name?: string | null;
+  bsb?: string | null;
+  account_number?: string | null;
+}
+
 export function generateQuoteHTML(
   quote: Quote,
-  opts?: { payment_link_url?: string | null; deposit_amount?: number | null; hidePayment?: boolean }
+  opts?: { payment_link_url?: string | null; deposit_amount?: number | null; hidePayment?: boolean; bankDetails?: BankDetails | null }
 ): string {
   const customerName = [quote.customer_first_name, quote.customer_last_name]
     .filter(Boolean)
@@ -77,7 +84,6 @@ export function generateQuoteHTML(
         });
 
         if (stoneOptions.length > 1) {
-          let optRows = "";
           stoneOptions.forEach((opt, oi) => {
             const stones = Array.isArray(opt.stones) ? opt.stones as Array<Record<string, unknown>> : [];
             const specsText = stones.map(s =>
@@ -85,11 +91,11 @@ export function generateQuoteHTML(
                 .map(v => (v != null && v !== "" ? String(v) : null)).filter(Boolean).join(" ")
             ).filter(Boolean).join("; ");
             const optPrice = typeof opt.quoted_price === "number"
-              ? `$${opt.quoted_price.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              ? ` — $${opt.quoted_price.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
               : "";
-            optRows += `<tr style="background:${oi % 2 === 0 ? "#fff" : "#f5f5f5"}"><td style="padding:5px 8px;font-size:8.5pt;font-weight:600;color:#222;border-right:1px solid #ddd;width:70px;">${esc(String(opt.label || `Option ${oi + 1}`))}</td><td style="padding:5px 8px;font-size:8.5pt;color:#444;border-right:1px solid #ddd;">${esc(specsText)}</td><td style="padding:5px 8px;font-size:8.5pt;font-weight:700;color:#000;text-align:right;white-space:nowrap;">${optPrice}</td></tr>`;
+            const lbl = oi === 0 ? "Stone Options" : "&nbsp;";
+            rows += `<tr style="${rowBg}"><td style="${tdLbl};padding-top:${oi === 0 ? "9" : "4"}px;">${lbl}</td><td style="${tdVal}"><strong>${esc(String(opt.label || `Option ${oi + 1}`))}</strong>: ${esc(specsText)}${optPrice}</td></tr>`;
           });
-          rows += `<tr style="${rowBg}"><td style="${tdLbl};padding-top:9px;">Stone Options</td><td style="padding:6px 12px;"><table style="width:100%;border-collapse:collapse;border:1px solid #e0e0e0;"><thead><tr style="background:#444;"><th style="padding:5px 8px;font-size:7.5pt;color:#fff;text-align:left;border-right:1px solid #666;">Option</th><th style="padding:5px 8px;font-size:7.5pt;color:#fff;text-align:left;border-right:1px solid #666;">Specifications</th><th style="padding:5px 8px;font-size:7.5pt;color:#fff;text-align:right;">Price</th></tr></thead><tbody>${optRows}</tbody></table></td></tr>`;
         } else if (stoneOptions.length === 1) {
           const opt = stoneOptions[0];
           const stones = Array.isArray(opt.stones) ? opt.stones as Array<Record<string, unknown>> : [];
@@ -115,6 +121,9 @@ export function generateQuoteHTML(
           if (addons.butterflies) addonLines.push("Butterfly Earring Backs");
           if (addons.chain) addonLines.push("Chain");
           if ((addons.additional_labour as number) > 0) addonLines.push("Additional Labour");
+          if (Array.isArray(addons.components)) {
+            (addons.components as Array<{ name: string }>).forEach(c => { if (c.name) addonLines.push(c.name); });
+          }
           if (addonLines.length > 0) rows += `<tr style="${rowBg}"><td style="${tdLbl}">Inclusions</td><td style="${tdVal}">${addonLines.map(esc).join(", ")}</td></tr>`;
         }
 
@@ -680,6 +689,22 @@ export function generateQuoteHTML(
   </div>
   <hr class="table-divider">
   ` : ""}
+
+  ${(() => {
+    const bd = opts?.bankDetails;
+    if (!bd) return "";
+    const lines: string[] = [];
+    if (bd.bank_name)     lines.push(`<strong>Bank:</strong> ${esc(bd.bank_name)}`);
+    if (bd.account_name)  lines.push(`<strong>Account Name:</strong> ${esc(bd.account_name)}`);
+    if (bd.bsb)           lines.push(`<strong>BSB:</strong> ${esc(bd.bsb)}`);
+    if (bd.account_number) lines.push(`<strong>Account No:</strong> ${esc(bd.account_number)}`);
+    if (lines.length === 0) return "";
+    return `<!-- Bank Details -->
+  <div style="margin:10px 0 0;padding:10px 12px;background:#f9f9f9;border-left:3px solid #555;font-size:9pt;color:#444;line-height:1.9;">
+    <div style="font-weight:bold;font-size:7.5pt;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;color:#777;">Bank Transfer Details</div>
+    ${lines.join("<br>")}
+  </div>`;
+  })()}
 
   <!-- Footer -->
   <div class="footer">

@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const body = await req.json();
-    const { itemType, subcategory, design, metals, mainStones, meleeStones, engraving, fingerSize, stockSku } = body;
+    const { itemType, subcategory, design, metals, mainStones, stoneOptions, meleeStones, engraving, fingerSize, stockSku } = body;
 
     // Build structured data strings — no gram weights, no pricing
     const metalStr = (metals ?? [])
@@ -16,12 +16,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const itemLabel = subcategory || itemType || "";
 
     type Stone = { caratWeight: string; shape: string; colour: string; clarity: string; origin: string };
-    const mainStoneStr = (mainStones ?? [])
-      .filter((s: Stone) => s.caratWeight)
-      .map((s: Stone) =>
-        `${s.caratWeight}ct${s.colour ? ` ${s.colour}` : ""}${s.clarity ? `/${s.clarity}` : ""} ${s.shape || ""} ${s.origin || ""}`.replace(/\s+/g, " ").trim()
-      )
-      .join(", ");
+    type StoneOpt = { label: string; stones: Stone[] };
+
+    const formatStone = (s: Stone): string =>
+      `${s.caratWeight}ct${s.colour ? ` ${s.colour}` : ""}${s.clarity ? `/${s.clarity}` : ""} ${s.shape || ""} ${s.origin || ""}`.replace(/\s+/g, " ").trim();
+
+    // When multiple stone options exist, reference each explicitly
+    const mainStoneStr = Array.isArray(stoneOptions) && stoneOptions.length > 1
+      ? (stoneOptions as StoneOpt[])
+          .map((opt, i) => {
+            const stones = (opt.stones ?? []).filter((s: Stone) => s.caratWeight);
+            const desc = stones.map(formatStone).join(", ");
+            return `Option ${i + 1} (${opt.label || `Option ${i + 1}`}): ${desc}`;
+          })
+          .join("; ")
+      : (mainStones ?? [])
+          .filter((s: Stone) => s.caratWeight)
+          .map(formatStone)
+          .join(", ");
 
     type Melee = { stoneType: string; shape: string; quality: string; caratWeight: string; qty: string };
     const meleeStr = (meleeStones ?? [])
@@ -47,7 +59,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
 Output format: [Metal] [Design Name] [Item Type] set with a [carat]ct [colour]/[clarity] [shape] [Lab Grown / Natural] Diamond
 - If two metals: "[Metal 1] and [Metal 2]"
-- If multiple main stones: list main stone first, then "accented with [melee description]"
+- If multiple main stones within one option: list each stone separated by " and "
+- If multiple stone OPTIONS are provided (e.g. "Option 1 (Lab Grown): ...; Option 2 (Natural): ..."): describe the item type and metal, then write "available with [Option 1 label] [stone specs] or [Option 2 label] [stone specs]" — reference every option explicitly
 - If no stone: [Metal] [Design Name] [Item Type]
 - If no metal name given: omit metal
 - Capitalise metal type, stone shape, and item type

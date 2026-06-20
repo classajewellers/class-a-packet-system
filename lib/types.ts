@@ -381,6 +381,13 @@ export interface Quote {
   deposit_amount?: number | null;
   deposit_paid?: boolean | null;
   deposit_paid_at?: string | null;
+  // Follow-up reminder schedule
+  follow_up_7d?: string | null;
+  follow_up_14d?: string | null;
+  follow_up_1m?: string | null;
+  follow_up_3m?: string | null;
+  follow_up_6m?: string | null;
+  follow_up_notes?: string | null;
 }
 
 // ─────────────────────────────────────────────

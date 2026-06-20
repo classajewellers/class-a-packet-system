@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
-import { generateQuoteHTML } from "@/lib/quoteGenerator";
+import { generateQuoteHTML, BankDetails } from "@/lib/quoteGenerator";
 import { Quote } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 async function generatePDF(
   req: NextRequest,
@@ -23,10 +22,21 @@ async function generatePDF(
 
   const quote = data as Quote;
   const isA5 = size === "a5";
+
+  // Fetch bank details from the tenant record
+  let bankDetails: BankDetails | null = null;
+  if (tenantId) {
+    const { data: tenant } = await supabase.from("tenants").select("bank_name,account_name,bsb,account_number").eq("id", tenantId).single();
+    if (tenant && (tenant.bank_name || tenant.bsb || tenant.account_number)) {
+      bankDetails = tenant as BankDetails;
+    }
+  }
+
   const html = generateQuoteHTML(quote, {
     payment_link_url: quote.stripe_payment_link_url ?? null,
     deposit_amount: quote.deposit_amount ?? null,
     hidePayment: isA5,
+    bankDetails,
   });
 
   const refNum = (quote.reference_number ?? "QUOTE").replace(/[^A-Za-z0-9_-]/g, "_");

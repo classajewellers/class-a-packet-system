@@ -218,6 +218,9 @@ function ItemSection({
     if (addons.butterflies) addonLines.push("Butterfly Earring Backs");
     if (addons.chain) addonLines.push("Chain");
     if (Number(addons.additional_labour ?? 0) > 0) addonLines.push("Additional Labour");
+    if (Array.isArray(addons.components)) {
+      (addons.components as Array<{ name: string }>).forEach(c => { if (c.name) addonLines.push(c.name); });
+    }
   }
 
   return (
@@ -334,6 +337,10 @@ export default function QuoteViewPage() {
   const [depositPercent, setDepositPercent] = useState<number>(30);
   const [paymentLinkUrl, setPaymentLinkUrl] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [followUpNotes, setFollowUpNotes] = useState("");
+  const [generatingEmail, setGeneratingEmail] = useState(false);
+  const [generatedEmail, setGeneratedEmail] = useState<string | null>(null);
+  const [emailCopied, setEmailCopied] = useState(false);
 
   const isManager = canManage(user?.role);
 
@@ -365,6 +372,7 @@ export default function QuoteViewPage() {
         if (!res.ok || !json.quote) setError(json.error ?? `HTTP ${res.status} — quote not found`);
         else {
           setQuote(json.quote);
+          setFollowUpNotes(json.quote.follow_up_notes ?? "");
           // Pre-populate payment link if already generated
           if (json.quote.stripe_payment_link_url) {
             setPaymentLinkUrl(json.quote.stripe_payment_link_url);
@@ -437,6 +445,38 @@ export default function QuoteViewPage() {
       setLinkCopied(true);
       setTimeout(() => setLinkCopied(false), 2000);
     });
+  }
+
+  async function saveFollowUpNotes(notes: string) {
+    if (!id) return;
+    await fetch(`/api/quotes/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "x-tenant-id": user?.tenantId ?? "" },
+      body: JSON.stringify({ follow_up_notes: notes }),
+    });
+  }
+
+  async function handleGenerateFollowUpEmail() {
+    if (!quote || generatingEmail) return;
+    setGeneratingEmail(true);
+    setGeneratedEmail(null);
+    try {
+      const res = await fetch("/api/quotes/generate-followup-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-tenant-id": user?.tenantId ?? "" },
+        body: JSON.stringify({
+          customerName: [quote.customer_first_name, quote.customer_last_name].filter(Boolean).join(" ") || null,
+          itemDescription: quote.ai_description || quote.design_brief || null,
+          quotedPrice: quote.quoted_price ?? quote.total ?? null,
+          followUpNotes,
+          staffName: user?.name ?? null,
+        }),
+      });
+      const json = await res.json();
+      if (json.email) setGeneratedEmail(json.email);
+    } catch { /* noop */ } finally {
+      setGeneratingEmail(false);
+    }
   }
 
   function buildOrderUrl(
@@ -778,6 +818,68 @@ export default function QuoteViewPage() {
             <p style={{ fontSize: 14, color: "#374151", lineHeight: 1.7, whiteSpace: "pre-wrap", margin: 0 }}>{quote.notes}</p>
           </div>
         )}
+
+        {/* ── Follow-up ────────────────────────────────────────────────────── */}
+        <div style={CARD}>
+          <span style={SEC_LABEL}>Follow-up</span>
+
+          {/* Schedule pills */}
+          {quote.follow_up_7d && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+              {[
+                { label: "7 days",    date: quote.follow_up_7d },
+                { label: "14 days",   date: quote.follow_up_14d },
+                { label: "1 month",   date: quote.follow_up_1m },
+                { label: "3 months",  date: quote.follow_up_3m },
+                { label: "6 months",  date: quote.follow_up_6m },
+              ].filter(d => d.date).map(({ label, date }) => (
+                <div key={label} style={{ background: "#F9FAFB", border: "1px solid #E8E8F0", borderRadius: 8, padding: "5px 12px", fontSize: 12, display: "flex", gap: 6, alignItems: "center" }}>
+                  <span style={{ color: "#9CA3AF" }}>{label}</span>
+                  <span style={{ fontWeight: 600, color: "#374151" }}>{formatDateAU(date!)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Notes textarea */}
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ fontSize: 12, color: "#6B7280", display: "block", marginBottom: 6, fontWeight: 500 }}>Notes</label>
+            <textarea
+              value={followUpNotes}
+              onChange={e => setFollowUpNotes(e.target.value)}
+              onBlur={() => saveFollowUpNotes(followUpNotes)}
+              style={{ width: "100%", border: "1px solid #E8E8F0", borderRadius: 8, padding: "8px 12px", fontSize: 13, resize: "vertical", minHeight: 72, outline: "none", boxSizing: "border-box", fontFamily: "inherit", color: "#374151", lineHeight: 1.6 }}
+              placeholder="What did the customer discuss? What are they looking for?"
+            />
+          </div>
+
+          {/* Generate email button */}
+          <button
+            onClick={handleGenerateFollowUpEmail}
+            disabled={generatingEmail}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, border: "1px solid #635BFF", background: generatingEmail ? "#F5F3FF" : "#EEF2FF", color: "#635BFF", fontSize: 13, fontWeight: 600, cursor: generatingEmail ? "wait" : "pointer", opacity: generatingEmail ? 0.8 : 1 }}
+          >
+            {generatingEmail ? "Generating…" : "Generate Follow-up Email"}
+          </button>
+
+          {/* Generated email output */}
+          {generatedEmail && (
+            <div style={{ marginTop: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 500 }}>Generated Email</span>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(generatedEmail); setEmailCopied(true); setTimeout(() => setEmailCopied(false), 2000); }}
+                  style={{ fontSize: 12, color: "#635BFF", background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 500 }}
+                >
+                  {emailCopied ? "Copied!" : "Copy"}
+                </button>
+              </div>
+              <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, color: "#374151", background: "#F9FAFB", border: "1px solid #E8E8F0", borderRadius: 8, padding: "12px 14px", lineHeight: 1.7, margin: 0, fontFamily: "inherit" }}>
+                {generatedEmail}
+              </pre>
+            </div>
+          )}
+        </div>
 
         {/* ── Price bar ───────────────────────────────────────────────────── */}
         {totalPrice != null && (

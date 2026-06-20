@@ -30,6 +30,7 @@ export async function PATCH(
     status?: string;
     assigned_to?: string | null;
     follow_up_date?: string | null;
+    follow_up_notes?: string | null;
     accepted_option?: number | null;
     quote_builder_data?: Record<string, unknown> | null;
     quoted_price?: number | null;
@@ -59,6 +60,16 @@ export async function PATCH(
     if (PIPELINE_STAGES.includes(body.status as PipelineStage)) {
       updates[stageTimestampMap[body.status as PipelineStage]] = now;
     }
+
+    // Reset follow-up schedule from the stage change date
+    const stageDate = new Date();
+    const addD = (d: Date, n: number) => { const r = new Date(d); r.setDate(r.getDate() + n); return r.toISOString().split('T')[0]; };
+    const addM = (d: Date, n: number) => { const r = new Date(d); r.setMonth(r.getMonth() + n); return r.toISOString().split('T')[0]; };
+    updates.follow_up_7d  = addD(stageDate, 7);
+    updates.follow_up_14d = addD(stageDate, 14);
+    updates.follow_up_1m  = addM(stageDate, 1);
+    updates.follow_up_3m  = addM(stageDate, 3);
+    updates.follow_up_6m  = addM(stageDate, 6);
   }
 
   // ── Assigned To ───────────────────────────────────────────────────────────
@@ -69,6 +80,11 @@ export async function PATCH(
   // ── Follow Up Date ────────────────────────────────────────────────────────
   if ("follow_up_date" in body) {
     updates.follow_up_date = body.follow_up_date ?? null;
+  }
+
+  // ── Follow Up Notes ───────────────────────────────────────────────────────
+  if ("follow_up_notes" in body) {
+    updates.follow_up_notes = body.follow_up_notes ?? null;
   }
 
   // ── Accepted Option (stone option index) ──────────────────────────────────

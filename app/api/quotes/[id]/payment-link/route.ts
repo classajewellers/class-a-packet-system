@@ -9,11 +9,6 @@ import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { Quote } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
-function roundUpToNearest5(amount: number): number {
-  return Math.ceil(amount / 5) * 5;
-}
 
 export async function POST(
   req: NextRequest,
@@ -44,7 +39,7 @@ export async function POST(
   let body: { amount?: number } = {};
   try { body = await req.json(); } catch { /* no body is fine */ }
 
-  const minimumDeposit = roundUpToNearest5(quotedPrice * 0.3);
+  const minimumDeposit = Math.round(quotedPrice * 0.3);
   let depositAmount = minimumDeposit;
 
   if (typeof body.amount === "number" && body.amount > 0) {
