@@ -370,7 +370,8 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                 <input style={inputStyle} type="text" value={item.fingerSize} onChange={e => set("fingerSize", e.target.value)} onFocus={onFocus} onBlur={onBlurField} placeholder="e.g. N, O½, 7" />
               </div>
               <div>
-                <input style={inputStyle} type="text" value={item.stockSku} onChange={e => set("stockSku", e.target.value)} onFocus={onFocus} onBlur={onBlurField} placeholder="if based on a specific product" />
+                <label style={labelStyle}>SKU</label>
+                <input style={inputStyle} type="text" value={item.stockSku} onChange={e => set("stockSku", e.target.value)} onFocus={onFocus} onBlur={onBlurField} placeholder="if based off a product" />
               </div>
             </div>
           </div>

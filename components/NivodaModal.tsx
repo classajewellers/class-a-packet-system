@@ -251,7 +251,6 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
             </div>
             <div>
               <div style={{ fontSize: 16, fontWeight: 700, color: "#1A1A2E" }}>Browse Stones</div>
-              <div style={{ fontSize: 12, color: "#6B7280" }}>Powered by Nivoda</div>
             </div>
           </div>
           <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 20, color: "#9CA3AF", lineHeight: 1, padding: "4px 8px" }}>×</button>
