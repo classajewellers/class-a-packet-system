@@ -252,6 +252,9 @@ export interface Packet {
   collection_notified_at: string | null;
   // Joined from profiles
   assigned_to_name?: string | null;
+
+  // Workshop packet link (migration 060)
+  source_order_ref?: string | null;
 }
 
 // ─────────────────────────────────────────────

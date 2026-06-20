@@ -18,7 +18,7 @@ interface Profile {
 }
 
 type KanbanStatus = "intake" | "on_bench" | "quality_check" | "ready" | "collected";
-type JobType = "repair" | "custom_order" | "stock_work";
+type JobType = "repair" | "custom_order" | "stock_work" | "online_order";
 type JobTypeFilter = "all" | JobType;
 type StatusFilter = "all" | "overdue" | "due_today" | "ready";
 
@@ -33,15 +33,17 @@ const COLUMNS: { status: KanbanStatus; label: string; bg: string; headerBg: stri
 ];
 
 const JOB_TYPE_LABELS: Record<string, string> = {
-  repair: "Repair",
-  custom_order: "Custom",
-  stock_work: "Stock",
+  repair:        "Repair",
+  custom_order:  "Custom",
+  stock_work:    "Stock",
+  online_order:  "Online",
 };
 
 const JOB_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
-  repair:       { bg: "#EEF2FF", color: "#4F46E5" },
-  custom_order: { bg: "#FFF7ED", color: "#C2410C" },
-  stock_work:   { bg: "#F0FDF4", color: "#15803D" },
+  repair:        { bg: "#EEF2FF", color: "#4F46E5" },
+  custom_order:  { bg: "#FFF7ED", color: "#C2410C" },
+  stock_work:    { bg: "#F0FDF4", color: "#15803D" },
+  online_order:  { bg: "#EFF6FF", color: "#3B82F6" },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -311,6 +313,7 @@ function SlideOver({
             >
               <option value="repair">Repair</option>
               <option value="custom_order">Custom Order</option>
+              <option value="online_order">Online Order</option>
               <option value="stock_work">Stock Work</option>
             </select>
           )}
@@ -537,7 +540,7 @@ function NewJobModal({
           </div>
           {/* Job type selector */}
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-            {(["repair", "custom_order", "stock_work"] as const).map(t => (
+            {(["repair", "custom_order", "online_order", "stock_work"] as const).map(t => (
               <button
                 key={t}
                 type="button"
@@ -821,6 +824,7 @@ export default function WorkshopPage() {
             ["all", "All"],
             ["repair", "Repairs"],
             ["custom_order", "Custom Orders"],
+            ["online_order", "Online Orders"],
             ["stock_work", "Stock Work"],
           ] as [JobTypeFilter, string][]).map(([v, label]) => (
             <button

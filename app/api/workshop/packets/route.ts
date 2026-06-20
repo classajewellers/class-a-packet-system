@@ -4,12 +4,13 @@ import { generateReferenceNumber } from "@/lib/referenceNumber";
 
 export const dynamic = "force-dynamic";
 
-const WORKSHOP_JOB_TYPES = ["repair", "custom_order", "stock_work"];
+const WORKSHOP_JOB_TYPES = ["repair", "custom_order", "stock_work", "online_order"];
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
   const { searchParams } = new URL(req.url);
   const includeCollected = searchParams.get("include_collected") === "1";
+  const sourceOrderRef   = searchParams.get("source_order_ref");
 
   try {
     const supabase = await createTenantSupabaseClient(tenantId);
@@ -23,6 +24,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     if (tenantId) q = q.eq("tenant_id", tenantId);
     if (!includeCollected) q = q.neq("status", "collected");
+    if (sourceOrderRef) q = q.eq("source_order_ref", sourceOrderRef);
 
     const { data: packets, error } = await q;
     if (error) return NextResponse.json({ packets: [], error: error.message }, { status: 500 });
@@ -60,6 +62,7 @@ function deriveJobType(rawJobType: string | undefined, packetType: string | unde
   if (rawJobType && WORKSHOP_JOB_TYPES.includes(rawJobType)) return rawJobType;
   // Derive from packet_type string
   const pt = (packetType ?? "").toLowerCase();
+  if (/online_order|online/.test(pt)) return "online_order";
   if (/repair|service/.test(pt)) return "repair";
   if (/custom|bespoke|commission/.test(pt)) return "custom_order";
   if (/stock|internal/.test(pt)) return "stock_work";
@@ -100,6 +103,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       staff_member: body.staff_member || null,
       internal_notes: body.internal_notes || null,
       valuation_required: false,
+      source_order_ref: body.source_order_ref || null,
     };
 
     const { data, error } = await supabase.from("packets").insert(insert).select().single();

@@ -85,6 +85,69 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
   const [toast, setToast]                 = useState<Toast | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ── Workshop packet generation (online orders) ───────────────────────────
+  const [workshopRequired, setWorkshopRequired] = useState(false);
+  const [workshopModal, setWorkshopModal]       = useState(false);
+  const [workshopPacketRef, setWorkshopPacketRef] = useState<string | null>(null);
+  const [wkProfiles, setWkProfiles]             = useState<{ id: string; full_name: string | null }[]>([]);
+  const [wkForm, setWkForm]                     = useState({ description: "", due_date: "", assigned_to: "" });
+  const [wkSaving, setWkSaving]                 = useState(false);
+  const [wkError, setWkError]                   = useState("");
+
+  // Check if a workshop packet already exists for this order
+  useEffect(() => {
+    if (local.packet_type !== "online_order" || !user?.tenantId) return;
+    fetch(`/api/workshop/packets?source_order_ref=${encodeURIComponent(local.reference_number)}`, {
+      headers: { "x-tenant-id": user.tenantId },
+    })
+      .then(r => r.json())
+      .then(j => {
+        const existing = (j.packets ?? []).find((p: { source_order_ref?: string }) => p.source_order_ref === local.reference_number);
+        if (existing) { setWorkshopRequired(true); setWorkshopPacketRef(existing.reference_number); }
+      })
+      .catch(() => {});
+  }, [local.reference_number, local.packet_type, user?.tenantId]);
+
+  // Load profiles for assigned-to dropdown when modal opens
+  useEffect(() => {
+    if (!workshopModal || !user?.tenantId) return;
+    fetch("/api/profiles", { headers: { "x-tenant-id": user.tenantId } })
+      .then(r => r.json())
+      .then(j => setWkProfiles(j.profiles ?? []))
+      .catch(() => {});
+  }, [workshopModal, user?.tenantId]);
+
+  async function generateWorkshopPacket() {
+    if (!wkForm.due_date) { setWkError("Due date is required."); return; }
+    setWkSaving(true); setWkError("");
+    try {
+      const res = await fetch("/api/workshop/packets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-tenant-id": user?.tenantId ?? "" },
+        body: JSON.stringify({
+          job_type: "online_order",
+          packet_type: "online_order",
+          source_order_ref: local.reference_number,
+          customer_first_name: local.customer_first_name,
+          customer_last_name: local.customer_last_name,
+          customer_email: local.customer_email,
+          customer_phone: local.customer_phone,
+          articles: wkForm.description || local.items_ordered || local.articles || null,
+          due_date: wkForm.due_date,
+          assigned_to: wkForm.assigned_to || null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setWkError(json.error ?? "Failed to create packet."); return; }
+      setWorkshopPacketRef(json.packet.reference_number);
+      setWorkshopModal(false);
+    } catch (err) {
+      setWkError(String(err));
+    } finally {
+      setWkSaving(false);
+    }
+  }
+
   // ── Valuation photo ───────────────────────────────────────────────────────
   const [valPhotoUploading, setValPhotoUploading] = useState(false);
   const [valPhotoProgress, setValPhotoProgress]   = useState(0);
@@ -525,6 +588,118 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                 onBlur={(e) => patch({ due_date: e.target.value || null })}
                 style={{ width: '100%', border: '1px solid #E8E8F0', borderRadius: 8, background: '#F9FAFB', padding: '12px 16px', fontSize: 18, fontWeight: 700, color: '#635BFF', outline: 'none' }}
               />
+            </div>
+          )}
+
+          {/* ── Workshop Required (online orders only) ── */}
+          {isOnline && (
+            <div style={{ background: workshopPacketRef ? "#F0FDF4" : "#F9FAFB", border: `1px solid ${workshopPacketRef ? "#86EFAC" : "#E8E8F0"}`, borderRadius: 12, padding: "14px 16px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#1A1A2E" }}>Workshop Required?</span>
+                  {workshopPacketRef && (
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#DCFCE7", color: "#15803D", letterSpacing: "0.04em" }}>
+                      ✓ In Workshop · {workshopPacketRef}
+                    </span>
+                  )}
+                </div>
+                {!workshopPacketRef && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !workshopRequired;
+                      setWorkshopRequired(next);
+                      if (next) {
+                        setWkForm({ description: local.items_ordered || local.articles || "", due_date: local.due_date?.split("T")[0] || "", assigned_to: "" });
+                        setWorkshopModal(true);
+                      }
+                    }}
+                    style={{
+                      width: 40, height: 22, borderRadius: 999, border: "none", cursor: "pointer",
+                      background: workshopRequired ? "#635BFF" : "#D1D5DB",
+                      position: "relative", transition: "background .15s",
+                    }}
+                  >
+                    <span style={{
+                      position: "absolute", top: 3, left: workshopRequired ? 20 : 3,
+                      width: 16, height: 16, borderRadius: "50%", background: "#fff",
+                      transition: "left .15s", display: "block",
+                    }} />
+                  </button>
+                )}
+              </div>
+              {workshopRequired && !workshopPacketRef && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWkForm({ description: local.items_ordered || local.articles || "", due_date: local.due_date?.split("T")[0] || "", assigned_to: "" });
+                    setWorkshopModal(true);
+                  }}
+                  style={{ marginTop: 10, width: "100%", padding: "8px", borderRadius: 8, border: "1px solid #635BFF", background: "#EEF2FF", color: "#635BFF", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                >
+                  Generate Workshop Packet →
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* ── Generate Packet Modal ── */}
+          {workshopModal && (
+            <div style={{ position: "fixed", inset: 0, zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.4)" }}>
+              <div style={{ background: "#fff", borderRadius: 16, width: 420, maxWidth: "calc(100vw - 32px)", boxShadow: "0 20px 60px rgba(0,0,0,0.2)", overflow: "hidden" }}>
+                <div style={{ padding: "20px 24px 14px", borderBottom: "1px solid #E8E8F0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#1A1A2E" }}>Generate Workshop Packet</h3>
+                  <button onClick={() => { setWorkshopModal(false); setWorkshopRequired(false); setWkError(""); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", fontSize: 20, lineHeight: 1 }}>×</button>
+                </div>
+                <div style={{ padding: "16px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div style={{ background: "#EFF6FF", borderRadius: 8, padding: "8px 12px", fontSize: 12, fontWeight: 600, color: "#3B82F6" }}>
+                    Job Type: Online Order · Linked to {local.reference_number}
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Description of Work</label>
+                    <textarea
+                      value={wkForm.description}
+                      onChange={e => setWkForm(f => ({ ...f, description: e.target.value }))}
+                      rows={3}
+                      style={{ width: "100%", border: "1px solid #E8E8F0", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: "#1A1A2E", outline: "none", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }}
+                      placeholder="Describe the work required…"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Due Date <span style={{ color: "#EF4444" }}>*</span></label>
+                    <input
+                      type="date"
+                      value={wkForm.due_date}
+                      onChange={e => setWkForm(f => ({ ...f, due_date: e.target.value }))}
+                      style={{ width: "100%", border: "1px solid #E8E8F0", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: "#1A1A2E", outline: "none", boxSizing: "border-box" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Assigned To</label>
+                    <select
+                      value={wkForm.assigned_to}
+                      onChange={e => setWkForm(f => ({ ...f, assigned_to: e.target.value }))}
+                      style={{ width: "100%", border: "1px solid #E8E8F0", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: "#1A1A2E", outline: "none", background: "#fff", boxSizing: "border-box" }}
+                    >
+                      <option value="">— Unassigned —</option>
+                      {wkProfiles.map(p => (
+                        <option key={p.id} value={p.id}>{p.full_name ?? p.id}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {wkError && (
+                    <div style={{ background: "#FEE2E2", border: "1px solid #FECACA", borderRadius: 8, padding: "8px 12px", fontSize: 13, color: "#DC2626" }}>{wkError}</div>
+                  )}
+                </div>
+                <div style={{ padding: "12px 24px 20px", borderTop: "1px solid #E8E8F0", display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                  <button onClick={() => { setWorkshopModal(false); setWorkshopRequired(false); setWkError(""); }} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #E8E8F0", background: "#fff", color: "#374151", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                    Cancel
+                  </button>
+                  <button onClick={generateWorkshopPacket} disabled={wkSaving} style={{ padding: "9px 20px", borderRadius: 8, border: "none", background: "#635BFF", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: wkSaving ? 0.6 : 1 }}>
+                    {wkSaving ? "Creating…" : "Generate Packet"}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
