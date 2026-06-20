@@ -139,7 +139,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     // Backfill maiden_name for any entries that came from quotes only
-    for (const [key, row] of map) {
+    for (const [key, row] of Array.from(map)) {
       if (!row.maiden_name && maidenNameMap.has(key)) {
         row.maiden_name = maidenNameMap.get(key) ?? null;
       }
