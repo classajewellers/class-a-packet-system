@@ -252,10 +252,11 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
               />
               {settingsExpanded && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
-                  {can("pricing")  && <SubLink href="/pricing"          label="Pricing" />}
-                  {can("settings") && <SubLink href="/settings/users"   label="Users" />}
+                  {can("pricing")  && <SubLink href="/pricing"               label="Pricing" />}
+                  {can("settings") && <SubLink href="/settings/users"        label="Users" />}
+                  {can("settings") && <SubLink href="/settings/vip-tiers"    label="VIP Tiers" />}
                   {can("settings") && isManager && <SubLink href="/settings/tenants" label="Stores" />}
-                  {isAdmin         && <SubLink href="/admin/users"       label="Admin Users" />}
+                  {isAdmin         && <SubLink href="/admin/users"            label="Admin Users" />}
                 </div>
               )}
             </div>
