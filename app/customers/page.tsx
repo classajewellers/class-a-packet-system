@@ -14,10 +14,21 @@ interface CustomerRow {
   first_name: string | null;
   last_name: string | null;
   total_orders: number;
+  non_repair_orders: number;
   total_quotes: number;
   total_spend: number;
+  non_repair_spend: number;
   last_visit: string;
   first_seen: string;
+}
+
+function getVipTier(spend: number, nonRepairOrders: number) {
+  if (spend >= 30000 || nonRepairOrders >= 20) return { tier: "Argyle",   color: "#E11D48", bg: "#FFF1F2" };
+  if (spend >= 20000 || nonRepairOrders >= 15) return { tier: "Diamond",  color: "#0891B2", bg: "#ECFEFF" };
+  if (spend >= 15000 || nonRepairOrders >= 10) return { tier: "Platinum", color: "#4F46E5", bg: "#EEF2FF" };
+  if (spend >= 10000 || nonRepairOrders >= 6)  return { tier: "Gold",     color: "#D97706", bg: "#FFFBEB" };
+  if (spend >= 5000  || nonRepairOrders >= 3)  return { tier: "Silver",   color: "#6B7280", bg: "#F3F4F6" };
+  return null;
 }
 
 function SkeletonRow() {
@@ -118,6 +129,7 @@ export default function CustomersPage() {
             </div>
           ) : customers.map((c) => {
             const name = [c.first_name, c.last_name].filter(Boolean).join(" ") || "—";
+            const mTier = getVipTier(c.non_repair_spend ?? 0, c.non_repair_orders ?? 0);
             return (
               <div
                 key={c.email}
@@ -125,7 +137,10 @@ export default function CustomersPage() {
                 className="flex items-center justify-between gap-3 px-4 py-3 cursor-pointer active:bg-gray-50"
               >
                 <div className="min-w-0">
-                  <div style={{ fontWeight: 600, color: '#1A1A2E', fontSize: 14 }}>{name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontWeight: 600, color: '#1A1A2E', fontSize: 14 }}>{name}</span>
+                    {mTier && <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: mTier.bg, color: mTier.color, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{mTier.tier}</span>}
+                  </div>
                   <div style={{ color: '#6B7280', fontSize: 13, marginTop: 2 }}>{c.phone || c.email || "—"}</div>
                   <div style={{ color: '#9CA3AF', fontSize: 12, marginTop: 2 }}>
                     Last visit: {formatDateAU(c.last_visit?.split("T")[0]) || "—"}
@@ -168,6 +183,7 @@ export default function CustomersPage() {
               ) : (
                 customers.map((c) => {
                   const name = [c.first_name, c.last_name].filter(Boolean).join(" ") || "—";
+                  const dTier = getVipTier(c.non_repair_spend ?? 0, c.non_repair_orders ?? 0);
                   return (
                     <tr
                       key={c.email}
@@ -176,7 +192,12 @@ export default function CustomersPage() {
                       onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = '#F9FAFB'}
                       onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}
                     >
-                      <td style={{ padding: '12px 20px', fontWeight: 600, color: '#1A1A2E' }}>{name}</td>
+                      <td style={{ padding: '12px 20px', fontWeight: 600, color: '#1A1A2E' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {name}
+                          {dTier && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: dTier.bg, color: dTier.color, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{dTier.tier}</span>}
+                        </div>
+                      </td>
                       <td style={{ padding: '12px 20px', color: '#6B7280' }}>{c.phone || "—"}</td>
                       <td style={{ padding: '12px 20px', color: '#6B7280', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.email || "—"}</td>
                       <td style={{ padding: '12px 20px', textAlign: 'center' }}>

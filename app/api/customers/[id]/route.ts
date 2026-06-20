@@ -20,7 +20,7 @@ export async function GET(
 
     const pkQ = supabase.from("packets").select("*").ilike("customer_email", email).order("created_at", { ascending: false });
     const qtQ = supabase.from("quotes").select("*").ilike("customer_email", email).is("converted_to_packet_id", null).order("created_at", { ascending: false });
-    const custQ = supabase.from("customers").select("notes, id").ilike("email", email);
+    const custQ = supabase.from("customers").select("notes, id, maiden_name, wishlist_notes, customer_followup_notes").ilike("email", email);
 
     const [packetsResult, quotesResult, notesResult] = await Promise.all([
       (tenantId ? pkQ.eq("tenant_id", tenantId) : pkQ),
@@ -30,8 +30,11 @@ export async function GET(
 
     const packets = packetsResult.data ?? [];
     const quotes  = quotesResult.data  ?? [];
-    const notes   = notesResult.data?.notes ?? null;
-    const customerId = notesResult.data?.id ?? null;
+    const notes                  = notesResult.data?.notes ?? null;
+    const customerId             = notesResult.data?.id ?? null;
+    const maiden_name            = notesResult.data?.maiden_name ?? null;
+    const wishlist_notes         = notesResult.data?.wishlist_notes ?? null;
+    const customer_followup_notes = notesResult.data?.customer_followup_notes ?? null;
 
     // Derive customer header from most recent packet
     const latest = packets[0] ?? quotes[0] ?? null;
@@ -45,6 +48,9 @@ export async function GET(
       state:      latest?.customer_state      ?? null,
       postcode:   latest?.customer_postcode   ?? null,
       notes,
+      maiden_name,
+      wishlist_notes,
+      customer_followup_notes,
       customer_id: customerId,
       // Stats
       total_orders: packets.length,
@@ -78,10 +84,17 @@ export async function PATCH(
     const tenantId = req.headers.get('x-tenant-id') ?? ''
     const supabase = await createTenantSupabaseClient(tenantId);
 
-    // Upsert notes by email into customers table
+    // Build update object from provided fields only
+    const updateFields: Record<string, unknown> = { email, tenant_id: tenantId };
+    const allowedFields = ["notes", "maiden_name", "wishlist_notes", "customer_followup_notes"] as const;
+    for (const field of allowedFields) {
+      if (field in body) updateFields[field] = body[field];
+    }
+
+    // Upsert into customers table
     const { error } = await supabase
       .from("customers")
-      .upsert({ email, notes: body.notes }, { onConflict: "email" });
+      .upsert(updateFields, { onConflict: "email" });
 
     if (error) {
       // If table doesn't exist, silently succeed

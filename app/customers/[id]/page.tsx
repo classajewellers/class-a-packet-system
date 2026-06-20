@@ -3,47 +3,65 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { Packet, Quote } from "@/lib/types";
 import { packetTypeLabel, formatDateAU, formatCurrency } from "@/lib/formatters";
 import PacketDetailDrawer from "@/components/PacketDetailDrawer";
 import { useUser } from "@/context/UserContext";
 
-type Tab = "orders" | "quotes" | "timeline" | "notes";
+// ── Types ────────────────────────────────────────────────────────────────────
 
-const TYPE_BADGE_STYLES: Record<string, React.CSSProperties> = {
+type Tab = "orders" | "quotes" | "timeline" | "notes" | "partners" | "wishlist" | "appointments" | "followup";
+
+const TYPE_BADGE: Record<string, React.CSSProperties> = {
   repair:        { background: '#FEF3C7', color: '#92400E' },
   custom_order:  { background: '#EEF2FF', color: '#635BFF' },
   layby:         { background: '#DBEAFE', color: '#1E40AF' },
   client_intake: { background: '#DCFCE7', color: '#166534' },
   online_order:  { background: '#DCFCE7', color: '#166534' },
 };
-
-const STAGE_BADGE_STYLES: Record<string, React.CSSProperties> = {
+const STAGE_BADGE: Record<string, React.CSSProperties> = {
   pending:      { background: '#F3F4F6', color: '#374151' },
   follow_up_1:  { background: '#DBEAFE', color: '#1E40AF' },
   follow_up_2:  { background: '#FEF3C7', color: '#92400E' },
   job_won:      { background: '#DCFCE7', color: '#166534' },
   job_lost:     { background: '#FEE2E2', color: '#991B1B' },
 };
-// Default fallback styles
-const DEFAULT_BADGE: React.CSSProperties = { background: '#F3F4F6', color: '#374151' };
+const DEF_BADGE: React.CSSProperties = { background: '#F3F4F6', color: '#374151' };
 
 interface CustomerData {
   email: string;
   phone: string | null;
   first_name: string | null;
   last_name: string | null;
+  maiden_name: string | null;
   street: string | null;
   suburb: string | null;
   state: string | null;
   postcode: string | null;
   notes: string | null;
+  wishlist_notes: string | null;
+  customer_followup_notes: string | null;
   customer_id: string | null;
   total_orders: number;
   total_quotes: number;
   total_spend: number;
   first_seen: string;
   last_visit: string;
+}
+
+interface Partner {
+  id: string;
+  partner_email: string;
+  partner_name: string | null;
+}
+
+interface Appointment {
+  id: string;
+  appointment_date: string;
+  appointment_time: string | null;
+  notes: string | null;
+  status: string;
 }
 
 interface TimelineEvent {
@@ -55,6 +73,19 @@ interface TimelineEvent {
   ref: string;
   status: string;
 }
+
+// ── VIP tier ─────────────────────────────────────────────────────────────────
+
+function getVipTier(spend: number, nonRepairOrders: number) {
+  if (spend >= 30000 || nonRepairOrders >= 20) return { tier: "Argyle",   color: "#E11D48", bg: "#FFF1F2" };
+  if (spend >= 20000 || nonRepairOrders >= 15) return { tier: "Diamond",  color: "#0891B2", bg: "#ECFEFF" };
+  if (spend >= 15000 || nonRepairOrders >= 10) return { tier: "Platinum", color: "#4F46E5", bg: "#EEF2FF" };
+  if (spend >= 10000 || nonRepairOrders >= 6)  return { tier: "Gold",     color: "#D97706", bg: "#FFFBEB" };
+  if (spend >= 5000  || nonRepairOrders >= 3)  return { tier: "Silver",   color: "#6B7280", bg: "#F3F4F6" };
+  return null;
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
 
 function StatPill({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
   return (
@@ -69,7 +100,7 @@ function TabButton({ label, active, onClick, count }: { label: string; active: b
   return (
     <button
       onClick={onClick}
-      style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', fontSize: 14, fontWeight: 600, background: 'transparent', border: 'none', borderBottom: `2px solid ${active ? '#635BFF' : 'transparent'}`, color: active ? '#635BFF' : '#6B7280', cursor: 'pointer', transition: 'all .15s', whiteSpace: 'nowrap', marginBottom: -1 }}
+      style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 14px', fontSize: 13, fontWeight: 600, background: 'transparent', border: 'none', borderBottom: `2px solid ${active ? '#635BFF' : 'transparent'}`, color: active ? '#635BFF' : '#6B7280', cursor: 'pointer', whiteSpace: 'nowrap', marginBottom: -1 }}
     >
       {label}
       {count != null && count > 0 && (
@@ -81,87 +112,263 @@ function TabButton({ label, active, onClick, count }: { label: string; active: b
   );
 }
 
+// ── Page ─────────────────────────────────────────────────────────────────────
+
 export default function CustomerProfilePage({ params }: { params: { id: string } }) {
   const { user } = useUser();
   const email = decodeURIComponent(params.id);
 
+  // Core data
   const [customer, setCustomer] = useState<CustomerData | null>(null);
   const [packets, setPackets] = useState<Packet[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("orders");
   const [selectedPacket, setSelectedPacket] = useState<Packet | null>(null);
+
+  // Notes
   const [notes, setNotes] = useState("");
   const [notesSaving, setNotesSaving] = useState(false);
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Maiden name
+  const [maidenName, setMaidenName] = useState("");
+  const [maidenNameSaving, setMaidenNameSaving] = useState(false);
+
+  // Partners
+  const [partners, setPartners] = useState<Partner[]>([]);
+  const [partnersLoaded, setPartnersLoaded] = useState(false);
+  const [partnerQuery, setPartnerQuery] = useState("");
+  const [partnerResults, setPartnerResults] = useState<{ email: string; first_name: string | null; last_name: string | null }[]>([]);
+  const [partnerSearching, setPartnerSearching] = useState(false);
+  const [linkingPartner, setLinkingPartner] = useState<string | null>(null);
+
+  // Wishlist
+  const [wishlistNotes, setWishlistNotes] = useState("");
+  const [wishlistSaving, setWishlistSaving] = useState(false);
+  const wishlistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Appointments
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [appointmentsLoaded, setAppointmentsLoaded] = useState(false);
+  const [newApptDate, setNewApptDate] = useState("");
+  const [newApptTime, setNewApptTime] = useState("");
+  const [newApptNotes, setNewApptNotes] = useState("");
+  const [addingAppt, setAddingAppt] = useState(false);
+
+  // Follow-up
+  const [followupNotes, setFollowupNotes] = useState("");
+  const [followupSaving, setFollowupSaving] = useState(false);
+  const [generatingEmail, setGeneratingEmail] = useState(false);
+  const [generatedEmail, setGeneratedEmail] = useState<string | null>(null);
+  const [emailCopied, setEmailCopied] = useState(false);
+
+  // ── Initial load ──────────────────────────────────────────────────────────
   useEffect(() => {
     fetch(`/api/customers/${encodeURIComponent(email)}`, { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } })
-      .then((r) => r.json())
-      .then((json) => {
+      .then(r => r.json())
+      .then(json => {
         setCustomer(json.customer ?? null);
         setPackets(json.packets ?? []);
         setQuotes(json.quotes ?? []);
         setNotes(json.customer?.notes ?? "");
+        setMaidenName(json.customer?.maiden_name ?? "");
+        setWishlistNotes(json.customer?.wishlist_notes ?? "");
+        setFollowupNotes(json.customer?.customer_followup_notes ?? "");
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [email]);
+  }, [email, user?.tenantId]);
 
-  function saveNotes(value: string) {
+  // ── Load partners on tab activate ─────────────────────────────────────────
+  useEffect(() => {
+    if (activeTab !== "partners" || partnersLoaded) return;
+    fetch(`/api/customers/${encodeURIComponent(email)}/partners`, { headers: { 'x-tenant-id': user?.tenantId ?? '' } })
+      .then(r => r.json())
+      .then(json => { setPartners(json.partners ?? []); setPartnersLoaded(true); });
+  }, [activeTab, partnersLoaded, email, user?.tenantId]);
+
+  // ── Load appointments on tab activate ────────────────────────────────────
+  useEffect(() => {
+    if (activeTab !== "appointments" || appointmentsLoaded) return;
+    fetch(`/api/customers/${encodeURIComponent(email)}/appointments`, { headers: { 'x-tenant-id': user?.tenantId ?? '' } })
+      .then(r => r.json())
+      .then(json => { setAppointments(json.appointments ?? []); setAppointmentsLoaded(true); });
+  }, [activeTab, appointmentsLoaded, email, user?.tenantId]);
+
+  // ── Partner search (debounced) ────────────────────────────────────────────
+  useEffect(() => {
+    if (!partnerQuery.trim()) { setPartnerResults([]); return; }
+    const t = setTimeout(async () => {
+      setPartnerSearching(true);
+      try {
+        const res = await fetch(`/api/customers?search=${encodeURIComponent(partnerQuery)}`, { headers: { 'x-tenant-id': user?.tenantId ?? '' } });
+        const json = await res.json();
+        const linked = new Set(partners.map(p => p.partner_email.toLowerCase()));
+        setPartnerResults(
+          (json.customers ?? [])
+            .filter((c: { email: string }) => c.email.toLowerCase() !== email.toLowerCase() && !linked.has(c.email.toLowerCase()))
+            .slice(0, 6)
+        );
+      } catch { /* noop */ } finally { setPartnerSearching(false); }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [partnerQuery, partners, email, user?.tenantId]);
+
+  // ── Patch helper ──────────────────────────────────────────────────────────
+  async function patch(fields: Record<string, unknown>) {
+    await fetch(`/api/customers/${encodeURIComponent(email)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
+      body: JSON.stringify(fields),
+    });
+  }
+
+  function saveNotes(v: string) {
     if (notesTimer.current) clearTimeout(notesTimer.current);
     notesTimer.current = setTimeout(async () => {
       setNotesSaving(true);
-      try {
-        await fetch(`/api/customers/${encodeURIComponent(email)}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
-          body: JSON.stringify({ notes: value }),
-        });
-      } finally {
-        setNotesSaving(false);
-      }
+      try { await patch({ notes: v }); } finally { setNotesSaving(false); }
     }, 800);
   }
 
+  async function saveMaidenName() {
+    setMaidenNameSaving(true);
+    try { await patch({ maiden_name: maidenName }); } finally { setMaidenNameSaving(false); }
+  }
+
+  function saveWishlist(v: string) {
+    if (wishlistTimer.current) clearTimeout(wishlistTimer.current);
+    wishlistTimer.current = setTimeout(async () => {
+      setWishlistSaving(true);
+      try { await patch({ wishlist_notes: v }); } finally { setWishlistSaving(false); }
+    }, 800);
+  }
+
+  async function saveFollowup() {
+    setFollowupSaving(true);
+    try { await patch({ customer_followup_notes: followupNotes }); } finally { setFollowupSaving(false); }
+  }
+
+  async function linkPartner(partnerEmail: string) {
+    setLinkingPartner(partnerEmail);
+    try {
+      const res = await fetch(`/api/customers/${encodeURIComponent(email)}/partners`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
+        body: JSON.stringify({ partnerEmail }),
+      });
+      const json = await res.json();
+      if (json.partner) { setPartners(prev => [...prev, json.partner]); setPartnerQuery(""); setPartnerResults([]); }
+    } catch { /* noop */ } finally { setLinkingPartner(null); }
+  }
+
+  async function unlinkPartner(partnerEmail: string) {
+    await fetch(`/api/customers/${encodeURIComponent(email)}/partners`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
+      body: JSON.stringify({ partnerEmail }),
+    });
+    setPartners(prev => prev.filter(p => p.partner_email !== partnerEmail));
+  }
+
+  async function addAppointment() {
+    if (!newApptDate) return;
+    setAddingAppt(true);
+    try {
+      const res = await fetch(`/api/customers/${encodeURIComponent(email)}/appointments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
+        body: JSON.stringify({ appointment_date: newApptDate, appointment_time: newApptTime || null, notes: newApptNotes || null }),
+      });
+      const json = await res.json();
+      if (json.appointment) {
+        setAppointments(prev => [json.appointment, ...prev]);
+        setNewApptDate(""); setNewApptTime(""); setNewApptNotes("");
+      }
+    } catch { /* noop */ } finally { setAddingAppt(false); }
+  }
+
+  async function toggleApptStatus(appt: Appointment) {
+    const newStatus = appt.status === "upcoming" ? "completed" : "upcoming";
+    await fetch(`/api/customers/${encodeURIComponent(email)}/appointments`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
+      body: JSON.stringify({ id: appt.id, status: newStatus }),
+    });
+    setAppointments(prev => prev.map(a => a.id === appt.id ? { ...a, status: newStatus } : a));
+  }
+
+  async function deleteAppt(id: string) {
+    await fetch(`/api/customers/${encodeURIComponent(email)}/appointments`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
+      body: JSON.stringify({ id }),
+    });
+    setAppointments(prev => prev.filter(a => a.id !== id));
+  }
+
+  async function generateEmail() {
+    if (generatingEmail) return;
+    setGeneratingEmail(true); setGeneratedEmail(null);
+    try {
+      const res = await fetch("/api/quotes/generate-followup-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
+        body: JSON.stringify({
+          customerName: [customer?.first_name, customer?.last_name].filter(Boolean).join(" ") || email,
+          followUpNotes: followupNotes,
+          staffName: user?.name ?? null,
+        }),
+      });
+      const json = await res.json();
+      if (json.email) setGeneratedEmail(json.email);
+    } catch { /* noop */ } finally { setGeneratingEmail(false); }
+  }
+
   function handlePacketUpdate(updated: Packet) {
-    setPackets((prev) => prev.map((p) => p.id === updated.id ? updated : p));
+    setPackets(prev => prev.map(p => p.id === updated.id ? updated : p));
     setSelectedPacket(updated);
   }
-
   function handlePacketDelete(id: string) {
-    setPackets((prev) => prev.filter((p) => p.id !== id));
+    setPackets(prev => prev.filter(p => p.id !== id));
     setSelectedPacket(null);
   }
-
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async function handleRetry(_packetId: string, _output: string) {}
+  async function handleRetry(_id: string, _out: string) {}
 
-  // Timeline: merge packets + quotes sorted by date desc
+  // ── Computed ──────────────────────────────────────────────────────────────
+  const nonRepairPackets = packets.filter(p => p.packet_type !== "repair");
+  const nonRepairSpend = nonRepairPackets.reduce((s, p) => s + (typeof p.total_charges === "number" ? p.total_charges : 0), 0);
+  const vipTier = getVipTier(nonRepairSpend, nonRepairPackets.length);
+
   const timeline: TimelineEvent[] = [
     ...packets.map((p): TimelineEvent => ({
-      date: p.created_at,
-      type: "order",
-      label: packetTypeLabel(p.packet_type),
+      date: p.created_at, type: "order", label: packetTypeLabel(p.packet_type),
       description: [p.articles, p.instructions].filter(Boolean).join(" — ") || "—",
       amount: typeof p.total_charges === "number" ? p.total_charges : null,
       ref: p.reference_number,
       status: p.collected_date ? "Collected" : (p.due_date && p.due_date < new Date().toISOString().split("T")[0] ? "Overdue" : "Active"),
     })),
     ...quotes.map((q): TimelineEvent => ({
-      date: q.created_at,
-      type: "quote",
-      label: "Quote",
+      date: q.created_at, type: "quote", label: "Quote",
       description: q.notes || (q.line_items as { design?: string }[])?.[0]?.design || "—",
-      amount: null,
-      ref: q.reference_number,
-      status: q.status,
+      amount: null, ref: q.reference_number, status: q.status,
     })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const name = [customer?.first_name, customer?.last_name].filter(Boolean).join(" ") || email;
+  const displayName = [customer?.first_name, customer?.last_name].filter(Boolean).join(" ") || email;
   const address = [customer?.street, customer?.suburb, customer?.state, customer?.postcode].filter(Boolean).join(", ");
 
+  // Shared styles
+  const PANEL = { padding: '16px 20px' };
+  const TEXTAREA: React.CSSProperties = { width: '100%', borderRadius: 8, border: '1px solid #E8E8F0', background: '#F9FAFB', padding: '12px 16px', fontSize: 14, color: '#1A1A2E', outline: 'none', resize: 'vertical' as const, fontFamily: 'inherit' };
+  const INPUT: React.CSSProperties = { border: '1px solid #E8E8F0', borderRadius: 8, padding: '8px 12px', fontSize: 14, outline: 'none', background: '#fff', color: '#1A1A2E' };
+  const BTN: React.CSSProperties = { background: '#635BFF', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
+  const BTN_SM: React.CSSProperties = { background: 'transparent', color: '#9CA3AF', border: '1px solid #E8E8F0', borderRadius: 8, padding: '5px 10px', fontSize: 12, cursor: 'pointer' };
+  const SEC: React.CSSProperties = { fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 };
+
+  // ── Guards ────────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto space-y-4 animate-pulse">
@@ -171,7 +378,6 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
       </div>
     );
   }
-
   if (!customer && packets.length === 0 && quotes.length === 0) {
     return (
       <div className="max-w-4xl mx-auto text-center py-20">
@@ -180,6 +386,7 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
     );
   }
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
       {selectedPacket && (
@@ -194,42 +401,61 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
 
       <div className="max-w-4xl mx-auto space-y-5">
 
-        {/* ── Customer header ── */}
-        <div style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, padding: 24 }}>
+        {/* ── Header ───────────────────────────────────────────────────────── */}
+        <div style={{ background: '#fff', border: '1px solid #E8E8F0', borderRadius: 12, padding: 24 }}>
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
-              {/* Initials circle */}
               <div className="flex items-center gap-3 mb-2">
                 <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#635BFF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 18, fontWeight: 700, flexShrink: 0 }}>
                   {(customer?.first_name?.[0] ?? email[0] ?? "?").toUpperCase()}
                 </div>
                 <div>
-                  <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>{name}</h1>
-                  <p style={{ fontSize: 14, color: '#6B7280', margin: 0 }}>{email}</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>{displayName}</h1>
+                    {vipTier && (
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 999, background: vipTier.bg, color: vipTier.color, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                        {vipTier.tier}
+                      </span>
+                    )}
+                  </div>
+                  <p style={{ fontSize: 14, color: '#6B7280', margin: '2px 0 0' }}>{email}</p>
+                  {customer?.maiden_name && (
+                    <p style={{ fontSize: 12, color: '#9CA3AF', margin: '2px 0 0' }}>née {customer.maiden_name}</p>
+                  )}
                 </div>
               </div>
+
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500 mt-2">
                 {customer?.phone && (
                   <span className="flex items-center gap-1">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.338c0-1.023.916-1.838 1.904-1.838h.394c.97 0 1.838.755 1.904 1.838l.263 3.507c.063.839-.486 1.602-1.321 1.77l-.522.104a.75.75 0 00-.563.73c0 2.117 1.73 4.388 4.055 5.51a.75.75 0 00.73-.077l.376-.3c.647-.516 1.567-.587 2.284-.11l2.905 1.937a1.905 1.905 0 01-.082 3.2l-.367.22A3.754 3.754 0 017.5 21.75C4.045 21.75 2.25 17.39 2.25 12c0-2.56.67-4.96 1.838-6.85z" />
-                    </svg>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.338c0-1.023.916-1.838 1.904-1.838h.394c.97 0 1.838.755 1.904 1.838l.263 3.507c.063.839-.486 1.602-1.321 1.77l-.522.104a.75.75 0 00-.563.73c0 2.117 1.73 4.388 4.055 5.51a.75.75 0 00.73-.077l.376-.3c.647-.516 1.567-.587 2.284-.11l2.905 1.937a1.905 1.905 0 01-.082 3.2l-.367.22A3.754 3.754 0 017.5 21.75C4.045 21.75 2.25 17.39 2.25 12c0-2.56.67-4.96 1.838-6.85z" /></svg>
                     {customer.phone}
                   </span>
                 )}
                 {address && (
                   <span className="flex items-center gap-1">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
-                    </svg>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" /></svg>
                     {address}
                   </span>
                 )}
               </div>
+
+              {/* Maiden name input */}
+              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <label style={{ fontSize: 12, color: '#6B7280', whiteSpace: 'nowrap' }}>Maiden name:</label>
+                <input
+                  type="text"
+                  value={maidenName}
+                  onChange={e => setMaidenName(e.target.value)}
+                  onBlur={saveMaidenName}
+                  placeholder="née …"
+                  style={{ ...INPUT, fontSize: 13, padding: '5px 10px', maxWidth: 180 }}
+                />
+                {maidenNameSaving && <span style={{ fontSize: 12, color: '#9CA3AF' }}>Saving…</span>}
+              </div>
             </div>
 
-            {/* Stats row */}
+            {/* Stats */}
             <div className="flex gap-2 flex-wrap">
               <StatPill label="Orders" value={customer?.total_orders ?? packets.length} accent />
               <StatPill label="Quotes" value={customer?.total_quotes ?? quotes.length} />
@@ -240,16 +466,22 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
           </div>
         </div>
 
-        {/* ── Tabs ── */}
-        <div style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, overflow: 'hidden' }}>
+        {/* ── Tab panel ────────────────────────────────────────────────────── */}
+        <div style={{ background: '#fff', border: '1px solid #E8E8F0', borderRadius: 12, overflow: 'hidden' }}>
+
+          {/* Tab bar */}
           <div style={{ display: 'flex', borderBottom: '1px solid #E8E8F0', overflowX: 'auto' }}>
-            <TabButton label="Orders" active={activeTab === "orders"} onClick={() => setActiveTab("orders")} count={packets.length} />
-            <TabButton label="Quotes" active={activeTab === "quotes"} onClick={() => setActiveTab("quotes")} count={quotes.length} />
-            <TabButton label="Timeline" active={activeTab === "timeline"} onClick={() => setActiveTab("timeline")} count={timeline.length} />
-            <TabButton label="Notes" active={activeTab === "notes"} onClick={() => setActiveTab("notes")} />
+            <TabButton label="Orders"       active={activeTab === "orders"}       onClick={() => setActiveTab("orders")}       count={packets.length} />
+            <TabButton label="Quotes"       active={activeTab === "quotes"}       onClick={() => setActiveTab("quotes")}       count={quotes.length} />
+            <TabButton label="Timeline"     active={activeTab === "timeline"}     onClick={() => setActiveTab("timeline")}     count={timeline.length} />
+            <TabButton label="Notes"        active={activeTab === "notes"}        onClick={() => setActiveTab("notes")} />
+            <TabButton label="Partners"     active={activeTab === "partners"}     onClick={() => setActiveTab("partners")}     count={partners.length || undefined} />
+            <TabButton label="Wishlist"     active={activeTab === "wishlist"}     onClick={() => setActiveTab("wishlist")} />
+            <TabButton label="Appointments" active={activeTab === "appointments"} onClick={() => setActiveTab("appointments")} count={appointments.filter(a => a.status === "upcoming").length || undefined} />
+            <TabButton label="Follow-up"    active={activeTab === "followup"}     onClick={() => setActiveTab("followup")} />
           </div>
 
-          {/* ── Orders tab ── */}
+          {/* ── Orders tab ─────────────────────────────────────────────────── */}
           {activeTab === "orders" && (
             <div className="overflow-x-auto">
               {packets.length === 0 ? (
@@ -258,66 +490,38 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
                 <table className="w-full text-sm">
                   <thead>
                     <tr style={{ textAlign: 'left', borderBottom: '1px solid #E8E8F0', background: '#F9FAFB' }}>
-                      {['Reference','Type','Description','Due','Total','Status','Specs','Certificate'].map((h) => (
+                      {['Reference','Type','Description','Due','Total','Status','Specs','Certificate'].map(h => (
                         <th key={h} style={{ padding: '12px 20px', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {packets.map((p) => {
-                      const isOverdue = p.due_date && p.due_date < new Date().toISOString().split("T")[0] && !p.collected_date;
-                      const status = p.collected_date ? "Collected" : isOverdue ? "Overdue" : "Active";
+                    {packets.map(p => {
+                      const overdue = p.due_date && p.due_date < new Date().toISOString().split("T")[0] && !p.collected_date;
+                      const status = p.collected_date ? "Collected" : overdue ? "Overdue" : "Active";
                       return (
-                        <tr
-                          key={p.id}
-                          onClick={() => setSelectedPacket(p)}
-                          style={{ borderBottom: '1px solid #E8E8F0', cursor: 'pointer', transition: 'background .12s' }}
-                          onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = '#F9FAFB'}
-                          onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}
-                        >
+                        <tr key={p.id} onClick={() => setSelectedPacket(p)} style={{ borderBottom: '1px solid #E8E8F0', cursor: 'pointer' }} onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = '#F9FAFB'} onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}>
                           <td style={{ padding: '12px 20px', fontFamily: 'monospace', fontSize: 11, color: '#6B7280' }}>{p.reference_number}</td>
+                          <td style={{ padding: '12px 20px' }}><span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, ...(TYPE_BADGE[p.packet_type] ?? DEF_BADGE) }}>{packetTypeLabel(p.packet_type)}</span></td>
+                          <td style={{ padding: '12px 20px', color: '#374151', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.articles || p.instructions || "—"}</td>
+                          <td style={{ padding: '12px 20px', fontSize: 14, color: overdue ? '#EF4444' : '#6B7280', fontWeight: overdue ? 600 : 400 }}>{formatDateAU(p.due_date) || "—"}</td>
+                          <td style={{ padding: '12px 20px', fontWeight: 600, color: '#1A1A2E' }}>{typeof p.total_charges === "number" ? formatCurrency(p.total_charges) : "—"}</td>
                           <td style={{ padding: '12px 20px' }}>
-                            <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, ...(TYPE_BADGE_STYLES[p.packet_type] ?? DEFAULT_BADGE) }}>
-                              {packetTypeLabel(p.packet_type)}
-                            </span>
-                          </td>
-                          <td style={{ padding: '12px 20px', color: '#374151', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {p.articles || p.instructions || "—"}
-                          </td>
-                          <td style={{ padding: '12px 20px', fontSize: 14, color: isOverdue ? '#EF4444' : '#6B7280', fontWeight: isOverdue ? 600 : 400 }}>
-                            {formatDateAU(p.due_date) || "—"}
-                          </td>
-                          <td style={{ padding: '12px 20px', fontWeight: 600, color: '#1A1A2E' }}>
-                            {typeof p.total_charges === "number" ? formatCurrency(p.total_charges) : "—"}
-                          </td>
-                          <td style={{ padding: '12px 20px' }}>
-                            <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600,
-                              ...(status === "Collected" ? { background: '#DCFCE7', color: '#166534' } :
-                                  status === "Overdue"   ? { background: '#FEE2E2', color: '#991B1B' } :
-                                  { background: '#F3F4F6', color: '#374151' }) }}>
+                            <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, ...(status === "Collected" ? { background: '#DCFCE7', color: '#166534' } : status === "Overdue" ? { background: '#FEE2E2', color: '#991B1B' } : { background: '#F3F4F6', color: '#374151' }) }}>
                               {status}
                             </span>
                           </td>
                           <td style={{ padding: '12px 20px' }}>
                             {p.item_specifications && Object.keys(p.item_specifications as Record<string, unknown>).length > 0 && (
-                              <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: '#DBEAFE', color: '#1E40AF' }}>
-                                Specs
-                              </span>
+                              <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: '#DBEAFE', color: '#1E40AF' }}>Specs</span>
                             )}
                           </td>
                           <td style={{ padding: '12px 20px' }}>
                             {p.valuation_status === "approved" && (
                               <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  import("@/lib/valuationCertificateGenerator").then(({ generateValuationCertificate }) => {
-                                    generateValuationCertificate(p);
-                                  });
-                                }}
+                                onClick={e => { e.stopPropagation(); import("@/lib/valuationCertificateGenerator").then(({ generateValuationCertificate }) => generateValuationCertificate(p)); }}
                                 style={{ display: 'inline-flex', padding: '4px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600, background: '#DCFCE7', color: '#166534', border: 'none', cursor: 'pointer' }}
-                              >
-                                View Certificate
-                              </button>
+                              >View Certificate</button>
                             )}
                           </td>
                         </tr>
@@ -329,7 +533,7 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
             </div>
           )}
 
-          {/* ── Quotes tab ── */}
+          {/* ── Quotes tab ─────────────────────────────────────────────────── */}
           {activeTab === "quotes" && (
             <div className="overflow-x-auto">
               {quotes.length === 0 ? (
@@ -338,27 +542,18 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
                 <table className="w-full text-sm">
                   <thead>
                     <tr style={{ textAlign: 'left', borderBottom: '1px solid #E8E8F0', background: '#F9FAFB' }}>
-                      {['Reference','Type','Notes','Stage','Assigned To','Created'].map((h) => (
+                      {['Reference','Type','Notes','Stage','Assigned To','Created'].map(h => (
                         <th key={h} style={{ padding: '12px 20px', fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {quotes.map((q) => (
-                      <tr
-                        key={q.id}
-                        style={{ borderBottom: '1px solid #E8E8F0', transition: 'background .12s' }}
-                        onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = '#F9FAFB'}
-                        onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}
-                      >
+                    {quotes.map(q => (
+                      <tr key={q.id} style={{ borderBottom: '1px solid #E8E8F0' }} onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = '#F9FAFB'} onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}>
                         <td style={{ padding: '12px 20px', fontFamily: 'monospace', fontSize: 11, color: '#6B7280' }}>{q.reference_number}</td>
                         <td style={{ padding: '12px 20px', color: '#374151' }}>{q.quote_type || "—"}</td>
                         <td style={{ padding: '12px 20px', color: '#6B7280', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.notes || "—"}</td>
-                        <td style={{ padding: '12px 20px' }}>
-                          <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, ...(STAGE_BADGE_STYLES[q.status] ?? DEFAULT_BADGE) }}>
-                            {(q.status ?? "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-                          </span>
-                        </td>
+                        <td style={{ padding: '12px 20px' }}><span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, ...(STAGE_BADGE[q.status] ?? DEF_BADGE) }}>{(q.status ?? "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</span></td>
                         <td style={{ padding: '12px 20px', color: '#6B7280' }}>{q.assigned_to || q.staff_member || "—"}</td>
                         <td style={{ padding: '12px 20px', color: '#9CA3AF', fontSize: 12 }}>{formatDateAU(q.created_at?.split("T")[0])}</td>
                       </tr>
@@ -369,19 +564,17 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
             </div>
           )}
 
-          {/* ── Timeline tab ── */}
+          {/* ── Timeline tab ───────────────────────────────────────────────── */}
           {activeTab === "timeline" && (
-            <div style={{ padding: '16px 20px' }}>
+            <div style={PANEL}>
               {timeline.length === 0 ? (
                 <p style={{ padding: '40px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 14 }}>No history</p>
               ) : (
                 <div style={{ position: 'relative' }}>
-                  {/* Vertical line */}
                   <div style={{ position: 'absolute', left: 20, top: 0, bottom: 0, width: 1, background: '#E8E8F0' }} />
                   <div style={{ paddingLeft: 56, display: 'flex', flexDirection: 'column', gap: 16 }}>
                     {timeline.map((ev, i) => (
                       <div key={i} style={{ position: 'relative' }}>
-                        {/* Icon */}
                         <div style={{ position: 'absolute', left: -36, top: 4, width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, background: ev.type === "order" ? '#635BFF' : '#EEF2FF', color: ev.type === "order" ? '#fff' : '#635BFF' }}>
                           {ev.type === "order" ? "📦" : "💬"}
                         </div>
@@ -390,20 +583,15 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
                             <div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                 <span style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>{ev.label}</span>
-                                <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600,
-                                  ...(ev.type === "order"
-                                    ? (ev.status === "Collected" ? { background: '#DCFCE7', color: '#166534' } : ev.status === "Overdue" ? { background: '#FEE2E2', color: '#991B1B' } : { background: '#F3F4F6', color: '#374151' })
-                                    : (STAGE_BADGE_STYLES[ev.status] ?? DEFAULT_BADGE)) }}>
-                                  {ev.status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                                <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, ...(ev.type === "order" ? (ev.status === "Collected" ? { background: '#DCFCE7', color: '#166534' } : ev.status === "Overdue" ? { background: '#FEE2E2', color: '#991B1B' } : { background: '#F3F4F6', color: '#374151' }) : (STAGE_BADGE[ev.status] ?? DEF_BADGE)) }}>
+                                  {ev.status.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
                                 </span>
                                 <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#D1D5DB' }}>{ev.ref}</span>
                               </div>
                               <p style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{ev.description}</p>
                             </div>
                             <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                              {ev.amount != null && (
-                                <p style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>{formatCurrency(ev.amount)}</p>
-                              )}
+                              {ev.amount != null && <p style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>{formatCurrency(ev.amount)}</p>}
                               <p style={{ fontSize: 12, color: '#9CA3AF' }}>{formatDateAU(ev.date.split("T")[0])}</p>
                             </div>
                           </div>
@@ -416,26 +604,172 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
             </div>
           )}
 
-          {/* ── Notes tab ── */}
+          {/* ── Notes tab ──────────────────────────────────────────────────── */}
           {activeTab === "notes" && (
-            <div style={{ padding: '16px 20px' }}>
+            <div style={PANEL}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                <label style={{ fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Staff Notes</label>
+                <label style={SEC}>Staff Notes</label>
                 {notesSaving && <span style={{ fontSize: 12, color: '#9CA3AF' }} className="animate-pulse">Saving…</span>}
               </div>
-              <textarea
-                rows={8}
-                value={notes}
-                onChange={(e) => {
-                  setNotes(e.target.value);
-                  saveNotes(e.target.value);
-                }}
-                placeholder="Add notes about this customer — preferences, history, anything relevant for future visits…"
-                style={{ width: '100%', borderRadius: 8, border: '1px solid #E8E8F0', background: '#F9FAFB', padding: '12px 16px', fontSize: 14, color: '#1A1A2E', outline: 'none', resize: 'vertical' as const, fontFamily: 'inherit' }}
-              />
+              <textarea rows={8} value={notes} onChange={e => { setNotes(e.target.value); saveNotes(e.target.value); }} placeholder="Add notes about this customer — preferences, history, anything relevant for future visits…" style={TEXTAREA} />
               <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 8 }}>Notes save automatically. Visible to all staff.</p>
             </div>
           )}
+
+          {/* ── Partners tab ───────────────────────────────────────────────── */}
+          {activeTab === "partners" && (
+            <div style={PANEL}>
+              {partners.length > 0 && (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={SEC}>Linked Partners</div>
+                  {partners.map(p => (
+                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', border: '1px solid #E8E8F0', borderRadius: 10, marginBottom: 8, background: '#F9FAFB' }}>
+                      <div>
+                        <Link href={`/customers/${encodeURIComponent(p.partner_email)}`} style={{ fontSize: 14, fontWeight: 600, color: '#635BFF', textDecoration: 'none' }}>
+                          {p.partner_name || p.partner_email}
+                        </Link>
+                        <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 1 }}>{p.partner_email}</div>
+                      </div>
+                      <button onClick={() => unlinkPartner(p.partner_email)} style={BTN_SM}>Unlink</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={SEC}>Link a Partner</div>
+              <input type="text" value={partnerQuery} onChange={e => setPartnerQuery(e.target.value)} placeholder="Search by name or email…" style={{ ...INPUT, width: '100%', marginBottom: 8 }} />
+              {partnerSearching && <div style={{ fontSize: 13, color: '#9CA3AF', padding: '6px 0' }}>Searching…</div>}
+              {partnerResults.map(r => {
+                const pName = [r.first_name, r.last_name].filter(Boolean).join(" ") || r.email;
+                return (
+                  <div key={r.email} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 8, border: '1px solid #E8E8F0', marginBottom: 6 }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 500, color: '#1A1A2E' }}>{pName}</div>
+                      <div style={{ fontSize: 12, color: '#9CA3AF' }}>{r.email}</div>
+                    </div>
+                    <button onClick={() => linkPartner(r.email)} disabled={linkingPartner === r.email} style={{ ...BTN, padding: '6px 14px', fontSize: 12, opacity: linkingPartner === r.email ? 0.6 : 1 }}>
+                      {linkingPartner === r.email ? "Linking…" : "Link"}
+                    </button>
+                  </div>
+                );
+              })}
+              {partners.length === 0 && !partnerQuery && !partnerSearching && (
+                <p style={{ fontSize: 13, color: '#9CA3AF', marginTop: 4 }}>Search for a customer above to link them as a partner.</p>
+              )}
+            </div>
+          )}
+
+          {/* ── Wishlist tab ───────────────────────────────────────────────── */}
+          {activeTab === "wishlist" && (
+            <div style={PANEL}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <label style={SEC}>Wishlist & Interests</label>
+                {wishlistSaving && <span style={{ fontSize: 12, color: '#9CA3AF' }} className="animate-pulse">Saving…</span>}
+              </div>
+              <textarea rows={8} value={wishlistNotes} onChange={e => { setWishlistNotes(e.target.value); saveWishlist(e.target.value); }} placeholder="Items they've looked at, styles they love, price ranges discussed, dream pieces…" style={TEXTAREA} />
+              <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 8 }}>Saves automatically.</p>
+            </div>
+          )}
+
+          {/* ── Appointments tab ───────────────────────────────────────────── */}
+          {activeTab === "appointments" && (
+            <div style={PANEL}>
+              {/* Add form */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={SEC}>New Appointment</div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <input type="date" value={newApptDate} onChange={e => setNewApptDate(e.target.value)} style={{ ...INPUT, flex: 1, minWidth: 140 }} />
+                  <input type="time" value={newApptTime} onChange={e => setNewApptTime(e.target.value)} style={{ ...INPUT, width: 130 }} />
+                </div>
+                <input type="text" value={newApptNotes} onChange={e => setNewApptNotes(e.target.value)} placeholder="Notes (optional)" style={{ ...INPUT, width: '100%', marginBottom: 10 }} />
+                <button onClick={addAppointment} disabled={!newApptDate || addingAppt} style={{ ...BTN, opacity: (!newApptDate || addingAppt) ? 0.5 : 1 }}>
+                  {addingAppt ? "Saving…" : "Add Appointment"}
+                </button>
+              </div>
+
+              {(() => {
+                const upcoming = appointments.filter(a => a.status === "upcoming");
+                const done = appointments.filter(a => a.status !== "upcoming");
+                if (appointments.length === 0) return <p style={{ fontSize: 13, color: '#9CA3AF' }}>No appointments logged yet.</p>;
+                return (
+                  <>
+                    {upcoming.length > 0 && (
+                      <>
+                        <div style={SEC}>Upcoming</div>
+                        {upcoming.map(a => (
+                          <div key={a.id} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', border: '1px solid #E8E8F0', borderRadius: 10, padding: '12px 14px', marginBottom: 8, background: '#F9FAFB' }}>
+                            <div>
+                              <div style={{ fontWeight: 600, color: '#1A1A2E', fontSize: 14 }}>
+                                {formatDateAU(a.appointment_date)}{a.appointment_time ? ` at ${String(a.appointment_time).slice(0,5)}` : ''}
+                              </div>
+                              {a.notes && <p style={{ fontSize: 13, color: '#6B7280', margin: '3px 0 0' }}>{a.notes}</p>}
+                            </div>
+                            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                              <button onClick={() => toggleApptStatus(a)} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 8, border: '1px solid #10B981', background: '#F0FDF4', color: '#10B981', cursor: 'pointer', fontWeight: 500 }}>Complete</button>
+                              <button onClick={() => deleteAppt(a.id)} style={BTN_SM}>Delete</button>
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                    {done.length > 0 && (
+                      <>
+                        <div style={{ ...SEC, color: '#9CA3AF', marginTop: upcoming.length ? 16 : 0 }}>Completed</div>
+                        {done.map(a => (
+                          <div key={a.id} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', border: '1px solid #E8E8F0', borderRadius: 10, padding: '12px 14px', marginBottom: 8, opacity: 0.6 }}>
+                            <div>
+                              <div style={{ fontWeight: 500, color: '#6B7280', fontSize: 14, textDecoration: 'line-through' }}>
+                                {formatDateAU(a.appointment_date)}{a.appointment_time ? ` at ${String(a.appointment_time).slice(0,5)}` : ''}
+                              </div>
+                              {a.notes && <p style={{ fontSize: 13, color: '#9CA3AF', margin: '3px 0 0' }}>{a.notes}</p>}
+                            </div>
+                            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                              <button onClick={() => toggleApptStatus(a)} style={{ ...BTN_SM, color: '#6B7280' }}>Reopen</button>
+                              <button onClick={() => deleteAppt(a.id)} style={BTN_SM}>Delete</button>
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* ── Follow-up tab ──────────────────────────────────────────────── */}
+          {activeTab === "followup" && (
+            <div style={PANEL}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <label style={SEC}>Follow-up Notes</label>
+                {followupSaving && <span style={{ fontSize: 12, color: '#9CA3AF' }} className="animate-pulse">Saving…</span>}
+              </div>
+              <textarea
+                rows={5}
+                value={followupNotes}
+                onChange={e => setFollowupNotes(e.target.value)}
+                onBlur={saveFollowup}
+                placeholder="What do they want, what was discussed, anything to reference in a follow-up email…"
+                style={{ ...TEXTAREA, marginBottom: 12 }}
+              />
+              <button onClick={generateEmail} disabled={generatingEmail} style={{ ...BTN, opacity: generatingEmail ? 0.75 : 1 }}>
+                {generatingEmail ? "Generating…" : "Generate Follow-up Email"}
+              </button>
+              {generatedEmail && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, color: '#6B7280', fontWeight: 500 }}>Generated Email</span>
+                    <button onClick={() => { navigator.clipboard.writeText(generatedEmail); setEmailCopied(true); setTimeout(() => setEmailCopied(false), 2000); }} style={{ fontSize: 12, color: '#635BFF', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 500 }}>
+                      {emailCopied ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                  <pre style={{ whiteSpace: 'pre-wrap', fontSize: 13, color: '#374151', background: '#F9FAFB', border: '1px solid #E8E8F0', borderRadius: 8, padding: '12px 14px', lineHeight: 1.7, margin: 0, fontFamily: 'inherit' }}>
+                    {generatedEmail}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+
         </div>
       </div>
     </>

@@ -8,12 +8,15 @@ interface CustomerRow {
   phone: string | null;
   first_name: string | null;
   last_name: string | null;
+  maiden_name: string | null;
   total_orders: number;
+  non_repair_orders: number;
   total_quotes: number;
   total_spend: number;
+  non_repair_spend: number;
   last_visit: string;
   first_seen: string;
-  articles_sample: string; // for search
+  articles_sample: string; // for search only, stripped from response
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -21,14 +24,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const search = (searchParams.get("search") ?? "").toLowerCase().trim();
 
   try {
-    const tenantId = req.headers.get('x-tenant-id') ?? ''
+    const tenantId = req.headers.get('x-tenant-id') ?? '';
     const supabase = await createTenantSupabaseClient(tenantId);
 
-    // Fetch packets — only columns needed for aggregation
+    // Fetch packets — include packet_type for non-repair aggregation
     const packetsQ = supabase
       .from("packets")
       .select(
-        "customer_email, customer_phone, customer_first_name, customer_last_name, total_charges, created_at, articles, instructions"
+        "customer_email, customer_phone, customer_first_name, customer_last_name, total_charges, created_at, articles, instructions, packet_type"
       )
       .order("created_at", { ascending: false });
     const { data: packets, error: pErr } = await (tenantId ? packetsQ.eq("tenant_id", tenantId) : packetsQ);
@@ -50,6 +53,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       // quotes table may not exist
     }
 
+    // Fetch customers table for maiden_name
+    let maidenNameMap = new Map<string, string | null>();
+    try {
+      const custQ = supabase.from("customers").select("email, maiden_name");
+      const { data: custData } = await (tenantId ? custQ.eq("tenant_id", tenantId) : custQ);
+      for (const c of custData ?? []) {
+        if (c.email) maidenNameMap.set(c.email.toLowerCase().trim(), c.maiden_name ?? null);
+      }
+    } catch {
+      // customers table may not have maiden_name yet
+    }
+
     // ── Aggregate by email ───────────────────────────────────────────────────
     const map = new Map<string, CustomerRow>();
 
@@ -59,11 +74,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
       const existing = map.get(key);
       const amount = typeof p.total_charges === "number" ? p.total_charges : 0;
+      const isRepair = p.packet_type === "repair";
       const articles = [p.articles, p.instructions].filter(Boolean).join(" ");
 
       if (existing) {
         existing.total_orders += 1;
         existing.total_spend += amount;
+        if (!isRepair) {
+          existing.non_repair_orders += 1;
+          existing.non_repair_spend += amount;
+        }
         if (p.created_at > existing.last_visit) existing.last_visit = p.created_at;
         if (p.created_at < existing.first_seen) existing.first_seen = p.created_at;
         if (p.customer_first_name && !existing.first_name) existing.first_name = p.customer_first_name;
@@ -76,9 +96,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           phone: p.customer_phone ?? null,
           first_name: p.customer_first_name ?? null,
           last_name: p.customer_last_name ?? null,
+          maiden_name: maidenNameMap.get(key) ?? null,
           total_orders: 1,
+          non_repair_orders: isRepair ? 0 : 1,
           total_quotes: 0,
           total_spend: amount,
+          non_repair_spend: isRepair ? 0 : amount,
           last_visit: p.created_at,
           first_seen: p.created_at,
           articles_sample: articles,
@@ -102,13 +125,23 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           phone: q.customer_phone ?? null,
           first_name: q.customer_first_name ?? null,
           last_name: q.customer_last_name ?? null,
+          maiden_name: maidenNameMap.get(key) ?? null,
           total_orders: 0,
+          non_repair_orders: 0,
           total_quotes: 1,
           total_spend: 0,
+          non_repair_spend: 0,
           last_visit: q.created_at,
           first_seen: q.created_at,
           articles_sample: "",
         });
+      }
+    }
+
+    // Backfill maiden_name for any entries that came from quotes only
+    for (const [key, row] of map) {
+      if (!row.maiden_name && maidenNameMap.has(key)) {
+        row.maiden_name = maidenNameMap.get(key) ?? null;
       }
     }
 
@@ -123,6 +156,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         const name = `${c.first_name ?? ""} ${c.last_name ?? ""}`.toLowerCase();
         return (
           name.includes(search) ||
+          (c.maiden_name ?? "").toLowerCase().includes(search) ||
           (c.email ?? "").toLowerCase().includes(search) ||
           (c.phone ?? "").toLowerCase().includes(search) ||
           (c.articles_sample ?? "").toLowerCase().includes(search)
