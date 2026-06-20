@@ -19,7 +19,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (!appointments?.length) return NextResponse.json({ appointments: [] });
 
     // Resolve customer names from most-recent packet per email
-    const emails = [...new Set(appointments.map(a => a.customer_email as string).filter(Boolean))];
+    const emails = Array.from(new Set(appointments.map(a => a.customer_email as string).filter(Boolean)));
     const namesMap = new Map<string, { first_name: string | null; last_name: string | null }>();
 
     try {
