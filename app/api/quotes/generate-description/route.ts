@@ -57,19 +57,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const systemPrompt = `You write jewellery product descriptions for quote documents.
 
-Output format: [Metal] [Design Name] [Item Type] set with a [carat]ct [colour]/[clarity] [shape] [Lab Grown / Natural] Diamond
+SINGLE stone option format (one sentence, period at end):
+"The [Design Name] [Item Type] in [Metal], finger size [size], set with a [carat]ct [Shape] [Lab Grown / Natural] Diamond, [Colour]/[Clarity]."
+
+MULTIPLE stone options format (multi-line, no trailing period on header):
+"The [Design Name] [Item Type] in [Metal], finger size [size], presented in two diamond options:
+Option 1 — [carat]ct [Shape] [Lab Grown / Natural] Diamond, [Colour]/[Clarity]
+Option 2 — [carat]ct [Shape] [Lab Grown / Natural] Diamond, [Colour]/[Clarity]"
+
+Rules:
 - If two metals: "[Metal 1] and [Metal 2]"
-- If multiple main stones within one option: list each stone separated by " and "
-- If multiple stone OPTIONS are provided (e.g. "Option 1 (Lab Grown): ...; Option 2 (Natural): ..."): describe the item type and metal, then write "available with [Option 1 label] [stone specs] or [Option 2 label] [stone specs]" — reference every option explicitly
-- If no stone: [Metal] [Design Name] [Item Type]
-- If no metal name given: omit metal
+- If no stone: "The [Design Name] [Item Type] in [Metal]."
+- If no metal: omit the "in [Metal]" clause
+- If no design name: use item type only (e.g. "The Engagement Ring in Platinum…")
+- If no finger size: omit the finger size clause entirely
+- If stock SKU is provided: append " — Ref: [SKU]" on the last line
 - Capitalise metal type, stone shape, and item type
 - Never mention gram weights, setting costs, labour, or pricing
-- Never use adjectives like stunning, exquisite, featuring, boasting, beautiful
-- If finger size is provided, append ", finger size [X]" at the end of the main description (before any stock SKU)
-- If stock SKU is provided, append " — Ref: [SKU]" at the very end
-- Only append finger size or stock SKU if they have values — omit entirely if empty
-- One sentence maximum, output the description only — no preamble, no explanation, no punctuation at the end`;
+- Never use adjectives like stunning, exquisite, featuring, boasting, or beautiful
+- Output the description only — no preamble, no explanation`;
 
     const userPrompt = [
       metalStr        && `Metal: ${metalStr}`,
