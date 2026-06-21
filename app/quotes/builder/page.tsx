@@ -364,7 +364,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
               <label style={labelStyle}>Design Description</label>
               <input style={inputStyle} type="text" value={item.design} onChange={e => set("design", e.target.value)} onFocus={onFocus} onBlur={onBlurField} placeholder="e.g. Stella Trilogy with split shank" />
             </div>
-            <div style={row2Style}>
+            <div className="qb-row2">
               <div>
                 <label style={labelStyle}>Finger Size</label>
                 <input style={inputStyle} type="text" value={item.fingerSize} onChange={e => set("fingerSize", e.target.value)} onFocus={onFocus} onBlur={onBlurField} placeholder="e.g. N, O½, 7" />
@@ -390,7 +390,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                       <button onClick={() => set("metals", item.metals.filter(x => x.id !== m.id))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 18, color: "#9CA3AF" }}>×</button>
                     )}
                   </div>
-                  <div style={row2Style}>
+                  <div className="qb-row2">
                     <div>
                       <label style={labelStyle}>Metal Type</label>
                       <select style={{ ...inputStyle, cursor: "pointer" }} value={m.type} onChange={e => set("metals", item.metals.map(x => x.id === m.id ? { ...x, type: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField}>
@@ -708,7 +708,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                   </div>
                 )}
               </div>
-              <div style={row2Style}>
+              <div className="qb-row2">
                 <div>
                   <label style={{ ...labelStyle, color: "#D97706" }}>Retail Price Override ($)</label>
                   <input style={{ ...inputStyle, borderColor: item.retailPriceOverride ? "#D97706" : "#E8E8F0" }} type="number" min="0" step="50" value={item.retailPriceOverride} onChange={e => set("retailPriceOverride", e.target.value)} onFocus={onFocus} onBlur={onBlurField} placeholder="Leave blank to use calculated" />
@@ -1131,7 +1131,20 @@ function QuoteBuilderPageInner() {
   const cardStyle: React.CSSProperties = { background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, padding: 20, marginBottom: 16 };
 
   return (
-    <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
+    <>
+    <style>{`
+      .qb-outer { padding: 24px; max-width: 1100px; margin: 0 auto; }
+      .qb-grid  { display: grid; grid-template-columns: 1fr 380px; gap: 24px; align-items: start; }
+      .qb-sidebar { position: sticky; top: 24px; }
+      .qb-row2  { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+      @media (max-width: 767px) {
+        .qb-outer   { padding: 16px; }
+        .qb-grid    { display: flex; flex-direction: column; gap: 16px; }
+        .qb-sidebar { position: static; top: auto; }
+        .qb-row2    { grid-template-columns: 1fr; }
+      }
+    `}</style>
+    <div className="qb-outer">
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: appendToQuoteId ? 12 : 24 }}>
         <Link href={appendToQuoteId ? `/quotes/${appendToQuoteId}` : "/quotes"} style={{ color: "#6B7280", textDecoration: "none", fontSize: 14, display: "flex", alignItems: "center", gap: 4 }}>
@@ -1154,7 +1167,7 @@ function QuoteBuilderPageInner() {
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: 24, alignItems: "start" }}>
+      <div className="qb-grid">
         {/* ── Left ── */}
         <div style={{ minWidth: 0 }}>
 
@@ -1182,7 +1195,7 @@ function QuoteBuilderPageInner() {
                 </div>
               )}
             </div>
-            <div style={row2Style}>
+            <div className="qb-row2">
               <div>
                 <label style={labelStyle}>First Name</label>
                 <input style={{ ...inputStyle, borderColor: errors.firstName ? "#EF4444" : "#E8E8F0" }} value={firstName} onChange={e => setFirstName(e.target.value)} onFocus={onFocus} onBlur={e => onBlurField(e, !!errors.firstName)} placeholder="Jane" />
@@ -1194,7 +1207,7 @@ function QuoteBuilderPageInner() {
                 {errors.lastName && <div style={errStyle}>{errors.lastName}</div>}
               </div>
             </div>
-            <div style={row2Style}>
+            <div className="qb-row2">
               <div>
                 <label style={labelStyle}>Email</label>
                 <input style={{ ...inputStyle, borderColor: errors.contact ? "#EF4444" : "#E8E8F0" }} type="email" value={email} onChange={e => setEmail(e.target.value)} onFocus={onFocus} onBlur={e => onBlurField(e, !!errors.contact)} placeholder="jane@example.com" />
@@ -1271,7 +1284,7 @@ function QuoteBuilderPageInner() {
         </div>
 
         {/* ── Right: Price panel ── */}
-        <div style={{ position: "sticky", top: 24 }}>
+        <div className="qb-sidebar">
           <div style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, padding: 24 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 16 }}>Live Price</div>
 
@@ -1347,6 +1360,7 @@ function QuoteBuilderPageInner() {
         </div>
       )}
     </div>
+    </>
   );
 }
 
