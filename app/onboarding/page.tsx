@@ -657,6 +657,18 @@ export default function OnboardingPage() {
   async function handleComplete() {
     setSaving(true);
     try {
+      try {
+        await fetch("/api/billing/create-subscription", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-tenant-id": tid },
+          body: JSON.stringify({
+            plan: "founding",
+            email: store.email || "",
+            store_name: store.store_name,
+          }),
+        });
+      } catch { /* ignore billing errors */ }
+
       await fetch("/api/onboarding/complete", {
         method: "PATCH",
         headers: { "Content-Type": "application/json", "x-tenant-id": tid },
