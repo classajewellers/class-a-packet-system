@@ -303,7 +303,7 @@ export default function CustomerSection({ data, onChange, errors }: Props) {
         </Field>
         <div>
           <label className="block text-sm font-semibold text-black mb-1 flex items-center gap-2">
-            Email<span className="text-black">*</span>
+            Email
             {shopifyFound && (
               <span className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5">
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">

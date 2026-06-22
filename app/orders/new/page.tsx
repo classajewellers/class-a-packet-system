@@ -36,7 +36,6 @@ function validate(data: PacketFormData): Partial<Record<keyof PacketFormData, st
   if (!data.customer_first_name.trim()) errors.customer_first_name = "Required";
   if (!data.customer_last_name.trim()) errors.customer_last_name = "Required";
   if (!data.customer_phone.trim()) errors.customer_phone = "Required";
-  if (!data.customer_email.trim()) errors.customer_email = "Required";
   if (!data.contact_preference.length)
     errors.contact_preference = "Select at least one contact preference";
   if (data.packet_type !== "online_order") {
