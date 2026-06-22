@@ -30,12 +30,11 @@ export default function SetPasswordPage() {
   useEffect(() => {
     const hash = window.location.hash
     const params = new URLSearchParams(hash.replace('#', ''))
-    const accessToken = params.get('access_token')
-    const refreshToken = params.get('refresh_token') ?? ''
+    const tokenHash = params.get('access_token')
     const type = params.get('type')
 
-    if (accessToken && type === 'invite') {
-      getSupabase().auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+    if (tokenHash && type === 'invite') {
+      getSupabase().auth.verifyOtp({ token_hash: tokenHash, type: 'invite' })
         .then(({ error }) => {
           if (error) {
             setSessionError(true)
