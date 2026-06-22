@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 
 function getSupabase() {
@@ -24,34 +24,6 @@ export default function SetPasswordPage() {
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [ready, setReady] = useState(false)
-  const [sessionError, setSessionError] = useState(false)
-
-  useEffect(() => {
-    const hash = window.location.hash
-    const params = new URLSearchParams(hash.replace('#', ''))
-    const tokenHash = params.get('access_token')
-    const type = params.get('type')
-
-    if (tokenHash && type === 'invite') {
-      getSupabase().auth.verifyOtp({ token_hash: tokenHash, type: 'invite' })
-        .then(({ error }) => {
-          if (error) {
-            setSessionError(true)
-          } else {
-            setReady(true)
-          }
-        })
-    } else {
-      getSupabase().auth.getSession().then(({ data }) => {
-        if (data.session) {
-          setReady(true)
-        } else {
-          setSessionError(true)
-        }
-      })
-    }
-  }, [])
 
   async function handleSubmit() {
     setError('')
@@ -65,26 +37,6 @@ export default function SetPasswordPage() {
       return
     }
     window.location.href = '/'
-  }
-
-  if (sessionError) {
-    return (
-      <div style={{ minHeight: '100vh', background: '#F9FAFB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, sans-serif' }}>
-        <div style={{ background: 'white', border: '1px solid #E8E8F0', borderRadius: 12, padding: 48, width: 400, textAlign: 'center' }}>
-          <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
-          <h2 style={{ fontSize: 18, fontWeight: 600, color: '#1A1760', marginBottom: 8 }}>Invite link expired</h2>
-          <p style={{ color: '#6B7280', fontSize: 14 }}>This invite link has expired or already been used. Please ask your manager to send a new invite.</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!ready) {
-    return (
-      <div style={{ minHeight: '100vh', background: '#F9FAFB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: '#9CA3AF', fontSize: 14, fontFamily: 'Inter, sans-serif' }}>Verifying invite…</div>
-      </div>
-    )
   }
 
   return (
