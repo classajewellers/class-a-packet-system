@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { UserProvider, useUser } from "@/context/UserContext";
 import Sidebar from "@/components/Sidebar";
@@ -10,12 +10,17 @@ import VaultReportButton from "@/components/VaultReportButton";
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
 
+// Pages that render without the app shell (sidebar + topbar)
+const NO_SHELL_PAGES = new Set(["/login", "/onboarding"]);
+
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, hydrated } = useUser();
   const router = useRouter();
   const pathname = usePathname();
-  const isLoginPage = pathname === "/login";
-  const isPublicPage = pathname.startsWith("/claim/");
+  const isLoginPage     = pathname === "/login";
+  const isOnboarding    = pathname === "/onboarding";
+  const isPublicPage    = pathname.startsWith("/claim/");
+  const isNoShellPage   = NO_SHELL_PAGES.has(pathname);
   const [aiOpen, setAiOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -25,9 +30,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const openSidebar  = useCallback(() => setSidebarOpen(true),  []);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
-  // Safety net: if the Supabase session check hangs for more than 10 s,
-  // stop blocking the UI. The middleware will redirect unauthenticated users
-  // to /login server-side anyway, so this is just a client-side fallback.
+  // Safety net: if the Supabase session check hangs, stop blocking the UI.
   const [forceShow, setForceShow] = useState(false);
   useEffect(() => {
     const id = setTimeout(() => setForceShow(true), 5_000);
@@ -37,12 +40,28 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!hydrated && !forceShow) return;
     if (isPublicPage) return;
-    if (!user && !isLoginPage) {
+    if (!user && !isLoginPage && !isOnboarding) {
       router.replace("/login");
     } else if (user && isLoginPage) {
       router.replace("/");
     }
-  }, [user, hydrated, forceShow, isLoginPage, isPublicPage, router]);
+  }, [user, hydrated, forceShow, isLoginPage, isOnboarding, isPublicPage, router]);
+
+  // Redirect authenticated users to onboarding if not complete (fire-and-forget, once per session)
+  const onboardingCheckedRef = useRef(false);
+  useEffect(() => {
+    if (!hydrated && !forceShow) return;
+    if (!user || isLoginPage || isOnboarding || isPublicPage) return;
+    if (onboardingCheckedRef.current) return;
+    onboardingCheckedRef.current = true;
+
+    fetch("/api/onboarding/status", { headers: { "x-tenant-id": user.tenantId } })
+      .then(r => r.json())
+      .then(({ onboarding_complete }) => {
+        if (!onboarding_complete) router.replace("/onboarding");
+      })
+      .catch(() => {});
+  }, [user, hydrated, forceShow, isLoginPage, isOnboarding, isPublicPage, router]);
 
   // Public pages: render immediately, no auth check, no shell
   if (isPublicPage) return <>{children}</>;
@@ -51,11 +70,11 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   if (!hydrated && !forceShow) return null;
 
   // Suppress content while redirect is in flight
-  if (!user && !isLoginPage) return null;
+  if (!user && !isLoginPage && !isOnboarding) return null;
   if (user && isLoginPage) return null;
 
-  // Login page: no sidebar/topbar
-  if (isLoginPage) return <>{children}</>;
+  // No-shell pages (login, onboarding): render children directly
+  if (isNoShellPage) return <>{children}</>;
 
   // Authenticated pages: full app shell
   return (
