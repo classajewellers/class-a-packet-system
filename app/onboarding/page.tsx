@@ -6,8 +6,6 @@ import { useUser } from "@/context/UserContext";
 
 export const dynamic = "force-dynamic";
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-
 interface StoreForm {
   store_name: string;
   phone: string;
@@ -42,8 +40,6 @@ interface VipTier {
   min_orders: number;
   colour: string;
 }
-
-// ── Shared styles ──────────────────────────────────────────────────────────────
 
 const PRIMARY = "#635BFF";
 
@@ -111,8 +107,6 @@ const btnSecondary: React.CSSProperties = {
   cursor: "pointer",
   fontFamily: "Inter, system-ui, sans-serif",
 };
-
-// ── Shared sub-components ──────────────────────────────────────────────────────
 
 function Field({
   label,
@@ -184,8 +178,6 @@ function StepDots({ current, total }: { current: number; total: number }) {
   );
 }
 
-// ── Step 1: Store Details ──────────────────────────────────────────────────────
-
 function Step1({
   form,
   onChange,
@@ -254,8 +246,6 @@ function Step1({
   );
 }
 
-// ── Step 2: Pricing ────────────────────────────────────────────────────────────
-
 function Step2({
   form,
   onChange,
@@ -290,8 +280,7 @@ function Step2({
       <div style={{ marginBottom: 24 }}>
         <h2 style={{ fontSize: 22, fontWeight: 700, color: "#1A1A2E", margin: "0 0 6px" }}>Pricing Defaults</h2>
         <p style={{ fontSize: 14, color: "#6B7280", margin: 0 }}>
-          Set your metal spot prices (per gram) for the quote builder. You can update these
-          anytime in Settings → Pricing.
+          Set your metal spot prices (per gram) for the quote builder. You can update these anytime in Settings → Pricing.
         </p>
       </div>
 
@@ -330,8 +319,6 @@ function Step2({
   );
 }
 
-// ── Step 3: VIP Tiers ──────────────────────────────────────────────────────────
-
 function Step3({
   tiers,
   loading,
@@ -348,8 +335,7 @@ function Step3({
       <div style={{ marginBottom: 24 }}>
         <h2 style={{ fontSize: 22, fontWeight: 700, color: "#1A1A2E", margin: "0 0 6px" }}>VIP Tiers</h2>
         <p style={{ fontSize: 14, color: "#6B7280", margin: 0 }}>
-          We've set up 4 default loyalty tiers for your customers. Customise thresholds and
-          colours anytime in Settings → VIP Tiers.
+          We&apos;ve set up default loyalty tiers for your customers. Customise thresholds anytime in Settings → VIP Tiers.
         </p>
       </div>
 
@@ -397,8 +383,6 @@ function Step3({
   );
 }
 
-// ── Step 4: Invite Team ────────────────────────────────────────────────────────
-
 function Step4({
   invites,
   onChangeInvite,
@@ -432,7 +416,7 @@ function Step4({
       <div style={{ marginBottom: 24 }}>
         <h2 style={{ fontSize: 22, fontWeight: 700, color: "#1A1A2E", margin: "0 0 6px" }}>Invite Your Team</h2>
         <p style={{ fontSize: 14, color: "#6B7280", margin: 0 }}>
-          Add staff members so they can start using Vault. They'll receive an email to set their password.
+          Add staff members so they can start using Vault. They&apos;ll receive an email to set their password.
         </p>
       </div>
 
@@ -488,8 +472,6 @@ function Step4({
   );
 }
 
-// ── Step 5: Go Live ────────────────────────────────────────────────────────────
-
 function Step5({
   storeName,
   onComplete,
@@ -502,7 +484,7 @@ function Step5({
   const items = [
     { icon: "🏪", label: "Store details",   sub: "Name, contact info, and payment details" },
     { icon: "💰", label: "Metal prices",    sub: "Gold, silver, and platinum per-gram rates" },
-    { icon: "⭐", label: "VIP tiers",       sub: "4 loyalty tiers ready for your customers" },
+    { icon: "⭐", label: "VIP tiers",       sub: "Loyalty tiers ready for your customers" },
     { icon: "👥", label: "Team invited",    sub: "Staff invites sent to join Vault" },
   ];
 
@@ -545,8 +527,6 @@ function Step5({
   );
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────────
-
 export default function OnboardingPage() {
   const { user, hydrated } = useUser();
   const router = useRouter();
@@ -568,19 +548,20 @@ export default function OnboardingPage() {
     gst_registered: true,
   });
 
-  const [vipTiers, setVipTiers]       = useState<VipTier[]>([]);
+  const [vipTiers, setVipTiers]         = useState<VipTier[]>([]);
   const [tiersLoading, setTiersLoading] = useState(false);
 
   const [invites, setInvites] = useState<InviteRow[]>([
     { name: "", email: "", role: "staff" },
   ]);
 
-  // Check onboarding status on mount
+  const tid = user?.tenantId ?? "";
+
   useEffect(() => {
     if (!hydrated || !user || checkedRef.current) return;
     checkedRef.current = true;
 
-    fetch("/api/onboarding/status", { headers: { "x-tenant-id": user.tenantId } })
+    fetch("/api/onboarding/status", { headers: { "x-tenant-id": tid } })
       .then(r => r.json())
       .then(data => {
         if (data.onboarding_complete) {
@@ -593,33 +574,29 @@ export default function OnboardingPage() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [hydrated, user, router]);
+  }, [hydrated, user, router, tid]);
 
-  // Seed VIP tiers when entering step 3
   useEffect(() => {
     if (step !== 3 || !user || tiersLoading || vipTiers.length > 0) return;
     setTiersLoading(true);
     fetch("/api/onboarding/vip-tiers", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-tenant-id": user.tenantId },
+      headers: { "Content-Type": "application/json", "x-tenant-id": tid },
     })
       .then(r => r.json())
       .then(data => setVipTiers(data.tiers ?? []))
       .catch(() => {})
       .finally(() => setTiersLoading(false));
-  }, [step, user, tiersLoading, vipTiers.length]);
-
-  // ── Step handlers ─────────────────────────────────────────────────────────────
+  }, [step, user, tiersLoading, vipTiers.length, tid]);
 
   async function handleStep1Next() {
     if (!store.store_name.trim()) { setError("Store name is required."); return; }
-    if (!user) return;
     setError(null);
     setSaving(true);
     try {
       const res = await fetch("/api/onboarding/store", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-tenant-id": user.tenantId },
+        headers: { "Content-Type": "application/json", "x-tenant-id": tid },
         body: JSON.stringify(store),
       });
       if (!res.ok) { setError("Failed to save store details."); return; }
@@ -632,13 +609,12 @@ export default function OnboardingPage() {
   }
 
   async function handleStep2Next() {
-    if (!user) return;
     setError(null);
     setSaving(true);
     try {
       const res = await fetch("/api/onboarding/pricing", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-tenant-id": user.tenantId },
+        headers: { "Content-Type": "application/json", "x-tenant-id": tid },
         body: JSON.stringify(pricing),
       });
       if (!res.ok) { setError("Failed to save pricing."); return; }
@@ -651,7 +627,6 @@ export default function OnboardingPage() {
   }
 
   async function handleStep4Next() {
-    if (!user) return;
     setError(null);
     const toInvite = invites.filter(i => i.name.trim() && i.email.trim());
     if (toInvite.length === 0) { await handleStep4Skip(); return; }
@@ -659,7 +634,7 @@ export default function OnboardingPage() {
     try {
       await fetch("/api/onboarding/invite", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-tenant-id": user.tenantId },
+        headers: { "Content-Type": "application/json", "x-tenant-id": tid },
         body: JSON.stringify({ invites: toInvite }),
       });
       setStep(5);
@@ -671,22 +646,20 @@ export default function OnboardingPage() {
   }
 
   async function handleStep4Skip() {
-    if (!user) return;
     await fetch("/api/onboarding/invite", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-tenant-id": user.tenantId },
+      headers: { "Content-Type": "application/json", "x-tenant-id": tid },
       body: JSON.stringify({ invites: [] }),
     }).catch(() => {});
     setStep(5);
   }
 
   async function handleComplete() {
-    if (!user) return;
     setSaving(true);
     try {
       await fetch("/api/onboarding/complete", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-tenant-id": user.tenantId },
+        headers: { "Content-Type": "application/json", "x-tenant-id": tid },
       });
       router.push("/dashboard");
     } catch {
@@ -694,8 +667,6 @@ export default function OnboardingPage() {
       setSaving(false);
     }
   }
-
-  // ── Render ─────────────────────────────────────────────────────────────────────
 
   if (!hydrated || loading) {
     return (
@@ -709,25 +680,21 @@ export default function OnboardingPage() {
     <div style={{ minHeight: "100vh", background: "#F9FAFB", padding: "48px 16px 80px", fontFamily: "Inter, system-ui, sans-serif" }}>
       <div style={{ maxWidth: 600, margin: "0 auto" }}>
 
-        {/* Wordmark */}
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.04em", color: PRIMARY }}>◆ Vault</div>
           <div style={{ fontSize: 13, color: "#9CA3AF", marginTop: 4 }}>Store setup · Step {step} of 5</div>
         </div>
 
-        {/* Progress dots */}
         <div style={{ marginBottom: 40 }}>
           <StepDots current={step} total={5} />
         </div>
 
-        {/* Error banner */}
         {error && (
           <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, padding: "10px 14px", marginBottom: 20, fontSize: 13, color: "#DC2626" }}>
             {error}
           </div>
         )}
 
-        {/* Step content */}
         {step === 1 && (
           <Step1
             form={store}
