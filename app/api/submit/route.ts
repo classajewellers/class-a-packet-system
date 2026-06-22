@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { generateReferenceNumber, generateRepairTrackerNumber } from "@/lib/referenceNumber";
-import { parseCurrency, packetTypeLabel, formatDateAU, formatAustralianPhone } from "@/lib/formatters";
+import { parseCurrency } from "@/lib/formatters";
+import { fireOrderConfirmationZap } from "@/lib/zapier";
 import { PacketFormData, Packet, SubmitResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -167,55 +168,22 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
   console.log("[submit] Insert successful:", insertedPacket.id, insertedPacket.reference_number);
   const packet = insertedPacket as Packet;
 
-  // ── 5. Auto-send Order Confirmation SMS for repair / custom_order ──────────
-  const isAutoSendType   = packet.packet_type === "repair" || packet.packet_type === "custom_order";
-  const isNotOnlineOrder = packet.packet_type !== "online_order";
-  const hasPhone         = !!packet.customer_phone;
-  const isNotShopify     = (packet.order_source ?? "").toLowerCase() !== "shopify";
-  const prefersText      = (packet.contact_preference as unknown as string) === "text";
-  const shouldAutoSend   = isAutoSendType && isNotOnlineOrder && hasPhone && isNotShopify && prefersText;
-  const confirmWebhook   = process.env.ZAPIER_ORDER_CONFIRMATION_WEBHOOK;
+  // ── 5. Zap 1 — Order Confirmation SMS (repair / custom_order only) ──────────
+  const isOrderConfirmType = packet.packet_type === "repair" || packet.packet_type === "custom_order";
+  if (isOrderConfirmType) {
+    // fire-and-forget; returns null from formatAustralianPhone if no valid mobile
+    fireOrderConfirmationZap(packet);
 
-  console.log("[submit] Auto-send SMS:", {
-    packet_type:  packet.packet_type,
-    order_source: packet.order_source ?? null,
-    hasPhone,
-    willSend:     shouldAutoSend && !!confirmWebhook,
-  });
-
-  if (shouldAutoSend && confirmWebhook) {
-    const customerName = [packet.customer_first_name, packet.customer_last_name]
-      .filter(Boolean).join(" ");
-    const isInStore = packet.packet_type === "repair" || packet.packet_type === "custom_order";
-    const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "https://class-a-packet-system.vercel.app").replace(/\/$/, "");
+    // Record claim slip URL in DB (fire-and-forget)
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "https://jewelleryvault.com.au").replace(/\/$/, "");
     const claimSlipUrl = `${appUrl}/claim/${packet.reference_number}`;
-    const autoPayload = {
-      order_source:     "In-Store",
-      customer_name:    customerName,
-      customer_phone:   formatAustralianPhone(packet.customer_phone),
-      order_type:       packetTypeLabel(packet.packet_type),
-      reference_number: packet.reference_number,
-      due_date:         formatDateAU(packet.due_date),
-      total_charges:    "",
-      ...(isInStore && { claim_slip_url: claimSlipUrl }),
-    };
-    // Fire-and-forget — do not block submission response
-    fetch(confirmWebhook, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify(autoPayload),
-    }).catch((err) => console.warn("[submit] Auto-send SMS failed:", err));
-
-    // Record claim slip URL in DB for in-store orders only (fire-and-forget)
-    if (isInStore) {
-      supabase.from("packets").update({
-        claim_slip_url:      claimSlipUrl,
-        claim_slip_sent:     true,
-        claim_slip_sent_at:  new Date().toISOString(),
-      }).eq("id", packet.id).then(({ error }) => {
-        if (error) console.warn("[submit] claim_slip_url DB update failed:", error.message);
-      });
-    }
+    supabase.from("packets").update({
+      claim_slip_url:     claimSlipUrl,
+      claim_slip_sent:    true,
+      claim_slip_sent_at: new Date().toISOString(),
+    }).eq("id", packet.id).then(({ error }) => {
+      if (error) console.warn("[submit] claim_slip_url DB update failed:", error.message);
+    });
   }
 
   // ── 6. Upsert customer record ─────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { fireReadyForPickupZap } from "@/lib/zapier";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,22 @@ export async function PATCH(
       if (field in body) updates[field] = body[field];
     }
 
+    // Fetch current record when we need previous state
+    const needsCurrent =
+      body.status === "ready" ||
+      updates.total_charges !== undefined ||
+      updates.deposit !== undefined;
+
+    let current: { status?: string | null; total_charges?: number | null; deposit?: number | null } | null = null;
+    if (needsCurrent) {
+      const { data } = await supabase
+        .from("packets")
+        .select("status, total_charges, deposit")
+        .eq("id", params.id)
+        .single();
+      current = data;
+    }
+
     // Status side-effects
     if (body.status !== undefined) {
       updates.status_updated_at = new Date().toISOString();
@@ -35,8 +52,6 @@ export async function PATCH(
 
     // Recalculate balance if charges/deposit changed
     if (updates.total_charges !== undefined || updates.deposit !== undefined) {
-      const { data: current } = await supabase
-        .from("packets").select("total_charges, deposit").eq("id", params.id).single();
       const charges = Number(updates.total_charges ?? current?.total_charges ?? 0);
       const deposit = Number(updates.deposit ?? current?.deposit ?? 0);
       updates.balance = Math.max(0, charges - deposit);
@@ -47,6 +62,12 @@ export async function PATCH(
     const { data, error } = await q.select().single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // Zap 2 — Ready for Pickup SMS: only when transitioning TO 'ready'
+    if (body.status === "ready" && current?.status !== "ready" && data) {
+      fireReadyForPickupZap(data);
+    }
+
     return NextResponse.json({ packet: data });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
