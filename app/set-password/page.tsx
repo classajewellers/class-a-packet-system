@@ -20,30 +20,36 @@ const labelStyle: React.CSSProperties = {
 }
 
 export default function SetPasswordPage() {
-  const [password, setPassword]   = useState('')
-  const [confirm, setConfirm]     = useState('')
-  const [error, setError]         = useState('')
-  const [loading, setLoading]     = useState(false)
-  const [ready, setReady]         = useState(false)
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [ready, setReady] = useState(false)
   const [sessionError, setSessionError] = useState(false)
 
   useEffect(() => {
-    // Parse the access_token from the URL hash set by Supabase invite link
     const hash = window.location.hash
     const params = new URLSearchParams(hash.replace('#', ''))
-    const accessToken  = params.get('access_token')
+    const accessToken = params.get('access_token')
     const refreshToken = params.get('refresh_token') ?? ''
-    const type         = params.get('type')
+    const type = params.get('type')
 
     if (accessToken && type === 'invite') {
       getSupabase().auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
         .then(({ error }) => {
-          if (error) { setSessionError(true) } else { setReady(true) }
+          if (error) {
+            setSessionError(true)
+          } else {
+            setReady(true)
+          }
         })
     } else {
-      // Check if already have a session (e.g. page refresh)
       getSupabase().auth.getSession().then(({ data }) => {
-        if (data.session) { setReady(true) } else { setSessionError(true) }
+        if (data.session) {
+          setReady(true)
+        } else {
+          setSessionError(true)
+        }
       })
     }
   }, [])
@@ -65,4 +71,67 @@ export default function SetPasswordPage() {
   if (sessionError) {
     return (
       <div style={{ minHeight: '100vh', background: '#F9FAFB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, sans-serif' }}>
-        <div style={{
+        <div style={{ background: 'white', border: '1px solid #E8E8F0', borderRadius: 12, padding: 48, width: 400, textAlign: 'center' }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
+          <h2 style={{ fontSize: 18, fontWeight: 600, color: '#1A1760', marginBottom: 8 }}>Invite link expired</h2>
+          <p style={{ color: '#6B7280', fontSize: 14 }}>This invite link has expired or already been used. Please ask your manager to send a new invite.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!ready) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#F9FAFB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ color: '#9CA3AF', fontSize: 14, fontFamily: 'Inter, sans-serif' }}>Verifying invite…</div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#F9FAFB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, sans-serif' }}>
+      <div style={{ background: 'white', border: '1px solid #E8E8F0', borderRadius: 12, padding: 48, width: 400 }}>
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <div style={{ width: 48, height: 48, background: '#635BFF', borderRadius: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+            <span style={{ color: 'white', fontSize: 20 }}>◆</span>
+          </div>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: '#1A1760', margin: '0 0 8px' }}>Welcome to Vault</h1>
+          <p style={{ color: '#6B7280', fontSize: 14, margin: 0 }}>Set your password to get started.</p>
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle}>Password</label>
+          <input
+            type="password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            placeholder="••••••••"
+            style={inputStyle}
+          />
+        </div>
+        <div style={{ marginBottom: 24 }}>
+          <label style={labelStyle}>Confirm Password</label>
+          <input
+            type="password"
+            value={confirm}
+            onChange={e => setConfirm(e.target.value)}
+            placeholder="••••••••"
+            onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+            style={inputStyle}
+          />
+        </div>
+        {error && (
+          <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: 12, marginBottom: 16, color: '#DC2626', fontSize: 14 }}>
+            {error}
+          </div>
+        )}
+        <button
+          onClick={handleSubmit}
+          disabled={loading}
+          style={{ width: '100%', padding: 12, background: '#635BFF', color: 'white', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.7 : 1 }}
+        >
+          {loading ? 'Setting up your account…' : 'Set Password & Sign In'}
+        </button>
+      </div>
+    </div>
+  )
+}
