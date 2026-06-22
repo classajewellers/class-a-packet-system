@@ -12,7 +12,7 @@ interface BillingState { subscriptionStatus: string | null }
 const BillingContext = createContext<BillingState>({ subscriptionStatus: null });
 export function useBillingStatus() { return useContext(BillingContext); }
 
-const NO_SHELL_PAGES = new Set(["/login", "/onboarding", "/billing"]);
+const NO_SHELL_PAGES = new Set(["/login", "/onboarding", "/billing", "/set-password"]);
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, hydrated } = useUser();
@@ -21,6 +21,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const isLoginPage   = pathname === "/login";
   const isOnboarding  = pathname === "/onboarding";
   const isBillingPage = pathname === "/billing";
+  const isSetPassword = pathname === "/set-password";
   const isPublicPage  = pathname.startsWith("/claim/");
   const isNoShellPage = NO_SHELL_PAGES.has(pathname);
   const [aiOpen, setAiOpen] = useState(false);
@@ -41,38 +42,36 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!hydrated && !forceShow) return;
     if (isPublicPage) return;
-    if (!user && !isLoginPage && !isOnboarding && !isBillingPage) {
+    if (!user && !isLoginPage && !isOnboarding && !isBillingPage && !isSetPassword) {
       router.replace("/login");
     } else if (user && isLoginPage) {
       router.replace("/");
     }
-  }, [user, hydrated, forceShow, isLoginPage, isOnboarding, isBillingPage, isPublicPage, router]);
+  }, [user, hydrated, forceShow, isLoginPage, isOnboarding, isBillingPage, isSetPassword, isPublicPage, router]);
 
   const checkedRef = useRef(false);
   useEffect(() => {
     if (!hydrated && !forceShow) return;
-    if (!user || isLoginPage || isOnboarding || isBillingPage || isPublicPage) return;
+    if (!user || isLoginPage || isOnboarding || isBillingPage || isSetPassword || isPublicPage) return;
     if (checkedRef.current) return;
     checkedRef.current = true;
 
     void (async () => {
       try {
         const headers = { "x-tenant-id": user.tenantId ?? "" };
-
         const ob = await fetch("/api/onboarding/status", { headers }).then(r => r.json()) as { onboarding_complete?: boolean };
         if (!ob.onboarding_complete) { router.replace("/onboarding"); return; }
-
         const bil = await fetch("/api/billing/status", { headers }).then(r => r.json()) as { subscription_status?: string };
         const status = bil.subscription_status ?? null;
         setSubscriptionStatus(status);
         if (status === "canceled") router.replace("/billing");
       } catch { /* fail open */ }
     })();
-  }, [user, hydrated, forceShow, isLoginPage, isOnboarding, isBillingPage, isPublicPage, router]);
+  }, [user, hydrated, forceShow, isLoginPage, isOnboarding, isBillingPage, isSetPassword, isPublicPage, router]);
 
   if (isPublicPage) return <>{children}</>;
   if (!hydrated && !forceShow) return null;
-  if (!user && !isLoginPage && !isOnboarding && !isBillingPage) return null;
+  if (!user && !isLoginPage && !isOnboarding && !isBillingPage && !isSetPassword) return null;
   if (user && isLoginPage) return null;
 
   if (isNoShellPage) {
