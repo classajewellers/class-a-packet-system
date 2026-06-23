@@ -1,7 +1,5 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-
 import { useState, useEffect } from "react";
 import { useUser } from "@/context/UserContext";
 
@@ -32,7 +30,7 @@ interface MarginRow {
 }
 
 export default function PricingMarginsPage() {
-  const { user } = useUser();
+  const { user, hydrated } = useUser();
   const [rows, setRows] = useState<MarginRow[]>(
     CATEGORIES.map(c => ({ category: c.key, ...DEFAULTS[c.key] }))
   );
@@ -41,7 +39,8 @@ export default function PricingMarginsPage() {
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
   useEffect(() => {
-    if (!user?.tenantId) return;
+    if (!hydrated) return;
+    if (!user?.tenantId) { setLoading(false); return; }
     fetch("/api/settings/pricing-margins", {
       headers: { "x-tenant-id": user.tenantId },
     })
@@ -58,7 +57,7 @@ export default function PricingMarginsPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [user?.tenantId]);
+  }, [user?.tenantId, hydrated]);
 
   function updateRow(category: CategoryKey, field: "margin_percent" | "hourly_rate", value: string) {
     setRows(prev =>

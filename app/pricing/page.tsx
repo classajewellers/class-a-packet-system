@@ -52,14 +52,15 @@ export default function PricingPage() {
   }, [hydrated, user, router]);
 
   useEffect(() => {
-    fetch('/api/pricing', { headers: { 'x-tenant-id': user?.tenantId ?? '' } }).then(r => r.json()).then(json => {
+    if (!user?.tenantId) return;
+    fetch('/api/pricing', { headers: { 'x-tenant-id': user.tenantId } }).then(r => r.json()).then(json => {
       setMetalRates(json.metalRates ?? []);
       setFixedCosts(json.fixedCosts ?? []);
       setMarginBrackets(json.marginBrackets ?? []);
       setMeleeStones(json.meleeStones ?? []);
       setLoading(false);
     }).catch(() => setLoading(false));
-  }, []);
+  }, [user?.tenantId]);
 
   useEffect(() => {
     if (tab !== 'stones' || stonesLoaded) return;
