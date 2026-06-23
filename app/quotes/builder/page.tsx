@@ -142,7 +142,8 @@ function computeItemPricing(
   metalRates: MetalRate[],
   fixedCosts: FixedCost[],
   marginBrackets: MarginBracket[],
-  isManager: boolean
+  isManager: boolean,
+  marginConfig: MarginConfig[] = []
 ): ItemPricing {
   let metalCost = 0;
   for (const m of item.metals) {
