@@ -255,6 +255,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
               {settingsOpen && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
                   {can("pricing")  && <SubLink href="/pricing"            label="Pricing" />}
+                  {can("pricing")  && <SubLink href="/settings/pricing"   label="Pricing Margins" />}
                   {can("settings") && <SubLink href="/settings/users"     label="Users" />}
                   {can("settings") && <SubLink href="/settings/staff"     label="Staff" />}
                   {can("settings") && <SubLink href="/settings/vip-tiers" label="VIP Tiers" />}
