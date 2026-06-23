@@ -125,6 +125,15 @@ function onBlurField(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement 
 
 // ─── Pricing ────────────────────────────────────────────────────────────────────
 
+function getMetalCategory(metalType: string): string {
+  const t = metalType.toLowerCase();
+  if (t.includes("9ct"))      return "gold_9ct";
+  if (t.includes("18ct"))     return "gold_18ct";
+  if (t.includes("silver"))   return "silver";
+  if (t.includes("platinum")) return "platinum";
+  return "gold_9ct";
+}
+
 interface ItemPricing {
   metalCost: number; mainStoneCost: number; meleeCost: number; mainStoneSettingCost: number;
   mainStoneSettingRate: number; addonsCost: number; totalCost: number;
