@@ -26,6 +26,8 @@ interface StonePricingData {
   carat_multipliers:   Array<{ stone_type: string; carat_from: number; carat_to: number | null; multiplier: number; sort_order: number }>;
   margins:             Array<{ category: string; margin_percent: number }>;
 }
+interface RapPrice { size_from: number; size_to: number; colour: string; clarity: string; price_per_ct: number; }
+interface RapData  { prices: RapPrice[]; discount_percent: number; currency_rate: number; }
 
 interface MetalRow { id: string; type: string; weight: string; }
 interface StoneEntry {
@@ -132,10 +134,32 @@ function onBlurField(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement 
 
 // ─── Pricing ────────────────────────────────────────────────────────────────────
 
-function calcStoneBaseCost(stone: StoneEntry, sp: StonePricingData | null): number {
+function calcRapaportCost(stone: StoneEntry, rapData: RapData): number {
+  const ct = parseFloat(stone.caratWeight) || 0;
+  if (ct <= 0) return 0;
+  const colour  = stone.colour.trim().toUpperCase();
+  const clarity = stone.clarity.trim().toUpperCase();
+  if (!colour || !clarity) return 0;
+  const match = rapData.prices.find(p =>
+    ct >= p.size_from && ct <= p.size_to && p.colour === colour && p.clarity === clarity
+  );
+  if (!match || match.price_per_ct <= 0) return 0;
+  const rawUsdPerCt = match.price_per_ct * 100;
+  const buyUsdPerCt = rawUsdPerCt * (1 - rapData.discount_percent / 100);
+  return buyUsdPerCt * rapData.currency_rate * ct;
+}
+
+function calcStoneBaseCost(stone: StoneEntry, sp: StonePricingData | null, rapData: RapData | null = null): number {
   if (!sp) return 0;
   const ct = parseFloat(stone.caratWeight) || 0;
   if (ct <= 0 || !stone.colour || !stone.clarity) return 0;
+
+  // Natural diamonds: use Rapaport pricing when available
+  if (stone.origin === "Natural" && rapData && rapData.prices.length > 0) {
+    const rapCost = calcRapaportCost(stone, rapData);
+    if (rapCost > 0) return rapCost;
+  }
+
   const stoneType = stone.origin === "Lab Grown" ? "lab_diamond" : "natural_diamond";
   const base = sp.base_prices.find(b => b.stone_type === stoneType);
   if (!base || base.base_price_per_carat <= 0) return 0;
@@ -177,7 +201,8 @@ function computeItemPricing(
   marginBrackets: MarginBracket[],
   isManager: boolean,
   marginConfig: MarginConfig[] = [],
-  stonePricing: StonePricingData | null = null
+  stonePricing: StonePricingData | null = null,
+  rapData: RapData | null = null
 ): ItemPricing {
   let metalCost = 0;
   for (const m of item.metals) {
@@ -202,7 +227,7 @@ function computeItemPricing(
   const mainStoneCost = item.includeMainStone && isManager && item.stoneOptions[0]
     ? (item.stoneOptions[0].stones ?? []).reduce((s, st) => {
         const manualCost = st.cost.trim() !== "" ? parseFloat(st.cost) : NaN;
-        const baseCost = !isNaN(manualCost) ? manualCost : calcStoneBaseCost(st, stonePricing);
+        const baseCost = !isNaN(manualCost) ? manualCost : calcStoneBaseCost(st, stonePricing, rapData);
         if (marginConfig.length > 0) {
           const stoneMarginCat = st.origin === "Lab Grown" ? "stone_lab" : "stone_natural";
           const stoneMarginPct = marginConfig.find(c => c.category === stoneMarginCat)?.margin_percent ?? stoneCatMarginPct;
@@ -334,9 +359,10 @@ interface ItemCardProps {
   onShowNivoda: (itemId: string, optId: string) => void;
   errors: Record<string, string>;
   stonePricing: StonePricingData | null;
+  rapData: RapData | null;
 }
 
-function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManager, setItems, onShowNivoda, errors, stonePricing }: ItemCardProps) {
+function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManager, setItems, onShowNivoda, errors, stonePricing, rapData }: ItemCardProps) {
   const [activeOptIdx, setActiveOptIdx] = useState(0);
 
   function set<K extends keyof BuilderItem>(key: K, value: BuilderItem[K]) {
@@ -559,8 +585,9 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                           <div style={{ marginTop: 4 }}>
                             <label style={{ ...labelStyle, color: "#635BFF" }}>Cost Price ($)</label>
                             {(() => {
-                              const autoCalc = stone.cost.trim() === "" ? calcStoneBaseCost(stone, stonePricing) : 0;
-                              const ph = autoCalc > 0 ? `$${autoCalc.toFixed(2)} (auto)` : "$0.00";
+                              const autoCalc = stone.cost.trim() === "" ? calcStoneBaseCost(stone, stonePricing, rapData) : 0;
+                              const isRap = stone.origin === "Natural" && autoCalc > 0 && rapData && rapData.prices.length > 0 && calcRapaportCost(stone, rapData) > 0;
+                              const ph = autoCalc > 0 ? `$${autoCalc.toFixed(2)} ${isRap ? '(Rap)' : '(auto)'}` : "$0.00";
                               return (
                                 <input style={{ ...inputStyle, width: 130, borderColor: "#C4BFFE" }} type="number" min="0" step="0.01" value={stone.cost} onChange={e => set("stoneOptions", item.stoneOptions.map(o => o.id === opt.id ? { ...o, stones: o.stones.map(s => s.id === stone.id ? { ...s, cost: e.target.value } : s) } : o))} onFocus={onFocus} onBlur={onBlurField} placeholder={ph} />
                               );
@@ -858,6 +885,7 @@ function QuoteBuilderPageInner() {
   const [marginBrackets, setMarginBrackets] = useState<MarginBracket[]>([]);
   const [marginConfig, setMarginConfig] = useState<MarginConfig[]>([]);
   const [stonePricing, setStonePricing] = useState<StonePricingData | null>(null);
+  const [rapData, setRapData] = useState<RapData | null>(null);
 
   // Customer
   const [firstName, setFirstName] = useState("");
@@ -917,6 +945,10 @@ function QuoteBuilderPageInner() {
       .then(r => r.json())
       .then((json: StonePricingData) => setStonePricing(json))
       .catch(() => {});
+    fetch("/api/settings/rapaport", { headers })
+      .then(r => r.json())
+      .then(json => setRapData({ prices: json.prices ?? [], discount_percent: json.discount_percent ?? 0, currency_rate: json.currency_rate ?? 1.538 }))
+      .catch(() => {});
   }, [user?.tenantId]);
 
   // ── Tenant features ────────────────────────────────────────────────────────
@@ -970,8 +1002,8 @@ function QuoteBuilderPageInner() {
   // ── Pricing ────────────────────────────────────────────────────────────────
 
   const allPricings = useMemo(() =>
-    items.map(item => computeItemPricing(item, metalRates, fixedCosts, marginBrackets, isManager, marginConfig, stonePricing)),
-    [items, metalRates, fixedCosts, marginBrackets, isManager, marginConfig, stonePricing]
+    items.map(item => computeItemPricing(item, metalRates, fixedCosts, marginBrackets, isManager, marginConfig, stonePricing, rapData)),
+    [items, metalRates, fixedCosts, marginBrackets, isManager, marginConfig, stonePricing, rapData]
   );
 
   const charmTotal = useMemo(() => charmItems.reduce((sum, c) => sum + Number(c.retail_price), 0), [charmItems]);
@@ -1325,6 +1357,7 @@ function QuoteBuilderPageInner() {
               onShowNivoda={(itemId, optId) => { nivodaTargetItemId.current = itemId; nivodaTargetOptId.current = optId; setShowNivodaModal(true); }}
               errors={errors}
               stonePricing={stonePricing}
+              rapData={rapData}
             />
           ))}
 
