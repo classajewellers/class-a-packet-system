@@ -223,10 +223,19 @@ function computeItemPricing(
     : marginBrackets;
   const safeBrackets = activeBrackets.length > 0 ? activeBrackets : marginBrackets;
 
-  const blended = calculateBlendedRetailFromBrackets(totalCost, safeBrackets);
-  const suggestedRetail = blended.retail;
-  const rawPrice = blended.unrounded;
-  const breakdown = blended.breakdown;
+  let suggestedRetail: number;
+  let rawPrice: number;
+  let breakdown: BlendedBreakdownLine[];
+  if (marginConfig.length > 0) {
+    suggestedRetail = totalCost > 0 ? Math.ceil(totalCost / 5) * 5 : 0;
+    rawPrice = totalCost;
+    breakdown = [];
+  } else {
+    const blended = calculateBlendedRetailFromBrackets(totalCost, safeBrackets);
+    suggestedRetail = blended.retail;
+    rawPrice = blended.unrounded;
+    breakdown = blended.breakdown;
+  }
 
   let quotedPrice: number;
   if (item.marginMultiplierOverride && parseFloat(item.marginMultiplierOverride) > 0) {
@@ -835,7 +844,8 @@ function QuoteBuilderPageInner() {
   // ── Load pricing data ──────────────────────────────────────────────────────
 
   useEffect(() => {
-    fetch("/api/pricing", { headers: { "x-tenant-id": user?.tenantId ?? "" } })
+    const headers = { "x-tenant-id": user?.tenantId ?? "" };
+    fetch("/api/pricing", { headers })
       .then(r => r.json())
       .then(json => {
         const METAL_ORDER = ["9ct Yellow Gold", "9ct White Gold", "9ct Rose Gold", "18ct Yellow Gold", "18ct White Gold", "18ct Rose Gold", "Platinum", "Silver"];
@@ -849,6 +859,10 @@ function QuoteBuilderPageInner() {
         setFixedCosts(json.fixedCosts ?? []);
         setMarginBrackets(json.marginBrackets ?? []);
       })
+      .catch(() => {});
+    fetch("/api/settings/pricing-margins", { headers })
+      .then(r => r.json())
+      .then((json: { rows?: MarginConfig[] }) => setMarginConfig(json.rows ?? []))
       .catch(() => {});
   }, [user?.tenantId]);
 
@@ -903,8 +917,8 @@ function QuoteBuilderPageInner() {
   // ── Pricing ────────────────────────────────────────────────────────────────
 
   const allPricings = useMemo(() =>
-    items.map(item => computeItemPricing(item, metalRates, fixedCosts, marginBrackets, isManager)),
-    [items, metalRates, fixedCosts, marginBrackets, isManager]
+    items.map(item => computeItemPricing(item, metalRates, fixedCosts, marginBrackets, isManager, marginConfig)),
+    [items, metalRates, fixedCosts, marginBrackets, isManager, marginConfig]
   );
 
   const charmTotal = useMemo(() => charmItems.reduce((sum, c) => sum + Number(c.retail_price), 0), [charmItems]);
