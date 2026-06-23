@@ -1,17 +1,6 @@
-/**
- * Nivoda authentication utility.
- * Fetches and caches a bearer token for the Nivoda diamond API.
- *
- * STAGING (active):
- *   NIVODA_ENDPOINT=https://intg-customer-staging.nivodaapi.net/api/diamonds
- *   NIVODA_EMAIL=testaccount@sample.com
- *   NIVODA_PASSWORD=staging-nivoda-22
- *
- * PRODUCTION (enable once Nivoda activates prod access):
- *   NIVODA_ENDPOINT=https://integrations.nivoda.net/api/diamonds
- *   NIVODA_EMAIL=josh@classa.com.au
- *   NIVODA_PASSWORD=<prod password>
- */
+// Nivoda authentication utility.
+// Fetches and caches a bearer token for the Nivoda diamond API.
+// Configure via environment variables — see .env.local.example
 
 // Endpoint is read per-request so Vercel env changes take effect without redeploy.
 export function getNivodaEndpoint(): string {
