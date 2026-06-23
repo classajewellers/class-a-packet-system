@@ -147,19 +147,35 @@ function computeItemPricing(
   let metalCost = 0;
   for (const m of item.metals) {
     const rate = metalRates.find(r => r.metal_type === m.type);
-    if (rate) metalCost += (parseFloat(m.weight) || 0) * Number(rate.price_per_gram);
+    if (rate) {
+      const rawCost = (parseFloat(m.weight) || 0) * Number(rate.price_per_gram);
+      if (marginConfig.length > 0) {
+        const cat = getMetalCategory(m.type);
+        const marginPct = marginConfig.find(c => c.category === cat)?.margin_percent ?? 45;
+        metalCost += rawCost * (1 + marginPct / 100);
+      } else {
+        metalCost += rawCost;
+      }
+    }
   }
 
   const mainStoneSettingRate = Number(fixedCosts.find(fc => fc.key === "main_stone_setting")?.amount ?? 80);
   const stoneCount = item.includeMainStone && item.stoneOptions[0] ? (item.stoneOptions[0].stones?.length ?? 0) : 0;
   const mainStoneSettingCost = item.includeMainStone ? stoneCount * mainStoneSettingRate : 0;
 
+  const stoneCatMarginPct = marginConfig.find(c => c.category === "gold_9ct")?.margin_percent ?? 45;
   const mainStoneCost = item.includeMainStone && isManager && item.stoneOptions[0]
-    ? (item.stoneOptions[0].stones ?? []).reduce((s, st) => s + (parseFloat(st.cost) || 0), 0)
+    ? (item.stoneOptions[0].stones ?? []).reduce((s, st) => {
+        const cost = parseFloat(st.cost) || 0;
+        return s + (marginConfig.length > 0 ? cost * (1 + stoneCatMarginPct / 100) : cost);
+      }, 0)
     : 0;
 
   const meleeCost = isManager
-    ? item.meleeRows.reduce((s, r) => s + (parseFloat(r.individualCost) || 0) * (parseInt(r.qty) || 0), 0)
+    ? item.meleeRows.reduce((s, r) => {
+        const cost = (parseFloat(r.individualCost) || 0) * (parseInt(r.qty) || 0);
+        return s + (marginConfig.length > 0 ? cost * (1 + stoneCatMarginPct / 100) : cost);
+      }, 0)
     : 0;
 
   let addonsCost = mainStoneSettingCost;
@@ -167,7 +183,12 @@ function computeItemPricing(
   if (mainStoneSettingCost > 0) costMap.mainStoneSetting = mainStoneSettingCost;
 
   for (const fc of fixedCosts) {
-    if (fc.key === "labour") { addonsCost += Number(fc.amount); costMap.labour = Number(fc.amount); }
+    if (fc.key === "labour") {
+      const labourAmt = marginConfig.length > 0
+        ? (marginConfig.find(c => c.category === "labour_standard")?.hourly_rate ?? Number(fc.amount))
+        : Number(fc.amount);
+      addonsCost += labourAmt; costMap.labour = labourAmt;
+    }
   }
 
   if (item.smallSettings) {
