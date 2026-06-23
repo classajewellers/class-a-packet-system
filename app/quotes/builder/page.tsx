@@ -19,6 +19,13 @@ interface MetalRate { id: string; metal_type: string; price_per_gram: number; }
 interface FixedCost { id: string; key: string; label: string; amount: number; }
 interface MarginBracket { id: string; cost_min: number; cost_max: number | null; multiplier: number; stone_type?: string | null; }
 interface MarginConfig  { id: string; category: string; margin_percent: number; hourly_rate: number | null; }
+interface StonePricingData {
+  base_prices:         Array<{ stone_type: string; base_price_per_carat: number }>;
+  colour_adjustments:  Array<{ stone_type: string; colour_grade: string;  adjustment_percent: number; sort_order: number }>;
+  clarity_adjustments: Array<{ stone_type: string; clarity_grade: string; adjustment_percent: number; sort_order: number }>;
+  carat_multipliers:   Array<{ stone_type: string; carat_from: number; carat_to: number | null; multiplier: number; sort_order: number }>;
+  margins:             Array<{ category: string; margin_percent: number }>;
+}
 
 interface MetalRow { id: string; type: string; weight: string; }
 interface StoneEntry {
@@ -125,6 +132,23 @@ function onBlurField(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement 
 
 // ─── Pricing ────────────────────────────────────────────────────────────────────
 
+function calcStoneBaseCost(stone: StoneEntry, sp: StonePricingData | null): number {
+  if (!sp) return 0;
+  const ct = parseFloat(stone.caratWeight) || 0;
+  if (ct <= 0 || !stone.colour || !stone.clarity) return 0;
+  const stoneType = stone.origin === "Lab Grown" ? "lab_diamond" : "natural_diamond";
+  const base = sp.base_prices.find(b => b.stone_type === stoneType);
+  if (!base || base.base_price_per_carat <= 0) return 0;
+  const colourAdj  = sp.colour_adjustments.find(c => c.stone_type === stoneType && c.colour_grade === stone.colour)?.adjustment_percent ?? 0;
+  const clarityAdj = sp.clarity_adjustments.find(c => c.stone_type === stoneType && c.clarity_grade === stone.clarity)?.adjustment_percent ?? 0;
+  const multRow = sp.carat_multipliers
+    .filter(m => m.stone_type === stoneType)
+    .sort((a, b) => a.carat_from - b.carat_from)
+    .find(m => ct >= m.carat_from && (m.carat_to == null || ct <= m.carat_to));
+  const caratMult = multRow?.multiplier ?? 1;
+  return base.base_price_per_carat * (1 + colourAdj / 100) * (1 + clarityAdj / 100) * caratMult * ct;
+}
+
 function getMetalCategory(metalType: string): string {
   const t = metalType.toLowerCase();
   if (t.includes("9ct"))      return "gold_9ct";
@@ -152,7 +176,8 @@ function computeItemPricing(
   fixedCosts: FixedCost[],
   marginBrackets: MarginBracket[],
   isManager: boolean,
-  marginConfig: MarginConfig[] = []
+  marginConfig: MarginConfig[] = [],
+  stonePricing: StonePricingData | null = null
 ): ItemPricing {
   let metalCost = 0;
   for (const m of item.metals) {
@@ -176,8 +201,14 @@ function computeItemPricing(
   const stoneCatMarginPct = marginConfig.find(c => c.category === "gold_9ct")?.margin_percent ?? 45;
   const mainStoneCost = item.includeMainStone && isManager && item.stoneOptions[0]
     ? (item.stoneOptions[0].stones ?? []).reduce((s, st) => {
-        const cost = parseFloat(st.cost) || 0;
-        return s + (marginConfig.length > 0 ? cost * (1 + stoneCatMarginPct / 100) : cost);
+        const manualCost = st.cost.trim() !== "" ? parseFloat(st.cost) : NaN;
+        const baseCost = !isNaN(manualCost) ? manualCost : calcStoneBaseCost(st, stonePricing);
+        if (marginConfig.length > 0) {
+          const stoneMarginCat = st.origin === "Lab Grown" ? "stone_lab" : "stone_natural";
+          const stoneMarginPct = marginConfig.find(c => c.category === stoneMarginCat)?.margin_percent ?? stoneCatMarginPct;
+          return s + baseCost * (1 + stoneMarginPct / 100);
+        }
+        return s + baseCost;
       }, 0)
     : 0;
 
@@ -302,9 +333,10 @@ interface ItemCardProps {
   setItems: React.Dispatch<React.SetStateAction<BuilderItem[]>>;
   onShowNivoda: (itemId: string, optId: string) => void;
   errors: Record<string, string>;
+  stonePricing: StonePricingData | null;
 }
 
-function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManager, setItems, onShowNivoda, errors }: ItemCardProps) {
+function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManager, setItems, onShowNivoda, errors, stonePricing }: ItemCardProps) {
   const [activeOptIdx, setActiveOptIdx] = useState(0);
 
   function set<K extends keyof BuilderItem>(key: K, value: BuilderItem[K]) {
@@ -526,7 +558,13 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                         {isManager && (
                           <div style={{ marginTop: 4 }}>
                             <label style={{ ...labelStyle, color: "#635BFF" }}>Cost Price ($)</label>
-                            <input style={{ ...inputStyle, width: 130, borderColor: "#C4BFFE" }} type="number" min="0" step="0.01" value={stone.cost} onChange={e => set("stoneOptions", item.stoneOptions.map(o => o.id === opt.id ? { ...o, stones: o.stones.map(s => s.id === stone.id ? { ...s, cost: e.target.value } : s) } : o))} onFocus={onFocus} onBlur={onBlurField} placeholder="$0.00" />
+                            {(() => {
+                              const autoCalc = stone.cost.trim() === "" ? calcStoneBaseCost(stone, stonePricing) : 0;
+                              const ph = autoCalc > 0 ? `$${autoCalc.toFixed(2)} (auto)` : "$0.00";
+                              return (
+                                <input style={{ ...inputStyle, width: 130, borderColor: "#C4BFFE" }} type="number" min="0" step="0.01" value={stone.cost} onChange={e => set("stoneOptions", item.stoneOptions.map(o => o.id === opt.id ? { ...o, stones: o.stones.map(s => s.id === stone.id ? { ...s, cost: e.target.value } : s) } : o))} onFocus={onFocus} onBlur={onBlurField} placeholder={ph} />
+                              );
+                            })()}
                           </div>
                         )}
                       </div>
@@ -819,6 +857,7 @@ function QuoteBuilderPageInner() {
   const [fixedCosts, setFixedCosts] = useState<FixedCost[]>([]);
   const [marginBrackets, setMarginBrackets] = useState<MarginBracket[]>([]);
   const [marginConfig, setMarginConfig] = useState<MarginConfig[]>([]);
+  const [stonePricing, setStonePricing] = useState<StonePricingData | null>(null);
 
   // Customer
   const [firstName, setFirstName] = useState("");
@@ -874,6 +913,10 @@ function QuoteBuilderPageInner() {
       .then(r => r.json())
       .then((json: { rows?: MarginConfig[] }) => setMarginConfig(json.rows ?? []))
       .catch(() => {});
+    fetch("/api/settings/stone-pricing", { headers })
+      .then(r => r.json())
+      .then((json: StonePricingData) => setStonePricing(json))
+      .catch(() => {});
   }, [user?.tenantId]);
 
   // ── Tenant features ────────────────────────────────────────────────────────
@@ -927,8 +970,8 @@ function QuoteBuilderPageInner() {
   // ── Pricing ────────────────────────────────────────────────────────────────
 
   const allPricings = useMemo(() =>
-    items.map(item => computeItemPricing(item, metalRates, fixedCosts, marginBrackets, isManager, marginConfig)),
-    [items, metalRates, fixedCosts, marginBrackets, isManager, marginConfig]
+    items.map(item => computeItemPricing(item, metalRates, fixedCosts, marginBrackets, isManager, marginConfig, stonePricing)),
+    [items, metalRates, fixedCosts, marginBrackets, isManager, marginConfig, stonePricing]
   );
 
   const charmTotal = useMemo(() => charmItems.reduce((sum, c) => sum + Number(c.retail_price), 0), [charmItems]);
@@ -1281,6 +1324,7 @@ function QuoteBuilderPageInner() {
               setItems={setItems}
               onShowNivoda={(itemId, optId) => { nivodaTargetItemId.current = itemId; nivodaTargetOptId.current = optId; setShowNivodaModal(true); }}
               errors={errors}
+              stonePricing={stonePricing}
             />
           ))}
 
