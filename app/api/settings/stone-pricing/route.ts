@@ -26,7 +26,7 @@ const CLARITY_GRADES = [
   { clarity_grade: "I1",   adjustment_percent: -20, sort_order: 7 },
 ];
 
-const CARAT_MULTIPLIERS = [
+const CARAT_MULTIPLIERS: Array<{ carat_from: number; carat_to: number | null; multiplier: number; sort_order: number }> = [
   { carat_from: 0,    carat_to: 0.99, multiplier: 0.75, sort_order: 0 },
   { carat_from: 1,    carat_to: 1.49, multiplier: 0.40, sort_order: 1 },
   { carat_from: 1.5,  carat_to: 1.99, multiplier: 0.45, sort_order: 2 },
