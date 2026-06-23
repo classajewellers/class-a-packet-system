@@ -521,6 +521,11 @@ export default function PricingPage() {
           {/* Tab: Stones */}
           {tab === 'stones' && (
             <>
+              {/* Info note */}
+              <div style={{ marginBottom: 16, padding: '10px 14px', background: '#F0F0FF', border: '1px solid #C7C5F8', borderRadius: 8, fontSize: 13, color: '#4338CA' }}>
+                Natural diamond pricing is managed via the <strong>Rapaport</strong> tab.
+              </div>
+
               {/* Save button */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 20, gap: 12 }}>
                 {stonesToast && (
@@ -531,7 +536,7 @@ export default function PricingPage() {
                 </button>
               </div>
 
-              {/* Section 1: Base prices */}
+              {/* Section 1: Base prices — natural_diamond hidden (managed via Rapaport tab) */}
               <div style={{ marginBottom: 24 }}>
                 <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginBottom: 10, marginTop: 0 }}>Base Price per Carat</h3>
                 <div style={card}>
@@ -542,8 +547,8 @@ export default function PricingPage() {
                       <th style={thStyle}>Margin %</th>
                     </tr></thead>
                     <tbody>
-                      {stoneBasePrices.map((row, i) => {
-                        const labels2: Record<string, string> = { lab_diamond: 'Lab Diamond', natural_diamond: 'Natural Diamond', gem_stone: 'Gem Stone' };
+                      {stoneBasePrices.filter(row => row.stone_type !== 'natural_diamond').map((row, i) => {
+                        const labels2: Record<string, string> = { lab_diamond: 'Lab Diamond', gem_stone: 'Gem Stone' };
                         return (
                           <tr key={row.stone_type}>
                             <td style={{ ...tdStyle, fontWeight: 500 }}>{labels2[row.stone_type] ?? row.stone_type}</td>
@@ -571,16 +576,9 @@ export default function PricingPage() {
                 </div>
               </div>
 
-              {/* Section 2: Colour Adjustments */}
+              {/* Section 2: Colour Adjustments — Lab Diamond only (natural handled by Rapaport) */}
               <div style={{ marginBottom: 24 }}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginBottom: 10, marginTop: 0 }}>Colour Adjustments</h3>
-                <div style={{ display: 'flex', gap: 4, marginBottom: 12, background: '#F3F4F6', borderRadius: 8, padding: 3, width: 'fit-content' }}>
-                  {(['lab_diamond', 'natural_diamond'] as const).map(st => (
-                    <button key={st} onClick={() => setStoneColourSubTab(st)} style={{ padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 500, background: stoneColourSubTab === st ? '#fff' : 'transparent', color: stoneColourSubTab === st ? '#1A1A2E' : '#6B7280', boxShadow: stoneColourSubTab === st ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', transition: 'all .15s' }}>
-                      {st === 'lab_diamond' ? 'Lab Diamond' : 'Natural Diamond'}
-                    </button>
-                  ))}
-                </div>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginBottom: 10, marginTop: 0 }}>Colour Adjustments — Lab Diamond</h3>
                 <div style={card}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead><tr>
@@ -588,13 +586,13 @@ export default function PricingPage() {
                       <th style={thStyle}>Adjustment %</th>
                     </tr></thead>
                     <tbody>
-                      {stoneColours.filter(c => c.stone_type === stoneColourSubTab).sort((a, b) => a.sort_order - b.sort_order).map(row => (
+                      {stoneColours.filter(c => c.stone_type === 'lab_diamond').sort((a, b) => a.sort_order - b.sort_order).map(row => (
                         <tr key={row.colour_grade}>
                           <td style={{ ...tdStyle, fontWeight: 600 }}>{row.colour_grade}</td>
                           <td style={tdStyle}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                               <input type="number" step="0.01" value={row.adjustment_percent}
-                                onChange={e => setStoneColours(prev => prev.map(r => r.stone_type === stoneColourSubTab && r.colour_grade === row.colour_grade ? { ...r, adjustment_percent: parseFloat(e.target.value) || 0 } : r))}
+                                onChange={e => setStoneColours(prev => prev.map(r => r.stone_type === 'lab_diamond' && r.colour_grade === row.colour_grade ? { ...r, adjustment_percent: parseFloat(e.target.value) || 0 } : r))}
                                 style={inputStyle} />
                               <span style={{ fontSize: 13, color: '#6B7280' }}>%</span>
                             </div>
@@ -607,15 +605,9 @@ export default function PricingPage() {
               </div>
 
               {/* Section 3: Clarity Adjustments */}
+              {/* Section 3: Clarity Adjustments — Lab Diamond only (natural handled by Rapaport) */}
               <div style={{ marginBottom: 24 }}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginBottom: 10, marginTop: 0 }}>Clarity Adjustments</h3>
-                <div style={{ display: 'flex', gap: 4, marginBottom: 12, background: '#F3F4F6', borderRadius: 8, padding: 3, width: 'fit-content' }}>
-                  {(['lab_diamond', 'natural_diamond'] as const).map(st => (
-                    <button key={st} onClick={() => setStoneClaritySubTab(st)} style={{ padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 500, background: stoneClaritySubTab === st ? '#fff' : 'transparent', color: stoneClaritySubTab === st ? '#1A1A2E' : '#6B7280', boxShadow: stoneClaritySubTab === st ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', transition: 'all .15s' }}>
-                      {st === 'lab_diamond' ? 'Lab Diamond' : 'Natural Diamond'}
-                    </button>
-                  ))}
-                </div>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginBottom: 10, marginTop: 0 }}>Clarity Adjustments — Lab Diamond</h3>
                 <div style={card}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead><tr>
@@ -623,13 +615,13 @@ export default function PricingPage() {
                       <th style={thStyle}>Adjustment %</th>
                     </tr></thead>
                     <tbody>
-                      {stoneClarities.filter(c => c.stone_type === stoneClaritySubTab).sort((a, b) => a.sort_order - b.sort_order).map(row => (
+                      {stoneClarities.filter(c => c.stone_type === 'lab_diamond').sort((a, b) => a.sort_order - b.sort_order).map(row => (
                         <tr key={row.clarity_grade}>
                           <td style={{ ...tdStyle, fontWeight: 600 }}>{row.clarity_grade}</td>
                           <td style={tdStyle}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                               <input type="number" step="0.01" value={row.adjustment_percent}
-                                onChange={e => setStoneClarities(prev => prev.map(r => r.stone_type === stoneClaritySubTab && r.clarity_grade === row.clarity_grade ? { ...r, adjustment_percent: parseFloat(e.target.value) || 0 } : r))}
+                                onChange={e => setStoneClarities(prev => prev.map(r => r.stone_type === 'lab_diamond' && r.clarity_grade === row.clarity_grade ? { ...r, adjustment_percent: parseFloat(e.target.value) || 0 } : r))}
                                 style={inputStyle} />
                               <span style={{ fontSize: 13, color: '#6B7280' }}>%</span>
                             </div>
