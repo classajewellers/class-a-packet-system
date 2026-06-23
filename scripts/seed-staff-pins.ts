@@ -34,40 +34,40 @@ function loadEnvLocal() {
 
 loadEnvLocal();
 
-// ── Staff data ────────────────────────────────────────────────────────────────
-// Source of truth. After seeding, delete the PIN column from this file and
-// remove verify-pin/route.ts's hardcoded STAFF_PINS entirely.
+// ── Staff roster ──────────────────────────────────────────────────────────────
+// PINs have been seeded and are stored as bcrypt hashes in the staff_pins table.
+// To add or update a staff member: insert/update directly in Supabase using
+// bcrypt.hash(pin, 12) to generate the hash.
 //
 // NOTE: Paull Scudds and Zac Mucklow share customercare@classa.com.au.
-// email is stored for informational purposes only (not used for login).
-// name is the unique login identifier.
+// email is informational only. name is the unique login identifier.
 
 const STAFF: Array<{ name: string; email: string; pin: string; role: "manager" | "staff" }> = [
-  { name: "Aisha Scott",       email: "aisha@classa.com.au",        pin: "7875", role: "staff"   },
-  { name: "Arissa Michos",     email: "arissa@classa.com.au",       pin: "6916", role: "manager" },
-  { name: "Benjamin Mucklow",  email: "ben@classa.com.au",          pin: "5320", role: "manager" },
-  { name: "Bradley Mucklow",   email: "brad@classa.com.au",         pin: "5378", role: "manager" },
-  { name: "Bridget Moore",     email: "bridget@classa.com.au",      pin: "8484", role: "staff"   },
-  { name: "Charlotte Beavis",  email: "charlotte@classa.com.au",    pin: "2780", role: "staff"   },
-  { name: "Daniel Beecken",    email: "daniel@classa.com.au",       pin: "1171", role: "staff"   },
-  { name: "David Johnson",     email: "david@classa.com.au",        pin: "1103", role: "staff"   },
-  { name: "Dior Munro",        email: "dior@classa.com.au",         pin: "9863", role: "staff"   },
-  { name: "Donna Cordes",      email: "donna@classa.com.au",        pin: "0204", role: "staff"   },
-  { name: "Ivy Wood",          email: "ivy@classa.com.au",          pin: "4873", role: "staff"   },
-  { name: "Jack Mullan",       email: "jack@classa.com.au",         pin: "4214", role: "staff"   },
-  { name: "Jessica D'Alfonso", email: "jess@classa.com.au",         pin: "5333", role: "staff"   },
-  { name: "Joseph Onorato",    email: "joseph@classa.com.au",       pin: "1623", role: "staff"   },
-  { name: "Joshua Mucklow",    email: "josh@classa.com.au",         pin: "2204", role: "manager" },
-  { name: "Keeley Mucklow",    email: "keeley@classa.com.au",       pin: "0034", role: "staff"   },
-  { name: "Leah Newton",       email: "leah@classa.com.au",         pin: "0906", role: "staff"   },
-  { name: "Melody Abram",      email: "melody@classa.com.au",       pin: "1065", role: "staff"   },
-  { name: "Monica Maghsoodi",  email: "monica@classa.com.au",       pin: "6306", role: "staff"   },
-  { name: "Paull Scudds",      email: "customercare@classa.com.au", pin: "2367", role: "staff"   },
-  { name: "Sam Mucklow",       email: "sam@classa.com.au",          pin: "0994", role: "manager" },
-  { name: "Shahrzad Givi",     email: "shahrzad@classa.com.au",     pin: "3434", role: "staff"   },
-  { name: "Sinziana Peters",   email: "sinziana@classa.com.au",     pin: "9344", role: "staff"   },
-  { name: "Vivian Valladares", email: "viv@classa.com.au",          pin: "0409", role: "staff"   },
-  { name: "Zac Mucklow",       email: "customercare@classa.com.au", pin: "9006", role: "staff"   },
+  { name: "Aisha Scott",       email: "aisha@classa.com.au",        pin: "", role: "staff"   },
+  { name: "Arissa Michos",     email: "arissa@classa.com.au",       pin: "", role: "manager" },
+  { name: "Benjamin Mucklow",  email: "ben@classa.com.au",          pin: "", role: "manager" },
+  { name: "Bradley Mucklow",   email: "brad@classa.com.au",         pin: "", role: "manager" },
+  { name: "Bridget Moore",     email: "bridget@classa.com.au",      pin: "", role: "staff"   },
+  { name: "Charlotte Beavis",  email: "charlotte@classa.com.au",    pin: "", role: "staff"   },
+  { name: "Daniel Beecken",    email: "daniel@classa.com.au",       pin: "", role: "staff"   },
+  { name: "David Johnson",     email: "david@classa.com.au",        pin: "", role: "staff"   },
+  { name: "Dior Munro",        email: "dior@classa.com.au",         pin: "", role: "staff"   },
+  { name: "Donna Cordes",      email: "donna@classa.com.au",        pin: "", role: "staff"   },
+  { name: "Ivy Wood",          email: "ivy@classa.com.au",          pin: "", role: "staff"   },
+  { name: "Jack Mullan",       email: "jack@classa.com.au",         pin: "", role: "staff"   },
+  { name: "Jessica D'Alfonso", email: "jess@classa.com.au",         pin: "", role: "staff"   },
+  { name: "Joseph Onorato",    email: "joseph@classa.com.au",       pin: "", role: "staff"   },
+  { name: "Joshua Mucklow",    email: "josh@classa.com.au",         pin: "", role: "manager" },
+  { name: "Keeley Mucklow",    email: "keeley@classa.com.au",       pin: "", role: "staff"   },
+  { name: "Leah Newton",       email: "leah@classa.com.au",         pin: "", role: "staff"   },
+  { name: "Melody Abram",      email: "melody@classa.com.au",       pin: "", role: "staff"   },
+  { name: "Monica Maghsoodi",  email: "monica@classa.com.au",       pin: "", role: "staff"   },
+  { name: "Paull Scudds",      email: "customercare@classa.com.au", pin: "", role: "staff"   },
+  { name: "Sam Mucklow",       email: "sam@classa.com.au",          pin: "", role: "manager" },
+  { name: "Shahrzad Givi",     email: "shahrzad@classa.com.au",     pin: "", role: "staff"   },
+  { name: "Sinziana Peters",   email: "sinziana@classa.com.au",     pin: "", role: "staff"   },
+  { name: "Vivian Valladares", email: "viv@classa.com.au",          pin: "", role: "staff"   },
+  { name: "Zac Mucklow",       email: "customercare@classa.com.au", pin: "", role: "staff"   },
 ];
 
 // ── Main ──────────────────────────────────────────────────────────────────────
