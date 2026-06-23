@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -31,12 +33,10 @@ const STAFF_PINS: Record<string, { pin: string; role: "manager" | "staff"; email
   "Zac Mucklow":       { pin: "9006", role: "staff",   email: "customercare@classa.com.au",  initials: "ZM" },
 };
 
-// ── In-memory rate limiting (resets on server restart) ──
-// Map<staffName, { attempts: number; lockedUntil: number | null }>
-const attemptTracker = new Map<string, { attempts: number; lockedUntil: number | null }>();
-
-const MAX_ATTEMPTS = 3;
-const LOCK_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+// 3 wrong PINs per staff name per 5-minute window.
+// Supabase-backed — survives serverless cold starts, consistent across instances.
+const MAX_ATTEMPTS    = 3;
+const WINDOW_SECONDS  = 5 * 60;
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   let body: { name: string; pin: string };
@@ -51,38 +51,32 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ success: false, error: "Missing name or pin" }, { status: 400 });
   }
 
-  // Check lock
-  const tracker = attemptTracker.get(name) ?? { attempts: 0, lockedUntil: null };
-  if (tracker.lockedUntil && Date.now() < tracker.lockedUntil) {
-    const remaining = Math.ceil((tracker.lockedUntil - Date.now()) / 60000);
-    return NextResponse.json({
-      success: false,
-      locked: true,
-      error: `Too many attempts. Please see a manager. Try again in ${remaining} minute${remaining !== 1 ? "s" : ""}.`,
-    }, { status: 429 });
-  }
-
   const staff = STAFF_PINS[name];
-  if (!staff || staff.pin !== pin.trim()) {
-    // Increment attempts
-    const newAttempts = (tracker.attempts || 0) + 1;
-    const locked = newAttempts >= MAX_ATTEMPTS;
-    attemptTracker.set(name, {
-      attempts: locked ? 0 : newAttempts,
-      lockedUntil: locked ? Date.now() + LOCK_DURATION_MS : null,
-    });
+  const pinCorrect = !!staff && staff.pin === pin.trim();
+
+  if (!pinCorrect) {
+    // Only increment the rate limit counter on failed attempts
+    const supabase = createServerSupabaseClient();
+    const rl = await checkRateLimit(supabase, `pin:${name}`, MAX_ATTEMPTS, WINDOW_SECONDS);
+
+    // Treat remaining=0 as locked (this was the last allowed attempt)
+    if (!rl.allowed || rl.remaining === 0) {
+      const minutesLeft = Math.ceil((rl.resetAt.getTime() - Date.now()) / 60000);
+      return NextResponse.json({
+        success: false,
+        locked: true,
+        error: `Too many attempts. Please see a manager. Try again in ${minutesLeft} minute${minutesLeft !== 1 ? "s" : ""}.`,
+      }, { status: 429 });
+    }
+
     return NextResponse.json({
       success: false,
-      locked,
-      attemptsLeft: locked ? 0 : MAX_ATTEMPTS - newAttempts,
-      error: locked
-        ? "Too many attempts. Please see a manager."
-        : `Incorrect PIN. ${MAX_ATTEMPTS - newAttempts} attempt${MAX_ATTEMPTS - newAttempts !== 1 ? "s" : ""} remaining.`,
+      locked: false,
+      attemptsLeft: rl.remaining,
+      error: `Incorrect PIN. ${rl.remaining} attempt${rl.remaining !== 1 ? "s" : ""} remaining.`,
     }, { status: 401 });
   }
 
-  // Success — clear tracker
-  attemptTracker.delete(name);
   return NextResponse.json({
     success: true,
     staff: {
