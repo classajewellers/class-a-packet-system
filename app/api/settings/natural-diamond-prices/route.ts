@@ -347,13 +347,13 @@ const ND_SEED: ShapeSeed[] = [
   },
 ];
 
-function buildSeedRows(tenantId: string, now: string) {
+function buildSeedRows(tenantId: string, now: string, shapes: ShapeSeed[] = ND_SEED) {
   const rows: Array<{
     tenant_id: string; shape: string; size_from: number; size_to: number;
     colour_group: string; clarity: string; price_per_ct: number;
     created_at: string; updated_at: string;
   }> = [];
-  for (const shape of ND_SEED) {
+  for (const shape of shapes) {
     for (const band of shape.bands) {
       for (let ci = 0; ci < ND_COLOUR_GROUPS.length; ci++) {
         for (let ki = 0; ki < ND_CLARITIES.length; ki++) {
@@ -384,34 +384,31 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
     const supabase = await createTenantSupabaseClient(tenantId);
 
-    // Seed if needed
-    console.log(`[nd-prices] GET for tenant=${tenantId} — checking for existing rows`);
-    const { data: existing, error: existingErr } = await supabase
+    // Per-shape seed check — seed any shape that has zero rows for this tenant
+    console.log(`[nd-prices] GET for tenant=${tenantId} — checking seeded shapes`);
+    const { data: existingShapeRows, error: shapesErr } = await supabase
       .from("natural_diamond_prices")
-      .select("id")
-      .eq("tenant_id", tenantId)
-      .limit(1);
+      .select("shape")
+      .eq("tenant_id", tenantId);
 
-    if (existingErr) {
-      console.error(`[nd-prices] Error checking existing rows:`, existingErr);
-    }
+    if (shapesErr) console.error(`[nd-prices] Error checking existing shapes:`, shapesErr);
 
-    console.log(`[nd-prices] Existing rows check: found=${existing?.length ?? 0}, needsSeed=${!existing || existing.length === 0}`);
+    const seededShapes = new Set(Array.from((existingShapeRows ?? []).map(r => r.shape as string)));
+    const missingShapes = ND_SEED.filter(s => !seededShapes.has(s.name));
 
-    if (!existing || existing.length === 0) {
+    console.log(`[nd-prices] Seeded: [${Array.from(seededShapes).join(', ')}], Missing: [${missingShapes.map(s => s.name).join(', ') || 'none'}]`);
+
+    if (missingShapes.length > 0) {
       const now = new Date().toISOString();
-      const seedRows = buildSeedRows(tenantId, now);
-      console.log(`[nd-prices] Seeding ${seedRows.length} rows for tenant=${tenantId}`);
+      const seedRows = buildSeedRows(tenantId, now, missingShapes);
+      console.log(`[nd-prices] Seeding ${seedRows.length} rows for ${missingShapes.length} missing shapes`);
       for (let i = 0; i < seedRows.length; i += 200) {
         const batch = seedRows.slice(i, i + 200);
         const { error: upsertErr } = await supabase
           .from("natural_diamond_prices")
           .upsert(batch, { onConflict: "tenant_id,shape,size_from,size_to,colour_group,clarity" });
-        if (upsertErr) {
-          console.error(`[nd-prices] Upsert error at batch ${i}:`, upsertErr);
-        } else {
-          console.log(`[nd-prices] Inserted batch ${i}–${i + batch.length - 1} (${batch.length} rows)`);
-        }
+        if (upsertErr) console.error(`[nd-prices] Upsert error at batch ${i}:`, upsertErr);
+        else console.log(`[nd-prices] Inserted batch ${i}–${i + batch.length - 1} (${batch.length} rows)`);
       }
     }
 

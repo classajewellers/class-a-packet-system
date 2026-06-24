@@ -17,6 +17,7 @@ interface StoneColourRow  { stone_type: string; colour_grade: string;  adjustmen
 interface StoneClarityRow { stone_type: string; clarity_grade: string; adjustment_percent: number; sort_order: number; }
 interface StoneCaratRow   { stone_type: string; carat_from: number; carat_to: number | null; multiplier: number; sort_order: number; }
 interface NdPrice         { shape: string; size_from: number; size_to: number; colour_group: string; clarity: string; price_per_ct: number; }
+interface CalcResult      { buyAud: number; sellAud: number; pricePerCtAud: number; sizeBand: string | null; colourGroup: string | null; marginPct: number; }
 
 type SaveState = Record<string, 'saving' | 'saved' | 'error'>;
 
@@ -42,7 +43,7 @@ const ND_CLARITIES     = ['IF', 'VVS1', 'VVS2', 'VS1', 'VS2', 'SI1', 'SI2', 'I1'
 export default function PricingPage() {
   const { user, hydrated } = useUser();
   const router = useRouter();
-  const [tab, setTab] = useState<'metal' | 'fixed' | 'margin' | 'melee' | 'lab_diamonds' | 'natural_diamonds' | 'gem_stones'>('metal');
+  const [tab, setTab] = useState<'metal' | 'fixed' | 'margin' | 'melee' | 'lab_diamonds' | 'natural_diamonds' | 'gem_stones' | 'calculator'>('metal');
 
   const [metalRates, setMetalRates] = useState<MetalRate[]>([]);
   const [fixedCosts, setFixedCosts] = useState<FixedCost[]>([]);
@@ -68,6 +69,16 @@ export default function PricingPage() {
   const [ndShape, setNdShape]                 = useState<string>('round');
   const [ndBandIdx, setNdBandIdx]             = useState(4); // default 1.00–1.49
 
+  // Calculator tab
+  const [calcStoneType, setCalcStoneType] = useState<'natural' | 'lab'>('natural');
+  const [calcShape, setCalcShape]         = useState<string>('round');
+  const [calcCarat, setCalcCarat]         = useState<string>('');
+  const [calcColour, setCalcColour]       = useState<string>('');
+  const [calcClarity, setCalcClarity]     = useState<string>('');
+  const [calcResult, setCalcResult]       = useState<CalcResult | null>(null);
+  const [calcLoading, setCalcLoading]     = useState(false);
+  const [calcError, setCalcError]         = useState<string | null>(null);
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   const [saveStates, setSaveStates] = useState<SaveState>({});
@@ -88,7 +99,7 @@ export default function PricingPage() {
   }, [user?.tenantId]);
 
   useEffect(() => {
-    if ((tab !== 'lab_diamonds' && tab !== 'gem_stones') || stonesLoaded) return;
+    if ((tab !== 'lab_diamonds' && tab !== 'gem_stones' && tab !== 'calculator') || stonesLoaded) return;
     fetch('/api/settings/stone-pricing', { headers: { 'x-tenant-id': user?.tenantId ?? '' } })
       .then(r => r.json())
       .then(json => {
@@ -122,6 +133,70 @@ export default function PricingPage() {
       })
       .catch(() => {});
   }, [tab, ndLoaded, user?.tenantId]);
+
+  useEffect(() => {
+    if (tab !== 'calculator') return;
+    const carat = parseFloat(calcCarat);
+    if (!calcColour || !calcClarity || isNaN(carat) || carat <= 0 || !user?.tenantId) {
+      setCalcResult(null);
+      setCalcError(null);
+      return;
+    }
+
+    setCalcLoading(true);
+    setCalcError(null);
+
+    const tid = setTimeout(async () => {
+      try {
+        if (calcStoneType === 'natural') {
+          const params = new URLSearchParams({ shape: calcShape, carat: String(carat), colour: calcColour, clarity: calcClarity });
+          const res = await fetch(`/api/settings/natural-diamond-prices/lookup?${params}`, {
+            headers: { 'x-tenant-id': user.tenantId! },
+          });
+          const json = await res.json();
+          if (!res.ok) {
+            setCalcError(json.error ?? 'No price found for these specs');
+            setCalcResult(null);
+          } else {
+            setCalcResult({
+              buyAud: json.total_aud,
+              sellAud: json.sell_aud,
+              pricePerCtAud: json.price_per_ct_aud,
+              sizeBand: `${json.size_from}–${json.size_to} ct`,
+              colourGroup: json.colour_group,
+              marginPct: json.natural_margin_pct,
+            });
+          }
+        } else {
+          if (!stonesLoaded) { setCalcLoading(false); return; }
+          const labBase = stoneBasePrices.find(r => r.stone_type === 'lab_diamond');
+          if (!labBase) { setCalcLoading(false); return; }
+          const colourAdj  = stoneColours.find(c => c.stone_type === 'lab_diamond' && c.colour_grade === calcColour)?.adjustment_percent ?? 0;
+          const clarityAdj = stoneClarities.find(c => c.stone_type === 'lab_diamond' && c.clarity_grade === calcClarity)?.adjustment_percent ?? 0;
+          const caratMult  = stoneCaratMults.find(r => carat >= r.carat_from && (r.carat_to === null || carat <= r.carat_to))?.multiplier ?? 1;
+          const pricePerCt = labBase.base_price_per_carat * (1 + colourAdj / 100) * (1 + clarityAdj / 100) * caratMult;
+          const buyAud     = pricePerCt * carat;
+          const marginPct  = labBase.margin_percent;
+          const sellAud    = buyAud * (1 + marginPct / 100);
+          setCalcResult({
+            buyAud:        Math.round(buyAud * 100) / 100,
+            sellAud:       Math.round(sellAud * 100) / 100,
+            pricePerCtAud: Math.round(pricePerCt * 100) / 100,
+            sizeBand:      null,
+            colourGroup:   null,
+            marginPct,
+          });
+        }
+      } catch {
+        setCalcError('Calculation failed');
+        setCalcResult(null);
+      } finally {
+        setCalcLoading(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(tid);
+  }, [tab, calcStoneType, calcShape, calcCarat, calcColour, calcClarity, user?.tenantId, stonesLoaded, stoneBasePrices, stoneColours, stoneClarities, stoneCaratMults]);
 
   async function save(tableName: string, id: string, field: string, value: number) {
     setSaveStates(s => ({ ...s, [id]: 'saving' }));
@@ -288,11 +363,12 @@ export default function PricingPage() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: '#F3F4F6', borderRadius: 10, padding: 4, flexWrap: 'wrap' }}>
-        {(['metal', 'fixed', 'margin', 'melee', 'natural_diamonds', 'lab_diamonds', 'gem_stones'] as const).map((t) => {
+        {(['metal', 'fixed', 'margin', 'melee', 'natural_diamonds', 'lab_diamonds', 'gem_stones', 'calculator'] as const).map((t) => {
           const labels = {
             metal: 'Metal Prices', fixed: 'Fixed Costs', margin: 'Margin Brackets',
             melee: 'Melee Stones', natural_diamonds: 'Natural Diamonds',
             lab_diamonds: 'Lab Diamonds', gem_stones: 'Gem Stones',
+            calculator: '🔢 Calculator',
           };
           return (
             <button
@@ -714,6 +790,129 @@ export default function PricingPage() {
                 <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 8, marginBottom: 0 }}>Leave "To" blank for no upper limit.</p>
               </div>
             </>
+          )}
+
+          {/* Tab: Calculator */}
+          {tab === 'calculator' && (
+            <div style={{ maxWidth: 560 }}>
+              {/* Stone type toggle */}
+              <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderRadius: 10, overflow: 'hidden', border: '1px solid #E8E8F0', width: 'fit-content' }}>
+                {(['natural', 'lab'] as const).map(type => (
+                  <button key={type} onClick={() => { setCalcStoneType(type); setCalcResult(null); setCalcError(null); }}
+                    style={{ padding: '10px 28px', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, fontFamily: 'inherit',
+                      background: calcStoneType === type ? '#635BFF' : '#fff',
+                      color: calcStoneType === type ? '#fff' : '#6B7280',
+                      transition: 'all .15s' }}>
+                    {type === 'natural' ? 'Natural Diamond' : 'Lab Grown Diamond'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Inputs card */}
+              <div style={{ ...card, padding: 24, marginBottom: 20 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                  {calcStoneType === 'natural' && (
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Shape</label>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {Array.from(ND_SHAPES).map(s => (
+                          <button key={s} onClick={() => setCalcShape(s)}
+                            style={{ padding: '6px 14px', borderRadius: 8, border: `${calcShape === s ? 2 : 1}px solid ${calcShape === s ? '#635BFF' : '#E8E8F0'}`,
+                              background: calcShape === s ? '#EEF2FF' : '#fff', color: calcShape === s ? '#635BFF' : '#374151',
+                              fontSize: 13, fontWeight: calcShape === s ? 600 : 400, cursor: 'pointer', textTransform: 'capitalize', fontFamily: 'inherit' }}>
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Carat Weight</label>
+                    <input type="number" min="0.01" step="0.01" placeholder="e.g. 1.20" value={calcCarat}
+                      onChange={e => setCalcCarat(e.target.value)}
+                      style={{ width: '100%', border: '1px solid #E8E8F0', borderRadius: 8, padding: '10px 12px', fontSize: 14, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Colour</label>
+                    <select value={calcColour} onChange={e => setCalcColour(e.target.value)}
+                      style={{ width: '100%', border: '1px solid #E8E8F0', borderRadius: 8, padding: '10px 12px', fontSize: 14, fontFamily: 'inherit', background: '#fff', cursor: 'pointer', outline: 'none' }}>
+                      <option value="">Select…</option>
+                      {['D','E','F','G','H','I','J','K','L','M'].map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Clarity</label>
+                    <select value={calcClarity} onChange={e => setCalcClarity(e.target.value)}
+                      style={{ width: '100%', border: '1px solid #E8E8F0', borderRadius: 8, padding: '10px 12px', fontSize: 14, fontFamily: 'inherit', background: '#fff', cursor: 'pointer', outline: 'none' }}>
+                      <option value="">Select…</option>
+                      {ND_CLARITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Result card */}
+              {calcLoading && (
+                <div style={{ textAlign: 'center', padding: '32px 0', color: '#9CA3AF', fontSize: 14 }}>Calculating…</div>
+              )}
+              {!calcLoading && calcError && (
+                <div style={{ padding: '14px 20px', borderRadius: 10, background: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', fontSize: 14 }}>
+                  {calcError}
+                </div>
+              )}
+              {!calcLoading && !calcError && calcResult && (
+                <div style={{ background: '#fff', border: '2px solid #635BFF', borderRadius: 12, overflow: 'hidden' }}>
+                  <div style={{ background: '#635BFF', padding: '14px 20px' }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      {calcStoneType === 'natural' ? `Natural Diamond — ${calcShape.charAt(0).toUpperCase() + calcShape.slice(1)}` : 'Lab Grown Diamond'}
+                    </div>
+                    <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>
+                      {calcCarat} ct · {calcColour} · {calcClarity}
+                      {calcResult.colourGroup && ` · ${calcResult.colourGroup}`}
+                    </div>
+                  </div>
+                  <div style={{ padding: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                    <div style={{ gridColumn: '1 / -1', background: '#F0FDF4', borderRadius: 10, padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Recommended Sell Price</div>
+                        <div style={{ fontSize: 28, fontWeight: 700, color: '#15803D', marginTop: 4 }}>
+                          ${calcResult.sellAud.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#16A34A', textAlign: 'right' }}>
+                        {calcResult.marginPct}% margin applied
+                      </div>
+                    </div>
+                    <div style={{ background: '#F9FAFB', borderRadius: 10, padding: '14px 16px' }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Buy Price (AUD)</div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: '#1A1A2E' }}>
+                        ${calcResult.buyAud.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                    <div style={{ background: '#F9FAFB', borderRadius: 10, padding: '14px 16px' }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Price / ct (AUD)</div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: '#1A1A2E' }}>
+                        ${calcResult.pricePerCtAud.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                    {calcResult.sizeBand && (
+                      <div style={{ background: '#F9FAFB', borderRadius: 10, padding: '14px 16px' }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Size Band Matched</div>
+                        <div style={{ fontSize: 16, fontWeight: 600, color: '#1A1A2E' }}>{calcResult.sizeBand}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              {!calcLoading && !calcError && !calcResult && (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: '#9CA3AF', fontSize: 14 }}>
+                  Enter carat weight, colour and clarity to calculate a price.
+                </div>
+              )}
+            </div>
           )}
 
           {/* Tab: Gem Stones */}
