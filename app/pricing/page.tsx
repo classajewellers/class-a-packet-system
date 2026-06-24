@@ -17,7 +17,7 @@ interface StoneColourRow  { stone_type: string; colour_grade: string;  adjustmen
 interface StoneClarityRow { stone_type: string; clarity_grade: string; adjustment_percent: number; sort_order: number; }
 interface StoneCaratRow   { stone_type: string; carat_from: number; carat_to: number | null; multiplier: number; sort_order: number; }
 interface NdPrice         { shape: string; size_from: number; size_to: number; colour_group: string; clarity: string; price_per_ct: number; }
-interface CalcResult      { buyAud: number; sellAud: number; pricePerCtAud: number; sizeBand: string | null; colourGroup: string | null; marginPct: number; }
+interface CalcResult      { buyAud: number; pricePerCtAud: number; sizeBand: string | null; colourGroup: string | null; }
 
 type SaveState = Record<string, 'saving' | 'saved' | 'error'>;
 
@@ -159,12 +159,10 @@ export default function PricingPage() {
             setCalcResult(null);
           } else {
             setCalcResult({
-              buyAud: json.total_aud,
-              sellAud: json.sell_aud,
+              buyAud:        json.total_aud,
               pricePerCtAud: json.price_per_ct_aud,
-              sizeBand: `${json.size_from}–${json.size_to} ct`,
-              colourGroup: json.colour_group,
-              marginPct: json.natural_margin_pct,
+              sizeBand:      `${json.size_from}–${json.size_to} ct`,
+              colourGroup:   json.colour_group,
             });
           }
         } else {
@@ -176,15 +174,11 @@ export default function PricingPage() {
           const caratMult  = stoneCaratMults.find(r => carat >= r.carat_from && (r.carat_to === null || carat <= r.carat_to))?.multiplier ?? 1;
           const pricePerCt = labBase.base_price_per_carat * (1 + colourAdj / 100) * (1 + clarityAdj / 100) * caratMult;
           const buyAud     = pricePerCt * carat;
-          const marginPct  = labBase.margin_percent;
-          const sellAud    = buyAud * (1 + marginPct / 100);
           setCalcResult({
             buyAud:        Math.round(buyAud * 100) / 100,
-            sellAud:       Math.round(sellAud * 100) / 100,
             pricePerCtAud: Math.round(pricePerCt * 100) / 100,
             sizeBand:      null,
             colourGroup:   null,
-            marginPct,
           });
         }
       } catch {
@@ -875,17 +869,6 @@ export default function PricingPage() {
                     </div>
                   </div>
                   <div style={{ padding: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                    <div style={{ gridColumn: '1 / -1', background: '#F0FDF4', borderRadius: 10, padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Recommended Sell Price</div>
-                        <div style={{ fontSize: 28, fontWeight: 700, color: '#15803D', marginTop: 4 }}>
-                          ${calcResult.sellAud.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </div>
-                      </div>
-                      <div style={{ fontSize: 12, color: '#16A34A', textAlign: 'right' }}>
-                        {calcResult.marginPct}% margin applied
-                      </div>
-                    </div>
                     <div style={{ background: '#F9FAFB', borderRadius: 10, padding: '14px 16px' }}>
                       <div style={{ fontSize: 11, fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Buy Price (AUD)</div>
                       <div style={{ fontSize: 20, fontWeight: 700, color: '#1A1A2E' }}>
