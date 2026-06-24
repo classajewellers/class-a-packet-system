@@ -16,18 +16,16 @@ interface StoneBaseRow    { stone_type: string; base_price_per_carat: number; ma
 interface StoneColourRow  { stone_type: string; colour_grade: string;  adjustment_percent: number; sort_order: number; }
 interface StoneClarityRow { stone_type: string; clarity_grade: string; adjustment_percent: number; sort_order: number; }
 interface StoneCaratRow   { stone_type: string; carat_from: number; carat_to: number | null; multiplier: number; sort_order: number; }
+interface NdPrice         { shape: string; size_from: number; size_to: number; colour_group: string; clarity: string; price_per_ct: number; }
 
 type SaveState = Record<string, 'saving' | 'saved' | 'error'>;
 
 const CARAT_SIZES = ['0.005ct', '0.01ct', '0.02ct', '0.03ct', '0.05ct', '0.10ct'];
 const STONE_TYPES = ['Lab Grown', 'Natural'];
 
-interface RapPrice { size_from: number; size_to: number; colour: string; clarity: string; price_per_ct: number; }
-interface RapLookupResult { rap_list_per_ct: number; raw_usd_per_ct: number; buy_price_aud: number; sell_price_aud: number; }
-
-const RAP_BANDS = [
-  { label: '0.30–0.39', sf: 0.30, st: 0.39 },
-  { label: '0.40–0.49', sf: 0.40, st: 0.49 },
+const ND_SHAPES = ['round', 'oval', 'cushion', 'pear', 'emerald', 'marquise', 'radiant'] as const;
+const ND_BANDS = [
+  { label: '0.30–0.49', sf: 0.30, st: 0.49 },
   { label: '0.50–0.69', sf: 0.50, st: 0.69 },
   { label: '0.70–0.89', sf: 0.70, st: 0.89 },
   { label: '0.90–0.99', sf: 0.90, st: 0.99 },
@@ -38,13 +36,13 @@ const RAP_BANDS = [
   { label: '4.00–4.99', sf: 4.00, st: 4.99 },
   { label: '5.00–5.99', sf: 5.00, st: 5.99 },
 ];
-const RAP_COLOURS   = ['D','E','F','G','H','I','J','K','L','M'];
-const RAP_CLARITIES = ['IF','VVS1','VVS2','VS1','VS2','SI1','SI2','SI3','I1','I2','I3'];
+const ND_COLOUR_GROUPS = ['D-F', 'G-H', 'I-J', 'K-L', 'M'];
+const ND_CLARITIES     = ['IF', 'VVS1', 'VVS2', 'VS1', 'VS2', 'SI1', 'SI2', 'I1', 'I2'];
 
 export default function PricingPage() {
   const { user, hydrated } = useUser();
   const router = useRouter();
-  const [tab, setTab] = useState<'metal' | 'fixed' | 'margin' | 'melee' | 'stones' | 'rapaport'>('metal');
+  const [tab, setTab] = useState<'metal' | 'fixed' | 'margin' | 'melee' | 'lab_diamonds' | 'natural_diamonds' | 'gem_stones'>('metal');
 
   const [metalRates, setMetalRates] = useState<MetalRate[]>([]);
   const [fixedCosts, setFixedCosts] = useState<FixedCost[]>([]);
@@ -52,31 +50,24 @@ export default function PricingPage() {
   const [meleeStones, setMeleeStones] = useState<MeleeStone[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [stoneBasePrices, setStoneBasePrices]       = useState<StoneBaseRow[]>([]);
-  const [stoneColours, setStoneColours]             = useState<StoneColourRow[]>([]);
-  const [stoneClarities, setStoneClarities]         = useState<StoneClarityRow[]>([]);
-  const [stoneCaratMults, setStoneCaratMults]       = useState<StoneCaratRow[]>([]);
-  const [stonesLoaded, setStonesLoaded]             = useState(false);
-  const [stonesSaving, setStonesSaving]             = useState(false);
-  const [stonesToast, setStonesToast]               = useState<string | null>(null);
-  const [stoneColourSubTab, setStoneColourSubTab]   = useState<'lab_diamond' | 'natural_diamond'>('lab_diamond');
-  const [stoneClaritySubTab, setStoneClaritySubTab] = useState<'lab_diamond' | 'natural_diamond'>('lab_diamond');
+  // Stone pricing (lab + gem)
+  const [stoneBasePrices, setStoneBasePrices]   = useState<StoneBaseRow[]>([]);
+  const [stoneColours, setStoneColours]         = useState<StoneColourRow[]>([]);
+  const [stoneClarities, setStoneClarities]     = useState<StoneClarityRow[]>([]);
+  const [stoneCaratMults, setStoneCaratMults]   = useState<StoneCaratRow[]>([]);
+  const [stonesLoaded, setStonesLoaded]         = useState(false);
+  const [stonesSaving, setStonesSaving]         = useState(false);
+  const [stonesToast, setStonesToast]           = useState<string | null>(null);
 
-  // Rapaport tab state
-  const [rapPrices, setRapPrices]               = useState<RapPrice[]>([]);
-  const [rapDiscount, setRapDiscount]           = useState(0);
-  const [rapCurrencyRate, setRapCurrencyRate]   = useState(1.538);
-  const [rapLoaded, setRapLoaded]               = useState(false);
-  const [rapSaving, setRapSaving]               = useState(false);
-  const [rapSettingsSaving, setRapSettingsSaving] = useState(false);
-  const [rapToast, setRapToast]                 = useState<string | null>(null);
-  const [rapBandIdx, setRapBandIdx]             = useState(0);
-  const [rapLookupCarat, setRapLookupCarat]     = useState('');
-  const [rapLookupColour, setRapLookupColour]   = useState('G');
-  const [rapLookupClarity, setRapLookupClarity] = useState('VS1');
-  const [rapLookupResult, setRapLookupResult]   = useState<RapLookupResult | null>(null);
-  const [rapLookupError, setRapLookupError]     = useState<string | null>(null);
-  const [rapLookupLoading, setRapLookupLoading] = useState(false);
+  // Natural diamond pricing (RapNet grid)
+  const [ndPrices, setNdPrices]               = useState<NdPrice[]>([]);
+  const [ndCurrencyRate, setNdCurrencyRate]   = useState(1.538);
+  const [ndNaturalMargin, setNdNaturalMargin] = useState(30);
+  const [ndLoaded, setNdLoaded]               = useState(false);
+  const [ndSaving, setNdSaving]               = useState(false);
+  const [ndToast, setNdToast]                 = useState<string | null>(null);
+  const [ndShape, setNdShape]                 = useState<string>('round');
+  const [ndBandIdx, setNdBandIdx]             = useState(4); // default 1.00–1.49
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
@@ -98,7 +89,7 @@ export default function PricingPage() {
   }, [user?.tenantId]);
 
   useEffect(() => {
-    if (tab !== 'stones' || stonesLoaded) return;
+    if ((tab !== 'lab_diamonds' && tab !== 'gem_stones') || stonesLoaded) return;
     fetch('/api/settings/stone-pricing', { headers: { 'x-tenant-id': user?.tenantId ?? '' } })
       .then(r => r.json())
       .then(json => {
@@ -113,7 +104,6 @@ export default function PricingPage() {
         );
         setStoneColours(json.colour_adjustments ?? []);
         setStoneClarities(json.clarity_adjustments ?? []);
-        // Carat multipliers are the same across stone types — show lab_diamond as canonical
         setStoneCaratMults(
           (json.carat_multipliers ?? []).filter((r: { stone_type: string }) => r.stone_type === 'lab_diamond')
         );
@@ -123,17 +113,17 @@ export default function PricingPage() {
   }, [tab, stonesLoaded, user?.tenantId]);
 
   useEffect(() => {
-    if (tab !== 'rapaport' || rapLoaded || !user?.tenantId) return;
-    fetch('/api/settings/rapaport', { headers: { 'x-tenant-id': user.tenantId } })
+    if (tab !== 'natural_diamonds' || ndLoaded || !user?.tenantId) return;
+    fetch('/api/settings/natural-diamond-prices', { headers: { 'x-tenant-id': user.tenantId } })
       .then(r => r.json())
       .then(json => {
-        setRapPrices(json.prices ?? []);
-        setRapDiscount(json.discount_percent ?? 0);
-        setRapCurrencyRate(json.currency_rate ?? 1.538);
-        setRapLoaded(true);
+        setNdPrices(json.prices ?? []);
+        setNdCurrencyRate(json.currency_rate ?? 1.538);
+        setNdNaturalMargin(json.natural_margin ?? 30);
+        setNdLoaded(true);
       })
       .catch(() => {});
-  }, [tab, rapLoaded, user?.tenantId]);
+  }, [tab, ndLoaded, user?.tenantId]);
 
   async function save(tableName: string, id: string, field: string, value: number) {
     setSaveStates(s => ({ ...s, [id]: 'saving' }));
@@ -144,7 +134,6 @@ export default function PricingPage() {
     });
     if (res.ok) {
       setSaveStates(s => ({ ...s, [id]: 'saved' }));
-      // Update local state
       if (tableName === 'pricing_metal_rates') {
         setMetalRates(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
       } else if (tableName === 'pricing_fixed_costs') {
@@ -186,73 +175,36 @@ export default function PricingPage() {
     }
   }
 
-  async function saveRapSettings() {
+  async function saveNdPricing() {
     if (!user?.tenantId) return;
-    setRapSettingsSaving(true);
+    setNdSaving(true);
     try {
-      const res = await fetch('/api/settings/rapaport', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-tenant-id': user.tenantId },
-        body: JSON.stringify({ discount_percent: rapDiscount, currency_rate: rapCurrencyRate }),
-      });
-      if (!res.ok) throw new Error('Save failed');
-      setRapToast('Settings saved ✓');
-    } catch {
-      setRapToast('Error saving settings');
-    } finally {
-      setRapSettingsSaving(false);
-      setTimeout(() => setRapToast(null), 3000);
-    }
-  }
-
-  async function saveRapMatrix() {
-    if (!user?.tenantId) return;
-    setRapSaving(true);
-    try {
-      const res = await fetch('/api/settings/rapaport', {
+      const res = await fetch('/api/settings/natural-diamond-prices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-tenant-id': user.tenantId },
         body: JSON.stringify({
-          prices: rapPrices.map(({ size_from, size_to, colour, clarity, price_per_ct }) => ({ size_from, size_to, colour, clarity, price_per_ct })),
-          discount_percent: rapDiscount,
-          currency_rate:    rapCurrencyRate,
+          prices: ndPrices.map(({ shape, size_from, size_to, colour_group, clarity, price_per_ct }) => ({ shape, size_from, size_to, colour_group, clarity, price_per_ct })),
+          currency_rate: ndCurrencyRate,
+          natural_margin: ndNaturalMargin,
         }),
       });
       if (!res.ok) throw new Error('Save failed');
-      setRapToast('Matrix saved ✓');
+      setNdToast('Saved ✓');
     } catch {
-      setRapToast('Error saving matrix');
+      setNdToast('Error saving');
     } finally {
-      setRapSaving(false);
-      setTimeout(() => setRapToast(null), 3000);
+      setNdSaving(false);
+      setTimeout(() => setNdToast(null), 3000);
     }
   }
 
-  function updateRapCell(sf: number, st: number, colour: string, clarity: string, val: string) {
+  function updateNdCell(shape: string, sf: number, st: number, colourGroup: string, clarity: string, val: string) {
     const ppc = parseFloat(val) || 0;
-    setRapPrices(prev => {
-      const idx = prev.findIndex(p => p.size_from === sf && p.size_to === st && p.colour === colour && p.clarity === clarity);
+    setNdPrices(prev => {
+      const idx = prev.findIndex(p => p.shape === shape && p.size_from === sf && p.size_to === st && p.colour_group === colourGroup && p.clarity === clarity);
       if (idx >= 0) return prev.map((p, i) => i === idx ? { ...p, price_per_ct: ppc } : p);
-      return [...prev, { size_from: sf, size_to: st, colour, clarity, price_per_ct: ppc }];
+      return [...prev, { shape, size_from: sf, size_to: st, colour_group: colourGroup, clarity, price_per_ct: ppc }];
     });
-  }
-
-  async function doRapLookup() {
-    if (!user?.tenantId || !rapLookupCarat || !rapLookupColour || !rapLookupClarity) return;
-    setRapLookupLoading(true);
-    setRapLookupResult(null);
-    setRapLookupError(null);
-    try {
-      const params = new URLSearchParams({ carat: rapLookupCarat, colour: rapLookupColour, clarity: rapLookupClarity });
-      const res = await fetch(`/api/settings/rapaport/lookup?${params}`, { headers: { 'x-tenant-id': user.tenantId } });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? 'Lookup failed');
-      setRapLookupResult(json as RapLookupResult);
-    } catch (e) {
-      setRapLookupError(e instanceof Error ? e.message : 'Lookup failed');
-    } finally {
-      setRapLookupLoading(false);
-    }
   }
 
   if (!hydrated || !user) return null;
@@ -341,8 +293,12 @@ export default function PricingPage() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: '#F3F4F6', borderRadius: 10, padding: 4, flexWrap: 'wrap' }}>
-        {(['metal', 'fixed', 'margin', 'melee', 'stones', 'rapaport'] as const).map((t) => {
-          const labels = { metal: 'Metal Prices', fixed: 'Fixed Costs', margin: 'Margin Brackets', melee: 'Melee Stones', stones: 'Stones', rapaport: 'Rapaport' };
+        {(['metal', 'fixed', 'margin', 'melee', 'natural_diamonds', 'lab_diamonds', 'gem_stones'] as const).map((t) => {
+          const labels = {
+            metal: 'Metal Prices', fixed: 'Fixed Costs', margin: 'Margin Brackets',
+            melee: 'Melee Stones', natural_diamonds: 'Natural Diamonds',
+            lab_diamonds: 'Lab Diamonds', gem_stones: 'Gem Stones',
+          };
           return (
             <button
               key={t}
@@ -518,15 +474,114 @@ export default function PricingPage() {
               </table>
             </div>
           )}
-          {/* Tab: Stones */}
-          {tab === 'stones' && (
+
+          {/* Tab: Natural Diamonds */}
+          {tab === 'natural_diamonds' && (
             <>
-              {/* Info note */}
-              <div style={{ marginBottom: 16, padding: '10px 14px', background: '#F0F0FF', border: '1px solid #C7C5F8', borderRadius: 8, fontSize: 13, color: '#4338CA' }}>
-                Natural diamond pricing is managed via the <strong>Rapaport</strong> tab.
+              {ndToast && (
+                <div style={{ marginBottom: 16, padding: '10px 16px', borderRadius: 8, background: ndToast.startsWith('Error') ? '#FEF2F2' : '#F0FDF4', border: `1px solid ${ndToast.startsWith('Error') ? '#FECACA' : '#BBF7D0'}`, color: ndToast.startsWith('Error') ? '#DC2626' : '#16A34A', fontSize: 13, fontWeight: 600 }}>
+                  {ndToast}
+                </div>
+              )}
+
+              {/* Settings bar */}
+              <div style={{ ...card, padding: 20, marginBottom: 24 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginTop: 0, marginBottom: 16 }}>Settings</h3>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 20, flexWrap: 'wrap' }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: 6 }}>USD → AUD Rate</label>
+                    <input type="number" min="0" step="0.0001" value={ndCurrencyRate}
+                      onChange={e => setNdCurrencyRate(parseFloat(e.target.value) || 1)}
+                      style={{ ...inputStyle, width: 100 }} />
+                    <p style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4, marginBottom: 0 }}>Default 1.538 (AUD @ 0.65)</p>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: 6 }}>Natural Diamond Margin %</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <input type="number" min="0" max="999" step="0.1" value={ndNaturalMargin}
+                        onChange={e => setNdNaturalMargin(parseFloat(e.target.value) || 0)}
+                        style={{ ...inputStyle, width: 80 }} />
+                      <span style={{ fontSize: 13, color: '#6B7280' }}>%</span>
+                    </div>
+                  </div>
+                  <button onClick={saveNdPricing} disabled={ndSaving}
+                    style={{ background: ndSaving ? '#9CA3AF' : '#635BFF', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 14, fontWeight: 600, cursor: ndSaving ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+                    {ndSaving ? 'Saving…' : 'Save All'}
+                  </button>
+                </div>
               </div>
 
-              {/* Save button */}
+              {/* Shape + band selectors */}
+              <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {Array.from(ND_SHAPES).map(s => (
+                    <button key={s} onClick={() => setNdShape(s)}
+                      style={{ padding: '6px 14px', borderRadius: 8, border: `${ndShape === s ? 2 : 1}px solid ${ndShape === s ? '#635BFF' : '#E8E8F0'}`, background: ndShape === s ? '#EEF2FF' : '#fff', color: ndShape === s ? '#635BFF' : '#374151', fontSize: 13, fontWeight: ndShape === s ? 600 : 400, cursor: 'pointer', textTransform: 'capitalize' }}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
+                <select value={ndBandIdx} onChange={e => setNdBandIdx(parseInt(e.target.value))}
+                  style={{ border: '1px solid #E8E8F0', borderRadius: 8, padding: '7px 10px', fontSize: 13, color: '#1A1A2E', background: '#fff', fontFamily: 'inherit', cursor: 'pointer' }}>
+                  {ND_BANDS.map((b, i) => <option key={b.label} value={i}>{b.label} ct</option>)}
+                </select>
+              </div>
+
+              {/* Price grid */}
+              {!ndLoaded ? (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: '#9CA3AF', fontSize: 14 }}>Loading…</div>
+              ) : (
+                <div style={{ overflowX: 'auto', marginBottom: 24 }}>
+                  <table style={{ borderCollapse: 'collapse', fontSize: 12, minWidth: 600 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ ...thStyle, width: 60, textAlign: 'center' }}>Colour</th>
+                        {ND_CLARITIES.map(cl => (
+                          <th key={cl} style={{ ...thStyle, textAlign: 'center', padding: '8px 6px', whiteSpace: 'nowrap' }}>{cl}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ND_COLOUR_GROUPS.map(cg => {
+                        const band = ND_BANDS[ndBandIdx];
+                        const midpoint = (band.sf + band.st) / 2;
+                        return (
+                          <tr key={cg}>
+                            <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, color: '#635BFF', padding: '6px 8px', fontSize: 12 }}>{cg}</td>
+                            {ND_CLARITIES.map(cl => {
+                              const entry = ndPrices.find(p => p.shape === ndShape && p.size_from === band.sf && p.size_to === band.st && p.colour_group === cg && p.clarity === cl);
+                              const ppc = entry?.price_per_ct ?? 0;
+                              const audHint = ppc > 0 ? ppc * ndCurrencyRate * midpoint : 0;
+                              return (
+                                <td key={cl} style={{ ...tdStyle, padding: '4px 4px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                  <input
+                                    type="number" min="0" step="1"
+                                    value={ppc || ''}
+                                    onChange={e => updateNdCell(ndShape, band.sf, band.st, cg, cl, e.target.value)}
+                                    style={{ width: 60, border: '1px solid #E8E8F0', borderRadius: 5, padding: '3px 4px', fontSize: 11, fontFamily: 'monospace', textAlign: 'right', outline: 'none', color: '#1A1A2E' }}
+                                  />
+                                  {audHint > 0 && (
+                                    <div style={{ fontSize: 9, color: '#9CA3AF', marginTop: 1 }}>${Math.round(audHint).toLocaleString()}</div>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 0, marginBottom: 0 }}>
+                Values are RapNet average prices in USD/ct. Grey hint shows estimated total AUD cost at the carat midpoint. Price IS the buy price — no additional discount applied.
+              </p>
+            </>
+          )}
+
+          {/* Tab: Lab Diamonds */}
+          {tab === 'lab_diamonds' && (
+            <>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 20, gap: 12 }}>
                 {stonesToast && (
                   <span style={{ fontSize: 13, fontWeight: 600, color: stonesToast.startsWith('Error') ? '#EF4444' : '#10B981' }}>{stonesToast}</span>
@@ -536,7 +591,7 @@ export default function PricingPage() {
                 </button>
               </div>
 
-              {/* Section 1: Base prices — natural_diamond hidden (managed via Rapaport tab) */}
+              {/* Base price + margin */}
               <div style={{ marginBottom: 24 }}>
                 <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginBottom: 10, marginTop: 0 }}>Base Price per Carat</h3>
                 <div style={card}>
@@ -547,23 +602,23 @@ export default function PricingPage() {
                       <th style={thStyle}>Margin %</th>
                     </tr></thead>
                     <tbody>
-                      {stoneBasePrices.filter(row => row.stone_type !== 'natural_diamond').map((row, i) => {
-                        const labels2: Record<string, string> = { lab_diamond: 'Lab Diamond', gem_stone: 'Gem Stone' };
+                      {stoneBasePrices.filter(row => row.stone_type === 'lab_diamond').map((row) => {
+                        const allIdx = stoneBasePrices.findIndex(r => r.stone_type === row.stone_type);
                         return (
                           <tr key={row.stone_type}>
-                            <td style={{ ...tdStyle, fontWeight: 500 }}>{labels2[row.stone_type] ?? row.stone_type}</td>
+                            <td style={{ ...tdStyle, fontWeight: 500 }}>Lab Diamond</td>
                             <td style={tdStyle}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                 <span style={{ fontSize: 13, color: '#6B7280' }}>$</span>
                                 <input type="number" min="0" step="0.01" value={row.base_price_per_carat}
-                                  onChange={e => setStoneBasePrices(prev => prev.map((r, j) => j === i ? { ...r, base_price_per_carat: parseFloat(e.target.value) || 0 } : r))}
+                                  onChange={e => setStoneBasePrices(prev => prev.map((r, j) => j === allIdx ? { ...r, base_price_per_carat: parseFloat(e.target.value) || 0 } : r))}
                                   style={inputStyle} />
                               </div>
                             </td>
                             <td style={tdStyle}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                 <input type="number" min="0" max="999" step="0.1" value={row.margin_percent}
-                                  onChange={e => setStoneBasePrices(prev => prev.map((r, j) => j === i ? { ...r, margin_percent: parseFloat(e.target.value) || 0 } : r))}
+                                  onChange={e => setStoneBasePrices(prev => prev.map((r, j) => j === allIdx ? { ...r, margin_percent: parseFloat(e.target.value) || 0 } : r))}
                                   style={inputStyle} />
                                 <span style={{ fontSize: 13, color: '#6B7280' }}>%</span>
                               </div>
@@ -576,9 +631,9 @@ export default function PricingPage() {
                 </div>
               </div>
 
-              {/* Section 2: Colour Adjustments — Lab Diamond only (natural handled by Rapaport) */}
+              {/* Colour Adjustments */}
               <div style={{ marginBottom: 24 }}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginBottom: 10, marginTop: 0 }}>Colour Adjustments — Lab Diamond</h3>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginBottom: 10, marginTop: 0 }}>Colour Adjustments</h3>
                 <div style={card}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead><tr>
@@ -604,10 +659,9 @@ export default function PricingPage() {
                 </div>
               </div>
 
-              {/* Section 3: Clarity Adjustments */}
-              {/* Section 3: Clarity Adjustments — Lab Diamond only (natural handled by Rapaport) */}
+              {/* Clarity Adjustments */}
               <div style={{ marginBottom: 24 }}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginBottom: 10, marginTop: 0 }}>Clarity Adjustments — Lab Diamond</h3>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginBottom: 10, marginTop: 0 }}>Clarity Adjustments</h3>
                 <div style={card}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead><tr>
@@ -633,7 +687,7 @@ export default function PricingPage() {
                 </div>
               </div>
 
-              {/* Section 4: Carat Multipliers */}
+              {/* Carat Multipliers */}
               <div style={{ marginBottom: 24 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                   <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', margin: 0 }}>Carat Weight Multipliers</h3>
@@ -680,163 +734,59 @@ export default function PricingPage() {
                     </tbody>
                   </table>
                 </div>
-                <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 8, marginBottom: 0 }}>Applies to all stone types. Leave "To" blank for no upper limit.</p>
+                <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 8, marginBottom: 0 }}>Leave "To" blank for no upper limit.</p>
               </div>
             </>
           )}
 
-          {/* Tab: Rapaport */}
-          {tab === 'rapaport' && (
+          {/* Tab: Gem Stones */}
+          {tab === 'gem_stones' && (
             <>
-              {/* Toast */}
-              {rapToast && (
-                <div style={{ marginBottom: 16, padding: '10px 16px', borderRadius: 8, background: rapToast.startsWith('Error') ? '#FEF2F2' : '#F0FDF4', border: `1px solid ${rapToast.startsWith('Error') ? '#FECACA' : '#BBF7D0'}`, color: rapToast.startsWith('Error') ? '#DC2626' : '#16A34A', fontSize: 13, fontWeight: 600 }}>
-                  {rapToast}
-                </div>
-              )}
-
-              {/* Section 1: Settings */}
-              <div style={{ ...card, padding: 20, marginBottom: 24 }}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginTop: 0, marginBottom: 16 }}>Rapaport Settings</h3>
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 20, flexWrap: 'wrap' }}>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: 6 }}>Discount off Rap %</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <input type="number" min="0" max="100" step="0.1" value={rapDiscount}
-                        onChange={e => setRapDiscount(parseFloat(e.target.value) || 0)}
-                        style={{ ...inputStyle, width: 80 }} />
-                      <span style={{ fontSize: 13, color: '#6B7280' }}>%</span>
-                    </div>
-                    <p style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4, marginBottom: 0 }}>e.g. 15 = buying 15% below list</p>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: 6 }}>USD → AUD Rate</label>
-                    <input type="number" min="0" step="0.0001" value={rapCurrencyRate}
-                      onChange={e => setRapCurrencyRate(parseFloat(e.target.value) || 1)}
-                      style={{ ...inputStyle, width: 100 }} />
-                    <p style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4, marginBottom: 0 }}>Default 1.538 (AUD @ 0.65)</p>
-                  </div>
-                  <button onClick={saveRapSettings} disabled={rapSettingsSaving}
-                    style={{ background: rapSettingsSaving ? '#9CA3AF' : '#635BFF', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 14, fontWeight: 600, cursor: rapSettingsSaving ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
-                    {rapSettingsSaving ? 'Saving…' : 'Save Settings'}
-                  </button>
-                </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 20, gap: 12 }}>
+                {stonesToast && (
+                  <span style={{ fontSize: 13, fontWeight: 600, color: stonesToast.startsWith('Error') ? '#EF4444' : '#10B981' }}>{stonesToast}</span>
+                )}
+                <button onClick={saveStonePricing} disabled={stonesSaving} style={{ background: stonesSaving ? '#9CA3AF' : '#635BFF', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 14, fontWeight: 600, cursor: stonesSaving ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+                  {stonesSaving ? 'Saving…' : 'Save Changes'}
+                </button>
               </div>
-
-              {/* Section 2: Price matrix */}
               <div style={{ marginBottom: 24 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', margin: 0 }}>Price Matrix</h3>
-                    <select value={rapBandIdx} onChange={e => setRapBandIdx(parseInt(e.target.value))}
-                      style={{ border: '1px solid #E8E8F0', borderRadius: 8, padding: '6px 10px', fontSize: 13, color: '#1A1A2E', background: '#fff', fontFamily: 'inherit', cursor: 'pointer' }}>
-                      {RAP_BANDS.map((b, i) => <option key={b.label} value={i}>{b.label} ct</option>)}
-                    </select>
-                  </div>
-                  <button onClick={saveRapMatrix} disabled={rapSaving}
-                    style={{ background: rapSaving ? '#9CA3AF' : '#635BFF', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: rapSaving ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
-                    {rapSaving ? 'Saving…' : 'Save All Changes'}
-                  </button>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginBottom: 10, marginTop: 0 }}>Base Price per Carat</h3>
+                <div style={card}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead><tr>
+                      <th style={thStyle}>Stone Type</th>
+                      <th style={thStyle}>Base $/ct</th>
+                      <th style={thStyle}>Margin %</th>
+                    </tr></thead>
+                    <tbody>
+                      {stoneBasePrices.filter(row => row.stone_type === 'gem_stone').map((row) => {
+                        const allIdx = stoneBasePrices.findIndex(r => r.stone_type === row.stone_type);
+                        return (
+                          <tr key={row.stone_type}>
+                            <td style={{ ...tdStyle, fontWeight: 500 }}>Gem Stone</td>
+                            <td style={tdStyle}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <span style={{ fontSize: 13, color: '#6B7280' }}>$</span>
+                                <input type="number" min="0" step="0.01" value={row.base_price_per_carat}
+                                  onChange={e => setStoneBasePrices(prev => prev.map((r, j) => j === allIdx ? { ...r, base_price_per_carat: parseFloat(e.target.value) || 0 } : r))}
+                                  style={inputStyle} />
+                              </div>
+                            </td>
+                            <td style={tdStyle}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <input type="number" min="0" max="999" step="0.1" value={row.margin_percent}
+                                  onChange={e => setStoneBasePrices(prev => prev.map((r, j) => j === allIdx ? { ...r, margin_percent: parseFloat(e.target.value) || 0 } : r))}
+                                  style={inputStyle} />
+                                <span style={{ fontSize: 13, color: '#6B7280' }}>%</span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-                {!rapLoaded ? (
-                  <div style={{ textAlign: 'center', padding: '40px 0', color: '#9CA3AF', fontSize: 14 }}>Loading…</div>
-                ) : (
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ borderCollapse: 'collapse', fontSize: 12, minWidth: 700 }}>
-                      <thead>
-                        <tr>
-                          <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>Colour</th>
-                          {RAP_CLARITIES.map(cl => (
-                            <th key={cl} style={{ ...thStyle, textAlign: 'center', padding: '8px 6px', whiteSpace: 'nowrap' }}>{cl}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {RAP_COLOURS.map(colour => {
-                          const band = RAP_BANDS[rapBandIdx];
-                          const midpoint = (band.sf + band.st) / 2;
-                          return (
-                            <tr key={colour}>
-                              <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, color: '#635BFF', padding: '6px 8px' }}>{colour}</td>
-                              {RAP_CLARITIES.map(clarity => {
-                                const entry = rapPrices.find(p => p.size_from === band.sf && p.size_to === band.st && p.colour === colour && p.clarity === clarity);
-                                const ppc = entry?.price_per_ct ?? 0;
-                                const buyAud = ppc > 0 ? ppc * 100 * (1 - rapDiscount / 100) * rapCurrencyRate * midpoint : 0;
-                                return (
-                                  <td key={clarity} style={{ ...tdStyle, padding: '4px 4px', textAlign: 'center', verticalAlign: 'middle' }}>
-                                    <input
-                                      type="number" min="0" step="1"
-                                      value={ppc || ''}
-                                      onChange={e => updateRapCell(band.sf, band.st, colour, clarity, e.target.value)}
-                                      style={{ width: 52, border: '1px solid #E8E8F0', borderRadius: 5, padding: '3px 4px', fontSize: 11, fontFamily: 'monospace', textAlign: 'right', outline: 'none', color: '#1A1A2E' }}
-                                    />
-                                    {buyAud > 0 && (
-                                      <div style={{ fontSize: 9, color: '#9CA3AF', marginTop: 1 }}>${Math.round(buyAud).toLocaleString()}</div>
-                                    )}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-                <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 10, marginBottom: 0 }}>
-                  Values are raw Rap list prices in hundreds of USD/ct. Grey hint shows estimated AUD buy price at the carat midpoint.
-                </p>
-              </div>
-
-              {/* Section 3: Lookup tool */}
-              <div style={{ ...card, padding: 20 }}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginTop: 0, marginBottom: 16 }}>Quick Lookup</h3>
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: 6 }}>Carat Weight</label>
-                    <input type="number" min="0" step="0.01" value={rapLookupCarat}
-                      onChange={e => setRapLookupCarat(e.target.value)}
-                      placeholder="e.g. 1.20"
-                      style={{ ...inputStyle, width: 90 }} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: 6 }}>Colour</label>
-                    <select value={rapLookupColour} onChange={e => setRapLookupColour(e.target.value)}
-                      style={{ border: '1px solid #E8E8F0', borderRadius: 8, padding: '7px 10px', fontSize: 14, color: '#1A1A2E', background: '#fff', fontFamily: 'inherit' }}>
-                      {RAP_COLOURS.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: 6 }}>Clarity</label>
-                    <select value={rapLookupClarity} onChange={e => setRapLookupClarity(e.target.value)}
-                      style={{ border: '1px solid #E8E8F0', borderRadius: 8, padding: '7px 10px', fontSize: 14, color: '#1A1A2E', background: '#fff', fontFamily: 'inherit' }}>
-                      {RAP_CLARITIES.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <button onClick={doRapLookup} disabled={rapLookupLoading || !rapLookupCarat}
-                    style={{ background: rapLookupLoading ? '#9CA3AF' : '#635BFF', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 14, fontWeight: 600, cursor: rapLookupLoading || !rapLookupCarat ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
-                    {rapLookupLoading ? 'Looking up…' : 'Look Up'}
-                  </button>
-                </div>
-                {rapLookupError && (
-                  <div style={{ padding: '10px 14px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, color: '#DC2626', fontSize: 13, marginBottom: 12 }}>
-                    {rapLookupError}
-                  </div>
-                )}
-                {rapLookupResult && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-                    {[
-                      { label: 'Rap List (USD/ct)', value: `$${(rapLookupResult.raw_usd_per_ct).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` },
-                      { label: 'Buy Price AUD', value: `$${rapLookupResult.buy_price_aud.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-                      { label: 'Est. Sell AUD', value: `$${rapLookupResult.sell_price_aud.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-                    ].map(({ label, value }) => (
-                      <div key={label} style={{ background: '#F9FAFB', border: '1px solid #E8E8F0', borderRadius: 10, padding: '14px 16px' }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>{label}</div>
-                        <div style={{ fontSize: 20, fontWeight: 700, color: '#1A1A2E' }}>{value}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             </>
           )}
