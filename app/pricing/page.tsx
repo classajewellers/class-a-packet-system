@@ -60,10 +60,9 @@ export default function PricingPage() {
   const [stonesToast, setStonesToast]           = useState<string | null>(null);
 
   // Natural diamond pricing (RapNet grid)
-  const [ndPrices, setNdPrices]               = useState<NdPrice[]>([]);
-  const [ndCurrencyRate, setNdCurrencyRate]   = useState(1.538);
-  const [ndNaturalMargin, setNdNaturalMargin] = useState(30);
-  const [ndLoaded, setNdLoaded]               = useState(false);
+  const [ndPrices, setNdPrices]             = useState<NdPrice[]>([]);
+  const [ndCurrencyRate, setNdCurrencyRate] = useState(1.538);
+  const [ndLoaded, setNdLoaded]             = useState(false);
   const [ndSaving, setNdSaving]               = useState(false);
   const [ndToast, setNdToast]                 = useState<string | null>(null);
   const [ndShape, setNdShape]                 = useState<string>('round');
@@ -119,7 +118,6 @@ export default function PricingPage() {
       .then(json => {
         setNdPrices(json.prices ?? []);
         setNdCurrencyRate(json.currency_rate ?? 1.538);
-        setNdNaturalMargin(json.natural_margin ?? 30);
         setNdLoaded(true);
       })
       .catch(() => {});
@@ -185,7 +183,6 @@ export default function PricingPage() {
         body: JSON.stringify({
           prices: ndPrices.map(({ shape, size_from, size_to, colour_group, clarity, price_per_ct }) => ({ shape, size_from, size_to, colour_group, clarity, price_per_ct })),
           currency_rate: ndCurrencyRate,
-          natural_margin: ndNaturalMargin,
         }),
       });
       if (!res.ok) throw new Error('Save failed');
@@ -494,15 +491,6 @@ export default function PricingPage() {
                       onChange={e => setNdCurrencyRate(parseFloat(e.target.value) || 1)}
                       style={{ ...inputStyle, width: 100 }} />
                     <p style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4, marginBottom: 0 }}>Default 1.538 (AUD @ 0.65)</p>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: 6 }}>Natural Diamond Margin %</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <input type="number" min="0" max="999" step="0.1" value={ndNaturalMargin}
-                        onChange={e => setNdNaturalMargin(parseFloat(e.target.value) || 0)}
-                        style={{ ...inputStyle, width: 80 }} />
-                      <span style={{ fontSize: 13, color: '#6B7280' }}>%</span>
-                    </div>
                   </div>
                   <button onClick={saveNdPricing} disabled={ndSaving}
                     style={{ background: ndSaving ? '#9CA3AF' : '#635BFF', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 14, fontWeight: 600, cursor: ndSaving ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>

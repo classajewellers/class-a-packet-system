@@ -385,24 +385,37 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const supabase = await createTenantSupabaseClient(tenantId);
 
     // Seed if needed
-    const { data: existing } = await supabase
+    console.log(`[nd-prices] GET for tenant=${tenantId} — checking for existing rows`);
+    const { data: existing, error: existingErr } = await supabase
       .from("natural_diamond_prices")
       .select("id")
       .eq("tenant_id", tenantId)
       .limit(1);
 
+    if (existingErr) {
+      console.error(`[nd-prices] Error checking existing rows:`, existingErr);
+    }
+
+    console.log(`[nd-prices] Existing rows check: found=${existing?.length ?? 0}, needsSeed=${!existing || existing.length === 0}`);
+
     if (!existing || existing.length === 0) {
       const now = new Date().toISOString();
       const seedRows = buildSeedRows(tenantId, now);
+      console.log(`[nd-prices] Seeding ${seedRows.length} rows for tenant=${tenantId}`);
       for (let i = 0; i < seedRows.length; i += 200) {
-        await supabase.from("natural_diamond_prices").upsert(
-          seedRows.slice(i, i + 200),
-          { onConflict: "tenant_id,shape,size_from,size_to,colour_group,clarity" }
-        );
+        const batch = seedRows.slice(i, i + 200);
+        const { error: upsertErr } = await supabase
+          .from("natural_diamond_prices")
+          .upsert(batch, { onConflict: "tenant_id,shape,size_from,size_to,colour_group,clarity" });
+        if (upsertErr) {
+          console.error(`[nd-prices] Upsert error at batch ${i}:`, upsertErr);
+        } else {
+          console.log(`[nd-prices] Inserted batch ${i}–${i + batch.length - 1} (${batch.length} rows)`);
+        }
       }
     }
 
-    const [pricesRes, tenantRes, marginRes] = await Promise.all([
+    const [pricesRes, tenantRes] = await Promise.all([
       supabase
         .from("natural_diamond_prices")
         .select("shape,size_from,size_to,colour_group,clarity,price_per_ct")
@@ -413,18 +426,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         .select("stone_currency_rate")
         .eq("id", tenantId)
         .maybeSingle(),
-      supabase
-        .from("pricing_margin_config")
-        .select("margin_percent")
-        .eq("tenant_id", tenantId)
-        .eq("category", "stone_natural")
-        .maybeSingle(),
     ]);
 
+    console.log(`[nd-prices] Returning ${pricesRes.data?.length ?? 0} rows`);
+
     return NextResponse.json({
-      prices:          pricesRes.data   ?? [],
-      currency_rate:   tenantRes.data?.stone_currency_rate ?? 1.538,
-      natural_margin:  marginRes.data?.margin_percent ?? 30,
+      prices:        pricesRes.data ?? [],
+      currency_rate: tenantRes.data?.stone_currency_rate ?? 1.538,
     });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
