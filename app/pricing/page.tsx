@@ -150,7 +150,6 @@ export default function PricingPage() {
   async function saveStonePricing() {
     if (!user?.tenantId) return;
     setStonesSaving(true);
-    const CATEGORY_MAP: Record<string, string> = { lab_diamond: 'stone_lab', natural_diamond: 'stone_natural', gem_stone: 'stone_gem' };
     try {
       const res = await fetch('/api/settings/stone-pricing', {
         method: 'POST',
@@ -160,7 +159,6 @@ export default function PricingPage() {
           colour_adjustments: stoneColours,
           clarity_adjustments: stoneClarities,
           carat_multipliers: stoneCaratMults.map(({ carat_from, carat_to, multiplier, sort_order }) => ({ carat_from, carat_to, multiplier, sort_order })),
-          margins: stoneBasePrices.map(b => ({ category: CATEGORY_MAP[b.stone_type] ?? b.stone_type, margin_percent: b.margin_percent })),
         }),
       });
       if (!res.ok) throw new Error('Save failed');
@@ -587,7 +585,6 @@ export default function PricingPage() {
                     <thead><tr>
                       <th style={thStyle}>Stone Type</th>
                       <th style={thStyle}>Base $/ct</th>
-                      <th style={thStyle}>Margin %</th>
                     </tr></thead>
                     <tbody>
                       {stoneBasePrices.filter(row => row.stone_type === 'lab_diamond').map((row) => {
@@ -601,14 +598,6 @@ export default function PricingPage() {
                                 <input type="number" min="0" step="0.01" value={row.base_price_per_carat}
                                   onChange={e => setStoneBasePrices(prev => prev.map((r, j) => j === allIdx ? { ...r, base_price_per_carat: parseFloat(e.target.value) || 0 } : r))}
                                   style={inputStyle} />
-                              </div>
-                            </td>
-                            <td style={tdStyle}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                <input type="number" min="0" max="999" step="0.1" value={row.margin_percent}
-                                  onChange={e => setStoneBasePrices(prev => prev.map((r, j) => j === allIdx ? { ...r, margin_percent: parseFloat(e.target.value) || 0 } : r))}
-                                  style={inputStyle} />
-                                <span style={{ fontSize: 13, color: '#6B7280' }}>%</span>
                               </div>
                             </td>
                           </tr>
@@ -745,7 +734,6 @@ export default function PricingPage() {
                     <thead><tr>
                       <th style={thStyle}>Stone Type</th>
                       <th style={thStyle}>Base $/ct</th>
-                      <th style={thStyle}>Margin %</th>
                     </tr></thead>
                     <tbody>
                       {stoneBasePrices.filter(row => row.stone_type === 'gem_stone').map((row) => {
@@ -759,14 +747,6 @@ export default function PricingPage() {
                                 <input type="number" min="0" step="0.01" value={row.base_price_per_carat}
                                   onChange={e => setStoneBasePrices(prev => prev.map((r, j) => j === allIdx ? { ...r, base_price_per_carat: parseFloat(e.target.value) || 0 } : r))}
                                   style={inputStyle} />
-                              </div>
-                            </td>
-                            <td style={tdStyle}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                <input type="number" min="0" max="999" step="0.1" value={row.margin_percent}
-                                  onChange={e => setStoneBasePrices(prev => prev.map((r, j) => j === allIdx ? { ...r, margin_percent: parseFloat(e.target.value) || 0 } : r))}
-                                  style={inputStyle} />
-                                <span style={{ fontSize: 13, color: '#6B7280' }}>%</span>
                               </div>
                             </td>
                           </tr>
