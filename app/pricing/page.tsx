@@ -649,7 +649,8 @@ export default function PricingPage() {
 
               {/* Base price + margin */}
               <div style={{ marginBottom: 24 }}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginBottom: 10, marginTop: 0 }}>Base Price per Carat</h3>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginBottom: 6, marginTop: 0 }}>Reference Price (D/VS1 at 1ct)</h3>
+                <p style={{ fontSize: 12, color: '#6B7280', marginTop: 0, marginBottom: 10 }}>Set your cost price for a D/VS1 lab grown diamond at 1 carat. Colour and clarity adjustments apply as percentages from this base. Carat multipliers scale the price up or down by size.</p>
                 <div style={card}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead><tr>
@@ -737,7 +738,7 @@ export default function PricingPage() {
               {/* Carat Multipliers */}
               <div style={{ marginBottom: 24 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', margin: 0 }}>Carat Weight Multipliers</h3>
+                  <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', margin: 0 }}>Size Multipliers (how price per carat scales with size)</h3>
                   <button
                     onClick={() => setStoneCaratMults(prev => [...prev, { stone_type: 'lab_diamond', carat_from: 0, carat_to: null, multiplier: 1, sort_order: prev.length }])}
                     style={{ background: '#EEF2FF', color: '#635BFF', border: 'none', borderRadius: 6, padding: '5px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
@@ -781,7 +782,7 @@ export default function PricingPage() {
                     </tbody>
                   </table>
                 </div>
-                <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 8, marginBottom: 0 }}>Leave "To" blank for no upper limit.</p>
+                <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 8, marginBottom: 0 }}>1.00 = same as your 1ct reference price. Values above 1.00 mean larger stones cost more per carat. Leave "To" blank for no upper limit.</p>
               </div>
             </>
           )}

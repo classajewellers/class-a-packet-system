@@ -27,13 +27,14 @@ const CLARITY_GRADES = [
 ];
 
 const CARAT_MULTIPLIERS: Array<{ carat_from: number; carat_to: number | null; multiplier: number; sort_order: number }> = [
-  { carat_from: 0,    carat_to: 0.99, multiplier: 0.75, sort_order: 0 },
-  { carat_from: 1,    carat_to: 1.49, multiplier: 0.40, sort_order: 1 },
-  { carat_from: 1.5,  carat_to: 1.99, multiplier: 0.45, sort_order: 2 },
-  { carat_from: 2,    carat_to: 2.99, multiplier: 0.70, sort_order: 3 },
-  { carat_from: 3,    carat_to: 3.99, multiplier: 1.00, sort_order: 4 },
-  { carat_from: 4,    carat_to: 4.99, multiplier: 1.55, sort_order: 5 },
-  { carat_from: 5,    carat_to: null, multiplier: 1.65, sort_order: 6 },
+  { carat_from: 0,    carat_to: 0.49, multiplier: 0.50, sort_order: 0 },
+  { carat_from: 0.5,  carat_to: 0.99, multiplier: 0.75, sort_order: 1 },
+  { carat_from: 1,    carat_to: 1.49, multiplier: 1.00, sort_order: 2 },
+  { carat_from: 1.5,  carat_to: 1.99, multiplier: 1.32, sort_order: 3 },
+  { carat_from: 2,    carat_to: 2.99, multiplier: 1.96, sort_order: 4 },
+  { carat_from: 3,    carat_to: 3.99, multiplier: 2.80, sort_order: 5 },
+  { carat_from: 4,    carat_to: 4.99, multiplier: 3.60, sort_order: 6 },
+  { carat_from: 5,    carat_to: 99,   multiplier: 4.50, sort_order: 7 },
 ];
 
 const DIAMOND_TYPES = ["lab_diamond", "natural_diamond"] as const;
@@ -42,7 +43,7 @@ const ALL_STONE_TYPES = ["lab_diamond", "natural_diamond", "gem_stone"] as const
 async function seedDefaults(supabase: Awaited<ReturnType<typeof createTenantSupabaseClient>>, tenantId: string) {
   // Base prices
   await supabase.from("stone_base_prices").upsert([
-    { tenant_id: tenantId, stone_type: "lab_diamond",     base_price_per_carat: 300, updated_at: new Date().toISOString() },
+    { tenant_id: tenantId, stone_type: "lab_diamond",     base_price_per_carat: 280, updated_at: new Date().toISOString() },
     { tenant_id: tenantId, stone_type: "natural_diamond", base_price_per_carat: 800, updated_at: new Date().toISOString() },
     { tenant_id: tenantId, stone_type: "gem_stone",       base_price_per_carat: 200, updated_at: new Date().toISOString() },
   ], { onConflict: "tenant_id,stone_type" });
