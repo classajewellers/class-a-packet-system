@@ -18,7 +18,6 @@ import CharmNecklaceBuilder, { type CharmLineItem } from "@/components/CharmNeck
 interface MetalRate { id: string; metal_type: string; price_per_gram: number; }
 interface FixedCost { id: string; key: string; label: string; amount: number; }
 interface MarginBracket { id: string; cost_min: number; cost_max: number | null; multiplier: number; stone_type?: string | null; }
-interface MarginConfig  { id: string; category: string; margin_percent: number; hourly_rate: number | null; }
 interface StonePricingData {
   base_prices:         Array<{ stone_type: string; base_price_per_carat: number }>;
   colour_adjustments:  Array<{ stone_type: string; colour_grade: string;  adjustment_percent: number; sort_order: number }>;
@@ -186,15 +185,6 @@ function calcStoneBaseCost(stone: StoneEntry, sp: StonePricingData | null, ndDat
   return base.base_price_per_carat * (1 + colourAdj / 100) * (1 + clarityAdj / 100) * caratMult * ct;
 }
 
-function getMetalCategory(metalType: string): string {
-  const t = metalType.toLowerCase();
-  if (t.includes("9ct"))      return "gold_9ct";
-  if (t.includes("18ct"))     return "gold_18ct";
-  if (t.includes("silver"))   return "silver";
-  if (t.includes("platinum")) return "platinum";
-  return "gold_9ct";
-}
-
 interface ItemPricing {
   metalCost: number; mainStoneCost: number; meleeCost: number; mainStoneSettingCost: number;
   mainStoneSettingRate: number; addonsCost: number; totalCost: number;
@@ -213,48 +203,29 @@ function computeItemPricing(
   fixedCosts: FixedCost[],
   marginBrackets: MarginBracket[],
   isManager: boolean,
-  marginConfig: MarginConfig[] = [],
   stonePricing: StonePricingData | null = null,
   ndData: NdData | null = null
 ): ItemPricing {
   let metalCost = 0;
   for (const m of item.metals) {
     const rate = metalRates.find(r => r.metal_type === m.type);
-    if (rate) {
-      const rawCost = (parseFloat(m.weight) || 0) * Number(rate.price_per_gram);
-      if (marginConfig.length > 0) {
-        const cat = getMetalCategory(m.type);
-        const marginPct = marginConfig.find(c => c.category === cat)?.margin_percent ?? 45;
-        metalCost += rawCost * (1 + marginPct / 100);
-      } else {
-        metalCost += rawCost;
-      }
-    }
+    if (rate) metalCost += (parseFloat(m.weight) || 0) * Number(rate.price_per_gram);
   }
 
   const mainStoneSettingRate = Number(fixedCosts.find(fc => fc.key === "main_stone_setting")?.amount ?? 80);
   const stoneCount = item.includeMainStone && item.stoneOptions[0] ? (item.stoneOptions[0].stones?.length ?? 0) : 0;
   const mainStoneSettingCost = item.includeMainStone ? stoneCount * mainStoneSettingRate : 0;
 
-  const stoneCatMarginPct = marginConfig.find(c => c.category === "gold_9ct")?.margin_percent ?? 45;
   const mainStoneCost = item.includeMainStone && isManager && item.stoneOptions[0]
     ? (item.stoneOptions[0].stones ?? []).reduce((s, st) => {
         const manualCost = st.cost.trim() !== "" ? parseFloat(st.cost) : NaN;
         const baseCost = !isNaN(manualCost) ? manualCost : calcStoneBaseCost(st, stonePricing, ndData);
-        if (marginConfig.length > 0) {
-          const stoneMarginCat = st.origin === "Lab Grown" ? "stone_lab" : "stone_natural";
-          const stoneMarginPct = marginConfig.find(c => c.category === stoneMarginCat)?.margin_percent ?? stoneCatMarginPct;
-          return s + baseCost * (1 + stoneMarginPct / 100);
-        }
         return s + baseCost;
       }, 0)
     : 0;
 
   const meleeCost = isManager
-    ? item.meleeRows.reduce((s, r) => {
-        const cost = (parseFloat(r.individualCost) || 0) * (parseInt(r.qty) || 0);
-        return s + (marginConfig.length > 0 ? cost * (1 + stoneCatMarginPct / 100) : cost);
-      }, 0)
+    ? item.meleeRows.reduce((s, r) => s + (parseFloat(r.individualCost) || 0) * (parseInt(r.qty) || 0), 0)
     : 0;
 
   let addonsCost = mainStoneSettingCost;
@@ -262,12 +233,7 @@ function computeItemPricing(
   if (mainStoneSettingCost > 0) costMap.mainStoneSetting = mainStoneSettingCost;
 
   for (const fc of fixedCosts) {
-    if (fc.key === "labour") {
-      const labourAmt = marginConfig.length > 0
-        ? (marginConfig.find(c => c.category === "labour_standard")?.hourly_rate ?? Number(fc.amount))
-        : Number(fc.amount);
-      addonsCost += labourAmt; costMap.labour = labourAmt;
-    }
+    if (fc.key === "labour") { addonsCost += Number(fc.amount); costMap.labour = Number(fc.amount); }
   }
 
   if (item.smallSettings) {
@@ -302,19 +268,10 @@ function computeItemPricing(
     : marginBrackets;
   const safeBrackets = activeBrackets.length > 0 ? activeBrackets : marginBrackets;
 
-  let suggestedRetail: number;
-  let rawPrice: number;
-  let breakdown: BlendedBreakdownLine[];
-  if (marginConfig.length > 0) {
-    suggestedRetail = totalCost > 0 ? Math.ceil(totalCost / 5) * 5 : 0;
-    rawPrice = totalCost;
-    breakdown = [];
-  } else {
-    const blended = calculateBlendedRetailFromBrackets(totalCost, safeBrackets);
-    suggestedRetail = blended.retail;
-    rawPrice = blended.unrounded;
-    breakdown = blended.breakdown;
-  }
+  const blended = calculateBlendedRetailFromBrackets(totalCost, safeBrackets);
+  const suggestedRetail = blended.retail;
+  const rawPrice = blended.unrounded;
+  const breakdown = blended.breakdown;
 
   let quotedPrice: number;
   if (item.marginMultiplierOverride && parseFloat(item.marginMultiplierOverride) > 0) {
@@ -896,7 +853,6 @@ function QuoteBuilderPageInner() {
   const [metalRates, setMetalRates] = useState<MetalRate[]>([]);
   const [fixedCosts, setFixedCosts] = useState<FixedCost[]>([]);
   const [marginBrackets, setMarginBrackets] = useState<MarginBracket[]>([]);
-  const [marginConfig, setMarginConfig] = useState<MarginConfig[]>([]);
   const [stonePricing, setStonePricing] = useState<StonePricingData | null>(null);
   const [ndData, setNdData] = useState<NdData | null>(null);
 
@@ -949,10 +905,6 @@ function QuoteBuilderPageInner() {
         setFixedCosts(json.fixedCosts ?? []);
         setMarginBrackets(json.marginBrackets ?? []);
       })
-      .catch(() => {});
-    fetch("/api/settings/pricing-margins", { headers })
-      .then(r => r.json())
-      .then((json: { rows?: MarginConfig[] }) => setMarginConfig(json.rows ?? []))
       .catch(() => {});
     fetch("/api/settings/stone-pricing", { headers })
       .then(r => r.json())
@@ -1015,8 +967,8 @@ function QuoteBuilderPageInner() {
   // ── Pricing ────────────────────────────────────────────────────────────────
 
   const allPricings = useMemo(() =>
-    items.map(item => computeItemPricing(item, metalRates, fixedCosts, marginBrackets, isManager, marginConfig, stonePricing, ndData)),
-    [items, metalRates, fixedCosts, marginBrackets, isManager, marginConfig, stonePricing, ndData]
+    items.map(item => computeItemPricing(item, metalRates, fixedCosts, marginBrackets, isManager, stonePricing, ndData)),
+    [items, metalRates, fixedCosts, marginBrackets, isManager, stonePricing, ndData]
   );
 
   const charmTotal = useMemo(() => charmItems.reduce((sum, c) => sum + Number(c.retail_price), 0), [charmItems]);
