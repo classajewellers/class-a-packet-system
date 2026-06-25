@@ -162,6 +162,8 @@ function calcNdCost(stone: StoneEntry, ndData: NdData): number {
 }
 
 function calcStoneBaseCost(stone: StoneEntry, sp: StonePricingData | null, ndData: NdData | null = null): number {
+  console.log("[calcStoneBaseCost] sp=", sp ? `loaded (${sp.base_prices?.length} base, ${sp.carat_multipliers?.length} mult)` : "NULL");
+  console.log("[calcStoneBaseCost] stone=", { origin: stone.origin, colour: stone.colour, clarity: stone.clarity, caratWeight: stone.caratWeight });
   if (!sp) return 0;
   const ct = parseFloat(stone.caratWeight) || 0;
   if (ct <= 0 || !stone.colour || !stone.clarity) return 0;
@@ -174,6 +176,7 @@ function calcStoneBaseCost(stone: StoneEntry, sp: StonePricingData | null, ndDat
 
   const stoneType = stone.origin === "Lab Grown" ? "lab_diamond" : "natural_diamond";
   const base = sp.base_prices.find(b => b.stone_type === stoneType);
+  console.log("[calcStoneBaseCost] stoneType=", stoneType, "base=", base ?? "NOT FOUND");
   if (!base || base.base_price_per_carat <= 0) return 0;
   const colourAdj  = sp.colour_adjustments.find(c => c.stone_type === stoneType && c.colour_grade === stone.colour)?.adjustment_percent ?? 0;
   const clarityAdj = sp.clarity_adjustments.find(c => c.stone_type === stoneType && c.clarity_grade === stone.clarity)?.adjustment_percent ?? 0;
@@ -182,7 +185,10 @@ function calcStoneBaseCost(stone: StoneEntry, sp: StonePricingData | null, ndDat
     .sort((a, b) => a.carat_from - b.carat_from)
     .find(m => ct >= m.carat_from && (m.carat_to == null || ct <= m.carat_to));
   const caratMult = multRow?.multiplier ?? 1;
-  return base.base_price_per_carat * (1 + colourAdj / 100) * (1 + clarityAdj / 100) * caratMult * ct;
+  console.log("[calcStoneBaseCost] colourAdj=", colourAdj, "clarityAdj=", clarityAdj, "multRow=", multRow ?? "NOT FOUND (using 1)", "caratMult=", caratMult);
+  const result = base.base_price_per_carat * (1 + colourAdj / 100) * (1 + clarityAdj / 100) * caratMult * ct;
+  console.log("[calcStoneBaseCost] result=", result);
+  return result;
 }
 
 interface ItemPricing {
@@ -232,6 +238,7 @@ function computeItemPricing(
   const costMap: Record<string, number> = {};
   if (mainStoneSettingCost > 0) costMap.mainStoneSetting = mainStoneSettingCost;
 
+  console.log("[labour] fixedCosts keys=", fixedCosts.map(fc => fc.key));
   for (const fc of fixedCosts) {
     if (fc.key === "labour") { addonsCost += Number(fc.amount); costMap.labour = Number(fc.amount); }
   }
@@ -908,7 +915,10 @@ function QuoteBuilderPageInner() {
       .catch(() => {});
     fetch("/api/settings/stone-pricing", { headers })
       .then(r => r.json())
-      .then((json: StonePricingData) => setStonePricing(json))
+      .then((json: StonePricingData) => {
+        console.log("[stone-pricing] loaded: base_prices=", json.base_prices?.length, "colour_adjustments=", json.colour_adjustments?.length, "clarity_adjustments=", json.clarity_adjustments?.length, "carat_multipliers=", json.carat_multipliers?.length);
+        setStonePricing(json);
+      })
       .catch(() => {});
     fetch("/api/settings/natural-diamond-prices", { headers })
       .then(r => r.json())
