@@ -984,7 +984,7 @@ function QuoteBuilderPageInner() {
       colour: stone.color,
       clarity: stone.clarity,
       origin: stone.labgrown ? "Lab Grown" : "Natural",
-      cost: stone.price > 0 ? String(Math.round(stone.price / 100)) : "",
+      cost: "",
       nivodaId: stone.id,
     };
     const targetId    = nivodaTargetItemId.current;
