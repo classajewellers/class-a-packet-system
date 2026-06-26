@@ -8,10 +8,20 @@ import { Packet, Quote } from "@/lib/types";
 import { packetTypeLabel, formatDateAU, formatCurrency } from "@/lib/formatters";
 import PacketDetailDrawer from "@/components/PacketDetailDrawer";
 import { useUser } from "@/context/UserContext";
+import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "orders" | "quotes" | "timeline" | "notes" | "partners" | "wishlist" | "appointments" | "followup";
+type Tab = "orders" | "quotes" | "timeline" | "notes" | "partners" | "wishlist" | "appointments" | "followup" | "sms";
+
+interface SmsMessage {
+  id: string;
+  direction: "in" | "out";
+  body: string;
+  sent_at: string;
+  staff_id: string | null;
+  read_at: string | null;
+}
 
 const TYPE_BADGE: Record<string, React.CSSProperties> = {
   repair:        { background: '#FEF3C7', color: '#92400E' },
@@ -130,6 +140,7 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
   const [notes, setNotes] = useState("");
   const [notesSaving, setNotesSaving] = useState(false);
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeTabRef = useRef<Tab>("orders");
 
   // Maiden name
   const [maidenName, setMaidenName] = useState("");
@@ -155,6 +166,14 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
   const [newApptTime, setNewApptTime] = useState("");
   const [newApptNotes, setNewApptNotes] = useState("");
   const [addingAppt, setAddingAppt] = useState(false);
+
+  // SMS
+  const [smsMessages, setSmsMessages] = useState<SmsMessage[]>([]);
+  const [smsLoaded, setSmsLoaded] = useState(false);
+  const [smsUnread, setSmsUnread] = useState(0);
+  const [smsCompose, setSmsCompose] = useState("");
+  const [smsSending, setSmsSending] = useState(false);
+  const smsEndRef = useRef<HTMLDivElement | null>(null);
 
   // Follow-up
   const [followupNotes, setFollowupNotes] = useState("");
@@ -195,6 +214,67 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
       .then(r => r.json())
       .then(json => { setAppointments(json.appointments ?? []); setAppointmentsLoaded(true); });
   }, [activeTab, appointmentsLoaded, email, user?.tenantId]);
+
+  // ── Keep activeTabRef in sync ─────────────────────────────────────────────
+  useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
+
+  // ── Load SMS on tab activate ──────────────────────────────────────────────
+  useEffect(() => {
+    if (activeTab !== "sms" || smsLoaded || !customer?.customer_id || !user?.tenantId) return;
+    fetch(`/api/sms/messages?customer_id=${customer.customer_id}`, {
+      headers: { 'x-tenant-id': user.tenantId }
+    })
+      .then(r => r.json())
+      .then(json => {
+        const msgs: SmsMessage[] = json.messages ?? [];
+        setSmsMessages(msgs);
+        setSmsUnread(msgs.filter(m => m.direction === 'in' && !m.read_at).length);
+        setSmsLoaded(true);
+      });
+  }, [activeTab, smsLoaded, customer?.customer_id, user?.tenantId]);
+
+  // ── Mark SMS as read when tab opens ──────────────────────────────────────
+  useEffect(() => {
+    if (activeTab !== "sms" || !smsLoaded || !customer?.customer_id || !user?.tenantId) return;
+    fetch("/api/sms/read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", 'x-tenant-id': user.tenantId },
+      body: JSON.stringify({ customer_id: customer.customer_id }),
+    }).then(() => setSmsUnread(0)).catch(() => {});
+  }, [activeTab, smsLoaded, customer?.customer_id, user?.tenantId]);
+
+  // ── SMS realtime subscription ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!customer?.customer_id || !user?.tenantId) return;
+    const sb = createBrowserSupabaseClient();
+    const channel = sb.channel(`sms:${customer.customer_id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "sms_messages", filter: `customer_id=eq.${customer.customer_id}` },
+        (payload: { new: Record<string, unknown> }) => {
+          const msg = payload.new as unknown as SmsMessage;
+          if (msg.direction === "in") {
+            setSmsMessages(prev => [...prev, msg]);
+            if (activeTabRef.current === "sms") {
+              fetch("/api/sms/read", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", 'x-tenant-id': user.tenantId ?? '' },
+                body: JSON.stringify({ customer_id: customer.customer_id }),
+              }).catch(() => {});
+            } else {
+              setSmsUnread(prev => prev + 1);
+            }
+          }
+        }
+      )
+      .subscribe();
+    return () => { sb.removeChannel(channel); };
+  }, [customer?.customer_id, user?.tenantId]);
+
+  // ── Auto-scroll SMS thread ────────────────────────────────────────────────
+  useEffect(() => {
+    if (smsLoaded) smsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [smsMessages, smsLoaded]);
 
   // ── Partner search (debounced) ────────────────────────────────────────────
   useEffect(() => {
@@ -324,6 +404,31 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
       const json = await res.json();
       if (json.email) setGeneratedEmail(json.email);
     } catch { /* noop */ } finally { setGeneratingEmail(false); }
+  }
+
+  async function sendSms() {
+    const trimmed = smsCompose.trim();
+    if (!trimmed || !customer?.customer_id || !user?.tenantId || smsSending) return;
+    setSmsSending(true);
+    try {
+      const res = await fetch("/api/sms/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user.tenantId },
+        body: JSON.stringify({ customer_id: customer.customer_id, body: trimmed }),
+      });
+      const json = await res.json() as { success: boolean; message_id?: string };
+      if (json.success) {
+        setSmsMessages(prev => [...prev, {
+          id: json.message_id ?? String(Date.now()),
+          direction: "out",
+          body: trimmed,
+          sent_at: new Date().toISOString(),
+          staff_id: null,
+          read_at: null,
+        }]);
+        setSmsCompose("");
+      }
+    } catch { /* noop */ } finally { setSmsSending(false); }
   }
 
   function handlePacketUpdate(updated: Packet) {
@@ -479,6 +584,7 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
             <TabButton label="Wishlist"     active={activeTab === "wishlist"}     onClick={() => setActiveTab("wishlist")} />
             <TabButton label="Appointments" active={activeTab === "appointments"} onClick={() => setActiveTab("appointments")} count={appointments.filter(a => a.status === "upcoming").length || undefined} />
             <TabButton label="Follow-up"    active={activeTab === "followup"}     onClick={() => setActiveTab("followup")} />
+            <TabButton label="SMS"         active={activeTab === "sms"}         onClick={() => setActiveTab("sms")}         count={smsUnread || undefined} />
           </div>
 
           {/* ── Orders tab ─────────────────────────────────────────────────── */}
@@ -767,6 +873,71 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
                   </pre>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ── SMS tab ──────────────────────────────────────────────────── */}
+          {activeTab === "sms" && (
+            <div style={{ display: 'flex', flexDirection: 'column', height: 500 }}>
+              {/* Message thread */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {!smsLoaded && <p style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 13, paddingTop: 40 }}>Loading…</p>}
+                {smsLoaded && smsMessages.length === 0 && (
+                  <p style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 13, paddingTop: 40 }}>No messages yet. Send one below.</p>
+                )}
+                {smsMessages.map(msg => (
+                  <div key={msg.id} style={{ display: 'flex', justifyContent: msg.direction === 'out' ? 'flex-end' : 'flex-start' }}>
+                    <div style={{
+                      maxWidth: '70%',
+                      padding: '10px 14px',
+                      borderRadius: msg.direction === 'out' ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
+                      background: msg.direction === 'out' ? '#635BFF' : '#F3F4F6',
+                      color: msg.direction === 'out' ? '#fff' : '#1A1A2E',
+                      fontSize: 14,
+                    }}>
+                      <p style={{ margin: 0, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{msg.body}</p>
+                      <p style={{ margin: '4px 0 0', fontSize: 11, opacity: 0.65, textAlign: 'right' }}>
+                        {new Date(msg.sent_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                <div ref={smsEndRef} />
+              </div>
+
+              {/* Template pills */}
+              <div style={{ padding: '10px 20px 6px', borderTop: '1px solid #E8E8F0', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {["Your item is ready for pickup", "Following up on your recent quote", "Your appointment is confirmed"].map(t => (
+                  <button key={t} onClick={() => setSmsCompose(t)} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 999, border: '1px solid #E8E8F0', background: '#F9FAFB', color: '#635BFF', cursor: 'pointer', fontWeight: 500 }}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+
+              {/* Compose */}
+              <div style={{ padding: '8px 16px 16px', display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                {!customer?.phone ? (
+                  <p style={{ fontSize: 13, color: '#EF4444', margin: 0 }}>No phone number on file for this customer.</p>
+                ) : (
+                  <>
+                    <textarea
+                      rows={2}
+                      value={smsCompose}
+                      onChange={e => setSmsCompose(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendSms(); } }}
+                      placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
+                      style={{ ...TEXTAREA, flex: 1, resize: 'none', padding: '10px 12px', fontSize: 13 }}
+                    />
+                    <button
+                      onClick={() => void sendSms()}
+                      disabled={!smsCompose.trim() || smsSending}
+                      style={{ ...BTN, flexShrink: 0, opacity: (!smsCompose.trim() || smsSending) ? 0.5 : 1, padding: '10px 18px' }}
+                    >
+                      {smsSending ? "Sending…" : "Send"}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           )}
 
