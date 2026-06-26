@@ -8,6 +8,7 @@ import Link from "next/link";
 import { formatDateAU, formatCurrency } from "@/lib/formatters";
 import { useUser } from "@/context/UserContext";
 import { hasPermission } from "@/lib/userTypes";
+import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -84,6 +85,9 @@ export default function CustomersPage() {
   const [tiers, setTiers] = useState<VipTier[]>([]);
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
 
+  // SMS unread counts — keyed by customer email
+  const [smsUnreadMap, setSmsUnreadMap] = useState<Record<string, number>>({});
+
   // Appointments tab state
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [appointmentsLoaded, setAppointmentsLoaded] = useState(false);
@@ -119,6 +123,36 @@ export default function CustomersPage() {
     const timer = setTimeout(() => fetchCustomers(search), 300);
     return () => clearTimeout(timer);
   }, [search, fetchCustomers]);
+
+  // ── Fetch SMS unread counts once tenant is known ──────────────────────────
+  useEffect(() => {
+    if (!tenantId) return;
+    fetch("/api/sms/unread", { headers: { "x-tenant-id": tenantId } })
+      .then(r => r.json())
+      .then(json => setSmsUnreadMap(json.unread ?? {}))
+      .catch(() => {});
+  }, [tenantId]);
+
+  // ── Realtime: refresh unread counts on any new inbound SMS ────────────────
+  useEffect(() => {
+    if (!tenantId) return;
+    const sb = createBrowserSupabaseClient();
+    const channel = sb.channel(`sms-list:${tenantId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "sms_messages", filter: `tenant_id=eq.${tenantId}` },
+        (payload: { new: Record<string, unknown> }) => {
+          if (payload.new.direction === "in") {
+            fetch("/api/sms/unread", { headers: { "x-tenant-id": tenantId } })
+              .then(r => r.json())
+              .then(json => setSmsUnreadMap(json.unread ?? {}))
+              .catch(() => {});
+          }
+        }
+      )
+      .subscribe();
+    return () => { sb.removeChannel(channel); };
+  }, [tenantId]);
 
   // Load appointments when tab activated
   useEffect(() => {
@@ -157,7 +191,14 @@ export default function CustomersPage() {
 
       {/* ── Page tab bar ────────────────────────────────────────────────────── */}
       <div style={{ display: "flex", gap: 4, background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, padding: 4, alignSelf: "flex-start", width: "fit-content" }}>
-        <button style={TAB_BTN(pageTab === "customers")} onClick={() => setPageTab("customers")}>Customers</button>
+        <button style={TAB_BTN(pageTab === "customers")} onClick={() => setPageTab("customers")}>
+          Customers
+          {Object.values(smsUnreadMap).reduce((s, n) => s + n, 0) > 0 && (
+            <span style={{ marginLeft: 6, fontSize: 11, background: "#EF4444", color: "#fff", borderRadius: 999, padding: "1px 6px", fontWeight: 700 }}>
+              {Object.values(smsUnreadMap).reduce((s, n) => s + n, 0)} SMS
+            </span>
+          )}
+        </button>
         <button style={TAB_BTN(pageTab === "appointments")} onClick={() => setPageTab("appointments")}>
           Appointments
           {appointments.filter(a => a.status === "upcoming").length > 0 && (
@@ -270,6 +311,11 @@ export default function CustomersPage() {
                       <div style={{ color: "#9CA3AF", fontSize: 12, marginTop: 2 }}>Last visit: {formatDateAU(c.last_visit?.split("T")[0]) || "—"}</div>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
+                      {(smsUnreadMap[c.email] ?? 0) > 0 && (
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 999, background: "#EF4444", color: "#fff", whiteSpace: "nowrap" }}>
+                          {smsUnreadMap[c.email]} SMS
+                        </span>
+                      )}
                       {c.total_spend > 0 && <span style={{ fontWeight: 600, color: "#1A1A2E", fontSize: 14 }}>{formatCurrency(c.total_spend)}</span>}
                       <svg className="w-4 h-4" fill="none" stroke="#D1D5DB" strokeWidth={2} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
@@ -338,10 +384,17 @@ export default function CustomersPage() {
                         </td>
                         <td style={{ padding: "12px 20px", color: "#6B7280" }}>{formatDateAU(c.last_visit?.split("T")[0]) || "—"}</td>
                         <td style={{ padding: "12px 20px", fontWeight: 600, color: "#1A1A2E" }}>{c.total_spend > 0 ? formatCurrency(c.total_spend) : "—"}</td>
-                        <td style={{ padding: "12px 20px", color: "#D1D5DB" }}>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                          </svg>
+                        <td style={{ padding: "12px 20px" }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
+                            {(smsUnreadMap[c.email] ?? 0) > 0 && (
+                              <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 999, background: "#EF4444", color: "#fff", whiteSpace: "nowrap" }}>
+                                {smsUnreadMap[c.email]} SMS
+                              </span>
+                            )}
+                            <svg className="w-4 h-4" fill="none" stroke="#D1D5DB" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                            </svg>
+                          </div>
                         </td>
                       </tr>
                     );
