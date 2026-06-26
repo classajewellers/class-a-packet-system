@@ -13,6 +13,7 @@ const PUBLIC_ROUTES = new Set([
   "/api/auth/verify-pin",
   "/api/shopify/webhook",
   "/api/shopify/customer",
+  "/api/twilio/webhook",
   "/vault-admin/login",
 ]);
 
@@ -28,7 +29,7 @@ const AUTH_RATE_LIMIT_ROUTES = new Set([
 ]);
 
 // Paths excluded from general API rate limiting (server-to-server or high-volume)
-const RATE_LIMIT_EXEMPT_PREFIXES = ["/api/shopify/"];
+const RATE_LIMIT_EXEMPT_PREFIXES = ["/api/shopify/", "/api/twilio/"];
 
 /**
  * Edge-compatible rate limit check via Supabase REST API.
