@@ -159,7 +159,7 @@ export async function PUT(
     console.log("[PUT /customers] success, row:", row);
     return NextResponse.json({
       success: true,
-      customer: { ...row, street: row.address },
+      customer: { ...row, street: row.address, customer_id: row.id },
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";

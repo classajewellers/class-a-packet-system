@@ -90,7 +90,13 @@
       "Skill(claude-api:*)",
       "Bash(cat next.config.ts)",
       "Bash(cat next.config.js)",
-      "Bash(cat next.config.mjs)"
+      "Bash(cat next.config.mjs)",
+      "Bash(find \"/Users/joshmucklow/Downloads/Projects/gemquote 2/.claude\" -type f 2>/dev/null; find \"/Users/joshmucklow/.claude\" -name \"settings*\" -o -name \"hooks*\" 2>/dev/null | head -20)",
+      "Bash(grep -n \"settings\" middleware.ts)",
+      "Bash(grep -n \"settings\" app/middleware.ts)",
+      "Bash(grep -E \"SUPABASE_URL|SUPABASE_SERVICE|DATABASE_URL|POSTGRES\" .env.local)",
+      "Bash(grep -E \"SUPABASE_URL|SUPABASE_SERVICE|DATABASE_URL|POSTGRES\" .env)",
+      "Bash(git rm *)"
     ],
     "deny": [
       "Bash(git push --force*)",
