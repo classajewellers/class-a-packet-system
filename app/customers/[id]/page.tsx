@@ -137,7 +137,7 @@ function TabButton({ label, active, onClick, count }: { label: string; active: b
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CustomerProfilePage({ params }: { params: { id: string } }) {
-  const { user } = useUser();
+  const { user, hydrated } = useUser();
   const router = useRouter();
   const email = decodeURIComponent(params.id);
 
@@ -202,6 +202,7 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
 
   // ── Initial load ──────────────────────────────────────────────────────────
   useEffect(() => {
+    if (!hydrated) return;
     fetch(`/api/customers/${encodeURIComponent(email)}`, { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } })
       .then(r => r.json())
       .then(json => {
@@ -215,7 +216,7 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [email, user?.tenantId]);
+  }, [email, user?.tenantId, hydrated]);
 
   // ── Load partners on tab activate ─────────────────────────────────────────
   useEffect(() => {
@@ -440,7 +441,7 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
 
   async function saveEdit() {
     if (editSaving) return;
-    if (!user?.tenantId) return;
+    if (!hydrated || !user?.tenantId) return;
     setEditSaving(true);
     try {
       const payload = { ...editForm, customer_id: customer?.customer_id ?? null };
@@ -611,7 +612,7 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
               <button onClick={() => setEditOpen(false)} style={{ ...BTN_SM, color: '#374151', border: '1px solid #E8E8F0', padding: '8px 16px', fontSize: 13 }}>Cancel</button>
-              <button onClick={saveEdit} disabled={editSaving} style={{ ...BTN, opacity: editSaving ? 0.7 : 1 }}>
+              <button onClick={saveEdit} disabled={editSaving || !hydrated || !user} style={{ ...BTN, opacity: (editSaving || !hydrated || !user) ? 0.7 : 1 }}>
                 {editSaving ? "Saving…" : "Save Changes"}
               </button>
             </div>
