@@ -153,6 +153,8 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState<EditForm>({ first_name: "", last_name: "", email: "", phone: "", street: "", suburb: "", state: "", postcode: "" });
   const [editSaving, setEditSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Notes
   const [notes, setNotes] = useState("");
@@ -468,6 +470,29 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
     }
   }
 
+  async function deleteCustomer() {
+    if (deleting || !hydrated || !user?.tenantId) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/customers/${encodeURIComponent(email)}`, {
+        method: "DELETE",
+        headers: { 'x-tenant-id': user.tenantId },
+      });
+      const json = await res.json() as { success: boolean; error?: string };
+      if (json.success) {
+        router.replace("/customers");
+      } else {
+        console.error("[deleteCustomer] error:", json.error);
+        setDeleting(false);
+        setDeleteConfirm(false);
+      }
+    } catch (err) {
+      console.error("[deleteCustomer] fetch threw:", err);
+      setDeleting(false);
+      setDeleteConfirm(false);
+    }
+  }
+
   async function sendSms() {
     const trimmed = smsCompose.trim();
     if (!trimmed || !customer?.customer_id || !user?.tenantId || smsSending) return;
@@ -610,8 +635,41 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
-              <button onClick={() => setEditOpen(false)} style={{ ...BTN_SM, color: '#374151', border: '1px solid #E8E8F0', padding: '8px 16px', fontSize: 13 }}>Cancel</button>
+            {user?.role === 'manager' && (
+              <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #F3F4F6' }}>
+                {!deleteConfirm ? (
+                  <button
+                    onClick={() => setDeleteConfirm(true)}
+                    style={{ ...BTN_SM, color: '#DC2626', border: '1px solid #FECACA', background: '#FEF2F2', padding: '8px 16px', fontSize: 13, width: '100%' }}
+                  >
+                    Delete Customer
+                  </button>
+                ) : (
+                  <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: 14 }}>
+                    <p style={{ fontSize: 13, color: '#DC2626', fontWeight: 600, margin: '0 0 4px' }}>Are you sure?</p>
+                    <p style={{ fontSize: 12, color: '#6B7280', margin: '0 0 12px' }}>This will permanently delete the customer record. This cannot be undone.</p>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        onClick={() => setDeleteConfirm(false)}
+                        style={{ ...BTN_SM, flex: 1, color: '#374151', border: '1px solid #E8E8F0', padding: '7px 0', fontSize: 13 }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={deleteCustomer}
+                        disabled={deleting}
+                        style={{ ...BTN_SM, flex: 1, background: '#DC2626', color: '#fff', border: 'none', padding: '7px 0', fontSize: 13, opacity: deleting ? 0.7 : 1, cursor: deleting ? 'not-allowed' : 'pointer' }}
+                      >
+                        {deleting ? "Deleting…" : "Yes, Delete"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
+              <button onClick={() => { setEditOpen(false); setDeleteConfirm(false); }} style={{ ...BTN_SM, color: '#374151', border: '1px solid #E8E8F0', padding: '8px 16px', fontSize: 13 }}>Cancel</button>
               <button onClick={saveEdit} disabled={editSaving || !hydrated || !user} style={{ ...BTN, opacity: (editSaving || !hydrated || !user) ? 0.7 : 1 }}>
                 {editSaving ? "Saving…" : "Save Changes"}
               </button>

@@ -168,6 +168,37 @@ export async function PUT(
   }
 }
 
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+): Promise<NextResponse> {
+  const tenantId = req.headers.get("x-tenant-id") ?? "";
+  if (!tenantId) {
+    return NextResponse.json({ success: false, error: "x-tenant-id required" }, { status: 400 });
+  }
+
+  const email = decodeURIComponent(params.id).toLowerCase().trim();
+  const customerIdParam = req.nextUrl.searchParams.get("customer_id");
+
+  try {
+    const supabase = await createTenantSupabaseClient(tenantId);
+
+    const delQ = customerIdParam
+      ? supabase.from("customers").delete().eq("id", customerIdParam).eq("tenant_id", tenantId)
+      : supabase.from("customers").delete().ilike("email", email).eq("tenant_id", tenantId);
+
+    const { error } = await delQ;
+    if (error) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+  }
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
