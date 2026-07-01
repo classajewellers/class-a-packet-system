@@ -20,7 +20,7 @@ export async function GET(
 
     const pkQ = supabase.from("packets").select("*").ilike("customer_email", email).order("created_at", { ascending: false });
     const qtQ = supabase.from("quotes").select("*").ilike("customer_email", email).is("converted_to_packet_id", null).order("created_at", { ascending: false });
-    const custQ = supabase.from("customers").select("notes, id, maiden_name, wishlist_notes, customer_followup_notes").ilike("email", email);
+    const custQ = supabase.from("customers").select("notes, id, maiden_name, wishlist_notes, customer_followup_notes, first_name, last_name, phone, address, suburb, state, postcode").ilike("email", email);
 
     const [packetsResult, quotesResult, notesResult] = await Promise.all([
       (tenantId ? pkQ.eq("tenant_id", tenantId) : pkQ),
@@ -30,23 +30,24 @@ export async function GET(
 
     const packets = packetsResult.data ?? [];
     const quotes  = quotesResult.data  ?? [];
-    const notes                  = notesResult.data?.notes ?? null;
-    const customerId             = notesResult.data?.id ?? null;
-    const maiden_name            = notesResult.data?.maiden_name ?? null;
-    const wishlist_notes         = notesResult.data?.wishlist_notes ?? null;
-    const customer_followup_notes = notesResult.data?.customer_followup_notes ?? null;
+    const cust                    = notesResult.data;
+    const notes                   = cust?.notes ?? null;
+    const customerId              = cust?.id ?? null;
+    const maiden_name             = cust?.maiden_name ?? null;
+    const wishlist_notes          = cust?.wishlist_notes ?? null;
+    const customer_followup_notes = cust?.customer_followup_notes ?? null;
 
-    // Derive customer header from most recent packet
+    // Prefer customers-table contact data; fall back to latest packet/quote
     const latest = packets[0] ?? quotes[0] ?? null;
     const customer = {
       email,
-      phone:      latest?.customer_phone      ?? null,
-      first_name: latest?.customer_first_name ?? null,
-      last_name:  latest?.customer_last_name  ?? null,
-      street:     latest?.customer_street     ?? null,
-      suburb:     latest?.customer_suburb     ?? null,
-      state:      latest?.customer_state      ?? null,
-      postcode:   latest?.customer_postcode   ?? null,
+      phone:      cust?.phone      ?? latest?.customer_phone      ?? null,
+      first_name: cust?.first_name ?? latest?.customer_first_name ?? null,
+      last_name:  cust?.last_name  ?? latest?.customer_last_name  ?? null,
+      street:     cust?.address    ?? latest?.customer_street     ?? null,
+      suburb:     cust?.suburb     ?? latest?.customer_suburb     ?? null,
+      state:      cust?.state      ?? latest?.customer_state      ?? null,
+      postcode:   cust?.postcode   ?? latest?.customer_postcode   ?? null,
       notes,
       maiden_name,
       wishlist_notes,
@@ -70,6 +71,88 @@ export async function GET(
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+): Promise<NextResponse> {
+  const tenantId = req.headers.get("x-tenant-id") ?? "";
+  if (!tenantId) {
+    return NextResponse.json({ success: false, error: "x-tenant-id required" }, { status: 400 });
+  }
+
+  const oldEmail = decodeURIComponent(params.id).toLowerCase().trim();
+
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ success: false, error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const newEmail  = typeof body.email     === "string" ? body.email.toLowerCase().trim()  : oldEmail;
+  const firstName = typeof body.first_name === "string" ? body.first_name.trim() || null  : null;
+  const lastName  = typeof body.last_name  === "string" ? body.last_name.trim()  || null  : null;
+  const phone     = typeof body.phone     === "string" ? body.phone.trim()     || null  : null;
+  const address   = typeof body.street    === "string" ? body.street.trim()    || null  : null;
+  const suburb    = typeof body.suburb    === "string" ? body.suburb.trim()    || null  : null;
+  const state     = typeof body.state     === "string" ? body.state.trim()     || null  : null;
+  const postcode  = typeof body.postcode  === "string" ? body.postcode.trim()  || null  : null;
+
+  const fields = {
+    email: newEmail,
+    first_name: firstName,
+    last_name: lastName,
+    phone,
+    address,
+    suburb,
+    state,
+    postcode,
+  };
+
+  try {
+    const supabase = await createTenantSupabaseClient(tenantId);
+
+    // Check if a customers row already exists for this tenant+email
+    const { data: existing } = await supabase
+      .from("customers")
+      .select("id")
+      .ilike("email", oldEmail)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+    const RETURN_COLS = "id, email, first_name, last_name, phone, address, suburb, state, postcode";
+
+    let row: Record<string, unknown> | null = null;
+
+    if (existing) {
+      const { data, error } = await supabase
+        .from("customers")
+        .update(fields)
+        .eq("id", existing.id)
+        .select(RETURN_COLS)
+        .single();
+      if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      row = data as Record<string, unknown>;
+    } else {
+      const { data, error } = await supabase
+        .from("customers")
+        .insert({ ...fields, tenant_id: tenantId })
+        .select(RETURN_COLS)
+        .single();
+      if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      row = data as Record<string, unknown>;
+    }
+
+    return NextResponse.json({
+      success: true,
+      customer: { ...row, street: row.address },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
 }
 

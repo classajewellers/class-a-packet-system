@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Packet, Quote } from "@/lib/types";
 import { packetTypeLabel, formatDateAU, formatCurrency } from "@/lib/formatters";
 import PacketDetailDrawer from "@/components/PacketDetailDrawer";
@@ -58,6 +59,17 @@ interface CustomerData {
   total_spend: number;
   first_seen: string;
   last_visit: string;
+}
+
+interface EditForm {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  street: string;
+  suburb: string;
+  state: string;
+  postcode: string;
 }
 
 interface Partner {
@@ -126,6 +138,7 @@ function TabButton({ label, active, onClick, count }: { label: string; active: b
 
 export default function CustomerProfilePage({ params }: { params: { id: string } }) {
   const { user } = useUser();
+  const router = useRouter();
   const email = decodeURIComponent(params.id);
 
   // Core data
@@ -135,6 +148,11 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("orders");
   const [selectedPacket, setSelectedPacket] = useState<Packet | null>(null);
+
+  // Edit form
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState<EditForm>({ first_name: "", last_name: "", email: "", phone: "", street: "", suburb: "", state: "", postcode: "" });
+  const [editSaving, setEditSaving] = useState(false);
 
   // Notes
   const [notes, setNotes] = useState("");
@@ -406,6 +424,41 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
     } catch { /* noop */ } finally { setGeneratingEmail(false); }
   }
 
+  function openEdit() {
+    setEditForm({
+      first_name: customer?.first_name ?? "",
+      last_name:  customer?.last_name  ?? "",
+      email:      email,
+      phone:      customer?.phone      ?? "",
+      street:     customer?.street     ?? "",
+      suburb:     customer?.suburb     ?? "",
+      state:      customer?.state      ?? "",
+      postcode:   customer?.postcode   ?? "",
+    });
+    setEditOpen(true);
+  }
+
+  async function saveEdit() {
+    if (editSaving) return;
+    setEditSaving(true);
+    try {
+      const res = await fetch(`/api/customers/${encodeURIComponent(email)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "x-tenant-id": user?.tenantId ?? "" },
+        body: JSON.stringify(editForm),
+      });
+      const json = await res.json() as { success: boolean; customer?: Partial<CustomerData> };
+      if (json.success && json.customer) {
+        setCustomer(prev => prev ? { ...prev, ...json.customer } : prev);
+        setEditOpen(false);
+        const newEmail = (json.customer.email ?? "").toLowerCase();
+        if (newEmail && newEmail !== email.toLowerCase()) {
+          router.replace(`/customers/${encodeURIComponent(newEmail)}`);
+        }
+      }
+    } catch { /* noop */ } finally { setEditSaving(false); }
+  }
+
   async function sendSms() {
     const trimmed = smsCompose.trim();
     if (!trimmed || !customer?.customer_id || !user?.tenantId || smsSending) return;
@@ -494,6 +547,70 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
+      {editOpen && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={e => { if (e.target === e.currentTarget) setEditOpen(false); }}
+        >
+          <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 520, padding: 24, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>Edit Customer</h2>
+              <button onClick={() => setEditOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: '#9CA3AF', lineHeight: 1, padding: '0 2px' }}>×</button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 500, color: '#6B7280', display: 'block', marginBottom: 4 }}>First Name</label>
+                  <input type="text" value={editForm.first_name} onChange={e => setEditForm(f => ({ ...f, first_name: e.target.value }))} style={{ ...INPUT, width: '100%' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 500, color: '#6B7280', display: 'block', marginBottom: 4 }}>Last Name</label>
+                  <input type="text" value={editForm.last_name} onChange={e => setEditForm(f => ({ ...f, last_name: e.target.value }))} style={{ ...INPUT, width: '100%' }} />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 500, color: '#6B7280', display: 'block', marginBottom: 4 }}>Email</label>
+                <input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} style={{ ...INPUT, width: '100%' }} />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 500, color: '#6B7280', display: 'block', marginBottom: 4 }}>Phone</label>
+                <input type="text" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} style={{ ...INPUT, width: '100%' }} />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 500, color: '#6B7280', display: 'block', marginBottom: 4 }}>Street Address</label>
+                <input type="text" value={editForm.street} onChange={e => setEditForm(f => ({ ...f, street: e.target.value }))} style={{ ...INPUT, width: '100%' }} />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 90px', gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 500, color: '#6B7280', display: 'block', marginBottom: 4 }}>Suburb</label>
+                  <input type="text" value={editForm.suburb} onChange={e => setEditForm(f => ({ ...f, suburb: e.target.value }))} style={{ ...INPUT, width: '100%' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 500, color: '#6B7280', display: 'block', marginBottom: 4 }}>State</label>
+                  <input type="text" value={editForm.state} onChange={e => setEditForm(f => ({ ...f, state: e.target.value }))} style={{ ...INPUT, width: '100%' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 500, color: '#6B7280', display: 'block', marginBottom: 4 }}>Postcode</label>
+                  <input type="text" value={editForm.postcode} onChange={e => setEditForm(f => ({ ...f, postcode: e.target.value }))} style={{ ...INPUT, width: '100%' }} />
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
+              <button onClick={() => setEditOpen(false)} style={{ ...BTN_SM, color: '#374151', border: '1px solid #E8E8F0', padding: '8px 16px', fontSize: 13 }}>Cancel</button>
+              <button onClick={saveEdit} disabled={editSaving} style={{ ...BTN, opacity: editSaving ? 0.7 : 1 }}>
+                {editSaving ? "Saving…" : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedPacket && (
         <PacketDetailDrawer
           packet={selectedPacket}
@@ -522,6 +639,9 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
                         {vipTier.tier}
                       </span>
                     )}
+                    <button onClick={openEdit} style={{ fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 8, border: '1px solid #E8E8F0', background: '#F9FAFB', color: '#374151', cursor: 'pointer' }}>
+                      Edit
+                    </button>
                   </div>
                   <p style={{ fontSize: 14, color: '#6B7280', margin: '2px 0 0' }}>{email}</p>
                   {customer?.maiden_name && (
