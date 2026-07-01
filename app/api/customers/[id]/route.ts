@@ -42,17 +42,19 @@ export async function GET(
     const wishlist_notes          = cust?.wishlist_notes ?? null;
     const customer_followup_notes = cust?.customer_followup_notes ?? null;
 
-    // Prefer customers-table contact data; fall back to latest packet/quote
+    // If a customers row exists, it is the source of truth — use its values even if null
+    // (a null value means the user explicitly cleared it; don't fall back to packet data).
+    // Only fall back to packet/quote data when no customers row exists yet.
     const latest = packets[0] ?? quotes[0] ?? null;
     const customer = {
       email,
-      phone:      cust?.phone      ?? latest?.customer_phone      ?? null,
-      first_name: cust?.first_name ?? latest?.customer_first_name ?? null,
-      last_name:  cust?.last_name  ?? latest?.customer_last_name  ?? null,
-      street:     cust?.address    ?? latest?.customer_street     ?? null,
-      suburb:     cust?.suburb     ?? latest?.customer_suburb     ?? null,
-      state:      cust?.state      ?? latest?.customer_state      ?? null,
-      postcode:   cust?.postcode   ?? latest?.customer_postcode   ?? null,
+      phone:      cust ? cust.phone      : (latest?.customer_phone      ?? null),
+      first_name: cust ? cust.first_name : (latest?.customer_first_name ?? null),
+      last_name:  cust ? cust.last_name  : (latest?.customer_last_name  ?? null),
+      street:     cust ? cust.address    : (latest?.customer_street     ?? null),
+      suburb:     cust ? cust.suburb     : (latest?.customer_suburb     ?? null),
+      state:      cust ? cust.state      : (latest?.customer_state      ?? null),
+      postcode:   cust ? cust.postcode   : (latest?.customer_postcode   ?? null),
       notes,
       maiden_name,
       wishlist_notes,
