@@ -16,11 +16,16 @@ export async function GET(
 
   try {
     const tenantId = req.headers.get('x-tenant-id') ?? ''
+    const customerIdParam = req.nextUrl.searchParams.get("customer_id");
     const supabase = await createTenantSupabaseClient(tenantId);
 
     const pkQ = supabase.from("packets").select("*").ilike("customer_email", email).order("created_at", { ascending: false });
     const qtQ = supabase.from("quotes").select("*").ilike("customer_email", email).is("converted_to_packet_id", null).order("created_at", { ascending: false });
-    const custQ = supabase.from("customers").select("notes, id, maiden_name, wishlist_notes, customer_followup_notes, first_name, last_name, phone, address, suburb, state, postcode").ilike("email", email);
+    const CUST_COLS = "notes, id, maiden_name, wishlist_notes, customer_followup_notes, first_name, last_name, phone, address, suburb, state, postcode";
+    // Prefer UUID lookup (immune to email being cleared) over email lookup
+    const custQ = customerIdParam
+      ? supabase.from("customers").select(CUST_COLS).eq("id", customerIdParam)
+      : supabase.from("customers").select(CUST_COLS).ilike("email", email);
 
     const [packetsResult, quotesResult, notesResult] = await Promise.all([
       (tenantId ? pkQ.eq("tenant_id", tenantId) : pkQ),
@@ -96,7 +101,8 @@ export async function PUT(
 
   // customer_id (UUID) passed from frontend when the customers row already exists
   const customerId = typeof body.customer_id === "string" && body.customer_id ? body.customer_id : null;
-  const newEmail   = typeof body.email       === "string" ? body.email.toLowerCase().trim() : oldEmail;
+  const rawEmail   = typeof body.email       === "string" ? body.email.toLowerCase().trim() : "";
+  const newEmail   = rawEmail || oldEmail;
   const firstName  = typeof body.first_name  === "string" ? body.first_name.trim()  || null : null;
   const lastName   = typeof body.last_name   === "string" ? body.last_name.trim()   || null : null;
   const phone      = typeof body.phone       === "string" ? body.phone.trim()       || null : null;

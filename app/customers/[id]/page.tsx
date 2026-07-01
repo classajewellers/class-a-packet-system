@@ -440,19 +440,16 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
 
   async function saveEdit() {
     if (editSaving) return;
-    console.log("[saveEdit] start — email:", email, "tenantId:", user?.tenantId, "customer_id:", customer?.customer_id);
+    if (!user?.tenantId) return;
     setEditSaving(true);
     try {
       const payload = { ...editForm, customer_id: customer?.customer_id ?? null };
-      console.log("[saveEdit] PUT payload:", payload);
       const res = await fetch(`/api/customers/${encodeURIComponent(email)}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", "x-tenant-id": user?.tenantId ?? "" },
+        headers: { "Content-Type": "application/json", 'x-tenant-id': user.tenantId },
         body: JSON.stringify(payload),
       });
-      console.log("[saveEdit] response status:", res.status);
       const json = await res.json() as { success: boolean; customer?: Partial<CustomerData>; error?: string };
-      console.log("[saveEdit] response body:", json);
       if (json.success && json.customer) {
         setCustomer(prev => prev ? { ...prev, ...json.customer } : prev);
         setEditOpen(false);
@@ -461,7 +458,7 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
           router.replace(`/customers/${encodeURIComponent(newEmail)}`);
         }
       } else {
-        console.error("[saveEdit] API returned error:", json.error);
+        console.error("[saveEdit] error:", json.error);
       }
     } catch (err) {
       console.error("[saveEdit] fetch threw:", err);
@@ -583,7 +580,7 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
 
               <div>
                 <label style={{ fontSize: 12, fontWeight: 500, color: '#6B7280', display: 'block', marginBottom: 4 }}>Email</label>
-                <input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} style={{ ...INPUT, width: '100%' }} />
+                <input type="text" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} style={{ ...INPUT, width: '100%' }} />
               </div>
 
               <div>
