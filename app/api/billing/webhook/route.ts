@@ -48,9 +48,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     case "invoice.payment_failed": {
       const invoice = event.data.object as Stripe.Invoice;
-      const subId = typeof invoice.subscription === "string"
-        ? invoice.subscription
-        : invoice.subscription?.id;
+      const subId = (invoice as any).subscription_details?.subscription ?? null;
       if (subId) {
         await supabase
           .from("tenants")
@@ -62,9 +60,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     case "invoice.payment_succeeded": {
       const invoice = event.data.object as Stripe.Invoice;
-      const subId = typeof invoice.subscription === "string"
-        ? invoice.subscription
-        : invoice.subscription?.id;
+      const subId = (invoice as any).subscription_details?.subscription ?? null;
       if (subId) {
         await supabase
           .from("tenants")
