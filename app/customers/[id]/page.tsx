@@ -440,14 +440,19 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
 
   async function saveEdit() {
     if (editSaving) return;
+    console.log("[saveEdit] start — email:", email, "tenantId:", user?.tenantId, "customer_id:", customer?.customer_id);
     setEditSaving(true);
     try {
+      const payload = { ...editForm, customer_id: customer?.customer_id ?? null };
+      console.log("[saveEdit] PUT payload:", payload);
       const res = await fetch(`/api/customers/${encodeURIComponent(email)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", "x-tenant-id": user?.tenantId ?? "" },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify(payload),
       });
-      const json = await res.json() as { success: boolean; customer?: Partial<CustomerData> };
+      console.log("[saveEdit] response status:", res.status);
+      const json = await res.json() as { success: boolean; customer?: Partial<CustomerData>; error?: string };
+      console.log("[saveEdit] response body:", json);
       if (json.success && json.customer) {
         setCustomer(prev => prev ? { ...prev, ...json.customer } : prev);
         setEditOpen(false);
@@ -455,8 +460,14 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
         if (newEmail && newEmail !== email.toLowerCase()) {
           router.replace(`/customers/${encodeURIComponent(newEmail)}`);
         }
+      } else {
+        console.error("[saveEdit] API returned error:", json.error);
       }
-    } catch { /* noop */ } finally { setEditSaving(false); }
+    } catch (err) {
+      console.error("[saveEdit] fetch threw:", err);
+    } finally {
+      setEditSaving(false);
+    }
   }
 
   async function sendSms() {

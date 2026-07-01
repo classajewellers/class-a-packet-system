@@ -80,10 +80,12 @@ export async function PUT(
 ): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
   if (!tenantId) {
+    console.error("[PUT /customers] missing x-tenant-id");
     return NextResponse.json({ success: false, error: "x-tenant-id required" }, { status: 400 });
   }
 
   const oldEmail = decodeURIComponent(params.id).toLowerCase().trim();
+  console.log("[PUT /customers] tenantId:", tenantId, "oldEmail:", oldEmail);
 
   let body: Record<string, unknown>;
   try {
@@ -92,66 +94,68 @@ export async function PUT(
     return NextResponse.json({ success: false, error: "Invalid JSON" }, { status: 400 });
   }
 
-  const newEmail  = typeof body.email     === "string" ? body.email.toLowerCase().trim()  : oldEmail;
-  const firstName = typeof body.first_name === "string" ? body.first_name.trim() || null  : null;
-  const lastName  = typeof body.last_name  === "string" ? body.last_name.trim()  || null  : null;
-  const phone     = typeof body.phone     === "string" ? body.phone.trim()     || null  : null;
-  const address   = typeof body.street    === "string" ? body.street.trim()    || null  : null;
-  const suburb    = typeof body.suburb    === "string" ? body.suburb.trim()    || null  : null;
-  const state     = typeof body.state     === "string" ? body.state.trim()     || null  : null;
-  const postcode  = typeof body.postcode  === "string" ? body.postcode.trim()  || null  : null;
+  // customer_id (UUID) passed from frontend when the customers row already exists
+  const customerId = typeof body.customer_id === "string" && body.customer_id ? body.customer_id : null;
+  const newEmail   = typeof body.email       === "string" ? body.email.toLowerCase().trim() : oldEmail;
+  const firstName  = typeof body.first_name  === "string" ? body.first_name.trim()  || null : null;
+  const lastName   = typeof body.last_name   === "string" ? body.last_name.trim()   || null : null;
+  const phone      = typeof body.phone       === "string" ? body.phone.trim()       || null : null;
+  const address    = typeof body.street      === "string" ? body.street.trim()      || null : null;
+  const suburb     = typeof body.suburb      === "string" ? body.suburb.trim()      || null : null;
+  const state      = typeof body.state       === "string" ? body.state.trim()       || null : null;
+  const postcode   = typeof body.postcode    === "string" ? body.postcode.trim()    || null : null;
 
-  const fields = {
-    email: newEmail,
-    first_name: firstName,
-    last_name: lastName,
-    phone,
-    address,
-    suburb,
-    state,
-    postcode,
-  };
+  console.log("[PUT /customers] customerId:", customerId, "newEmail:", newEmail);
+
+  const fields = { email: newEmail, first_name: firstName, last_name: lastName, phone, address, suburb, state, postcode };
+  const RETURN_COLS = "id, email, first_name, last_name, phone, address, suburb, state, postcode";
 
   try {
     const supabase = await createTenantSupabaseClient(tenantId);
-
-    // Check if a customers row already exists for this tenant+email
-    const { data: existing } = await supabase
-      .from("customers")
-      .select("id")
-      .ilike("email", oldEmail)
-      .eq("tenant_id", tenantId)
-      .maybeSingle();
-
-    const RETURN_COLS = "id, email, first_name, last_name, phone, address, suburb, state, postcode";
-
     let row: Record<string, unknown> | null = null;
 
-    if (existing) {
+    if (customerId) {
+      // Row already exists — update directly by UUID (UUID came from tenant-scoped GET so ownership is implicit)
+      console.log("[PUT /customers] updating by UUID");
       const { data, error } = await supabase
         .from("customers")
         .update(fields)
-        .eq("id", existing.id)
+        .eq("id", customerId)
+        .eq("tenant_id", tenantId)
         .select(RETURN_COLS)
-        .single();
-      if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        .maybeSingle();
+      if (error) {
+        console.error("[PUT /customers] update error:", error);
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      }
+      if (!data) {
+        console.error("[PUT /customers] update matched 0 rows — UUID/tenant mismatch");
+        return NextResponse.json({ success: false, error: "Customer not found" }, { status: 404 });
+      }
       row = data as Record<string, unknown>;
     } else {
+      // No customers row yet (customer exists only in packets/quotes) — upsert by email
+      console.log("[PUT /customers] no UUID, upserting by email");
       const { data, error } = await supabase
         .from("customers")
-        .insert({ ...fields, tenant_id: tenantId })
+        .upsert({ ...fields, tenant_id: tenantId }, { onConflict: "email" })
         .select(RETURN_COLS)
         .single();
-      if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      if (error) {
+        console.error("[PUT /customers] upsert error:", error);
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      }
       row = data as Record<string, unknown>;
     }
 
+    console.log("[PUT /customers] success, row:", row);
     return NextResponse.json({
       success: true,
       customer: { ...row, street: row.address },
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
+    console.error("[PUT /customers] unexpected error:", msg);
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
 }
