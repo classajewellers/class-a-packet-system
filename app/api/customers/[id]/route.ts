@@ -118,13 +118,15 @@ export async function PUT(
   const fields = { email: newEmail, first_name: firstName, last_name: lastName, phone, address, suburb, state, postcode };
   const RETURN_COLS = "id, email, first_name, last_name, phone, address, suburb, state, postcode";
 
+  console.log("[PUT /customers] fields to write:", JSON.stringify(fields));
+
   try {
     const supabase = await createTenantSupabaseClient(tenantId);
     let row: Record<string, unknown> | null = null;
 
     if (customerId) {
-      // Row already exists — update directly by UUID (UUID came from tenant-scoped GET so ownership is implicit)
-      console.log("[PUT /customers] updating by UUID");
+      // Row already exists — update directly by UUID
+      console.log("[PUT /customers] UPDATE customers SET ... WHERE id =", customerId, "AND tenant_id =", tenantId);
       const { data, error } = await supabase
         .from("customers")
         .update(fields)
@@ -132,6 +134,7 @@ export async function PUT(
         .eq("tenant_id", tenantId)
         .select(RETURN_COLS)
         .maybeSingle();
+      console.log("[PUT /customers] UPDATE response — data:", JSON.stringify(data), "error:", JSON.stringify(error));
       if (error) {
         console.error("[PUT /customers] update error:", error);
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -142,21 +145,47 @@ export async function PUT(
       }
       row = data as Record<string, unknown>;
     } else {
-      // No customers row yet (customer exists only in packets/quotes) — upsert by email
-      console.log("[PUT /customers] no UUID, upserting by email");
-      const { data, error } = await supabase
+      // No UUID — avoid upsert (unreliable without a DB-level unique constraint).
+      // SELECT first, then UPDATE if found, INSERT if not.
+      console.log("[PUT /customers] no UUID — SELECT existing row for email:", newEmail, "tenant:", tenantId);
+      const { data: existing, error: selErr } = await supabase
         .from("customers")
-        .upsert({ ...fields, tenant_id: tenantId }, { onConflict: "email" })
-        .select(RETURN_COLS)
-        .single();
-      if (error) {
-        console.error("[PUT /customers] upsert error:", error);
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        .select("id")
+        .ilike("email", newEmail)
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+      console.log("[PUT /customers] SELECT result — existing:", JSON.stringify(existing), "error:", JSON.stringify(selErr));
+
+      if (existing?.id) {
+        console.log("[PUT /customers] found existing row, UPDATE by id:", existing.id);
+        const { data, error } = await supabase
+          .from("customers")
+          .update(fields)
+          .eq("id", String(existing.id))
+          .eq("tenant_id", tenantId)
+          .select(RETURN_COLS)
+          .single();
+        console.log("[PUT /customers] UPDATE (no-UUID path) — data:", JSON.stringify(data), "error:", JSON.stringify(error));
+        if (error) {
+          return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        }
+        row = data as Record<string, unknown>;
+      } else {
+        console.log("[PUT /customers] no existing row — INSERT");
+        const { data, error } = await supabase
+          .from("customers")
+          .insert({ ...fields, tenant_id: tenantId })
+          .select(RETURN_COLS)
+          .single();
+        console.log("[PUT /customers] INSERT — data:", JSON.stringify(data), "error:", JSON.stringify(error));
+        if (error) {
+          return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        }
+        row = data as Record<string, unknown>;
       }
-      row = data as Record<string, unknown>;
     }
 
-    console.log("[PUT /customers] success, row:", row);
+    console.log("[PUT /customers] success — final row:", JSON.stringify(row));
     return NextResponse.json({
       success: true,
       customer: { ...row, street: row.address, customer_id: row.id },
@@ -174,27 +203,46 @@ export async function DELETE(
 ): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
   if (!tenantId) {
+    console.error("[DELETE /customers] missing x-tenant-id");
     return NextResponse.json({ success: false, error: "x-tenant-id required" }, { status: 400 });
   }
 
   const email = decodeURIComponent(params.id).toLowerCase().trim();
   const customerIdParam = req.nextUrl.searchParams.get("customer_id");
+  console.log("[DELETE /customers] tenantId:", tenantId, "email:", email, "customerIdParam:", customerIdParam);
 
   try {
     const supabase = await createTenantSupabaseClient(tenantId);
 
-    const delQ = customerIdParam
-      ? supabase.from("customers").delete().eq("id", customerIdParam).eq("tenant_id", tenantId)
-      : supabase.from("customers").delete().ilike("email", email).eq("tenant_id", tenantId);
+    let deleteError: { message: string } | null = null;
 
-    const { error } = await delQ;
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    if (customerIdParam) {
+      console.log("[DELETE /customers] DELETE WHERE id =", customerIdParam, "AND tenant_id =", tenantId);
+      const { error } = await supabase
+        .from("customers")
+        .delete()
+        .eq("id", customerIdParam)
+        .eq("tenant_id", tenantId);
+      deleteError = error;
+    } else {
+      console.log("[DELETE /customers] DELETE WHERE email ilike", email, "AND tenant_id =", tenantId);
+      const { error } = await supabase
+        .from("customers")
+        .delete()
+        .ilike("email", email)
+        .eq("tenant_id", tenantId);
+      deleteError = error;
+    }
+
+    console.log("[DELETE /customers] delete error:", JSON.stringify(deleteError));
+    if (deleteError) {
+      return NextResponse.json({ success: false, error: deleteError.message }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
+    console.error("[DELETE /customers] unexpected error:", msg);
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
 }

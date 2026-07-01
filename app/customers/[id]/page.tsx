@@ -474,7 +474,10 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
     if (deleting || !hydrated || !user?.tenantId) return;
     setDeleting(true);
     try {
-      const res = await fetch(`/api/customers/${encodeURIComponent(email)}`, {
+      const deleteUrl = customer?.customer_id
+        ? `/api/customers/${encodeURIComponent(email)}?customer_id=${encodeURIComponent(customer.customer_id)}`
+        : `/api/customers/${encodeURIComponent(email)}`;
+      const res = await fetch(deleteUrl, {
         method: "DELETE",
         headers: { 'x-tenant-id': user.tenantId },
       });
