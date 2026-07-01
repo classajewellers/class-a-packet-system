@@ -1,7 +1,7 @@
 import Stripe from "stripe";
 
 export const stripe = new Stripe(process.env.VAULT_STRIPE_SECRET_KEY!, {
-  apiVersion: "2024-06-20",
+  apiVersion: "2026-05-27.dahlia",
 });
 
 export const PLAN_TO_PRICE_ID: Record<string, string> = {
