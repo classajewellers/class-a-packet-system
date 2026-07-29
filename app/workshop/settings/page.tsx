@@ -33,6 +33,21 @@ interface WorkshopLocation {
   sort_order: number;
 }
 
+interface TeamMember {
+  id: string;
+  name: string;
+  profile_id: string | null;
+  sort_order: number;
+  active: boolean;
+}
+
+interface Subcontractor {
+  id: string;
+  name: string;
+  sort_order: number;
+  active: boolean;
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const COLOR_OPTIONS = ["blue", "amber", "purple", "coral", "teal", "gray"] as const;
@@ -1134,9 +1149,421 @@ function LocationsTab({ tenantId }: { tenantId: string }) {
   );
 }
 
+// ─── Team Members Tab ─────────────────────────────────────────────────────────
+
+function TeamMembersTab({ tenantId }: { tenantId: string }) {
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<Partial<TeamMember>>({});
+  const [editError, setEditError] = useState<string | null>(null);
+  const [deleteErrors, setDeleteErrors] = useState<Record<string, string>>({});
+  const [addForm, setAddForm] = useState({ name: "", sort_order: 0, active: true });
+  const [addError, setAddError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [adding, setAdding] = useState(false);
+
+  const headers = { "Content-Type": "application/json", "x-tenant-id": tenantId };
+
+  const fetchMembers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/workshop/team-members", { headers: { "x-tenant-id": tenantId } });
+      const data = await res.json();
+      setMembers(Array.isArray(data) ? data : data.members ?? []);
+    } finally {
+      setLoading(false);
+    }
+  }, [tenantId]);
+
+  useEffect(() => { fetchMembers(); }, [fetchMembers]);
+
+  const startEdit = (m: TeamMember) => {
+    setEditingId(m.id);
+    setEditForm({ name: m.name, sort_order: m.sort_order, active: m.active });
+    setEditError(null);
+  };
+
+  const cancelEdit = () => { setEditingId(null); setEditForm({}); setEditError(null); };
+
+  const saveEdit = async (id: string) => {
+    setSaving(true);
+    setEditError(null);
+    try {
+      const res = await fetch(`/api/workshop/team-members/${id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify(editForm),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setEditError(d.error ?? d.message ?? "Failed to save");
+        return;
+      }
+      await fetchMembers();
+      cancelEdit();
+    } catch {
+      setEditError("Network error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteMember = async (id: string) => {
+    if (!confirm("Delete this team member?")) return;
+    setDeleteErrors((p) => ({ ...p, [id]: "" }));
+    try {
+      const res = await fetch(`/api/workshop/team-members/${id}`, { method: "DELETE", headers });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setDeleteErrors((p) => ({ ...p, [id]: d.error ?? d.message ?? "Failed to delete" }));
+        return;
+      }
+      await fetchMembers();
+    } catch {
+      setDeleteErrors((p) => ({ ...p, [id]: "Network error" }));
+    }
+  };
+
+  const submitAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdding(true);
+    setAddError(null);
+    try {
+      const res = await fetch("/api/workshop/team-members", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(addForm),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setAddError(d.error ?? d.message ?? "Failed to add");
+        return;
+      }
+      setAddForm({ name: "", sort_order: 0, active: true });
+      await fetchMembers();
+    } catch {
+      setAddError("Network error");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  if (loading) return <p style={s.loadingText}>Loading team members…</p>;
+
+  return (
+    <div>
+      {members.length === 0 && <p style={{ color: "#9CA3AF", fontSize: 14 }}>No team members yet.</p>}
+
+      {members.map((m, i) => (
+        <div key={m.id}>
+          {editingId === m.id ? (
+            <div style={s.editRow}>
+              <div style={s.formGrid}>
+                <div style={s.fieldGroup}>
+                  <label style={s.label}>Name</label>
+                  <input
+                    style={s.input}
+                    value={editForm.name ?? ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                  />
+                </div>
+                <div style={s.fieldGroup}>
+                  <label style={s.label}>Sort Order</label>
+                  <input
+                    type="number"
+                    style={s.input}
+                    value={editForm.sort_order ?? 0}
+                    onChange={(e) => setEditForm((f) => ({ ...f, sort_order: Number(e.target.value) }))}
+                  />
+                </div>
+                <div style={{ ...s.fieldGroup, justifyContent: "center" as const }}>
+                  <label style={{ ...s.label, marginBottom: 8 }}>Active</label>
+                  <input
+                    type="checkbox"
+                    checked={editForm.active ?? true}
+                    onChange={(e) => setEditForm((f) => ({ ...f, active: e.target.checked }))}
+                    style={{ width: 16, height: 16, cursor: "pointer" }}
+                  />
+                </div>
+              </div>
+              {editError && <p style={s.errorText}>{editError}</p>}
+              <div style={s.btnRow}>
+                <button style={s.btnPrimary} onClick={() => saveEdit(m.id)} disabled={saving}>
+                  {saving ? "Saving…" : "Save"}
+                </button>
+                <button style={s.btnSecondary} onClick={cancelEdit}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <div style={s.row(i % 2 === 1)}>
+              <span style={{ flex: 1, fontSize: 14, fontWeight: 500, color: "#1A1A2E" }}>{m.name}</span>
+              <span style={{
+                fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 12,
+                background: m.active ? "#D1FAE5" : "#F3F4F6",
+                color: m.active ? "#065F46" : "#6B7280",
+              }}>
+                {m.active ? "Active" : "Inactive"}
+              </span>
+              <span style={{ fontSize: 12, color: "#9CA3AF" }}>order {m.sort_order}</span>
+              <button style={s.btnEdit} onClick={() => startEdit(m)}>Edit</button>
+              <button style={s.btnDanger} onClick={() => deleteMember(m.id)}>Delete</button>
+              {deleteErrors[m.id] && (
+                <span style={{ ...s.errorText, width: "100%" }}>{deleteErrors[m.id]}</span>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+
+      <div style={s.addFormCard}>
+        <p style={{ ...s.sectionTitle, marginTop: 0 }}>Add Team Member</p>
+        <form onSubmit={submitAdd}>
+          <div style={s.formGrid}>
+            <div style={s.fieldGroup}>
+              <label style={s.label}>Name *</label>
+              <input
+                style={s.input}
+                required
+                value={addForm.name}
+                onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))}
+              />
+            </div>
+            <div style={s.fieldGroup}>
+              <label style={s.label}>Sort Order</label>
+              <input
+                type="number"
+                style={s.input}
+                value={addForm.sort_order}
+                onChange={(e) => setAddForm((f) => ({ ...f, sort_order: Number(e.target.value) }))}
+              />
+            </div>
+          </div>
+          {addError && <p style={s.errorText}>{addError}</p>}
+          <div style={s.btnRow}>
+            <button type="submit" style={s.btnPrimary} disabled={adding}>
+              {adding ? "Adding…" : "Add Team Member"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Sub-contractors Tab ──────────────────────────────────────────────────────
+
+function SubcontractorsTab({ tenantId }: { tenantId: string }) {
+  const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<Partial<Subcontractor>>({});
+  const [editError, setEditError] = useState<string | null>(null);
+  const [deleteErrors, setDeleteErrors] = useState<Record<string, string>>({});
+  const [addForm, setAddForm] = useState({ name: "", sort_order: 0, active: true });
+  const [addError, setAddError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [adding, setAdding] = useState(false);
+
+  const headers = { "Content-Type": "application/json", "x-tenant-id": tenantId };
+
+  const fetchSubs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/workshop/subcontractors", { headers: { "x-tenant-id": tenantId } });
+      const data = await res.json();
+      setSubcontractors(Array.isArray(data) ? data : data.subcontractors ?? []);
+    } finally {
+      setLoading(false);
+    }
+  }, [tenantId]);
+
+  useEffect(() => { fetchSubs(); }, [fetchSubs]);
+
+  const startEdit = (sub: Subcontractor) => {
+    setEditingId(sub.id);
+    setEditForm({ name: sub.name, sort_order: sub.sort_order, active: sub.active });
+    setEditError(null);
+  };
+
+  const cancelEdit = () => { setEditingId(null); setEditForm({}); setEditError(null); };
+
+  const saveEdit = async (id: string) => {
+    setSaving(true);
+    setEditError(null);
+    try {
+      const res = await fetch(`/api/workshop/subcontractors/${id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify(editForm),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setEditError(d.error ?? d.message ?? "Failed to save");
+        return;
+      }
+      await fetchSubs();
+      cancelEdit();
+    } catch {
+      setEditError("Network error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteSub = async (id: string) => {
+    if (!confirm("Delete this sub-contractor?")) return;
+    setDeleteErrors((p) => ({ ...p, [id]: "" }));
+    try {
+      const res = await fetch(`/api/workshop/subcontractors/${id}`, { method: "DELETE", headers });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setDeleteErrors((p) => ({ ...p, [id]: d.error ?? d.message ?? "Failed to delete" }));
+        return;
+      }
+      await fetchSubs();
+    } catch {
+      setDeleteErrors((p) => ({ ...p, [id]: "Network error" }));
+    }
+  };
+
+  const submitAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdding(true);
+    setAddError(null);
+    try {
+      const res = await fetch("/api/workshop/subcontractors", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(addForm),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setAddError(d.error ?? d.message ?? "Failed to add");
+        return;
+      }
+      setAddForm({ name: "", sort_order: 0, active: true });
+      await fetchSubs();
+    } catch {
+      setAddError("Network error");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  if (loading) return <p style={s.loadingText}>Loading sub-contractors…</p>;
+
+  return (
+    <div>
+      {subcontractors.length === 0 && <p style={{ color: "#9CA3AF", fontSize: 14 }}>No sub-contractors yet.</p>}
+
+      {subcontractors.map((sub, i) => (
+        <div key={sub.id}>
+          {editingId === sub.id ? (
+            <div style={s.editRow}>
+              <div style={s.formGrid}>
+                <div style={s.fieldGroup}>
+                  <label style={s.label}>Name</label>
+                  <input
+                    style={s.input}
+                    value={editForm.name ?? ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                  />
+                </div>
+                <div style={s.fieldGroup}>
+                  <label style={s.label}>Sort Order</label>
+                  <input
+                    type="number"
+                    style={s.input}
+                    value={editForm.sort_order ?? 0}
+                    onChange={(e) => setEditForm((f) => ({ ...f, sort_order: Number(e.target.value) }))}
+                  />
+                </div>
+                <div style={{ ...s.fieldGroup, justifyContent: "center" as const }}>
+                  <label style={{ ...s.label, marginBottom: 8 }}>Active</label>
+                  <input
+                    type="checkbox"
+                    checked={editForm.active ?? true}
+                    onChange={(e) => setEditForm((f) => ({ ...f, active: e.target.checked }))}
+                    style={{ width: 16, height: 16, cursor: "pointer" }}
+                  />
+                </div>
+              </div>
+              {editError && <p style={s.errorText}>{editError}</p>}
+              <div style={s.btnRow}>
+                <button style={s.btnPrimary} onClick={() => saveEdit(sub.id)} disabled={saving}>
+                  {saving ? "Saving…" : "Save"}
+                </button>
+                <button style={s.btnSecondary} onClick={cancelEdit}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <div style={s.row(i % 2 === 1)}>
+              <span style={{ flex: 1, fontSize: 14, fontWeight: 500, color: "#1A1A2E" }}>{sub.name}</span>
+              <span style={{
+                fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 12,
+                background: sub.active ? "#D1FAE5" : "#F3F4F6",
+                color: sub.active ? "#065F46" : "#6B7280",
+              }}>
+                {sub.active ? "Active" : "Inactive"}
+              </span>
+              <span style={{ fontSize: 12, color: "#9CA3AF" }}>order {sub.sort_order}</span>
+              <button style={s.btnEdit} onClick={() => startEdit(sub)}>Edit</button>
+              <button style={s.btnDanger} onClick={() => deleteSub(sub.id)}>Delete</button>
+              {deleteErrors[sub.id] && (
+                <span style={{ ...s.errorText, width: "100%" }}>{deleteErrors[sub.id]}</span>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+
+      <div style={s.addFormCard}>
+        <p style={{ ...s.sectionTitle, marginTop: 0 }}>Add Sub-contractor</p>
+        <form onSubmit={submitAdd}>
+          <div style={s.formGrid}>
+            <div style={s.fieldGroup}>
+              <label style={s.label}>Name *</label>
+              <input
+                style={s.input}
+                required
+                value={addForm.name}
+                onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))}
+              />
+            </div>
+            <div style={s.fieldGroup}>
+              <label style={s.label}>Sort Order</label>
+              <input
+                type="number"
+                style={s.input}
+                value={addForm.sort_order}
+                onChange={(e) => setAddForm((f) => ({ ...f, sort_order: Number(e.target.value) }))}
+              />
+            </div>
+          </div>
+          {addError && <p style={s.errorText}>{addError}</p>}
+          <div style={s.btnRow}>
+            <button type="submit" style={s.btnPrimary} disabled={adding}>
+              {adding ? "Adding…" : "Add Sub-contractor"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-type Tab = "categories" | "stages" | "locations";
+type Tab = "categories" | "stages" | "locations" | "team" | "subcontractors";
+
+const TAB_LABELS: Record<Tab, string> = {
+  categories:    "Categories",
+  stages:        "Stages",
+  locations:     "Locations",
+  team:          "Team Members",
+  subcontractors: "Sub-contractors",
+};
 
 export default function WorkshopSettingsPage() {
   const { user, hydrated } = useUser();
@@ -1171,20 +1598,22 @@ export default function WorkshopSettingsPage() {
 
         <div style={s.card}>
           <div style={s.tabBar}>
-            {(["categories", "stages", "locations"] as Tab[]).map((tab) => (
+            {(["categories", "stages", "locations", "team", "subcontractors"] as Tab[]).map((tab) => (
               <button
                 key={tab}
                 style={s.tabBtn(activeTab === tab)}
                 onClick={() => setActiveTab(tab)}
               >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {TAB_LABELS[tab]}
               </button>
             ))}
           </div>
           <div style={s.tabContent}>
-            {activeTab === "categories" && <CategoriesTab tenantId={tenantId} />}
-            {activeTab === "stages" && <StagesTab tenantId={tenantId} />}
-            {activeTab === "locations" && <LocationsTab tenantId={tenantId} />}
+            {activeTab === "categories"    && <CategoriesTab    tenantId={tenantId} />}
+            {activeTab === "stages"        && <StagesTab        tenantId={tenantId} />}
+            {activeTab === "locations"     && <LocationsTab     tenantId={tenantId} />}
+            {activeTab === "team"          && <TeamMembersTab   tenantId={tenantId} />}
+            {activeTab === "subcontractors" && <SubcontractorsTab tenantId={tenantId} />}
           </div>
         </div>
       </div>

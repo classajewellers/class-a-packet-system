@@ -376,9 +376,10 @@ function ManagerNoticeboard({ messages, leadTimes, tenantId, onRefresh }: { mess
 
 // ── Job Card ──────────────────────────────────────────────────────────────────
 
-function JobCard({ packet, config, accent, onDragStart, onClick }: {
+function JobCard({ packet, config, accent, onDragStart, onClick, onMove }: {
   packet: WorkshopPacket; config: WorkshopConfig; accent: string;
   onDragStart: (e: React.DragEvent, id: string) => void; onClick: (p: WorkshopPacket) => void;
+  onMove?: (fields: Record<string, unknown>) => void;
 }) {
   const overdue  = isOverdue(packet);
   const dueToday = isDueToday(packet);
@@ -416,6 +417,45 @@ function JobCard({ packet, config, accent, onDragStart, onClick }: {
           </span>
         )}
       </div>
+      {onMove && config.stages.length > 0 && (
+        <div style={{ marginTop: 7 }} onClick={e => e.stopPropagation()}>
+          <select
+            defaultValue=""
+            onChange={e => {
+              const val = e.target.value;
+              if (!val) return;
+              const [status, sub] = val.split("|");
+              const fields: Record<string, unknown> = { status };
+              if (sub) fields.workshop_intake_substatus = sub;
+              onMove(fields);
+              e.target.value = "";
+            }}
+            style={{ width: "100%", border: "1px solid #E8E8F0", borderRadius: 6, padding: "4px 6px", fontSize: 11, color: "#6B7280", background: "#F9FAFB", cursor: "pointer", outline: "none", fontFamily: "inherit" }}
+          >
+            <option value="">Move to…</option>
+            {config.stages
+              .slice()
+              .sort((a, b) => {
+                const catA = config.categories.find(c => c.id === a.category_id);
+                const catB = config.categories.find(c => c.id === b.category_id);
+                return (catA?.sort_order ?? 99) - (catB?.sort_order ?? 99) || a.sort_order - b.sort_order;
+              })
+              .map(stage => {
+                const isCurrent =
+                  packet.status === stage.key &&
+                  (stage.intake_substatus === null
+                    ? !packet.workshop_intake_substatus || packet.workshop_intake_substatus === "jobs_in"
+                    : packet.workshop_intake_substatus === stage.intake_substatus);
+                if (isCurrent) return null;
+                return (
+                  <option key={`${stage.key}|${stage.intake_substatus ?? ""}`} value={`${stage.key}|${stage.intake_substatus ?? ""}`}>
+                    {stage.label}
+                  </option>
+                );
+              })}
+          </select>
+        </div>
+      )}
     </div>
   );
 }
@@ -817,6 +857,14 @@ export default function WorkshopPage() {
   };
   const handleDelete = (id: string) => { setPackets(prev => prev.filter(p => p.id !== id)); if (selectedPacket?.id === id) setSelectedPacket(null); };
 
+  const handleMove = async (id: string, fields: Record<string, unknown>) => {
+    setPackets(prev => prev.map(p => p.id === id ? { ...p, ...(fields as Partial<WorkshopPacket>), status_updated_at: new Date().toISOString() } : p));
+    if (selectedPacket?.id === id) setSelectedPacket(prev => prev ? { ...prev, ...(fields as Partial<WorkshopPacket>) } : null);
+    try {
+      await fetch(`/api/workshop/packets/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json", "x-tenant-id": tenantId }, body: JSON.stringify(fields) });
+    } catch { fetchPackets(); }
+  };
+
   const JOB_TYPE_FILTER_OPTIONS = [
     ["all","All Types"],["repair","Repairs"],["custom_order","Custom"],
     ["collection_order","Collection"],["online_order","Online"],["stock_work","Stock"],
@@ -896,7 +944,9 @@ export default function WorkshopPage() {
               // first-time experience.
               const isCollapsed = collapsedState[group.categoryId] ?? true;
               const groupPackets = filteredPackets.filter(p => group.columns.some(col => col.match(p, config, profiles)));
-              const visibleCols = isCollapsed ? [] : group.columns.filter(col => !col.isDynamic || packetsForCol(col).length > 0);
+              // Show all columns when expanded — dynamic columns (team/sub) are always
+              // visible so they serve as drop targets even when empty.
+              const visibleCols = isCollapsed ? [] : group.columns;
 
               return (
                 <div key={group.categoryId} style={{ display: "flex", flexDirection: "column", flexShrink: 0, minWidth: 220 }}>
@@ -939,7 +989,7 @@ export default function WorkshopPage() {
                               onDrop={e => handleDrop(e, col)}
                             >
                               {cards.length === 0 && <div style={{ padding: "20px 8px", textAlign: "center", color: "#D1D5DB", fontSize: 12 }}>Drop cards here</div>}
-                              {cards.map(p => <JobCard key={p.id} packet={p} config={config} accent={col.accent} onDragStart={handleDragStart} onClick={() => setSelectedPacket(p)} />)}
+                              {cards.map(p => <JobCard key={p.id} packet={p} config={config} accent={col.accent} onDragStart={handleDragStart} onClick={() => setSelectedPacket(p)} onMove={fields => handleMove(p.id, fields)} />)}
                             </div>
                           </div>
                         );

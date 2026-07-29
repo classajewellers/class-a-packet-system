@@ -48,14 +48,14 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
   const [quotesOpen, setQuotesOpen]       = useState(pathname.startsWith("/quotes"));
   const [inventoryOpen, setInventoryOpen] = useState(pathname.startsWith("/inventory"));
   const [settingsOpen, setSettingsOpen]   = useState(
-    pathname.startsWith("/settings") || pathname.startsWith("/pricing") || pathname.startsWith("/admin/users")
+    pathname.startsWith("/settings") || pathname.startsWith("/pricing") || pathname.startsWith("/admin/users") || pathname.startsWith("/workshop/settings")
   );
 
   // Auto-expand the relevant section when navigating directly to a sub-route
   useEffect(() => {
     if (pathname.startsWith("/quotes"))    setQuotesOpen(true);
     if (pathname.startsWith("/inventory")) setInventoryOpen(true);
-    if (pathname.startsWith("/settings") || pathname.startsWith("/pricing") || pathname.startsWith("/admin/users")) setSettingsOpen(true);
+    if (pathname.startsWith("/settings") || pathname.startsWith("/pricing") || pathname.startsWith("/admin/users") || pathname.startsWith("/workshop/settings")) setSettingsOpen(true);
   }, [pathname]);
 
   const initials = (name: string) =>
@@ -260,6 +260,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
                   {can("settings") && <SubLink href="/settings/staff"     label="Staff" />}
                   {can("settings") && <SubLink href="/settings/vip-tiers" label="VIP Tiers" />}
                   {can("settings") && isManager && <SubLink href="/settings/tenants" label="Stores" />}
+                  {can("workshop") && isManager && <SubLink href="/workshop/settings" label="Workshop" />}
                   {isAdmin         && <SubLink href="/admin/users"         label="Admin Users" />}
                 </div>
               )}
