@@ -90,16 +90,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 }
 
-function deriveJobType(rawJobType: string | undefined, packetType: string | undefined): string {
-  if (rawJobType && WORKSHOP_JOB_TYPES.includes(rawJobType)) return rawJobType;
-  const pt = (packetType ?? "").toLowerCase();
-  if (/online_order|online/.test(pt)) return "online_order";
-  if (/collection_order|collection/.test(pt)) return "collection_order";
-  if (/repair|service/.test(pt)) return "repair";
-  if (/custom|bespoke|commission/.test(pt)) return "custom_order";
-  if (/stock|internal/.test(pt)) return "stock_work";
-  return "repair";
-}
+import { deriveJobType } from "@/lib/deriveJobType";
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";

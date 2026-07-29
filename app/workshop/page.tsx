@@ -617,14 +617,27 @@ function SlideOver({
   const overdue  = isOverdue(local);
   const dueToday = isDueToday(local);
 
-  const ALL_STATUSES: Array<[KanbanStatus, string, string]> = [
-    ["intake",        "Intake",               "#6B7280"],
-    ["on_bench",      "On Bench",             "#D97706"],
-    ["quality_check", "Quality Control",      "#3B82F6"],
-    ["to_be_valued",  "To-Be-Valued",         "#9333EA"],
-    ["ready",         "Ready",                "#16A34A"],
-    ["collected",     "Collected",            "#7C3AED"],
+  // Flat stage list — each entry is [label, status to write, substatus to write, accent colour]
+  // "active" detection checks both status and substatus for the intake sub-stages.
+  type StageEntry = { label: string; status: KanbanStatus; substatus: string | null; accent: string };
+  const FLAT_STAGES: StageEntry[] = [
+    { label: "Intake",               status: "intake",        substatus: "jobs_in",   accent: "#6B7280" },
+    { label: "Pre-Check",            status: "intake",        substatus: "pre_check", accent: "#D97706" },
+    { label: "On Order",             status: "intake",        substatus: "on_order",  accent: "#B45309" },
+    { label: "Quality Control",      status: "quality_check", substatus: null,        accent: "#3B82F6" },
+    { label: "On Bench",             status: "on_bench",      substatus: null,        accent: "#0284C7" },
+    { label: "To-Be-Valued",         status: "to_be_valued",  substatus: null,        accent: "#9333EA" },
+    { label: "Ready for Collection", status: "ready",         substatus: null,        accent: "#16A34A" },
+    { label: "Collected",            status: "collected",     substatus: null,        accent: "#7C3AED" },
   ];
+
+  function isStageActive(entry: StageEntry): boolean {
+    if (local.status !== entry.status) return false;
+    if (entry.substatus !== null) return (local.workshop_intake_substatus ?? "jobs_in") === entry.substatus;
+    // For non-intake stages, don't activate if status=intake (sub-stages cover those)
+    if (entry.status !== "intake") return true;
+    return false;
+  }
 
   const INPUT: React.CSSProperties = {
     width: "100%", border: "1px solid #E8E8F0", borderRadius: 8,
@@ -664,25 +677,27 @@ function SlideOver({
           </button>
         </div>
 
-        {/* Status buttons */}
+        {/* Flat stage selector */}
         <div style={{ padding: "12px 20px", borderBottom: "1px solid #E8E8F0", flexShrink: 0 }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>Stage</div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {ALL_STATUSES.map(([s, label, accent]) => {
-              const active = local.status === s;
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+            {FLAT_STAGES.map(entry => {
+              const active = isStageActive(entry);
+              const payload: Record<string, unknown> = { status: entry.status };
+              if (entry.substatus !== null) payload.workshop_intake_substatus = entry.substatus;
               return (
                 <button
-                  key={s}
-                  onClick={() => patch({ status: s })}
+                  key={`${entry.status}_${entry.substatus ?? ""}`}
+                  onClick={() => patch(payload)}
                   style={{
                     padding: "6px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                    border: `1px solid ${active ? accent : "#E8E8F0"}`,
-                    background: active ? accent : "#fff",
+                    border: `1px solid ${active ? entry.accent : "#E8E8F0"}`,
+                    background: active ? entry.accent : "#fff",
                     color: active ? "#fff" : "#6B7280",
                     transition: "all .12s",
                   }}
                 >
-                  {label}
+                  {entry.label}
                 </button>
               );
             })}
@@ -705,14 +720,6 @@ function SlideOver({
               <option value="collection_order">Collection Order</option>
               <option value="online_order">Online Order</option>
               <option value="stock_work">Stock Work</option>
-            </select>
-          )}
-
-          {local.status === "intake" && FIELD("Intake Sub-Status",
-            <select value={local.workshop_intake_substatus ?? "jobs_in"} onChange={e => patch({ workshop_intake_substatus: e.target.value })} style={INPUT}>
-              <option value="jobs_in">Jobs In</option>
-              <option value="pre_check">Pre-Check</option>
-              <option value="on_order">On Order</option>
             </select>
           )}
 

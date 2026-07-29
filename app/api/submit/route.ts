@@ -4,6 +4,7 @@ import { generateReferenceNumber, generateRepairTrackerNumber } from "@/lib/refe
 import { parseCurrency } from "@/lib/formatters";
 import { fireOrderConfirmationZap } from "@/lib/zapier";
 import { PacketFormData, Packet, SubmitResponse } from "@/lib/types";
+import { deriveJobType } from "@/lib/deriveJobType";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
   const insertData: Record<string, unknown> = {
     reference_number:   referenceNumber,
     packet_type:        formData.packet_type,
+    job_type:           deriveJobType(undefined, formData.packet_type),
     customer_first_name: formData.customer_first_name || null,
     customer_last_name:  formData.customer_last_name  || null,
     customer_email:      formData.customer_email      || null,
