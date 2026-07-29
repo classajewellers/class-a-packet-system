@@ -557,7 +557,7 @@ VALUES
 (tid, 'DEMO-019', 'repair', 'repair',
  c2, 'James', 'Hartley', 'james.hartley.demo@example.com', '0423 222 002',
  'on_bench', 'Nam',
- 'Laser-weld crack in shank of 9ct yellow gold signet ring. Crack at 6 o'clock, 4mm. No resize. Return polished.',
+ 'Laser-weld crack in shank of 9ct yellow gold signet ring. Crack at 6 o''clock, 4mm. No resize. Return polished.',
  '1x 9ct yellow gold signet ring, cracked shank',
  '2026-07-25', '2026-08-06', 240.00, 0.00,
  'JM', now() - interval '1 day');
