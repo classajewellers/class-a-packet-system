@@ -171,13 +171,15 @@ function buildCategoryGroups(config: WorkshopConfig, profiles: Profile[]): Categ
           label: m.name,
           ...colors,
           isDynamic: true,
-          match: (p: WorkshopPacket, _: WorkshopConfig, profs: Profile[]) => {
-            if (p.status !== "on_bench" || !!p.workshop_subcontractor_name || !p.assigned_to) return false;
-            if (m.profile_id) return p.assigned_to === m.profile_id;
-            const prof = profs.find(pr => pr.id === p.assigned_to);
-            return !!prof && prof.full_name?.toLowerCase().trim() === m.name.toLowerCase().trim();
+          match: (p: WorkshopPacket) => {
+            if (p.status !== "on_bench") return false;
+            if (m.profile_id) return p.assigned_to === m.profile_id && !p.workshop_subcontractor_name;
+            // Name-only team members: stored via workshop_subcontractor_name
+            return p.workshop_subcontractor_name === m.name;
           },
-          dropPayload: () => ({ status: "on_bench", assigned_to: m.profile_id ?? null, workshop_subcontractor_name: null }),
+          dropPayload: () => m.profile_id
+            ? { status: "on_bench", assigned_to: m.profile_id, workshop_subcontractor_name: null }
+            : { status: "on_bench", assigned_to: null, workshop_subcontractor_name: m.name },
         }));
       } else if (catNameLower === "subcontractors" || catNameLower === "subcontractor") {
         columns = config.subcontractors.filter(s => s.active).map(s => ({
@@ -261,13 +263,15 @@ function buildFallbackGroups(config: WorkshopConfig, profiles: Profile[]): Categ
   ];
   const teamCols: ColDesc[] = config.teamMembers.filter(m => m.active).map(m => ({
     key: `member_${m.id}`, label: m.name, ...purple, isDynamic: true,
-    match: (p: WorkshopPacket, _: WorkshopConfig, profs: Profile[]) => {
-      if (p.status !== "on_bench" || !!p.workshop_subcontractor_name || !p.assigned_to) return false;
-      if (m.profile_id) return p.assigned_to === m.profile_id;
-      const prof = profs.find(pr => pr.id === p.assigned_to);
-      return !!prof && prof.full_name?.toLowerCase().trim() === m.name.toLowerCase().trim();
+    match: (p: WorkshopPacket) => {
+      if (p.status !== "on_bench") return false;
+      if (m.profile_id) return p.assigned_to === m.profile_id && !p.workshop_subcontractor_name;
+      // Name-only team members: stored via workshop_subcontractor_name
+      return p.workshop_subcontractor_name === m.name;
     },
-    dropPayload: () => ({ status: "on_bench", assigned_to: m.profile_id ?? null, workshop_subcontractor_name: null }),
+    dropPayload: () => m.profile_id
+      ? { status: "on_bench", assigned_to: m.profile_id, workshop_subcontractor_name: null }
+      : { status: "on_bench", assigned_to: null, workshop_subcontractor_name: m.name },
   }));
   const subCols: ColDesc[] = config.subcontractors.filter(s => s.active).map(s => ({
     key: `sub_${s.id}`, label: s.name, ...coral, isDynamic: true,
@@ -483,7 +487,15 @@ function SlideOver({ packet, config, profiles, isManager, tenantId, onClose, onU
         const updated: WorkshopPacket = {
           ...json.packet,
           customer_display_name: local.customer_display_name,
-          assigned_to_name: fields.assigned_to !== undefined ? (profiles.find(p => p.id === fields.assigned_to)?.full_name ?? null) : local.assigned_to_name,
+          assigned_to_name: (() => {
+            // Non-null profile UUID — look up the name
+            if (fields.assigned_to) return profiles.find(p => p.id === fields.assigned_to)?.full_name ?? null;
+            // Name-based assignment (name-only team member or subcontractor)
+            if (fields.workshop_subcontractor_name !== undefined) return fields.workshop_subcontractor_name as string | null;
+            // Explicit unassign
+            if (fields.assigned_to === null) return null;
+            return local.assigned_to_name;
+          })(),
         };
         setLocal(updated); onUpdate(updated);
       }
@@ -603,18 +615,49 @@ function SlideOver({ packet, config, profiles, isManager, tenantId, onClose, onU
             </select>
           )}
 
-          {FIELD("Assigned To",
-            <select value={local.assigned_to ?? ""} onChange={e => patch({ assigned_to: e.target.value || null, workshop_subcontractor_name: null })} style={INPUT}>
-              <option value="">— Unassigned —</option>
-              {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name ?? p.id}</option>)}
-            </select>
-          )}
-
-          {FIELD("Subcontractor",
-            <select value={local.workshop_subcontractor_name ?? ""} onChange={e => patch({ workshop_subcontractor_name: e.target.value || null, assigned_to: null })} style={INPUT}>
-              <option value="">— None —</option>
-              {config.subcontractors.filter(s => s.active).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-            </select>
+          {FIELD("Assign To", (() => {
+            // Compute the current composite value
+            let currentVal = "";
+            if (local.assigned_to) {
+              currentVal = `team_profile:${local.assigned_to}`;
+            } else if (local.workshop_subcontractor_name) {
+              const isTeamName = config.teamMembers.some(m => !m.profile_id && m.name === local.workshop_subcontractor_name);
+              currentVal = isTeamName
+                ? `team_name:${local.workshop_subcontractor_name}`
+                : `sub:${local.workshop_subcontractor_name}`;
+            }
+            return (
+              <select
+                value={currentVal}
+                onChange={e => {
+                  const val = e.target.value;
+                  if (!val) { patch({ assigned_to: null, workshop_subcontractor_name: null }); return; }
+                  if (val.startsWith("team_profile:")) { patch({ assigned_to: val.slice(13), workshop_subcontractor_name: null }); return; }
+                  if (val.startsWith("team_name:"))    { patch({ assigned_to: null, workshop_subcontractor_name: val.slice(10) }); return; }
+                  if (val.startsWith("sub:"))           { patch({ workshop_subcontractor_name: val.slice(4), assigned_to: null }); return; }
+                }}
+                style={INPUT}
+              >
+                <option value="">— Unassigned —</option>
+                {config.teamMembers.filter(m => m.active).length > 0 && (
+                  <optgroup label="Team">
+                    {config.teamMembers.filter(m => m.active).map(m => (
+                      <option key={m.id} value={m.profile_id ? `team_profile:${m.profile_id}` : `team_name:${m.name}`}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {config.subcontractors.filter(s => s.active).length > 0 && (
+                  <optgroup label="Sub-contractors">
+                    {config.subcontractors.filter(s => s.active).map(s => (
+                      <option key={s.id} value={`sub:${s.name}`}>{s.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            );
+          })()
           )}
 
           {FIELD("Pathway",

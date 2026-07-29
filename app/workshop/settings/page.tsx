@@ -322,6 +322,40 @@ const s = {
     marginTop: 12,
     alignItems: "center",
   } as React.CSSProperties,
+  tabDesc: {
+    fontSize: 13,
+    color: "#6B7280",
+    marginBottom: 14,
+    lineHeight: "1.55",
+  } as React.CSSProperties,
+  topBar: {
+    display: "flex",
+    justifyContent: "flex-end",
+    marginBottom: 10,
+  } as React.CSSProperties,
+  btnAdd: {
+    padding: "7px 14px",
+    background: "#635BFF",
+    color: "#fff",
+    border: "none",
+    borderRadius: 7,
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "Inter, sans-serif",
+  } as React.CSSProperties,
+  sortBtn: (disabled: boolean): React.CSSProperties => ({
+    padding: "2px 6px",
+    background: disabled ? "#F9FAFB" : "#F3F4F6",
+    color: disabled ? "#D1D5DB" : "#6B7280",
+    border: "1px solid #E5E7EB",
+    borderRadius: 4,
+    fontSize: 12,
+    cursor: disabled ? "default" : "pointer",
+    lineHeight: "1.2",
+    fontFamily: "Inter, sans-serif",
+    flexShrink: 0,
+  }),
 };
 
 // ─── Color Swatch Picker ──────────────────────────────────────────────────────
@@ -389,6 +423,7 @@ function CategoriesTab({ tenantId }: { tenantId: string }) {
   const [editForm, setEditForm] = useState<Partial<StageCategory>>({});
   const [editError, setEditError] = useState<string | null>(null);
   const [deleteErrors, setDeleteErrors] = useState<Record<string, string>>({});
+  const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState({ name: "", color: "blue", sort_order: 0 });
   const [addError, setAddError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -441,7 +476,7 @@ function CategoriesTab({ tenantId }: { tenantId: string }) {
   };
 
   const deleteCategory = async (id: string) => {
-    if (!confirm("Delete this category?")) return;
+    if (!confirm("Delete this category? Stages inside it will become uncategorised.")) return;
     setDeleteErrors((p) => ({ ...p, [id]: "" }));
     try {
       const res = await fetch(`/api/workshop/categories/${id}`, { method: "DELETE", headers });
@@ -454,6 +489,23 @@ function CategoriesTab({ tenantId }: { tenantId: string }) {
     } catch {
       setDeleteErrors((p) => ({ ...p, [id]: "Network error" }));
     }
+  };
+
+  const moveItem = async (idx: number, dir: -1 | 1) => {
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= categories.length) return;
+    const a = categories[idx];
+    const b = categories[newIdx];
+    const reordered = [...categories];
+    reordered[idx] = b;
+    reordered[newIdx] = a;
+    setCategories(reordered);
+    try {
+      await Promise.all([
+        fetch(`/api/workshop/categories/${a.id}`, { method: "PATCH", headers, body: JSON.stringify({ sort_order: newIdx }) }),
+        fetch(`/api/workshop/categories/${b.id}`, { method: "PATCH", headers, body: JSON.stringify({ sort_order: idx }) }),
+      ]);
+    } catch { fetchCategories(); }
   };
 
   const submitAdd = async (e: React.FormEvent) => {
@@ -472,6 +524,7 @@ function CategoriesTab({ tenantId }: { tenantId: string }) {
         return;
       }
       setAddForm({ name: "", color: "blue", sort_order: 0 });
+      setAddOpen(false);
       await fetchCategories();
     } catch {
       setAddError("Network error");
@@ -484,8 +537,52 @@ function CategoriesTab({ tenantId }: { tenantId: string }) {
 
   return (
     <div>
+      <p style={s.tabDesc}>Categories group stages into collapsible strips on the board. Each strip has a colored header. The order here controls the order they appear on the board.</p>
+      <div style={s.topBar}>
+        <button style={s.btnAdd} onClick={() => { setAddOpen(o => !o); setAddError(null); }}>
+          {addOpen ? "Cancel" : "+ Add Category"}
+        </button>
+      </div>
+
+      {addOpen && (
+        <div style={{ ...s.addFormCard, marginTop: 0, marginBottom: 12 }}>
+          <form onSubmit={submitAdd}>
+            <div style={s.formGrid}>
+              <div style={s.fieldGroup}>
+                <label style={s.label}>Name *</label>
+                <input
+                  style={s.input}
+                  required
+                  autoFocus
+                  value={addForm.name}
+                  onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))}
+                />
+              </div>
+              <div style={s.fieldGroup}>
+                <label style={s.label}>Sort Order</label>
+                <input
+                  type="number"
+                  style={s.input}
+                  value={addForm.sort_order}
+                  onChange={(e) => setAddForm((f) => ({ ...f, sort_order: Number(e.target.value) }))}
+                />
+              </div>
+            </div>
+            <div style={s.fieldGroup}>
+              <label style={s.label}>Color</label>
+              <ColorPicker value={addForm.color} onChange={(c) => setAddForm((f) => ({ ...f, color: c }))} />
+            </div>
+            {addError && <p style={s.errorText}>{addError}</p>}
+            <div style={s.btnRow}>
+              <button type="submit" style={s.btnPrimary} disabled={adding}>{adding ? "Adding…" : "Add Category"}</button>
+              <button type="button" style={s.btnSecondary} onClick={() => setAddOpen(false)}>Cancel</button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {categories.length === 0 && !loading && (
-        <p style={{ color: "#9CA3AF", fontSize: 14 }}>No categories yet.</p>
+        <p style={{ color: "#9CA3AF", fontSize: 14 }}>No categories yet. Add one above.</p>
       )}
       {categories.map((cat, i) => (
         <div key={cat.id}>
@@ -496,17 +593,9 @@ function CategoriesTab({ tenantId }: { tenantId: string }) {
                   <label style={s.label}>Name</label>
                   <input
                     style={s.input}
+                    autoFocus
                     value={editForm.name ?? ""}
                     onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                  />
-                </div>
-                <div style={s.fieldGroup}>
-                  <label style={s.label}>Sort Order</label>
-                  <input
-                    type="number"
-                    style={s.input}
-                    value={editForm.sort_order ?? 0}
-                    onChange={(e) => setEditForm((f) => ({ ...f, sort_order: Number(e.target.value) }))}
                   />
                 </div>
                 <div style={s.fieldGroup}>
@@ -523,78 +612,32 @@ function CategoriesTab({ tenantId }: { tenantId: string }) {
               </div>
               <div style={s.fieldGroup}>
                 <label style={s.label}>Color</label>
-                <ColorPicker
-                  value={editForm.color ?? "blue"}
-                  onChange={(c) => setEditForm((f) => ({ ...f, color: c }))}
-                />
+                <ColorPicker value={editForm.color ?? "blue"} onChange={(c) => setEditForm((f) => ({ ...f, color: c }))} />
               </div>
               {editError && <p style={s.errorText}>{editError}</p>}
               <div style={s.btnRow}>
-                <button style={s.btnPrimary} onClick={() => saveEdit(cat.id)} disabled={saving}>
-                  {saving ? "Saving…" : "Save"}
-                </button>
+                <button style={s.btnPrimary} onClick={() => saveEdit(cat.id)} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
                 <button style={s.btnSecondary} onClick={cancelEdit}>Cancel</button>
               </div>
             </div>
           ) : (
             <div style={s.row(i % 2 === 1)}>
-              <span
-                style={{
-                  ...s.colorDot(COLOR_HEX[(cat.color as ColorOption)] ?? "#6B7280"),
-                  marginTop: 2,
-                }}
-              />
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <button style={s.sortBtn(i === 0)} onClick={() => moveItem(i, -1)} disabled={i === 0} title="Move up">▲</button>
+                <button style={s.sortBtn(i === categories.length - 1)} onClick={() => moveItem(i, 1)} disabled={i === categories.length - 1} title="Move down">▼</button>
+              </div>
+              <span style={{ ...s.colorDot(COLOR_HEX[(cat.color as ColorOption)] ?? "#6B7280"), marginTop: 2, flexShrink: 0 }} />
               <span style={{ flex: 1, fontSize: 14, fontWeight: 500, color: "#1A1A2E" }}>{cat.name}</span>
-              <span style={{ fontSize: 12, color: "#9CA3AF" }}>order {cat.sort_order}</span>
               <span style={{ fontSize: 12, color: "#9CA3AF" }}>{cat.default_collapsed ? "Collapsed" : "Expanded"}</span>
               <button style={s.btnEdit} onClick={() => startEdit(cat)}>Edit</button>
               <button style={s.btnDanger} onClick={() => deleteCategory(cat.id)}>Delete</button>
               {deleteErrors[cat.id] && (
-                <span style={{ ...s.errorText, width: "100%" }}>{deleteErrors[cat.id]}</span>
+                <span style={{ ...s.errorText, width: "100%", fontWeight: 500 }}>⚠ {deleteErrors[cat.id]}</span>
               )}
             </div>
           )}
         </div>
       ))}
-
-      <div style={s.addFormCard}>
-        <p style={{ ...s.sectionTitle, marginTop: 0 }}>Add Category</p>
-        <form onSubmit={submitAdd}>
-          <div style={s.formGrid}>
-            <div style={s.fieldGroup}>
-              <label style={s.label}>Name *</label>
-              <input
-                style={s.input}
-                required
-                value={addForm.name}
-                onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))}
-              />
-            </div>
-            <div style={s.fieldGroup}>
-              <label style={s.label}>Sort Order</label>
-              <input
-                type="number"
-                style={s.input}
-                value={addForm.sort_order}
-                onChange={(e) => setAddForm((f) => ({ ...f, sort_order: Number(e.target.value) }))}
-              />
-            </div>
-          </div>
-          <div style={s.fieldGroup}>
-            <label style={s.label}>Color</label>
-            <ColorPicker
-              value={addForm.color}
-              onChange={(c) => setAddForm((f) => ({ ...f, color: c }))}
-            />
-          </div>
-          {addError && <p style={s.errorText}>{addError}</p>}
-          <div style={s.btnRow}>
-            <button type="submit" style={s.btnPrimary} disabled={adding}>
-              {adding ? "Adding…" : "Add Category"}
-            </button>
-          </div>
-        </form>
-      </div>
     </div>
   );
 }
@@ -609,6 +652,7 @@ function StagesTab({ tenantId }: { tenantId: string }) {
   const [editForm, setEditForm] = useState<Partial<WorkshopStage>>({});
   const [editError, setEditError] = useState<string | null>(null);
   const [deleteErrors, setDeleteErrors] = useState<Record<string, string>>({});
+  const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState({
     key: "", label: "", intake_substatus: "", category_id: "", sort_order: 0,
   });
@@ -701,6 +745,25 @@ function StagesTab({ tenantId }: { tenantId: string }) {
     }
   };
 
+  const moveItem = async (stageList: WorkshopStage[], idx: number, dir: -1 | 1) => {
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= stageList.length) return;
+    const a = stageList[idx];
+    const b = stageList[newIdx];
+    const updatedStages = stages.map(s => {
+      if (s.id === a.id) return { ...s, sort_order: newIdx };
+      if (s.id === b.id) return { ...s, sort_order: idx };
+      return s;
+    });
+    setStages(updatedStages);
+    try {
+      await Promise.all([
+        fetch(`/api/workshop/stages/${a.id}`, { method: "PATCH", headers, body: JSON.stringify({ sort_order: newIdx }) }),
+        fetch(`/api/workshop/stages/${b.id}`, { method: "PATCH", headers, body: JSON.stringify({ sort_order: idx }) }),
+      ]);
+    } catch { fetchAll(); }
+  };
+
   const submitAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdding(true);
@@ -721,6 +784,7 @@ function StagesTab({ tenantId }: { tenantId: string }) {
         return;
       }
       setAddForm({ key: "", label: "", intake_substatus: "", category_id: "", sort_order: 0 });
+      setAddOpen(false);
       await fetchAll();
     } catch {
       setAddError("Network error");
@@ -751,7 +815,56 @@ function StagesTab({ tenantId }: { tenantId: string }) {
 
   return (
     <div>
-      {stages.length === 0 && <p style={{ color: "#9CA3AF", fontSize: 14 }}>No stages yet.</p>}
+      <p style={s.tabDesc}>Stages are the columns that appear within each category. "Locked" stages (Intake, To-Be-Valued, Collected) cannot have their key changed or be deleted.</p>
+      <div style={s.topBar}>
+        <button style={s.btnAdd} onClick={() => { setAddOpen(o => !o); setAddError(null); }}>
+          {addOpen ? "Cancel" : "+ Add Stage"}
+        </button>
+      </div>
+
+      {addOpen && (
+        <div style={{ ...s.addFormCard, marginTop: 0, marginBottom: 16 }}>
+          <form onSubmit={submitAdd}>
+            <div style={s.formGrid}>
+              <div style={s.fieldGroup}>
+                <label style={s.label}>Key *</label>
+                <input style={s.input} required autoFocus value={addForm.key} placeholder="e.g. in_progress"
+                  onChange={(e) => setAddForm((f) => ({ ...f, key: e.target.value }))} />
+              </div>
+              <div style={s.fieldGroup}>
+                <label style={s.label}>Label *</label>
+                <input style={s.input} required value={addForm.label}
+                  onChange={(e) => setAddForm((f) => ({ ...f, label: e.target.value }))} />
+              </div>
+              <div style={s.fieldGroup}>
+                <label style={s.label}>Intake Substatus</label>
+                <input style={s.input} value={addForm.intake_substatus} placeholder="Optional"
+                  onChange={(e) => setAddForm((f) => ({ ...f, intake_substatus: e.target.value }))} />
+              </div>
+              <div style={s.fieldGroup}>
+                <label style={s.label}>Category</label>
+                <select style={s.select} value={addForm.category_id}
+                  onChange={(e) => setAddForm((f) => ({ ...f, category_id: e.target.value }))}>
+                  <option value="">None</option>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div style={s.fieldGroup}>
+                <label style={s.label}>Sort Order</label>
+                <input type="number" style={s.input} value={addForm.sort_order}
+                  onChange={(e) => setAddForm((f) => ({ ...f, sort_order: Number(e.target.value) }))} />
+              </div>
+            </div>
+            {addError && <p style={s.errorText}>{addError}</p>}
+            <div style={s.btnRow}>
+              <button type="submit" style={s.btnPrimary} disabled={adding}>{adding ? "Adding…" : "Add Stage"}</button>
+              <button type="button" style={s.btnSecondary} onClick={() => setAddOpen(false)}>Cancel</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {stages.length === 0 && <p style={{ color: "#9CA3AF", fontSize: 14 }}>No stages yet. Add one above.</p>}
 
       {grouped.map(({ cat, stages: groupStages }) => (
         <div key={cat?.id ?? "uncategorised"}>
@@ -761,9 +874,7 @@ function StagesTab({ tenantId }: { tenantId: string }) {
                 <span style={s.colorDot(COLOR_HEX[(cat.color as ColorOption)] ?? "#6B7280")} />
                 {cat.name}
               </span>
-            ) : (
-              "Uncategorised"
-            )}
+            ) : "Uncategorised"}
           </div>
           {groupStages.map((stage, i) => (
             <div key={stage.id}>
@@ -836,33 +947,25 @@ function StagesTab({ tenantId }: { tenantId: string }) {
                 </div>
               ) : (
                 <div style={s.row(i % 2 === 1)}>
-                  {stage.is_locked && <span style={s.badge}>Locked</span>}
-                  <span style={{ flex: 1, fontSize: 14, fontWeight: 500, color: "#1A1A2E" }}>
-                    {stage.label}
-                  </span>
-                  <span style={s.mono}>{stage.key}</span>
-                  {stage.intake_substatus && (
-                    <span style={{ fontSize: 12, color: "#6B7280" }}>{stage.intake_substatus}</span>
-                  )}
-                  <span style={{ fontSize: 12, color: "#9CA3AF" }}>order {stage.sort_order}</span>
-                  <button style={s.btnEdit} onClick={() => startEdit(stage)}>Edit</button>
-                  <div
-                    title={stage.is_locked ? "Locked — cannot be deleted" : undefined}
-                    style={{ display: "inline-block" }}
-                  >
-                    <button
-                      style={{
-                        ...s.btnDanger,
-                        ...(stage.is_locked ? { opacity: 0.4, cursor: "not-allowed" } : {}),
-                      }}
-                      onClick={() => !stage.is_locked && deleteStage(stage.id)}
-                      disabled={stage.is_locked}
-                    >
-                      Delete
-                    </button>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <button style={s.sortBtn(i === 0)} onClick={() => moveItem(groupStages, i, -1)} disabled={i === 0} title="Move up">▲</button>
+                    <button style={s.sortBtn(i === groupStages.length - 1)} onClick={() => moveItem(groupStages, i, 1)} disabled={i === groupStages.length - 1} title="Move down">▼</button>
                   </div>
+                  {stage.is_locked && <span style={s.badge}>Locked</span>}
+                  <span style={{ flex: 1, fontSize: 14, fontWeight: 500, color: "#1A1A2E" }}>{stage.label}</span>
+                  <span style={s.mono}>{stage.key}</span>
+                  {stage.intake_substatus && <span style={{ fontSize: 12, color: "#6B7280" }}>{stage.intake_substatus}</span>}
+                  <button style={s.btnEdit} onClick={() => startEdit(stage)}>Edit</button>
+                  <button
+                    style={{ ...s.btnDanger, ...(stage.is_locked ? { opacity: 0.4, cursor: "not-allowed" } : {}) }}
+                    onClick={() => !stage.is_locked && deleteStage(stage.id)}
+                    disabled={stage.is_locked}
+                    title={stage.is_locked ? "This stage is locked and cannot be deleted" : undefined}
+                  >
+                    Delete
+                  </button>
                   {deleteErrors[stage.id] && (
-                    <span style={{ ...s.errorText, width: "100%" }}>{deleteErrors[stage.id]}</span>
+                    <span style={{ ...s.errorText, width: "100%", fontWeight: 500 }}>⚠ {deleteErrors[stage.id]}</span>
                   )}
                 </div>
               )}
@@ -870,70 +973,6 @@ function StagesTab({ tenantId }: { tenantId: string }) {
           ))}
         </div>
       ))}
-
-      <div style={s.addFormCard}>
-        <p style={{ ...s.sectionTitle, marginTop: 0 }}>Add Stage</p>
-        <form onSubmit={submitAdd}>
-          <div style={s.formGrid}>
-            <div style={s.fieldGroup}>
-              <label style={s.label}>Key *</label>
-              <input
-                style={s.input}
-                required
-                value={addForm.key}
-                placeholder="e.g. in_progress"
-                onChange={(e) => setAddForm((f) => ({ ...f, key: e.target.value }))}
-              />
-            </div>
-            <div style={s.fieldGroup}>
-              <label style={s.label}>Label *</label>
-              <input
-                style={s.input}
-                required
-                value={addForm.label}
-                onChange={(e) => setAddForm((f) => ({ ...f, label: e.target.value }))}
-              />
-            </div>
-            <div style={s.fieldGroup}>
-              <label style={s.label}>Intake Substatus</label>
-              <input
-                style={s.input}
-                value={addForm.intake_substatus}
-                placeholder="Optional"
-                onChange={(e) => setAddForm((f) => ({ ...f, intake_substatus: e.target.value }))}
-              />
-            </div>
-            <div style={s.fieldGroup}>
-              <label style={s.label}>Category</label>
-              <select
-                style={s.select}
-                value={addForm.category_id}
-                onChange={(e) => setAddForm((f) => ({ ...f, category_id: e.target.value }))}
-              >
-                <option value="">None</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-            <div style={s.fieldGroup}>
-              <label style={s.label}>Sort Order</label>
-              <input
-                type="number"
-                style={s.input}
-                value={addForm.sort_order}
-                onChange={(e) => setAddForm((f) => ({ ...f, sort_order: Number(e.target.value) }))}
-              />
-            </div>
-          </div>
-          {addError && <p style={s.errorText}>{addError}</p>}
-          <div style={s.btnRow}>
-            <button type="submit" style={s.btnPrimary} disabled={adding}>
-              {adding ? "Adding…" : "Add Stage"}
-            </button>
-          </div>
-        </form>
-      </div>
     </div>
   );
 }
@@ -947,6 +986,7 @@ function LocationsTab({ tenantId }: { tenantId: string }) {
   const [editForm, setEditForm] = useState<Partial<WorkshopLocation>>({});
   const [editError, setEditError] = useState<string | null>(null);
   const [deleteErrors, setDeleteErrors] = useState<Record<string, string>>({});
+  const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState({ name: "", job_types: [] as string[], sort_order: 0 });
   const [addError, setAddError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -1014,6 +1054,23 @@ function LocationsTab({ tenantId }: { tenantId: string }) {
     }
   };
 
+  const moveItem = async (idx: number, dir: -1 | 1) => {
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= locations.length) return;
+    const a = locations[idx];
+    const b = locations[newIdx];
+    const reordered = [...locations];
+    reordered[idx] = b;
+    reordered[newIdx] = a;
+    setLocations(reordered);
+    try {
+      await Promise.all([
+        fetch(`/api/workshop/locations/${a.id}`, { method: "PATCH", headers, body: JSON.stringify({ sort_order: newIdx }) }),
+        fetch(`/api/workshop/locations/${b.id}`, { method: "PATCH", headers, body: JSON.stringify({ sort_order: idx }) }),
+      ]);
+    } catch { fetchLocations(); }
+  };
+
   const submitAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdding(true);
@@ -1030,6 +1087,7 @@ function LocationsTab({ tenantId }: { tenantId: string }) {
         return;
       }
       setAddForm({ name: "", job_types: [], sort_order: 0 });
+      setAddOpen(false);
       await fetchLocations();
     } catch {
       setAddError("Network error");
@@ -1044,7 +1102,42 @@ function LocationsTab({ tenantId }: { tenantId: string }) {
 
   return (
     <div>
-      {locations.length === 0 && <p style={{ color: "#9CA3AF", fontSize: 14 }}>No locations yet.</p>}
+      <p style={s.tabDesc}>Locations are the Unassigned queue columns — each maps to job types (e.g. "Repairs" shows all repair jobs waiting to be assigned).</p>
+      <div style={s.topBar}>
+        <button style={s.btnAdd} onClick={() => { setAddOpen(o => !o); setAddError(null); }}>
+          {addOpen ? "Cancel" : "+ Add Location"}
+        </button>
+      </div>
+
+      {addOpen && (
+        <div style={{ ...s.addFormCard, marginTop: 0, marginBottom: 12 }}>
+          <form onSubmit={submitAdd}>
+            <div style={s.formGrid}>
+              <div style={s.fieldGroup}>
+                <label style={s.label}>Name *</label>
+                <input style={s.input} required autoFocus value={addForm.name}
+                  onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))} />
+              </div>
+              <div style={s.fieldGroup}>
+                <label style={s.label}>Sort Order</label>
+                <input type="number" style={s.input} value={addForm.sort_order}
+                  onChange={(e) => setAddForm((f) => ({ ...f, sort_order: Number(e.target.value) }))} />
+              </div>
+            </div>
+            <div style={s.fieldGroup}>
+              <label style={s.label}>Job Types</label>
+              <JobTypeCheckboxes value={addForm.job_types} onChange={(v) => setAddForm((f) => ({ ...f, job_types: v }))} />
+            </div>
+            {addError && <p style={s.errorText}>{addError}</p>}
+            <div style={s.btnRow}>
+              <button type="submit" style={s.btnPrimary} disabled={adding}>{adding ? "Adding…" : "Add Location"}</button>
+              <button type="button" style={s.btnSecondary} onClick={() => setAddOpen(false)}>Cancel</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {locations.length === 0 && <p style={{ color: "#9CA3AF", fontSize: 14 }}>No locations yet. Add one above.</p>}
 
       {locations.map((loc, i) => (
         <div key={loc.id}>
@@ -1053,98 +1146,42 @@ function LocationsTab({ tenantId }: { tenantId: string }) {
               <div style={s.formGrid}>
                 <div style={s.fieldGroup}>
                   <label style={s.label}>Name</label>
-                  <input
-                    style={s.input}
-                    value={editForm.name ?? ""}
-                    onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                  />
-                </div>
-                <div style={s.fieldGroup}>
-                  <label style={s.label}>Sort Order</label>
-                  <input
-                    type="number"
-                    style={s.input}
-                    value={editForm.sort_order ?? 0}
-                    onChange={(e) => setEditForm((f) => ({ ...f, sort_order: Number(e.target.value) }))}
-                  />
+                  <input style={s.input} autoFocus value={editForm.name ?? ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} />
                 </div>
               </div>
               <div style={s.fieldGroup}>
                 <label style={s.label}>Job Types</label>
-                <JobTypeCheckboxes
-                  value={editForm.job_types ?? []}
-                  onChange={(v) => setEditForm((f) => ({ ...f, job_types: v }))}
-                />
+                <JobTypeCheckboxes value={editForm.job_types ?? []} onChange={(v) => setEditForm((f) => ({ ...f, job_types: v }))} />
               </div>
               {editError && <p style={s.errorText}>{editError}</p>}
               <div style={s.btnRow}>
-                <button style={s.btnPrimary} onClick={() => saveEdit(loc.id)} disabled={saving}>
-                  {saving ? "Saving…" : "Save"}
-                </button>
+                <button style={s.btnPrimary} onClick={() => saveEdit(loc.id)} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
                 <button style={s.btnSecondary} onClick={cancelEdit}>Cancel</button>
               </div>
             </div>
           ) : (
             <div style={s.row(i % 2 === 1)}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <button style={s.sortBtn(i === 0)} onClick={() => moveItem(i, -1)} disabled={i === 0} title="Move up">▲</button>
+                <button style={s.sortBtn(i === locations.length - 1)} onClick={() => moveItem(i, 1)} disabled={i === locations.length - 1} title="Move down">▼</button>
+              </div>
               <span style={{ flex: 1, fontSize: 14, fontWeight: 500, color: "#1A1A2E" }}>{loc.name}</span>
               <span style={{ flex: 2, display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
-                {loc.job_types.length === 0 ? (
-                  <span style={{ color: "#9CA3AF", fontSize: 12 }}>No job types</span>
-                ) : (
-                  loc.job_types.map((jt) => (
-                    <span key={jt} style={s.tag}>{jobTypeLabel(jt)}</span>
-                  ))
-                )}
+                {loc.job_types.length === 0
+                  ? <span style={{ color: "#9CA3AF", fontSize: 12 }}>No job types</span>
+                  : loc.job_types.map((jt) => <span key={jt} style={s.tag}>{jobTypeLabel(jt)}</span>)
+                }
               </span>
-              <span style={{ fontSize: 12, color: "#9CA3AF" }}>order {loc.sort_order}</span>
               <button style={s.btnEdit} onClick={() => startEdit(loc)}>Edit</button>
               <button style={s.btnDanger} onClick={() => deleteLocation(loc.id)}>Delete</button>
               {deleteErrors[loc.id] && (
-                <span style={{ ...s.errorText, width: "100%" }}>{deleteErrors[loc.id]}</span>
+                <span style={{ ...s.errorText, width: "100%", fontWeight: 500 }}>⚠ {deleteErrors[loc.id]}</span>
               )}
             </div>
           )}
         </div>
       ))}
-
-      <div style={s.addFormCard}>
-        <p style={{ ...s.sectionTitle, marginTop: 0 }}>Add Location</p>
-        <form onSubmit={submitAdd}>
-          <div style={s.formGrid}>
-            <div style={s.fieldGroup}>
-              <label style={s.label}>Name *</label>
-              <input
-                style={s.input}
-                required
-                value={addForm.name}
-                onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))}
-              />
-            </div>
-            <div style={s.fieldGroup}>
-              <label style={s.label}>Sort Order</label>
-              <input
-                type="number"
-                style={s.input}
-                value={addForm.sort_order}
-                onChange={(e) => setAddForm((f) => ({ ...f, sort_order: Number(e.target.value) }))}
-              />
-            </div>
-          </div>
-          <div style={s.fieldGroup}>
-            <label style={s.label}>Job Types</label>
-            <JobTypeCheckboxes
-              value={addForm.job_types}
-              onChange={(v) => setAddForm((f) => ({ ...f, job_types: v }))}
-            />
-          </div>
-          {addError && <p style={s.errorText}>{addError}</p>}
-          <div style={s.btnRow}>
-            <button type="submit" style={s.btnPrimary} disabled={adding}>
-              {adding ? "Adding…" : "Add Location"}
-            </button>
-          </div>
-        </form>
-      </div>
     </div>
   );
 }
@@ -1158,6 +1195,7 @@ function TeamMembersTab({ tenantId }: { tenantId: string }) {
   const [editForm, setEditForm] = useState<Partial<TeamMember>>({});
   const [editError, setEditError] = useState<string | null>(null);
   const [deleteErrors, setDeleteErrors] = useState<Record<string, string>>({});
+  const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState({ name: "", sort_order: 0, active: true });
   const [addError, setAddError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -1210,7 +1248,7 @@ function TeamMembersTab({ tenantId }: { tenantId: string }) {
   };
 
   const deleteMember = async (id: string) => {
-    if (!confirm("Delete this team member?")) return;
+    if (!confirm("Delete this team member? Jobs currently assigned to them will need to be reassigned.")) return;
     setDeleteErrors((p) => ({ ...p, [id]: "" }));
     try {
       const res = await fetch(`/api/workshop/team-members/${id}`, { method: "DELETE", headers });
@@ -1223,6 +1261,23 @@ function TeamMembersTab({ tenantId }: { tenantId: string }) {
     } catch {
       setDeleteErrors((p) => ({ ...p, [id]: "Network error" }));
     }
+  };
+
+  const moveItem = async (idx: number, dir: -1 | 1) => {
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= members.length) return;
+    const a = members[idx];
+    const b = members[newIdx];
+    const reordered = [...members];
+    reordered[idx] = b;
+    reordered[newIdx] = a;
+    setMembers(reordered);
+    try {
+      await Promise.all([
+        fetch(`/api/workshop/team-members/${a.id}`, { method: "PATCH", headers, body: JSON.stringify({ sort_order: newIdx }) }),
+        fetch(`/api/workshop/team-members/${b.id}`, { method: "PATCH", headers, body: JSON.stringify({ sort_order: idx }) }),
+      ]);
+    } catch { fetchMembers(); }
   };
 
   const submitAdd = async (e: React.FormEvent) => {
@@ -1241,6 +1296,7 @@ function TeamMembersTab({ tenantId }: { tenantId: string }) {
         return;
       }
       setAddForm({ name: "", sort_order: 0, active: true });
+      setAddOpen(false);
       await fetchMembers();
     } catch {
       setAddError("Network error");
@@ -1253,7 +1309,33 @@ function TeamMembersTab({ tenantId }: { tenantId: string }) {
 
   return (
     <div>
-      {members.length === 0 && <p style={{ color: "#9CA3AF", fontSize: 14 }}>No team members yet.</p>}
+      <p style={s.tabDesc}>Team members each get their own column on the board when a job is assigned to them. They show up in the "Assign To" dropdown on every job.</p>
+      <div style={s.topBar}>
+        <button style={s.btnAdd} onClick={() => { setAddOpen(o => !o); setAddError(null); }}>
+          {addOpen ? "Cancel" : "+ Add Team Member"}
+        </button>
+      </div>
+
+      {addOpen && (
+        <div style={{ ...s.addFormCard, marginTop: 0, marginBottom: 12 }}>
+          <form onSubmit={submitAdd}>
+            <div style={s.formGrid}>
+              <div style={s.fieldGroup}>
+                <label style={s.label}>Name *</label>
+                <input style={s.input} required autoFocus value={addForm.name}
+                  onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))} />
+              </div>
+            </div>
+            {addError && <p style={s.errorText}>{addError}</p>}
+            <div style={s.btnRow}>
+              <button type="submit" style={s.btnPrimary} disabled={adding}>{adding ? "Adding…" : "Add Team Member"}</button>
+              <button type="button" style={s.btnSecondary} onClick={() => setAddOpen(false)}>Cancel</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {members.length === 0 && <p style={{ color: "#9CA3AF", fontSize: 14 }}>No team members yet. Add one above.</p>}
 
       {members.map((m, i) => (
         <div key={m.id}>
@@ -1262,91 +1344,41 @@ function TeamMembersTab({ tenantId }: { tenantId: string }) {
               <div style={s.formGrid}>
                 <div style={s.fieldGroup}>
                   <label style={s.label}>Name</label>
-                  <input
-                    style={s.input}
-                    value={editForm.name ?? ""}
-                    onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                  />
-                </div>
-                <div style={s.fieldGroup}>
-                  <label style={s.label}>Sort Order</label>
-                  <input
-                    type="number"
-                    style={s.input}
-                    value={editForm.sort_order ?? 0}
-                    onChange={(e) => setEditForm((f) => ({ ...f, sort_order: Number(e.target.value) }))}
-                  />
+                  <input style={s.input} autoFocus value={editForm.name ?? ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} />
                 </div>
                 <div style={{ ...s.fieldGroup, justifyContent: "center" as const }}>
                   <label style={{ ...s.label, marginBottom: 8 }}>Active</label>
-                  <input
-                    type="checkbox"
-                    checked={editForm.active ?? true}
+                  <input type="checkbox" checked={editForm.active ?? true}
                     onChange={(e) => setEditForm((f) => ({ ...f, active: e.target.checked }))}
-                    style={{ width: 16, height: 16, cursor: "pointer" }}
-                  />
+                    style={{ width: 16, height: 16, cursor: "pointer" }} />
                 </div>
               </div>
               {editError && <p style={s.errorText}>{editError}</p>}
               <div style={s.btnRow}>
-                <button style={s.btnPrimary} onClick={() => saveEdit(m.id)} disabled={saving}>
-                  {saving ? "Saving…" : "Save"}
-                </button>
+                <button style={s.btnPrimary} onClick={() => saveEdit(m.id)} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
                 <button style={s.btnSecondary} onClick={cancelEdit}>Cancel</button>
               </div>
             </div>
           ) : (
             <div style={s.row(i % 2 === 1)}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <button style={s.sortBtn(i === 0)} onClick={() => moveItem(i, -1)} disabled={i === 0} title="Move up">▲</button>
+                <button style={s.sortBtn(i === members.length - 1)} onClick={() => moveItem(i, 1)} disabled={i === members.length - 1} title="Move down">▼</button>
+              </div>
               <span style={{ flex: 1, fontSize: 14, fontWeight: 500, color: "#1A1A2E" }}>{m.name}</span>
-              <span style={{
-                fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 12,
-                background: m.active ? "#D1FAE5" : "#F3F4F6",
-                color: m.active ? "#065F46" : "#6B7280",
-              }}>
+              <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 12, background: m.active ? "#D1FAE5" : "#F3F4F6", color: m.active ? "#065F46" : "#6B7280" }}>
                 {m.active ? "Active" : "Inactive"}
               </span>
-              <span style={{ fontSize: 12, color: "#9CA3AF" }}>order {m.sort_order}</span>
               <button style={s.btnEdit} onClick={() => startEdit(m)}>Edit</button>
               <button style={s.btnDanger} onClick={() => deleteMember(m.id)}>Delete</button>
               {deleteErrors[m.id] && (
-                <span style={{ ...s.errorText, width: "100%" }}>{deleteErrors[m.id]}</span>
+                <span style={{ ...s.errorText, width: "100%", fontWeight: 500 }}>⚠ {deleteErrors[m.id]}</span>
               )}
             </div>
           )}
         </div>
       ))}
-
-      <div style={s.addFormCard}>
-        <p style={{ ...s.sectionTitle, marginTop: 0 }}>Add Team Member</p>
-        <form onSubmit={submitAdd}>
-          <div style={s.formGrid}>
-            <div style={s.fieldGroup}>
-              <label style={s.label}>Name *</label>
-              <input
-                style={s.input}
-                required
-                value={addForm.name}
-                onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))}
-              />
-            </div>
-            <div style={s.fieldGroup}>
-              <label style={s.label}>Sort Order</label>
-              <input
-                type="number"
-                style={s.input}
-                value={addForm.sort_order}
-                onChange={(e) => setAddForm((f) => ({ ...f, sort_order: Number(e.target.value) }))}
-              />
-            </div>
-          </div>
-          {addError && <p style={s.errorText}>{addError}</p>}
-          <div style={s.btnRow}>
-            <button type="submit" style={s.btnPrimary} disabled={adding}>
-              {adding ? "Adding…" : "Add Team Member"}
-            </button>
-          </div>
-        </form>
-      </div>
     </div>
   );
 }
@@ -1360,6 +1392,7 @@ function SubcontractorsTab({ tenantId }: { tenantId: string }) {
   const [editForm, setEditForm] = useState<Partial<Subcontractor>>({});
   const [editError, setEditError] = useState<string | null>(null);
   const [deleteErrors, setDeleteErrors] = useState<Record<string, string>>({});
+  const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState({ name: "", sort_order: 0, active: true });
   const [addError, setAddError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -1427,6 +1460,23 @@ function SubcontractorsTab({ tenantId }: { tenantId: string }) {
     }
   };
 
+  const moveItem = async (idx: number, dir: -1 | 1) => {
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= subcontractors.length) return;
+    const a = subcontractors[idx];
+    const b = subcontractors[newIdx];
+    const reordered = [...subcontractors];
+    reordered[idx] = b;
+    reordered[newIdx] = a;
+    setSubcontractors(reordered);
+    try {
+      await Promise.all([
+        fetch(`/api/workshop/subcontractors/${a.id}`, { method: "PATCH", headers, body: JSON.stringify({ sort_order: newIdx }) }),
+        fetch(`/api/workshop/subcontractors/${b.id}`, { method: "PATCH", headers, body: JSON.stringify({ sort_order: idx }) }),
+      ]);
+    } catch { fetchSubs(); }
+  };
+
   const submitAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdding(true);
@@ -1443,6 +1493,7 @@ function SubcontractorsTab({ tenantId }: { tenantId: string }) {
         return;
       }
       setAddForm({ name: "", sort_order: 0, active: true });
+      setAddOpen(false);
       await fetchSubs();
     } catch {
       setAddError("Network error");
@@ -1455,7 +1506,33 @@ function SubcontractorsTab({ tenantId }: { tenantId: string }) {
 
   return (
     <div>
-      {subcontractors.length === 0 && <p style={{ color: "#9CA3AF", fontSize: 14 }}>No sub-contractors yet.</p>}
+      <p style={s.tabDesc}>Sub-contractors each get their own column on the board when a job is sent out for work. They also appear in the "Assign To" dropdown, grouped separately from team members.</p>
+      <div style={s.topBar}>
+        <button style={s.btnAdd} onClick={() => { setAddOpen(o => !o); setAddError(null); }}>
+          {addOpen ? "Cancel" : "+ Add Sub-contractor"}
+        </button>
+      </div>
+
+      {addOpen && (
+        <div style={{ ...s.addFormCard, marginTop: 0, marginBottom: 12 }}>
+          <form onSubmit={submitAdd}>
+            <div style={s.formGrid}>
+              <div style={s.fieldGroup}>
+                <label style={s.label}>Name *</label>
+                <input style={s.input} required autoFocus value={addForm.name}
+                  onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))} />
+              </div>
+            </div>
+            {addError && <p style={s.errorText}>{addError}</p>}
+            <div style={s.btnRow}>
+              <button type="submit" style={s.btnPrimary} disabled={adding}>{adding ? "Adding…" : "Add Sub-contractor"}</button>
+              <button type="button" style={s.btnSecondary} onClick={() => setAddOpen(false)}>Cancel</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {subcontractors.length === 0 && <p style={{ color: "#9CA3AF", fontSize: 14 }}>No sub-contractors yet. Add one above.</p>}
 
       {subcontractors.map((sub, i) => (
         <div key={sub.id}>
@@ -1464,91 +1541,41 @@ function SubcontractorsTab({ tenantId }: { tenantId: string }) {
               <div style={s.formGrid}>
                 <div style={s.fieldGroup}>
                   <label style={s.label}>Name</label>
-                  <input
-                    style={s.input}
-                    value={editForm.name ?? ""}
-                    onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                  />
-                </div>
-                <div style={s.fieldGroup}>
-                  <label style={s.label}>Sort Order</label>
-                  <input
-                    type="number"
-                    style={s.input}
-                    value={editForm.sort_order ?? 0}
-                    onChange={(e) => setEditForm((f) => ({ ...f, sort_order: Number(e.target.value) }))}
-                  />
+                  <input style={s.input} autoFocus value={editForm.name ?? ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} />
                 </div>
                 <div style={{ ...s.fieldGroup, justifyContent: "center" as const }}>
                   <label style={{ ...s.label, marginBottom: 8 }}>Active</label>
-                  <input
-                    type="checkbox"
-                    checked={editForm.active ?? true}
+                  <input type="checkbox" checked={editForm.active ?? true}
                     onChange={(e) => setEditForm((f) => ({ ...f, active: e.target.checked }))}
-                    style={{ width: 16, height: 16, cursor: "pointer" }}
-                  />
+                    style={{ width: 16, height: 16, cursor: "pointer" }} />
                 </div>
               </div>
               {editError && <p style={s.errorText}>{editError}</p>}
               <div style={s.btnRow}>
-                <button style={s.btnPrimary} onClick={() => saveEdit(sub.id)} disabled={saving}>
-                  {saving ? "Saving…" : "Save"}
-                </button>
+                <button style={s.btnPrimary} onClick={() => saveEdit(sub.id)} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
                 <button style={s.btnSecondary} onClick={cancelEdit}>Cancel</button>
               </div>
             </div>
           ) : (
             <div style={s.row(i % 2 === 1)}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <button style={s.sortBtn(i === 0)} onClick={() => moveItem(i, -1)} disabled={i === 0} title="Move up">▲</button>
+                <button style={s.sortBtn(i === subcontractors.length - 1)} onClick={() => moveItem(i, 1)} disabled={i === subcontractors.length - 1} title="Move down">▼</button>
+              </div>
               <span style={{ flex: 1, fontSize: 14, fontWeight: 500, color: "#1A1A2E" }}>{sub.name}</span>
-              <span style={{
-                fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 12,
-                background: sub.active ? "#D1FAE5" : "#F3F4F6",
-                color: sub.active ? "#065F46" : "#6B7280",
-              }}>
+              <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 12, background: sub.active ? "#D1FAE5" : "#F3F4F6", color: sub.active ? "#065F46" : "#6B7280" }}>
                 {sub.active ? "Active" : "Inactive"}
               </span>
-              <span style={{ fontSize: 12, color: "#9CA3AF" }}>order {sub.sort_order}</span>
               <button style={s.btnEdit} onClick={() => startEdit(sub)}>Edit</button>
               <button style={s.btnDanger} onClick={() => deleteSub(sub.id)}>Delete</button>
               {deleteErrors[sub.id] && (
-                <span style={{ ...s.errorText, width: "100%" }}>{deleteErrors[sub.id]}</span>
+                <span style={{ ...s.errorText, width: "100%", fontWeight: 500 }}>⚠ {deleteErrors[sub.id]}</span>
               )}
             </div>
           )}
         </div>
       ))}
-
-      <div style={s.addFormCard}>
-        <p style={{ ...s.sectionTitle, marginTop: 0 }}>Add Sub-contractor</p>
-        <form onSubmit={submitAdd}>
-          <div style={s.formGrid}>
-            <div style={s.fieldGroup}>
-              <label style={s.label}>Name *</label>
-              <input
-                style={s.input}
-                required
-                value={addForm.name}
-                onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))}
-              />
-            </div>
-            <div style={s.fieldGroup}>
-              <label style={s.label}>Sort Order</label>
-              <input
-                type="number"
-                style={s.input}
-                value={addForm.sort_order}
-                onChange={(e) => setAddForm((f) => ({ ...f, sort_order: Number(e.target.value) }))}
-              />
-            </div>
-          </div>
-          {addError && <p style={s.errorText}>{addError}</p>}
-          <div style={s.btnRow}>
-            <button type="submit" style={s.btnPrimary} disabled={adding}>
-              {adding ? "Adding…" : "Add Sub-contractor"}
-            </button>
-          </div>
-        </form>
-      </div>
     </div>
   );
 }
@@ -1594,7 +1621,7 @@ export default function WorkshopSettingsPage() {
           ← Back to Workshop
         </a>
         <h1 style={s.heading}>Workshop Settings</h1>
-        <p style={s.subheading}>Configure categories, stages, and locations for your workshop.</p>
+        <p style={s.subheading}>Configure categories, stages, locations, team members, and sub-contractors for your workshop board.</p>
 
         <div style={s.card}>
           <div style={s.tabBar}>
