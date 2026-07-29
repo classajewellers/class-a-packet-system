@@ -131,11 +131,46 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
     insertData.order_source          = formData.order_source          || null;
   }
 
-  // ── 4. Insert into Supabase ────────────────────────────────────────────────
-  console.log("[submit] Inserting into packets table...");
-  const tenantId = req.headers.get('x-tenant-id') ?? ''
+  // ── 4. Resolve tenant + customer BEFORE inserting packet ─────────────────
+  console.log("[submit] Resolving tenant and customer...");
+  const tenantId = req.headers.get('x-tenant-id') ?? '';
   insertData.tenant_id = tenantId;
   const supabase = await createTenantSupabaseClient(tenantId);
+
+  // Upsert customer first so packets.customer_id is populated from day one
+  let customerId: string | null = null;
+  if (formData.customer_email) {
+    try {
+      const { data: cRow } = await supabase
+        .from("customers")
+        .upsert(
+          {
+            email:           formData.customer_email.toLowerCase().trim(),
+            phone:           formData.customer_phone      || null,
+            first_name:      formData.customer_first_name || null,
+            last_name:       formData.customer_last_name  || null,
+            last_visit_date: new Date().toISOString().split("T")[0],
+            tenant_id:       tenantId,
+          },
+          { onConflict: "email" }
+        )
+        .select("id")
+        .single();
+      customerId = cRow?.id ?? null;
+      console.log("[submit] Customer resolved → id:", customerId);
+    } catch (err) {
+      console.warn("[submit] Customer upsert failed:", err instanceof Error ? err.message : String(err));
+    }
+  }
+  insertData.customer_id = customerId;
+
+  // Auto-flag for valuation when order value ≥ $3,000
+  if (totalCharges >= 3000) {
+    insertData.workshop_needs_valuation = true;
+  }
+
+  // ── 5. Insert packet ───────────────────────────────────────────────────────
+  console.log("[submit] Inserting into packets table...");
 
   const { data: insertedPacket, error: insertError } = await supabase
     .from("packets")
@@ -168,7 +203,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
   console.log("[submit] Insert successful:", insertedPacket.id, insertedPacket.reference_number);
   const packet = insertedPacket as Packet;
 
-  // ── 5. Zap 1 — Order Confirmation SMS (repair / custom_order only) ──────────
+  // ── 6. Zap 1 — Order Confirmation SMS (repair / custom_order only) ──────────
   const isOrderConfirmType = packet.packet_type === "repair" || packet.packet_type === "custom_order";
   if (isOrderConfirmType) {
     // fire-and-forget; returns null from formatAustralianPhone if no valid mobile
@@ -186,50 +221,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
     });
   }
 
-  // ── 6. Upsert customer record ─────────────────────────────────────────────────
-  if (packet.customer_email) {
-    void (async () => {
-      try {
-        await supabase.from("customers").upsert(
-          {
-            email:           packet.customer_email!.toLowerCase().trim(),
-            phone:           packet.customer_phone    || null,
-            first_name:      packet.customer_first_name || null,
-            last_name:       packet.customer_last_name  || null,
-            last_visit_date: new Date().toISOString().split("T")[0],
-            tenant_id:       tenantId,
-          },
-          { onConflict: "email" }
-        );
-      } catch { /* ignore */ }
-    })();
-  }
-
-  // ── 7. Auto-create workshop job for repair/custom_order ──────────────────────
-  if (packet.packet_type === "repair" || packet.packet_type === "custom_order") {
-    const initialStage = packet.packet_type === "repair" ? "precheck" : "new";
-    const jobType = packet.packet_type === "repair" ? "minor" : "major";
-    const { error: workshopErr } = await supabase.from("workshop_jobs").insert({
-      packet_id: packet.id,
-      reference_number: packet.reference_number,
-      customer_surname: packet.customer_last_name ?? packet.customer_first_name ?? "Unknown",
-      description: packet.articles ?? "",
-      instructions: packet.instructions ?? "",
-      category: packet.packet_type === "repair" ? "repair" : "other",
-      job_type: jobType,
-      stage: initialStage,
-      due_date: packet.due_date ?? null,
-      stage_changed_at: new Date().toISOString(),
-      valuation_required: packet.valuation_required ?? false,
-      tenant_id: tenantId,
-    });
-    if (workshopErr) {
-      // workshop_jobs table may not exist yet — log but don't fail
-      console.warn("[submit] Auto-create workshop job failed:", workshopErr.message);
-    }
-  }
-
-  // ── 8. Mark quote as converted (if this order was created from a quote) ─────
+  // ── 7. Mark quote as converted (if this order was created from a quote) ─────
   if (formData.from_quote_id) {
     console.log("[submit] Marking quote as converted:", formData.from_quote_id);
     const { data: quoteRow, error: quoteErr } = await supabase
@@ -312,7 +304,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
     })();
   }
 
-  // ── 9. Return success ─────────────────────────────────────────────────────
+  // ── 8. Return success ─────────────────────────────────────────────────────
   return NextResponse.json({
     packet,
     results: { supabase: "success" },
