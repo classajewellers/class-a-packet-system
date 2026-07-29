@@ -698,6 +698,7 @@ export default function WorkshopPage() {
   const [packets,  setPackets]  = useState<WorkshopPacket[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [config,   setConfig]   = useState<WorkshopConfig>({ teamMembers: [], subcontractors: [], valuers: [], pathways: [], messages: [], leadTimes: [], categories: [], stages: [], locations: [] });
+  const [configError, setConfigError] = useState<string | null>(null);
   const [loading,        setLoading]        = useState(true);
   const [selectedPacket, setSelectedPacket] = useState<WorkshopPacket | null>(null);
   const [includeCollected, setIncludeCollected] = useState(false);
@@ -738,6 +739,17 @@ export default function WorkshopPage() {
     try {
       const res = await fetch("/api/workshop/config", { cache: "no-store", headers: { "x-tenant-id": tenantId } });
       const json = await res.json();
+      if (!res.ok) {
+        console.error("[workshop] config fetch failed:", res.status, json);
+        setConfigError(`Config load failed (${res.status})`);
+        return;
+      }
+      if (json.configError) {
+        console.error("[workshop] config query error:", json.configError);
+        setConfigError(json.configError);
+      } else {
+        setConfigError(null);
+      }
       setConfig({
         teamMembers:    json.teamMembers    ?? [],
         subcontractors: json.subcontractors ?? [],
@@ -749,7 +761,10 @@ export default function WorkshopPage() {
         stages:         json.stages         ?? [],
         locations:      json.locations      ?? [],
       });
-    } catch { /* noop */ }
+    } catch (err) {
+      console.error("[workshop] fetchConfig threw:", err);
+      setConfigError("Couldn't reach workshop config endpoint");
+    }
   }, [tenantId]);
 
   useEffect(() => { fetchPackets(); }, [fetchPackets]);
@@ -759,6 +774,7 @@ export default function WorkshopPage() {
     fetch("/api/profiles", { headers: { "x-tenant-id": tenantId } }).then(r => r.json()).then(j => setProfiles(j.profiles ?? [])).catch(() => {});
   }, [tenantId]);
 
+  const usingFallback = config.categories.length === 0;
   const categoryGroups = buildCategoryGroups(config, profiles);
 
   const sortAtRisk = (pkts: WorkshopPacket[]) =>
@@ -832,6 +848,18 @@ export default function WorkshopPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {config.messages.map(m => <div key={m.id} style={{ background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 8, padding: "8px 12px", fontSize: 13, color: "#374151" }}>{m.text}</div>)}
           </div>
+        </div>
+      )}
+
+      {/* Config fallback banner */}
+      {usingFallback && (
+        <div style={{ background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 10, padding: "8px 14px", fontSize: 13, color: "#B45309", fontWeight: 500, marginBottom: 10, flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
+          <span>⚠</span>
+          <span>
+            {configError
+              ? `Couldn't load workshop configuration — showing default layout. (${configError})`
+              : "Workshop configuration not found — showing default layout. Run migration 071 and check Supabase logs."}
+          </span>
         </div>
       )}
 
