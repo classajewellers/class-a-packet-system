@@ -213,18 +213,26 @@ function buildColumns(config: WorkshopConfig): ColDesc[] {
     dropPayload: () => ({ status: "on_bench", assigned_to: null, workshop_subcontractor_name: null }),
   });
 
-  // 4b. Unassigned — Repairs (repair + stock_work + online_order)
-  // NOTE: stock_work and online_order mapping here pending confirmation
+  // 4b. Unassigned — Repairs (repair only)
   cols.push({
     key: "unassigned_repairs",
     label: "Repairs",
     headerBg: "#EEF2FF", accent: "#4F46E5", colBg: "#EEF2FF",
-    match: p => p.status === "on_bench" && !p.assigned_to && !p.workshop_subcontractor_name &&
-      (p.job_type === "repair" || p.job_type === "stock_work" || p.job_type === "online_order"),
+    match: p => p.status === "on_bench" && !p.assigned_to && !p.workshop_subcontractor_name && p.job_type === "repair",
     dropPayload: () => ({ status: "on_bench", assigned_to: null, workshop_subcontractor_name: null }),
   });
 
-  // 4c. Unassigned — Collection Orders
+  // 4c. Unassigned — Stock Work / Online Orders
+  cols.push({
+    key: "unassigned_stock_online",
+    label: "Stock Work / Online Orders",
+    headerBg: "#EFF6FF", accent: "#3B82F6", colBg: "#EFF6FF",
+    match: p => p.status === "on_bench" && !p.assigned_to && !p.workshop_subcontractor_name &&
+      (p.job_type === "stock_work" || p.job_type === "online_order"),
+    dropPayload: () => ({ status: "on_bench", assigned_to: null, workshop_subcontractor_name: null }),
+  });
+
+  // 4d. Unassigned — Collection Orders
   cols.push({
     key: "unassigned_collection",
     label: "Collection Orders",
