@@ -281,11 +281,11 @@ function buildFallbackGroups(config: WorkshopConfig, profiles: Profile[]): Categ
   ];
 
   return [
-    { categoryId: "fallback_intake",    label: "Intake",          color: "blue",   ...blue,   columns: intakeCols,     defaultCollapsed: false },
-    { categoryId: "fallback_unassigned",label: "Unassigned",      color: "amber",  ...amber,  columns: unassignedCols, defaultCollapsed: false },
-    { categoryId: "fallback_team",      label: "Team",            color: "purple", ...purple, columns: teamCols,       defaultCollapsed: false },
-    { categoryId: "fallback_sub",       label: "Sub-contractors", color: "coral",  ...coral,  columns: subCols,        defaultCollapsed: false },
-    { categoryId: "fallback_finishing", label: "Finishing",       color: "teal",   ...teal,   columns: finishCols,     defaultCollapsed: false },
+    { categoryId: "fallback_intake",    label: "Intake",          color: "blue",   ...blue,   columns: intakeCols,     defaultCollapsed: true },
+    { categoryId: "fallback_unassigned",label: "Unassigned",      color: "amber",  ...amber,  columns: unassignedCols, defaultCollapsed: true },
+    { categoryId: "fallback_team",      label: "Team",            color: "purple", ...purple, columns: teamCols,       defaultCollapsed: true },
+    { categoryId: "fallback_sub",       label: "Sub-contractors", color: "coral",  ...coral,  columns: subCols,        defaultCollapsed: true },
+    { categoryId: "fallback_finishing", label: "Finishing",       color: "teal",   ...teal,   columns: finishCols,     defaultCollapsed: true },
   ];
 }
 
@@ -890,26 +890,38 @@ export default function WorkshopPage() {
         <div style={{ flex: 1, overflowX: "auto", overflowY: "hidden", paddingBottom: 4 }}>
           <div style={{ display: "flex", gap: 12, height: "100%", minWidth: "max-content" }}>
             {categoryGroups.map(group => {
-              const isCollapsed = collapsedState[group.categoryId] ?? group.defaultCollapsed;
+              // Default to collapsed on first visit; only use saved state if the user has
+              // previously interacted with this category. The DB's default_collapsed is
+              // intentionally ignored here — the strip behavior should always be the
+              // first-time experience.
+              const isCollapsed = collapsedState[group.categoryId] ?? true;
               const groupPackets = filteredPackets.filter(p => group.columns.some(col => col.match(p, config, profiles)));
               const visibleCols = isCollapsed ? [] : group.columns.filter(col => !col.isDynamic || packetsForCol(col).length > 0);
 
               return (
-                <div key={group.categoryId} style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}>
-                  {/* Category header strip */}
+                <div key={group.categoryId} style={{ display: "flex", flexDirection: "column", flexShrink: 0, minWidth: 220 }}>
+                  {/* Category header strip — prominently colored so it reads as a group container */}
                   <button
-                    onClick={() => toggleCategory(group.categoryId, group.defaultCollapsed)}
-                    style={{ display: "flex", alignItems: "center", gap: 8, background: "#fff", border: `1px solid ${group.accent}33`, borderBottom: "none", borderRadius: isCollapsed ? 10 : "10px 10px 0 0", padding: "8px 12px", cursor: "pointer", width: "100%", textAlign: "left", marginBottom: 0 }}
+                    onClick={() => toggleCategory(group.categoryId, true)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      background: `${group.accent}18`,
+                      border: `1.5px solid ${group.accent}50`,
+                      borderBottom: isCollapsed ? undefined : "none",
+                      borderRadius: isCollapsed ? 10 : "10px 10px 0 0",
+                      padding: "10px 14px", cursor: "pointer", width: "100%",
+                      textAlign: "left", marginBottom: 0,
+                    }}
                   >
-                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: group.accent, flexShrink: 0 }} />
-                    <span style={{ fontSize: 11, fontWeight: 700, color: group.accent, textTransform: "uppercase", letterSpacing: "0.06em", flex: 1, whiteSpace: "nowrap" }}>{group.label}</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, background: `${group.accent}20`, color: group.accent, borderRadius: 999, padding: "1px 7px", flexShrink: 0 }}>{groupPackets.length}</span>
-                    <span style={{ fontSize: 11, color: group.accent, flexShrink: 0 }}>{isCollapsed ? "▸" : "▾"}</span>
+                    <span style={{ width: 10, height: 10, borderRadius: "50%", background: group.accent, flexShrink: 0, boxShadow: `0 0 0 2px ${group.accent}30` }} />
+                    <span style={{ fontSize: 12, fontWeight: 800, color: group.accent, textTransform: "uppercase", letterSpacing: "0.07em", flex: 1, whiteSpace: "nowrap" }}>{group.label}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, background: group.accent, color: "#fff", borderRadius: 999, padding: "1px 8px", flexShrink: 0 }}>{groupPackets.length}</span>
+                    <span style={{ fontSize: 13, color: group.accent, flexShrink: 0, marginLeft: 4 }}>{isCollapsed ? "▸" : "▾"}</span>
                   </button>
 
-                  {/* Columns */}
+                  {/* Columns — wrapped in a visually connected container */}
                   {!isCollapsed && (
-                    <div style={{ display: "flex", gap: 8, background: `${group.accent}10`, border: `1px solid ${group.accent}33`, borderRadius: "0 0 10px 10px", padding: 8, flex: 1, overflowY: "hidden" }}>
+                    <div style={{ display: "flex", gap: 8, background: `${group.accent}0C`, border: `1.5px solid ${group.accent}50`, borderRadius: "0 0 10px 10px", padding: 10, flex: 1, overflowY: "hidden" }}>
                       {visibleCols.length === 0 ? (
                         <div style={{ width: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "#D1D5DB", fontSize: 12, padding: "16px 8px" }}>No columns</div>
                       ) : visibleCols.map(col => {
@@ -918,7 +930,7 @@ export default function WorkshopPage() {
                           <div key={col.key} style={{ flexShrink: 0, width: 240, display: "flex", flexDirection: "column" }}>
                             <div style={{ background: col.colBg, borderRadius: "8px 8px 0 0", border: "1px solid #E8E8F0", borderBottom: "none", padding: "8px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                               <span style={{ fontSize: 12, fontWeight: 700, color: col.accent, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{col.label}</span>
-                              <span style={{ fontSize: 11, fontWeight: 700, background: "rgba(255,255,255,0.7)", color: col.accent, borderRadius: 999, padding: "1px 7px", flexShrink: 0 }}>{cards.length}</span>
+                              <span style={{ fontSize: 11, fontWeight: 700, background: "rgba(255,255,255,0.8)", color: col.accent, borderRadius: 999, padding: "1px 7px", flexShrink: 0 }}>{cards.length}</span>
                             </div>
                             <div
                               style={{ flex: 1, overflowY: "auto", background: col.colBg, border: "1px solid #E8E8F0", borderTop: "none", borderRadius: "0 0 8px 8px", padding: 8, display: "flex", flexDirection: "column", gap: 8, minHeight: 160 }}
@@ -932,13 +944,6 @@ export default function WorkshopPage() {
                           </div>
                         );
                       })}
-                    </div>
-                  )}
-
-                  {/* Collapsed pill — show when collapsed */}
-                  {isCollapsed && (
-                    <div style={{ background: `${group.accent}10`, border: `1px solid ${group.accent}33`, borderTop: "none", borderRadius: "0 0 10px 10px", padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 11, color: group.accent }}>{groupPackets.length} job{groupPackets.length !== 1 ? "s" : ""}</span>
                     </div>
                   )}
                 </div>
