@@ -1,8 +1,19 @@
 -- ============================================================
 -- Migration 073: Repair Quoting data model
 -- quote items/lines, discount tiers, tenant-scoped pricing
--- catalogues (metal rates, claw rates, setting tiers, restring
--- matrix, repair/service actions, parts catalogue)
+-- catalogues (claw rates, setting tiers, restring matrix,
+-- repair/service actions, parts catalogue)
+--
+-- NOTE: Repair Quoting reads metal per-gram rates from the
+-- existing pricing_gold_prices table (migration 048) rather
+-- than a separate metal_rates table.
+-- KNOWN LIMITATION: pricing_gold_prices has no tenant_id —
+-- this table is currently shared across all Vault tenants.
+-- Fine while Class A is the only real tenant; must be fixed
+-- (add tenant_id, migrate existing rows) before other tenants
+-- go live with real gold rate needs of their own.
+-- The excluded_from_resize_rebuild flag lives in the separate
+-- repair_quoting_metal_exclusions table below.
 -- ============================================================
 
 -- ── Quote items (physical pieces within a quote) ─────────────────
@@ -76,17 +87,17 @@ CREATE TABLE IF NOT EXISTS pricing_brackets (
 );
 ALTER TABLE pricing_brackets DISABLE ROW LEVEL SECURITY;
 
--- ── Metal rates (per gram, ex any markup) ─────────────────────────
-CREATE TABLE IF NOT EXISTS metal_rates (
+-- ── Resize/rebuild metal exclusions (Repair Quoting only) ────────
+-- Stores which pricing_gold_prices.metal_type values should be
+-- excluded from the resize and rebuild guided calculators.
+-- metal_type must match pricing_gold_prices.metal_type exactly.
+CREATE TABLE IF NOT EXISTS repair_quoting_metal_exclusions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL,
-  metal_name text NOT NULL,
-  rate_per_gram numeric, -- null = N/A / check market
-  excluded_from_resize_rebuild boolean DEFAULT false,
-  sort_order int DEFAULT 0,
-  UNIQUE (tenant_id, metal_name)
+  metal_type text NOT NULL, -- must match pricing_gold_prices.metal_type
+  UNIQUE (tenant_id, metal_type)
 );
-ALTER TABLE metal_rates DISABLE ROW LEVEL SECURITY;
+ALTER TABLE repair_quoting_metal_exclusions DISABLE ROW LEVEL SECURITY;
 
 -- ── Claw rates (per claw, by metal) ───────────────────────────────
 CREATE TABLE IF NOT EXISTS claw_rates (

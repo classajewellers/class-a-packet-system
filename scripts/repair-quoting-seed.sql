@@ -6,6 +6,20 @@
 --   claw_rates.is_confirmed=false  → all except 18ct variants (5 confirmed, 6 unconfirmed)
 --   parts_catalogue: OMITTED — re-share Class_A_Workshop_Repair_Quoting (2) (1).html
 --                    to parse the real PRODUCTS array (~350 SKUs)
+--
+-- NOTE: metal_rates table removed — Repair Quoting reads per-gram
+-- rates from the existing pricing_gold_prices table instead.
+-- KNOWN LIMITATION: pricing_gold_prices has no tenant_id — shared
+-- across all Vault tenants. Fine while Class A is the only real
+-- tenant; must be fixed before other tenants go live.
+--
+-- repair_quoting_metal_exclusions seed: PENDING — pricing_gold_prices
+-- only contains 7 metal_type values (9ct Yellow, 9ct White, 9ct Rose,
+-- 18ct Yellow, 18ct White, 18ct Rose, Platinum). The original
+-- exclusion list (Brass, Bronze, Sterling Silver variants, 10ct,
+-- Palladium 950, Platinum Puro 950) does not exist in that table.
+-- Confirm with Josh which of the 7 live metal_type values (if any)
+-- should be excluded from resize/rebuild before seeding this table.
 -- ============================================================
 
 DO $$
