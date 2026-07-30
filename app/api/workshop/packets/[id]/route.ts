@@ -81,18 +81,27 @@ export async function PATCH(
       body.status === "to_be_valued" ||
       updates.total_charges !== undefined ||
       updates.deposit !== undefined ||
-      intakeTriggerPresent;
+      intakeTriggerPresent ||
+      updates.workshop_step_index !== undefined ||
+      updates.assigned_to !== undefined ||
+      updates.workshop_subcontractor_name !== undefined ||
+      updates.workshop_valuer !== undefined;
 
     let current: {
       status?: string | null;
       total_charges?: number | null;
       deposit?: number | null;
+      workshop_needs_valuation?: boolean | null;
+      workshop_valuer?: string | null;
+      assigned_to?: string | null;
+      workshop_subcontractor_name?: string | null;
+      workshop_step_index?: number | null;
     } | null = null;
 
     if (needsCurrent) {
       const { data } = await supabase
         .from("packets")
-        .select("status, total_charges, deposit")
+        .select("status, total_charges, deposit, workshop_needs_valuation, workshop_valuer, assigned_to, workshop_subcontractor_name, workshop_step_index")
         .eq("id", params.id)
         .single();
       current = data;
@@ -112,7 +121,18 @@ export async function PATCH(
       if (!updates.status_updated_at) {
         updates.status_updated_at = new Date().toISOString();
       }
-      if (incomingStatus === "ready") updates.collection_notified_at = new Date().toISOString();
+      if (incomingStatus === "ready") {
+        // Valuation gate: job must have passed through 'to_be_valued' if it requires valuation
+        const needsVal = updates.workshop_needs_valuation !== undefined
+          ? updates.workshop_needs_valuation
+          : current?.workshop_needs_valuation;
+        if (needsVal && current?.status !== "to_be_valued") {
+          return NextResponse.json({
+            error: "Valuation required. This job must be moved through the Valuation stage before being marked Ready for Collection.",
+          }, { status: 422 });
+        }
+        updates.collection_notified_at = new Date().toISOString();
+      }
       if (incomingStatus === "collected") updates.collected_at = new Date().toISOString();
       // Clear blocked state when status changes (DB trigger also does this; belt-and-suspenders)
       if (incomingStatus && incomingStatus !== current?.status) {
@@ -142,6 +162,49 @@ export async function PATCH(
     const { data, error } = await q.select().single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // Activity logging for notable field changes
+    if (current) {
+      const activityLogs: Record<string, unknown>[] = [];
+
+      if (updates.workshop_step_index !== undefined &&
+          Number(updates.workshop_step_index) !== Number(current.workshop_step_index)) {
+        activityLogs.push({
+          packet_id: params.id,
+          tenant_id: tenantId || null,
+          event_type: "step_advanced",
+          old_value: { step_index: current.workshop_step_index ?? 0 },
+          new_value: { step_index: updates.workshop_step_index },
+        });
+      }
+
+      const assigneeChanged =
+        (updates.assigned_to !== undefined && updates.assigned_to !== current.assigned_to) ||
+        (updates.workshop_subcontractor_name !== undefined && updates.workshop_subcontractor_name !== current.workshop_subcontractor_name);
+      if (assigneeChanged) {
+        activityLogs.push({
+          packet_id: params.id,
+          tenant_id: tenantId || null,
+          event_type: "assignment_changed",
+          old_value: { assigned_to: current.assigned_to, subcontractor: current.workshop_subcontractor_name },
+          new_value: { assigned_to: updates.assigned_to, subcontractor: updates.workshop_subcontractor_name },
+        });
+      }
+
+      if (updates.workshop_valuer !== undefined && updates.workshop_valuer !== current.workshop_valuer) {
+        activityLogs.push({
+          packet_id: params.id,
+          tenant_id: tenantId || null,
+          event_type: "valuation_assigned",
+          old_value: { valuer: current.workshop_valuer },
+          new_value: { valuer: updates.workshop_valuer },
+        });
+      }
+
+      if (activityLogs.length > 0) {
+        await supabase.from("packet_activity_log").insert(activityLogs);
+      }
+    }
 
     // Zap 2 — Ready for Pickup SMS: only when transitioning TO 'ready'
     if (

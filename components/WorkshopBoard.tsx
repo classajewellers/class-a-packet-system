@@ -6,7 +6,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea
 import { WorkshopJob } from "@/lib/types";
 import { WorkshopTrack, TRACK_LABELS, TRACK_STAGES, STAGE_LABELS, STAGE_COLOURS, stagesForFilter, trackFromJobType } from "@/lib/workshopConfig";
 import WorkshopJobCard from "@/components/WorkshopJobCard";
-import WorkshopJobDrawer from "@/components/WorkshopJobDrawer";
+// WorkshopJobDrawer removed — this component is superseded by app/workshop/board/page.tsx
 
 const fieldStyle: React.CSSProperties = {
   width: '100%', border: '1px solid #E8E8F0', borderRadius: 8,
@@ -130,15 +130,7 @@ export default function WorkshopBoard({ jobs, onStageChange, onRefresh, onJobDel
 
   return (
     <>
-      {/* Job detail drawer */}
-      {selectedJob && (
-        <WorkshopJobDrawer
-          job={selectedJob}
-          onClose={() => setSelectedJob(null)}
-          onUpdate={handleJobUpdate}
-          onDelete={handleJobDelete}
-        />
-      )}
+      {/* Job detail drawer (removed — use app/workshop/board instead) */}
 
       {/* Track + Valuation filter bar */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>

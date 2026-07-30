@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { hasPermission, canManage } from "@/lib/userTypes";
 import { formatDateAU, formatCurrency } from "@/lib/formatters";
+import WorkshopJobDrawer from "@/components/WorkshopJobDrawer";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -18,7 +19,7 @@ interface WorkshopPacket {
   reference_number: string;
   packet_type: string | null;
   job_type: string | null;
-  status: KanbanStatus | null;
+  status: string | null;
   status_updated_at: string | null;
   assigned_to: string | null;
   assigned_to_name: string | null;
@@ -35,6 +36,7 @@ interface WorkshopPacket {
   articles: string | null;
   instructions: string | null;
   internal_notes: string | null;
+  item_specifications: string | null;
   total_charges: number | string | null;
   deposit: number | string | null;
   balance: number | string | null;
@@ -535,9 +537,9 @@ function JobCard({ packet, config, accent, grouping, draggingDisabled, onDragSta
   );
 }
 
-// ── Slide-Over Panel ──────────────────────────────────────────────────────────
+// ── (SlideOver removed — see components/WorkshopJobDrawer.tsx) ───────────────
 
-function SlideOver({ packet, config, profiles, isManager, tenantId, onClose, onUpdate, onDelete }: {
+function _SlideOver_REMOVED({ packet, config, profiles, isManager, tenantId, onClose, onUpdate, onDelete }: {
   packet: WorkshopPacket; config: WorkshopConfig; profiles: Profile[];
   isManager: boolean; tenantId: string;
   onClose: () => void; onUpdate: (p: WorkshopPacket) => void; onDelete: (id: string) => void;
@@ -1191,9 +1193,9 @@ export default function WorkshopBoardPage() {
         </div>
       )}
 
-      {/* Slide-over */}
+      {/* Job detail drawer */}
       {selectedPacket && (
-        <SlideOver packet={selectedPacket} config={config} profiles={profiles} isManager={isManager} tenantId={tenantId} onClose={() => setSelectedPacket(null)} onUpdate={handleUpdate} onDelete={handleDelete} />
+        <WorkshopJobDrawer packet={selectedPacket} config={config} profiles={profiles} isManager={isManager} tenantId={tenantId} onClose={() => setSelectedPacket(null)} onUpdate={handleUpdate} onDelete={handleDelete} />
       )}
     </div>
   );
