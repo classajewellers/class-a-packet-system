@@ -115,7 +115,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const goldRate = (goldPrices ?? []).find((r: { metal_type: string }) =>
     r.metal_type?.toLowerCase().includes(metalSearch)
   );
-  const goldPricePerGram: number = Number(goldRate?.price_per_gram ?? 0);
+  // null rate means "not yet set" — treat as 0 so gram-weight path is skipped
+  // and componentCost falls through to flat-cost pricing (goldPricePerGram > 0 guard below)
+  const goldPricePerGram: number = goldRate?.price_per_gram != null ? Number(goldRate.price_per_gram) : 0;
 
   // ── Helper: cost for a component given selected metal ────────────────────
   function componentCost(comp: Record<string, unknown>): number | null {

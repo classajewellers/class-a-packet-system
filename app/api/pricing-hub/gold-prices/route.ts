@@ -17,11 +17,12 @@ export async function GET(): Promise<NextResponse> {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  let body: { id?: string; metal_type?: string; price_per_gram?: number; effective_date?: string; notes?: string };
+  let body: { id?: string; metal_type?: string; price_per_gram?: number | null; effective_date?: string; notes?: string };
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
   if (!body.metal_type?.trim()) return NextResponse.json({ error: "metal_type is required" }, { status: 400 });
-  if (body.price_per_gram == null) return NextResponse.json({ error: "price_per_gram is required" }, { status: 400 });
+  // price_per_gram may be null (means "rate not yet set — block calculations using this metal")
+  if (!("price_per_gram" in body)) return NextResponse.json({ error: "price_per_gram is required (pass null to mark rate as not yet set)" }, { status: 400 });
 
   const row = {
     metal_type:     body.metal_type.trim(),

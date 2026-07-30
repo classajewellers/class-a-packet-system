@@ -1,7 +1,7 @@
 export interface GoldRate {
   id: string;
   metal_type: string;
-  price_per_gram: number;
+  price_per_gram: number | null; // null = rate not yet set; callers must handle
 }
 
 export interface MarginBracket {

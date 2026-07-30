@@ -7,7 +7,7 @@ export const revalidate = 0;
 // ── Pure calculation helpers ─────────────────────────────────────────────────
 // Exact replica of findGoldPrice in app/pricing-hub/products/[id]/page.tsx
 
-type GoldPrice     = { id: string; metal_type: string; price_per_gram: number };
+type GoldPrice     = { id: string; metal_type: string; price_per_gram: number | null };
 type RateCard      = { id: string; card_type: string; label: string; amount: number; unit: string; sort_order: number };
 type MarginBracket = { id: string; cost_min: number; cost_max: number | null; multiplier: number; stone_type: string | null };
 
@@ -109,7 +109,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // ── Metal cost ────────────────────────────────────────────────────────────
   const metalGrams    = variant.metal_grams != null ? Number(variant.metal_grams) : null;
-  const gp            = findGoldPrice(goldPrices, variant.metal_type);
+  const gp = findGoldPrice(goldPrices, variant.metal_type);
+
+  if (gp && gp.price_per_gram === null) {
+    return NextResponse.json(
+      { error: `No rate set for ${gp.metal_type} — cannot calculate metal cost. Set a rate in Settings > Pricing first.` },
+      { status: 422 }
+    );
+  }
+
   const goldRatePerGram = gp ? Number(gp.price_per_gram) : null;
 
   if (metalGrams == null || metalGrams <= 0) {
@@ -119,6 +127,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
+  // goldRatePerGram is null only when no row matched (not: row matched but rate is null — that 422s above)
   const metalCost = metalGrams * (goldRatePerGram ?? 0);
 
   // ── Labour cost (rate cards matching pricing_mode) ────────────────────────
@@ -188,7 +197,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     {
       type:   "metal",
       label:  gp
-        ? `${metalGrams.toFixed(2)}g × $${Number(gp.price_per_gram).toFixed(2)}/g — ${variant.metal_type ?? "metal"}`
+        ? `${metalGrams.toFixed(2)}g × $${Number(gp.price_per_gram ?? 0).toFixed(2)}/g — ${variant.metal_type ?? "metal"}`
         : `${metalGrams.toFixed(2)}g — ${variant.metal_type ?? "metal"} (no rate matched, cost $0)`,
       amount: metalCost,
     },
