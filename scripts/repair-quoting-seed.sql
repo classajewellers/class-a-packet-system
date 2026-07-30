@@ -7,8 +7,6 @@
 --   parts_catalogue: OMITTED — re-share Class_A_Workshop_Repair_Quoting (2) (1).html
 --                    to parse the real PRODUCTS array (~350 SKUs)
 --
--- NOTE: metal_rates table removed — Repair Quoting reads per-gram
--- rates from the existing pricing_gold_prices table instead.
 -- KNOWN LIMITATION: pricing_gold_prices has no tenant_id — shared
 -- across all Vault tenants. Fine while Class A is the only real
 -- tenant; must be fixed before other tenants go live.
@@ -87,41 +85,6 @@ INSERT INTO pricing_brackets (tenant_id, bracket_type, cost_lower_bound, multipl
   (tid, 'labour',  5001, 2.70, 6),
   (tid, 'labour',  7501, 2.60, 7),
   (tid, 'labour', 12501, NULL, 8);  -- POA above $12,501 cost
-
--- ── metal_rates ───────────────────────────────────────────────────
--- excluded_from_resize_rebuild = true:
---   Brass, Bronze, Sterling Silver (TRS), Sterling Silver (AGPD),
---   Sterling Silver (AGPT), 10ct Yellow, 10ct White, 10ct Rose,
---   Palladium 950, Platinum Puro 950
-DELETE FROM metal_rates WHERE tenant_id = tid;
-INSERT INTO metal_rates (tenant_id, metal_name, rate_per_gram, excluded_from_resize_rebuild, sort_order) VALUES
-  (tid, 'Brass',                          0.49,   true,   1),
-  (tid, 'Bronze',                         0.49,   true,   2),
-  (tid, 'Sterling Silver (Standard)',      5.45,   false,  3),
-  (tid, 'Sterling Silver (TRS)',           5.45,   true,   4),
-  (tid, 'Sterling Silver (AGPD)',         10.92,   true,   5),
-  (tid, 'Sterling Silver (AGPT)',         11.13,   true,   6),
-  (tid, '9ct Yellow',                    100.15,   false,  7),
-  (tid, '9ct White (Palladium)',         108.67,   false,  8),
-  (tid, '9ct White (Nickel Free Hard)',  101.15,   false,  9),
-  (tid, '9ct Rose',                      100.11,   false, 10),
-  (tid, '9ct Pink',                      100.11,   false, 11),
-  (tid, '10ct Yellow',                   121.68,   true,  12),
-  (tid, '10ct White',                    126.52,   true,  13),
-  (tid, '10ct Rose',                     119.64,   true,  14),
-  (tid, '14ct Yellow',                   164.62,   false, 15),
-  (tid, '14ct White',                    170.55,   false, 16),
-  (tid, '14ct Rose',                     168.24,   false, 17),
-  (tid, '14ct Pink',                     168.24,   false, 18),
-  (tid, '18ct Yellow (Standard)',        197.75,   false, 19),
-  (tid, '18ct Yellow (Rich)',            201.71,   false, 20),
-  (tid, '18ct White Hard (13.2% PGM)',   206.99,   false, 21),
-  (tid, '18ct White Premium (15% PD)',   208.76,   false, 22),
-  (tid, '18ct Rose',                     204.60,   false, 23),
-  (tid, '22ct Yellow',                   249.79,   false, 24),
-  (tid, 'Palladium 950',                  78.26,   true,  25),
-  (tid, 'Platinum Puro 950',              NULL,    true,  26),  -- rate N/A, excluded from resize/rebuild
-  (tid, 'PlatinumG 950',                 122.21,   false, 27);
 
 -- ── claw_rates ────────────────────────────────────────────────────
 -- is_confirmed = TRUE  → 18ct variants only (5 rows)
