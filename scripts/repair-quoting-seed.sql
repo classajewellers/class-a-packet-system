@@ -13,14 +13,25 @@
 -- across all Vault tenants. Fine while Class A is the only real
 -- tenant; must be fixed before other tenants go live.
 --
--- repair_quoting_metal_exclusions seed: PENDING — pricing_gold_prices
--- only contains 7 metal_type values (9ct Yellow, 9ct White, 9ct Rose,
--- 18ct Yellow, 18ct White, 18ct Rose, Platinum). The original
--- exclusion list (Brass, Bronze, Sterling Silver variants, 10ct,
--- Palladium 950, Platinum Puro 950) does not exist in that table.
--- Confirm with Josh which of the 7 live metal_type values (if any)
--- should be excluded from resize/rebuild before seeding this table.
+-- repair_quoting_metal_exclusions: seeded empty — no metals excluded
+-- at this 11-metal granularity. Platinum stays available for
+-- resize/rebuild. Revisit if the table is expanded further.
+--
+-- pricing_gold_prices additions: 4 new rows added below (global table,
+-- outside the tenant-scoped DO block). Rates are PLACEHOLDERS —
+-- confirm with Josh before relying on these for real quotes.
 -- ============================================================
+
+-- ── pricing_gold_prices — gap-fill for Repair Quoting metals ─────
+-- GLOBAL TABLE (no tenant_id) — affects all Vault tenants.
+-- These 4 metals appear in parts_catalogue but were missing from the
+-- original migration 048 seed. Rates are placeholder estimates only.
+INSERT INTO pricing_gold_prices (metal_type, price_per_gram, effective_date, notes) VALUES
+  ('Sterling Silver', 1.50,  CURRENT_DATE, 'Placeholder rate — confirm with Josh before relying on this for real quotes'),
+  ('14ct Yellow Gold', 45.00, CURRENT_DATE, 'Placeholder rate — confirm with Josh before relying on this for real quotes'),
+  ('Rolled Gold',      2.00,  CURRENT_DATE, 'Placeholder rate — confirm with Josh before relying on this for real quotes'),
+  ('Gold Plated',      1.00,  CURRENT_DATE, 'Placeholder rate — confirm with Josh before relying on this for real quotes')
+ON CONFLICT DO NOTHING;
 
 DO $$
 DECLARE
@@ -177,6 +188,12 @@ INSERT INTO service_actions (tenant_id, name, pricing_mode, default_price, defau
   (tid, 'Polish and Rhodium Plating','minutes',            NULL,   30,  '$1/min cost, marked up · 30-min blocks',      4),
   (tid, 'Cleaning',                 'minutes',             NULL,   30,  '$1/min cost, marked up · 30-min blocks',      5),
   (tid, 'Miscellaneous',            'description_labour',  NULL,   30,  '$1/min cost, marked up · 30-min blocks',      6);
+
+-- ── repair_quoting_metal_exclusions ──────────────────────────────
+-- No exclusions at this 11-metal granularity. Platinum stays
+-- available for resize/rebuild per decision 2026-07-30.
+DELETE FROM repair_quoting_metal_exclusions WHERE tenant_id = tid;
+-- (no INSERTs — empty by design for now)
 
 -- ── parts_catalogue ───────────────────────────────────────────────
 -- OMITTED — awaiting re-share of Class_A_Workshop_Repair_Quoting (2) (1).html
