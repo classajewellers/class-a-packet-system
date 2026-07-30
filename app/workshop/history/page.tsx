@@ -121,7 +121,7 @@ export default function WorkshopHistoryPage() {
   const fetchPackets = useCallback(async () => {
     if (!tenantId) return;
     try {
-      const res = await fetch("/api/workshop/packets", { cache: "no-store", headers });
+      const res = await fetch("/api/workshop/packets?include_collected=1", { cache: "no-store", headers });
       const json = await res.json();
       setPackets((json.packets ?? []).filter((p: WorkshopPacket) => p.status === "collected"));
     } catch { setPackets([]); } finally { setLoading(false); }
