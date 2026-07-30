@@ -24,13 +24,17 @@
 
 -- ── pricing_gold_prices — gap-fill for Repair Quoting metals ─────
 -- GLOBAL TABLE (no tenant_id) — affects all Vault tenants.
--- These 4 metals appear in parts_catalogue but were missing from the
--- original migration 048 seed. Rates are placeholder estimates only.
+-- Gold Plated and Rolled Gold intentionally excluded: these are
+-- always bought as finished parts at a flat cost — never priced by
+-- weight — so a per-gram rate makes no sense for them.
+-- Sterling Silver and 14ct Yellow Gold ARE used in resize/rebuild
+-- by weight, but real rates are not yet confirmed. Stored as NULL
+-- (requires migration 073 to drop the NOT NULL constraint first).
+-- price_per_gram = NULL means "rate not set — block calculation /
+-- show check-with-manager" in the Repair Quoting calculators.
 INSERT INTO pricing_gold_prices (metal_type, price_per_gram, effective_date, notes) VALUES
-  ('Sterling Silver', 1.50,  CURRENT_DATE, 'Placeholder rate — confirm with Josh before relying on this for real quotes'),
-  ('14ct Yellow Gold', 45.00, CURRENT_DATE, 'Placeholder rate — confirm with Josh before relying on this for real quotes'),
-  ('Rolled Gold',      2.00,  CURRENT_DATE, 'Placeholder rate — confirm with Josh before relying on this for real quotes'),
-  ('Gold Plated',      1.00,  CURRENT_DATE, 'Placeholder rate — confirm with Josh before relying on this for real quotes')
+  ('Sterling Silver',  NULL, CURRENT_DATE, 'Rate not yet set — confirm with Josh before using in a live quote'),
+  ('14ct Yellow Gold', NULL, CURRENT_DATE, 'Rate not yet set — confirm with Josh before using in a live quote')
 ON CONFLICT DO NOTHING;
 
 DO $$

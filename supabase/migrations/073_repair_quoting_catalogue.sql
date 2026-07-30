@@ -189,6 +189,13 @@ CREATE TABLE IF NOT EXISTS fitting_fee_config (
 );
 ALTER TABLE fitting_fee_config DISABLE ROW LEVEL SECURITY;
 
+-- ── Allow NULL rates in pricing_gold_prices ───────────────────────
+-- Required so metals with no confirmed rate (e.g. Sterling Silver,
+-- 14ct Yellow Gold) can be stored as NULL rather than a fake $0.
+-- Repair Quoting calculators must check for NULL and show
+-- "Rate not set — check with manager" rather than computing $0.
+ALTER TABLE pricing_gold_prices ALTER COLUMN price_per_gram DROP NOT NULL;
+
 -- ── Extend quotes table for the new lifecycle ──────────────────────
 ALTER TABLE quotes ADD COLUMN IF NOT EXISTS accepted_at timestamptz;
 ALTER TABLE quotes ADD COLUMN IF NOT EXISTS accepted_by text;
