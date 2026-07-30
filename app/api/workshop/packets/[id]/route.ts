@@ -31,6 +31,9 @@ const ALLOWED_FIELDS = [
   "workshop_valuer",
   "workshop_supplier",
   "workshop_po_number",
+  "blocked_reason",
+  "blocked_note",
+  "blocked_at",
 ];
 
 // Fields that trigger a revert to intake/pre_check when the packet is not already in intake
@@ -111,6 +114,12 @@ export async function PATCH(
       }
       if (incomingStatus === "ready") updates.collection_notified_at = new Date().toISOString();
       if (incomingStatus === "collected") updates.collected_at = new Date().toISOString();
+      // Clear blocked state when status changes (DB trigger also does this; belt-and-suspenders)
+      if (incomingStatus && incomingStatus !== current?.status) {
+        if (!("blocked_reason" in updates)) updates.blocked_reason = null;
+        if (!("blocked_note"   in updates)) updates.blocked_note   = null;
+        if (!("blocked_at"     in updates)) updates.blocked_at     = null;
+      }
     }
 
     // Auto-set workshop_needs_valuation when total_charges >= 3000

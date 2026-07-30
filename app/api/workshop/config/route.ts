@@ -17,6 +17,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       { data: categories,     error: e7 },
       { data: stages,         error: e8 },
       { data: locations,      error: e9 },
+      { data: settingsRow,    error: e10 },
     ] = await Promise.all([
       supabase.from("workshop_team_members").select("*").eq("tenant_id", tenantId).order("sort_order"),
       supabase.from("workshop_subcontractors").select("*").eq("tenant_id", tenantId).order("sort_order"),
@@ -27,10 +28,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       supabase.from("workshop_stage_categories").select("*").eq("tenant_id", tenantId).order("sort_order"),
       supabase.from("workshop_stages").select("*").eq("tenant_id", tenantId).order("sort_order"),
       supabase.from("workshop_locations").select("*").eq("tenant_id", tenantId).order("sort_order"),
+      supabase.from("workshop_settings").select("*").eq("tenant_id", tenantId).maybeSingle(),
     ]);
 
     // Log any query-level errors — these don't throw, so they're invisible without this
-    const queryErrors = { e1, e2, e3, e4, e5, e6, e7, e8, e9 };
+    const queryErrors = { e1, e2, e3, e4, e5, e6, e7, e8, e9, e10 };
     for (const [key, err] of Object.entries(queryErrors)) {
       if (err) console.error(`[workshop/config] query ${key} failed:`, err.code, err.message, err.details);
     }
@@ -45,6 +47,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       categories:     categories     ?? [],
       stages:         stages         ?? [],
       locations:      locations      ?? [],
+      settings: {
+        stale_threshold_days: settingsRow?.stale_threshold_days ?? 5,
+        valuation_threshold:  settingsRow?.valuation_threshold  ?? 3000,
+      },
       // Surface any config-table errors to the client so the board can show a banner
       configError: e7?.message ?? e8?.message ?? e9?.message ?? null,
     });
