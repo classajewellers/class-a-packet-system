@@ -648,7 +648,7 @@ export default function QuoteViewPage() {
               {converting ? "Converting…" : "Convert to Order"}
             </button>
             <Link
-              href={`/quotes/builder?quote_id=${quote.id}`}
+              href={`/quotes/builder/new?quote_id=${quote.id}`}
               style={{ display: "flex", alignItems: "center", gap: 6, background: "#EEF2FF", color: "#635BFF", border: "1px solid #635BFF", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, textDecoration: "none" }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -913,7 +913,7 @@ export default function QuoteViewPage() {
         {/* ── Add Item button ────────────────────────────────── */}
         <div style={{ marginTop: 16, display: "flex", justifyContent: "center" }}>
           <Link
-            href={`/quotes/builder?quote_id=${quote.id}`}
+            href={`/quotes/builder/new?quote_id=${quote.id}`}
             style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 24px", borderRadius: 10, border: "1px dashed #635BFF", background: "#EEF2FF", color: "#635BFF", fontSize: 14, fontWeight: 600, textDecoration: "none" }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
