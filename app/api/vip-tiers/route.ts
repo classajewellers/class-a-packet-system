@@ -30,6 +30,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         min_spend: body.min_spend ?? 0,
         min_orders: body.min_orders ?? 0,
         colour: body.colour ?? "#9CA3AF",
+        discount_percent: body.discount_percent ?? 0,
+        eligible_ownership_only: body.eligible_ownership_only ?? false,
+        manual_only: body.manual_only ?? false,
       })
       .select()
       .single();
@@ -46,7 +49,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     const body = await req.json();
     const { id, ...fields } = body;
     const supabase = await createTenantSupabaseClient(tenantId);
-    const allowed = ["tier_name", "tier_order", "min_spend", "min_orders", "colour"];
+    const allowed = ["tier_name", "tier_order", "min_spend", "min_orders", "colour", "discount_percent", "eligible_ownership_only", "manual_only"];
     const update: Record<string, unknown> = {};
     for (const key of allowed) {
       if (key in fields) update[key] = fields[key];

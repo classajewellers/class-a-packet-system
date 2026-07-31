@@ -4,8 +4,11 @@ import { createTenantSupabaseClient } from "@/lib/supabase-server";
 export const dynamic = "force-dynamic";
 
 interface TierInfo {
+  id: string;
   tier_name: string;
   colour: string;
+  discount_percent: number;
+  eligible_ownership_only: boolean;
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -22,10 +25,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
     const supabase = await createTenantSupabaseClient(tenantId);
 
-    // Fetch tier config ordered highest → lowest
+    // Fetch spend-based tiers only (manual_only tiers are override-only, not auto-computed)
     const tierQ = supabase
       .from("vip_tier_config")
-      .select("tier_name, tier_order, min_spend, min_orders, colour")
+      .select("id, tier_name, tier_order, min_spend, min_orders, colour, discount_percent, eligible_ownership_only")
+      .eq("manual_only", false)
       .order("tier_order", { ascending: false });
     const { data: tiers } = await (tenantId ? tierQ.eq("tenant_id", tenantId) : tierQ);
     if (!tiers?.length) return NextResponse.json({ results: {} });
@@ -55,10 +59,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const spend = spendMap.get(email) ?? 0;
       const orders = ordersMap.get(email) ?? 0;
       const matched = tiers.find(
-        t => spend >= Number(t.min_spend) || orders >= t.min_orders
+        t => spend >= Number(t.min_spend) || orders >= Number(t.min_orders)
       );
       results[email] = matched
-        ? { tier_name: matched.tier_name, colour: matched.colour }
+        ? {
+            id: matched.id,
+            tier_name: matched.tier_name,
+            colour: matched.colour,
+            discount_percent: Number(matched.discount_percent ?? 0),
+            eligible_ownership_only: matched.eligible_ownership_only ?? false,
+          }
         : null;
     }
 

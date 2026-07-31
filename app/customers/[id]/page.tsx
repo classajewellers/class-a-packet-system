@@ -98,15 +98,6 @@ interface TimelineEvent {
 
 // ── VIP tier ─────────────────────────────────────────────────────────────────
 
-function getVipTier(spend: number, nonRepairOrders: number) {
-  if (spend >= 30000 || nonRepairOrders >= 20) return { tier: "Argyle",   color: "#E11D48", bg: "#FFF1F2" };
-  if (spend >= 20000 || nonRepairOrders >= 15) return { tier: "Diamond",  color: "#0891B2", bg: "#ECFEFF" };
-  if (spend >= 15000 || nonRepairOrders >= 10) return { tier: "Platinum", color: "#4F46E5", bg: "#EEF2FF" };
-  if (spend >= 10000 || nonRepairOrders >= 6)  return { tier: "Gold",     color: "#D97706", bg: "#FFFBEB" };
-  if (spend >= 5000  || nonRepairOrders >= 3)  return { tier: "Silver",   color: "#6B7280", bg: "#F3F4F6" };
-  return null;
-}
-
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function StatPill({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
@@ -146,6 +137,7 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
   const [packets, setPackets] = useState<Packet[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
+  const [vipTier, setVipTier] = useState<{ tier_name: string; colour: string } | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("orders");
   const [selectedPacket, setSelectedPacket] = useState<Packet | null>(null);
 
@@ -219,6 +211,16 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
       })
       .catch(() => setLoading(false));
   }, [email, user?.tenantId, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated || !user?.tenantId) return;
+    fetch(`/api/vip-tier/customer?emails=${encodeURIComponent(email)}`, {
+      headers: { 'x-tenant-id': user.tenantId },
+    })
+      .then(r => r.json())
+      .then(j => setVipTier(j.results?.[email.toLowerCase().trim()] ?? null))
+      .catch(() => {});
+  }, [email, user?.tenantId, hydrated]); // eslint-disable-line
 
   // ── Load partners on tab activate ─────────────────────────────────────────
   useEffect(() => {
@@ -535,8 +537,6 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
   // ── Computed ──────────────────────────────────────────────────────────────
   const nonRepairPackets = packets.filter(p => p.packet_type !== "repair");
   const nonRepairSpend = nonRepairPackets.reduce((s, p) => s + (typeof p.total_charges === "number" ? p.total_charges : 0), 0);
-  const vipTier = getVipTier(nonRepairSpend, nonRepairPackets.length);
-
   const timeline: TimelineEvent[] = [
     ...packets.map((p): TimelineEvent => ({
       date: p.created_at, type: "order", label: packetTypeLabel(p.packet_type),
@@ -705,8 +705,8 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>{displayName}</h1>
                     {vipTier && (
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 999, background: vipTier.bg, color: vipTier.color, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                        {vipTier.tier}
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 999, background: `${vipTier.colour}22`, color: vipTier.colour, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                        {vipTier.tier_name}
                       </span>
                     )}
                     <button onClick={openEdit} style={{ fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 8, border: '1px solid #E8E8F0', background: '#F9FAFB', color: '#374151', cursor: 'pointer' }}>

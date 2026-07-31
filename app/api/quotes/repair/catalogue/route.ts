@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     supabase.from('service_actions').select('*').eq('tenant_id', tenantId).eq('active', true).order('sort_order'),
     supabase.from('parts_catalogue').select('*').eq('tenant_id', tenantId).eq('active', true).order('category').order('name'),
     supabase.from('pricing_brackets').select('*').eq('tenant_id', tenantId).order('bracket_type').order('cost_lower_bound'),
-    supabase.from('discount_tiers').select('*').eq('tenant_id', tenantId).order('sort_order'),
+    supabase.from('vip_tier_config').select('id, tier_name, discount_percent, eligible_ownership_only, manual_only, colour').eq('tenant_id', tenantId).order('tier_order'),
     supabase.from('fitting_fee_config').select('*').eq('tenant_id', tenantId).single(),
   ]);
 
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     serviceActions: serviceActionsRes.data ?? [],
     parts: partsRes.data ?? [],
     brackets: bracketsRes.data ?? [],
-    discountTiers: discountTiersRes.data ?? [],
+    allTiers: discountTiersRes.data ?? [],
     fittingFeeConfig: fittingFeeRes.data ?? { fee_per_end: 35 },
   });
 }

@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { customer, items, discountTierId, discountAmount } = body;
+    const { customer, items, vipTierId, discountAmount, tierOverride } = body;
 
     const referenceNumber = await generateQuoteReferenceNumber();
 
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
         customer_last_name: customer?.lastName || null,
         customer_email: customer?.email || null,
         customer_phone: customer?.phone || null,
-        discount_tier_id: discountTierId || null,
+        vip_tier_id: vipTierId || null,
         discount_amount: discountAmount || null,
         tenant_id: tenantId,
       })
@@ -45,6 +45,20 @@ export async function POST(req: NextRequest) {
         },
         { onConflict: 'email' }
       );
+    }
+
+    // Apply manager-approved tier override to the customer record
+    if (tierOverride?.customerId && tierOverride?.tierId) {
+      void supabase
+        .from('customers')
+        .update({
+          tier_override_id: tierOverride.tierId,
+          tier_override_approved_by: tierOverride.approvedBy || null,
+          tier_override_approved_at: new Date().toISOString(),
+          tier_override_note: tierOverride.note || null,
+        })
+        .eq('id', tierOverride.customerId)
+        .eq('tenant_id', tenantId);
     }
 
     for (let i = 0; i < items.length; i++) {

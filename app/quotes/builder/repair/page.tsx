@@ -30,7 +30,7 @@ type Part = {
   name: string; size: string | null; cost: number; fittable: boolean; is_estimated: boolean;
 };
 type PricingBracket = { id: string; bracket_type: string; cost_lower_bound: number; multiplier: number | null };
-type DiscountTier = { id: string; name: string; discount_percent: number; eligible_ownership_only: boolean };
+type VipTier = { id: string; tier_name: string; discount_percent: number; eligible_ownership_only: boolean; manual_only: boolean; colour: string };
 type FittingFeeConfig = { fee_per_end: number };
 type CatalogueData = {
   settings: Settings;
@@ -38,7 +38,7 @@ type CatalogueData = {
   serviceActions: ServiceAction[];
   parts: Part[];
   brackets: PricingBracket[];
-  discountTiers: DiscountTier[];
+  allTiers: VipTier[];
   fittingFeeConfig: FittingFeeConfig;
 };
 
@@ -458,12 +458,17 @@ function RepairQuoteBuilderInner() {
 
   const [catalogue, setCatalogue] = useState<CatalogueData | null>(null);
   const [customer, setCustomer] = useState<Customer>({ firstName: "", lastName: "", email: "", phone: "" });
+  const [customerId, setCustomerId] = useState<string | null>(null);
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerResults, setCustomerResults] = useState<any[]>([]);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const customerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [computedTier, setComputedTier] = useState<VipTier | null>(null);
+  const [customerTierOverrideId, setCustomerTierOverrideId] = useState<string | null>(null);
+  const [overrideTierId, setOverrideTierId] = useState("");
+  const [overrideNote, setOverrideNote] = useState("");
+  const [showOverridePicker, setShowOverridePicker] = useState(false);
   const [items, setItems] = useState<QuoteItem[]>([newItem()]);
-  const [discountTierId, setDiscountTierId] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
@@ -484,7 +489,25 @@ function RepairQuoteBuilderInner() {
     }, 300);
   }, [customerSearch]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Fetch computed VIP tier when customer email is set
+  useEffect(() => {
+    if (!customer.email) { setComputedTier(null); return; }
+    const t = setTimeout(() => {
+      fetch(`/api/vip-tier/customer?emails=${encodeURIComponent(customer.email)}`, { headers })
+        .then(r => r.json())
+        .then(j => setComputedTier(j.results?.[customer.email.toLowerCase().trim()] ?? null))
+        .catch(() => {});
+    }, 400);
+    return () => clearTimeout(t);
+  }, [customer.email]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!hydrated) return null;
+
+  // Effective tier: manager override > customer stored override > computed spend tier
+  const effectiveTierId = overrideTierId || customerTierOverrideId || "";
+  const effectiveTier: VipTier | null = effectiveTierId
+    ? (catalogue?.allTiers.find(t => t.id === effectiveTierId) ?? null)
+    : computedTier;
 
   function updateItem(id: string, changes: Partial<QuoteItem>) {
     setItems(prev => prev.map(it => it.id === id ? { ...it, ...changes } : it));
@@ -573,10 +596,10 @@ function RepairQuoteBuilderInner() {
   }
 
   function calcTotals() {
-    const tier = catalogue?.discountTiers.find(t => t.id === discountTierId);
+    const tier = effectiveTier;
     const subtotal = items.reduce((s, it) => s + itemSubtotal(it), 0);
     let discountAmount = 0;
-    if (tier) {
+    if (tier && Number(tier.discount_percent) > 0) {
       const discountable = items.reduce((s, it) => {
         if (tier.eligible_ownership_only && it.ownership_status !== "purchased_from_us") return s;
         return s + itemSubtotal(it);
@@ -592,6 +615,7 @@ function RepairQuoteBuilderInner() {
     setSaving(true);
     setSaveError("");
     const { discountAmount } = calcTotals();
+    const effectiveTierIdForSave = overrideTierId || customerTierOverrideId || (computedTier?.id ?? "");
     try {
       const res = await fetch("/api/quotes/repair", {
         method: "POST",
@@ -599,8 +623,14 @@ function RepairQuoteBuilderInner() {
         body: JSON.stringify({
           customer: customer.firstName || customer.email ? customer : null,
           items: validItems,
-          discountTierId: discountTierId || null,
+          vipTierId: effectiveTierIdForSave || null,
           discountAmount: discountAmount || null,
+          tierOverride: (isManager && overrideTierId && customerId) ? {
+            customerId,
+            tierId: overrideTierId,
+            note: overrideNote,
+            approvedBy: user?.id ?? null,
+          } : null,
         }),
       });
       const data = await res.json();
@@ -613,7 +643,6 @@ function RepairQuoteBuilderInner() {
   }
 
   const { subtotal, discountAmount, total } = calcTotals();
-  const selectedTier = catalogue?.discountTiers.find(t => t.id === discountTierId);
   const settings = catalogue?.settings;
 
   const ownershipOptions = settings ? [
@@ -656,6 +685,9 @@ function RepairQuoteBuilderInner() {
                       key={i}
                       onMouseDown={() => {
                         setCustomer({ firstName: r.first_name ?? "", lastName: r.last_name ?? "", email: r.email ?? "", phone: r.phone ?? "" });
+                        setCustomerId(r.id ?? null);
+                        setCustomerTierOverrideId(r.tier_override_id ?? null);
+                        if (r.tier_override_id) { setOverrideTierId(r.tier_override_id); setShowOverridePicker(false); }
                         setCustomerSearch(`${r.first_name ?? ""} ${r.last_name ?? ""}`.trim() || r.email);
                         setShowCustomerDropdown(false);
                       }}
@@ -734,27 +766,84 @@ function RepairQuoteBuilderInner() {
               <span style={{ fontWeight: 600 }}>{fmtPrice(subtotal)}</span>
             </div>
 
-            {catalogue && catalogue.discountTiers.length > 0 && (
-              <div style={{ marginBottom: 14 }}>
+            {/* VIP tier + discount */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                 <label style={labelStyle}>Discount</label>
-                <select
-                  value={discountTierId}
-                  onChange={e => setDiscountTierId(e.target.value)}
-                  style={{ ...inputStyle, appearance: "none" as any, marginBottom: selectedTier ? 8 : 0 }}
-                >
-                  <option value="">No discount</option>
-                  {catalogue.discountTiers.map(t => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({t.discount_percent}%){t.eligible_ownership_only ? " — owned items only" : ""}
-                    </option>
-                  ))}
-                </select>
-                {selectedTier && (
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#059669" }}>
-                    <span>{selectedTier.name}</span>
-                    <span>−{fmtPrice(discountAmount)}</span>
-                  </div>
+                {isManager && (
+                  <button
+                    onClick={() => setShowOverridePicker(o => !o)}
+                    style={{ fontSize: 12, color: "#635BFF", background: "none", border: "none", cursor: "pointer", fontWeight: 500, padding: 0 }}
+                  >
+                    {showOverridePicker ? "Cancel" : overrideTierId ? "Change" : "Override"}
+                  </button>
                 )}
+              </div>
+
+              {/* Computed tier badge */}
+              {computedTier && !overrideTierId && (
+                <div style={{ marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, color: "#9CA3AF", marginRight: 5 }}>Auto:</span>
+                  <span style={{ display: "inline-flex", alignItems: "center", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 700, background: `${computedTier.colour}22`, color: computedTier.colour, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                    {computedTier.tier_name}
+                  </span>
+                </div>
+              )}
+
+              {/* Active override badge */}
+              {overrideTierId && (() => {
+                const ot = catalogue?.allTiers.find(t => t.id === overrideTierId);
+                return ot ? (
+                  <div style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 11, color: "#9CA3AF" }}>Override:</span>
+                    <span style={{ display: "inline-flex", alignItems: "center", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 700, background: `${ot.colour}22`, color: ot.colour, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                      {ot.tier_name}
+                    </span>
+                    <button onClick={() => { setOverrideTierId(""); setOverrideNote(""); }} style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 1 }}>✕</button>
+                  </div>
+                ) : null;
+              })()}
+
+              {/* No tier */}
+              {!computedTier && !overrideTierId && (
+                <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 6 }}>No VIP tier</div>
+              )}
+
+              {/* Manager override picker */}
+              {showOverridePicker && isManager && catalogue && (
+                <div style={{ background: "#F9FAFB", border: "1px solid #E8E8F0", borderRadius: 8, padding: "12px", marginBottom: 6 }}>
+                  <label style={labelStyle}>Override tier</label>
+                  <select
+                    value={overrideTierId}
+                    onChange={e => setOverrideTierId(e.target.value)}
+                    style={{ ...inputStyle, appearance: "none" as any, marginBottom: overrideTierId ? 8 : 0 }}
+                  >
+                    <option value="">— No override —</option>
+                    {catalogue.allTiers.map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.tier_name} ({t.discount_percent}%){t.eligible_ownership_only ? " — owned items" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {overrideTierId && (
+                    <>
+                      <label style={labelStyle}>Override note (required)</label>
+                      <input
+                        value={overrideNote}
+                        onChange={e => setOverrideNote(e.target.value)}
+                        placeholder="Reason for override…"
+                        style={inputStyle}
+                      />
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {discountAmount > 0 && effectiveTier && (
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#059669", marginBottom: 10 }}>
+                <span>{effectiveTier.tier_name} ({effectiveTier.discount_percent}%)</span>
+                <span>−{fmtPrice(discountAmount)}</span>
               </div>
             )}
 

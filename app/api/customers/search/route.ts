@@ -14,7 +14,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     const searchQ = supabase
       .from("customers")
-      .select("first_name, last_name, email, phone")
+      .select("id, first_name, last_name, email, phone, tier_override_id")
       .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`)
       .limit(8);
     const { data, error } = await (tenantId ? searchQ.eq("tenant_id", tenantId) : searchQ);

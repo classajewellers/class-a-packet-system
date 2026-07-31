@@ -29,7 +29,6 @@ interface ServiceAction {
   default_minutes: number | null; hint: string | null; active: boolean; sort_order: number;
 }
 interface PricingBracket { id: string; bracket_type: string; cost_lower_bound: number; multiplier: number | null; sort_order: number }
-interface DiscountTier { id: string; name: string; discount_percent: number; eligible_ownership_only: boolean; sort_order: number }
 interface FittingFeeConfig { fee_per_end: number }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -964,104 +963,6 @@ function BracketsTab({ tenantId }: { tenantId: string }) {
   );
 }
 
-// ─── Discount Tiers Tab ───────────────────────────────────────────────────────
-
-function DiscountTiersTab({ tenantId }: { tenantId: string }) {
-  const h = (extra?: Record<string, string>) => ({ "x-tenant-id": tenantId, "Content-Type": "application/json", ...extra });
-  const [rows, setRows] = useState<DiscountTier[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<Partial<DiscountTier>>({});
-  const [editError, setEditError] = useState<string | null>(null);
-  const [deleteErrors, setDeleteErrors] = useState<Record<string, string>>({});
-  const [addOpen, setAddOpen] = useState(false);
-  const [addForm, setAddForm] = useState<Partial<DiscountTier>>({ eligible_ownership_only: false, sort_order: 0 });
-  const [addError, setAddError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false); const [adding, setAdding] = useState(false);
-
-  const fetch_ = useCallback(async () => {
-    setLoading(true);
-    const res = await fetch("/api/quotes/settings/discount-tiers", { headers: { "x-tenant-id": tenantId } });
-    setRows(await res.json().then((d: any) => Array.isArray(d) ? d : []));
-    setLoading(false);
-  }, [tenantId]);
-  useEffect(() => { fetch_(); }, [fetch_]);
-
-  const saveEdit = async (id: string) => {
-    setSaving(true); setEditError(null);
-    try {
-      const res = await fetch(`/api/quotes/settings/discount-tiers/${id}`, { method: "PATCH", headers: h(), body: JSON.stringify({ ...editForm, discount_percent: Number(editForm.discount_percent) }) });
-      if (!res.ok) { const d = await res.json().catch(() => ({})); setEditError(d.error ?? "Failed"); return; }
-      await fetch_(); setEditingId(null);
-    } catch { setEditError("Network error"); } finally { setSaving(false); }
-  };
-
-  const deleteRow = async (id: string) => {
-    if (!confirm("Delete this discount tier?")) return;
-    try {
-      const res = await fetch(`/api/quotes/settings/discount-tiers/${id}`, { method: "DELETE", headers: h() });
-      if (!res.ok) { const d = await res.json().catch(() => ({})); setDeleteErrors(p => ({ ...p, [id]: d.error ?? "Failed to delete. It may be assigned to active quotes or customers." })); return; }
-      await fetch_();
-    } catch { setDeleteErrors(p => ({ ...p, [id]: "Network error" })); }
-  };
-
-  const submitAdd = async (e: React.FormEvent) => {
-    e.preventDefault(); setAdding(true); setAddError(null);
-    try {
-      const res = await fetch("/api/quotes/settings/discount-tiers", { method: "POST", headers: h(), body: JSON.stringify({ ...addForm, discount_percent: Number(addForm.discount_percent) }) });
-      if (!res.ok) { const d = await res.json().catch(() => ({})); setAddError(d.error ?? "Failed"); return; }
-      setAddForm({ eligible_ownership_only: false, sort_order: 0 }); setAddOpen(false); await fetch_();
-    } catch { setAddError("Network error"); } finally { setAdding(false); }
-  };
-
-  if (loading) return <p style={s.loadingText}>Loading…</p>;
-  return (
-    <div>
-      <p style={{ fontSize: 13, color: "#6B7280", marginBottom: 14 }}>Customer discount tiers applied at the quote level. "Owned items only" restricts the discount to items the customer purchased from you.</p>
-      <div style={s.topBar}><span /><button style={s.btnAdd} onClick={() => { setAddOpen(o => !o); setAddError(null); }}>{addOpen ? "Cancel" : "+ Add Tier"}</button></div>
-      {addOpen && (
-        <div style={s.addFormCard}>
-          <form onSubmit={submitAdd}>
-            <div style={s.formGrid(3)}>
-              <div style={s.fieldGroup}><label style={s.label}>Name *</label><input required autoFocus value={addForm.name ?? ""} onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))} style={s.input} /></div>
-              <div style={s.fieldGroup}><label style={s.label}>Discount % *</label><input required type="number" min="0" max="100" step="0.1" value={addForm.discount_percent ?? ""} onChange={e => setAddForm(f => ({ ...f, discount_percent: parseFloat(e.target.value) }))} style={s.input} /></div>
-              <div style={{ display: "flex", alignItems: "center", paddingTop: 20 }}><label style={{ display: "flex", gap: 6, fontSize: 13, cursor: "pointer" }}><input type="checkbox" checked={!!addForm.eligible_ownership_only} onChange={e => setAddForm(f => ({ ...f, eligible_ownership_only: e.target.checked }))} />Apply to owned items only</label></div>
-            </div>
-            {addError && <p style={s.errorText}>{addError}</p>}
-            <div style={s.btnRow}><button type="submit" style={s.btnPrimary} disabled={adding}>{adding ? "Adding…" : "Add"}</button><button type="button" style={s.btnSecondary} onClick={() => setAddOpen(false)}>Cancel</button></div>
-          </form>
-        </div>
-      )}
-      {rows.map((r, i) => (
-        <div key={r.id}>
-          {editingId === r.id ? (
-            <div style={s.editRow}>
-              <div style={s.formGrid(3)}>
-                <div style={s.fieldGroup}><label style={s.label}>Name</label><input autoFocus value={editForm.name ?? ""} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} style={s.input} /></div>
-                <div style={s.fieldGroup}><label style={s.label}>Discount %</label><input type="number" min="0" max="100" step="0.1" value={editForm.discount_percent ?? ""} onChange={e => setEditForm(f => ({ ...f, discount_percent: parseFloat(e.target.value) }))} style={s.input} /></div>
-                <div style={{ display: "flex", alignItems: "center", paddingTop: 20 }}><label style={{ display: "flex", gap: 6, fontSize: 13, cursor: "pointer" }}><input type="checkbox" checked={!!editForm.eligible_ownership_only} onChange={e => setEditForm(f => ({ ...f, eligible_ownership_only: e.target.checked }))} />Owned items only</label></div>
-              </div>
-              {editError && <p style={s.errorText}>{editError}</p>}
-              <div style={s.btnRow}><button style={s.btnPrimary} onClick={() => saveEdit(r.id)} disabled={saving}>{saving ? "Saving…" : "Save"}</button><button style={s.btnSecondary} onClick={() => { setEditingId(null); }}>Cancel</button></div>
-            </div>
-          ) : (
-            <div style={{ ...s.row(i % 2 === 1), alignItems: "center" }}>
-              <div style={{ flex: 1 }}>
-                <span style={{ fontSize: 14, fontWeight: 600, color: "#1A1A2E" }}>{r.name}</span>
-                {r.eligible_ownership_only && <span style={{ marginLeft: 8, fontSize: 11, background: "#EEF2FF", color: "#635BFF", padding: "1px 7px", borderRadius: 10, fontWeight: 600 }}>Owned items only</span>}
-              </div>
-              <span style={{ fontSize: 16, fontWeight: 700, color: "#635BFF" }}>{Number(r.discount_percent)}%</span>
-              <button style={s.btnEdit} onClick={() => { setEditingId(r.id); setEditForm({ name: r.name, discount_percent: r.discount_percent, eligible_ownership_only: r.eligible_ownership_only }); setEditError(null); }}>Edit</button>
-              <button style={s.btnDanger} onClick={() => deleteRow(r.id)}>Delete</button>
-              {deleteErrors[r.id] && <span style={{ ...s.errorText, width: "100%", fontWeight: 500 }}>⚠ {deleteErrors[r.id]}</span>}
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // ─── Fitting Fee Tab ──────────────────────────────────────────────────────────
 
 function FittingFeeTab({ tenantId }: { tenantId: string }) {
@@ -1123,7 +1024,7 @@ function FittingFeeTab({ tenantId }: { tenantId: string }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-type Tab = "parts" | "claw" | "tiers" | "restring" | "actions" | "brackets" | "discount" | "fitting";
+type Tab = "parts" | "claw" | "tiers" | "restring" | "actions" | "brackets" | "fitting";
 
 const TAB_LABELS: Record<Tab, string> = {
   parts:    "Parts Catalogue",
@@ -1132,7 +1033,6 @@ const TAB_LABELS: Record<Tab, string> = {
   restring: "Restring Matrix",
   actions:  "Repair & Services",
   brackets: "Pricing Brackets",
-  discount: "Discount Tiers",
   fitting:  "Fitting Fee",
 };
 
@@ -1160,7 +1060,7 @@ export default function RepairQuotingSettingsPage() {
     <div style={s.page}>
       <div style={s.container}>
         <h1 style={s.heading}>Repair Quoting Settings</h1>
-        <p style={s.subheading}>Configure parts catalogue, rates, pricing brackets, and discount tiers for repair quotes.</p>
+        <p style={s.subheading}>Configure parts catalogue, claw rates, pricing brackets, and actions for repair quotes.</p>
 
         <div style={s.card}>
           <div style={s.tabBar}>
@@ -1177,7 +1077,6 @@ export default function RepairQuotingSettingsPage() {
             {activeTab === "restring" && <RestringTab    tenantId={tenantId} />}
             {activeTab === "actions"  && <ActionsTab     tenantId={tenantId} />}
             {activeTab === "brackets" && <BracketsTab    tenantId={tenantId} />}
-            {activeTab === "discount" && <DiscountTiersTab tenantId={tenantId} />}
             {activeTab === "fitting"  && <FittingFeeTab  tenantId={tenantId} />}
           </div>
         </div>
