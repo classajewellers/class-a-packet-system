@@ -32,7 +32,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const packetsQ = supabase
       .from("packets")
       .select(
-        "customer_email, customer_phone, customer_first_name, customer_last_name, total_charges, created_at, articles, instructions, packet_type"
+        "id, customer_email, customer_phone, customer_first_name, customer_last_name, total_charges, created_at, articles, instructions, packet_type"
       )
       .order("created_at", { ascending: false });
     const { data: packets, error: pErr } = await (tenantId ? packetsQ.eq("tenant_id", tenantId) : packetsQ);
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // TEMP DEBUG: surface raw rows for josh@classa.com.au to identify stale DB data
     const _debugJoshPackets = (packets ?? [])
       .filter(p => (p.customer_email ?? "").toLowerCase().includes("josh") || (p.customer_email ?? "").toLowerCase().includes("classa"))
-      .map(p => ({ email: p.customer_email, first_name: p.customer_first_name, last_name: p.customer_last_name }));
+      .map(p => ({ id: p.id, email: p.customer_email, first_name: p.customer_first_name, last_name: p.customer_last_name }));
 
     // Fetch quotes — only columns needed
     let quotes: { customer_email: string | null; customer_phone: string | null; customer_first_name: string | null; customer_last_name: string | null; created_at: string }[] = [];
@@ -271,22 +271,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // Fix via supabase-js using the TENANT client (same client that can see the row on primary)
+    // Fix via supabase-js using IDs captured from the tenant-filtered packets fetch above
+    // No ILIKE — uses the IDs we already know exist from the working query path
     let _debug_supa_update: unknown = "not_run";
     let _debug_supa_verify: unknown = "not_run";
-    let _debug_packet_tenant_id: unknown = "not_checked";
+    const _debug_packet_tenant_id = "ids_from_packets_fetch";
     if (_debugJoshPackets.length > 0) {
-      // First: read full row detail including tenant_id — use tenant client (finds the row)
-      const { data: rowDetail, error: rowDetailErr } = await supabase
-        .from("packets")
-        .select("id, customer_email, tenant_id")
-        .ilike("customer_email", "%josh%");
-      _debug_packet_tenant_id = rowDetailErr
-        ? `error: ${rowDetailErr.message}`
-        : (rowDetail ?? []);
-
-      // UPDATE by exact id — tenant client, no ambiguity about which row
-      const ids = (rowDetail ?? []).map((r: { id: string }) => r.id);
+      const ids = _debugJoshPackets.map((p: { id: string }) => p.id).filter(Boolean);
       if (ids.length > 0) {
         const { data: updData, error: updErr } = await supabase
           .from("packets")
@@ -296,18 +287,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         _debug_supa_update = updErr
           ? `error: ${updErr.message}`
           : { updated: updData, ids_targeted: ids };
+
+        // Verify: re-read same IDs — if customer_email is now null, it worked
+        const { data: verifyRows, error: verifyErr } = await supabase
+          .from("packets")
+          .select("id, customer_email")
+          .in("id", ids);
+        _debug_supa_verify = verifyErr
+          ? `error: ${verifyErr.message}`
+          : (verifyRows ?? []);
       } else {
         _debug_supa_update = "no_ids_found";
       }
-
-      // Verify via tenant client
-      const { data: verifyRows, error: verifyErr } = await supabase
-        .from("packets")
-        .select("id, customer_email")
-        .ilike("customer_email", "%josh%");
-      _debug_supa_verify = verifyErr
-        ? `error: ${verifyErr.message}`
-        : (verifyRows ?? []);
     }
 
     const response = NextResponse.json({
