@@ -278,6 +278,24 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       }
     }
 
+    // Fix via supabase-js — same path that can see the row, bypasses the replica issue
+    let _debug_supa_update: unknown = "not_run";
+    let _debug_supa_verify: unknown = "not_run";
+    if (_debugJoshPackets.length > 0) {
+      const { error: updErr, count } = await supabase
+        .from("packets")
+        .update({ customer_email: null })
+        .ilike("customer_email", "%josh%")
+        .select();
+      _debug_supa_update = updErr ? `error: ${updErr.message}` : `ok, count=${count}`;
+
+      const { data: verifyRows } = await supabase
+        .from("packets")
+        .select("id, customer_email")
+        .ilike("customer_email", "%josh%");
+      _debug_supa_verify = verifyRows ?? [];
+    }
+
     const response = NextResponse.json({
       customers: result,
       _debug_query_time: new Date().toISOString(),
@@ -290,6 +308,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       _debug_raw_pg_select,
       _debug_raw_pg_update_count,
       _debug_raw_pg_verify,
+      _debug_supa_update,
+      _debug_supa_verify,
     });
     response.headers.set("x-debug-commit", "69fc203-fix3-marker");
     return response;
