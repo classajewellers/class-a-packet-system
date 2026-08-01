@@ -236,41 +236,34 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       try {
         await pgClient.connect();
 
-        // Find what schema packets lives in
+        // Find what schema packets lives in, and whether it's a table or view
         const schemaResult = await pgClient.query(
-          "SELECT table_schema FROM information_schema.tables WHERE table_name = 'packets'"
+          "SELECT table_schema, table_name, table_type FROM information_schema.tables WHERE table_name = 'packets'"
         );
-        const packetSchemas = schemaResult.rows.map((r: { table_schema: string }) => r.table_schema);
+        const packetSchemas = schemaResult.rows.map((r: { table_schema: string; table_type: string }) => `${r.table_schema} (${r.table_type})`);
         _debug_raw_pg_update_count = `packets_schemas_found: ${JSON.stringify(packetSchemas)}`;
 
-        // Try explicit public schema first, then any found schema
-        const schemasToTry = packetSchemas.length > 0 ? packetSchemas : ["public"];
-        for (const schema of schemasToTry) {
-          const selResult = await pgClient.query(
-            `SELECT id, customer_email FROM ${schema}.packets WHERE customer_email ILIKE '%josh%'`
-          );
-          if (selResult.rows.length > 0) {
-            _debug_raw_pg_select = { schema, rows: selResult.rows };
-
-            const updResult = await pgClient.query(
-              `UPDATE ${schema}.packets SET customer_email = NULL WHERE customer_email ILIKE '%josh%'`
-            );
-            _debug_raw_pg_update_count = { schema, rowCount: updResult.rowCount };
-
-            const verifyResult = await pgClient.query(
-              `SELECT id, customer_email FROM ${schema}.packets WHERE customer_email ILIKE '%josh%'`
-            );
-            _debug_raw_pg_verify = { schema, rows: verifyResult.rows };
-            break;
-          } else {
-            _debug_raw_pg_select = { schema, rows: [], note: "0 rows — tried next schema" };
-          }
+        // Check for a view definition
+        const viewResult = await pgClient.query(
+          "SELECT viewname, definition FROM pg_catalog.pg_views WHERE viewname = 'packets'"
+        );
+        if (viewResult.rows.length > 0) {
+          _debug_raw_pg_update_count = `VIEW: ${JSON.stringify(viewResult.rows[0].definition?.slice(0, 300))}`;
         }
 
-        if (_debug_raw_pg_update_count === "skipped") {
-          _debug_raw_pg_update_count = "not_run__no_josh_row_found_in_any_schema";
-          _debug_raw_pg_verify = [];
+        // Check for triggers on packets (or underlying table)
+        const trigResult = await pgClient.query(
+          "SELECT trigger_name, event_manipulation, action_statement FROM information_schema.triggers WHERE event_object_table ILIKE 'packet%'"
+        );
+        if (trigResult.rows.length > 0) {
+          _debug_raw_pg_verify = `triggers: ${JSON.stringify(trigResult.rows)}`;
         }
+
+        // Total row count with no filter — does the base table have data?
+        const countResult = await pgClient.query("SELECT COUNT(*) FROM public.packets");
+        _debug_raw_pg_select = `total_public_packets_count: ${countResult.rows[0].count}`;
+
+        // (schema loop removed — superseded by view/trigger/count checks above)
       } catch (pgErr) {
         _debug_raw_pg_select = `pg_error: ${pgErr instanceof Error ? pgErr.message : String(pgErr)}`;
       } finally {
