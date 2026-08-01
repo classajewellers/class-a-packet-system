@@ -93,4 +93,103 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         if (p.customer_first_name && !existing.first_name) existing.first_name = p.customer_first_name;
         if (p.customer_last_name && !existing.last_name) existing.last_name = p.customer_last_name;
         if (p.customer_phone && !existing.phone) existing.phone = p.customer_phone;
-        existing.articles_sample += " " +
+        existing.articles_sample += " " + articles;
+      } else {
+        map.set(key, {
+          email: key,
+          phone: p.customer_phone ?? null,
+          first_name: p.customer_first_name ?? null,
+          last_name: p.customer_last_name ?? null,
+          maiden_name: customerProfileMap.get(key)?.maiden_name ?? null,
+          total_orders: 1,
+          non_repair_orders: isRepair ? 0 : 1,
+          total_quotes: 0,
+          total_spend: amount,
+          non_repair_spend: isRepair ? 0 : amount,
+          last_visit: p.created_at,
+          first_seen: p.created_at,
+          articles_sample: articles,
+        });
+      }
+    }
+
+    for (const q of quotes) {
+      const key = (q.customer_email ?? "").toLowerCase().trim();
+      if (!key) continue;
+
+      const existing = map.get(key);
+      if (existing) {
+        existing.total_quotes += 1;
+        if (q.created_at > existing.last_visit) existing.last_visit = q.created_at;
+        if (q.created_at < existing.first_seen) existing.first_seen = q.created_at;
+      } else {
+        map.set(key, {
+          email: key,
+          phone: q.customer_phone ?? null,
+          first_name: q.customer_first_name ?? null,
+          last_name: q.customer_last_name ?? null,
+          maiden_name: customerProfileMap.get(key)?.maiden_name ?? null,
+          total_orders: 0,
+          non_repair_orders: 0,
+          total_quotes: 1,
+          total_spend: 0,
+          non_repair_spend: 0,
+          last_visit: q.created_at,
+          first_seen: q.created_at,
+          articles_sample: "",
+        });
+      }
+    }
+
+    for (const [key, profile] of Array.from(customerProfileMap)) {
+      const existing = map.get(key);
+      if (existing) {
+        if (profile.first_name) existing.first_name = profile.first_name;
+        if (profile.last_name) existing.last_name = profile.last_name;
+        if (profile.phone) existing.phone = profile.phone;
+        existing.maiden_name = profile.maiden_name ?? existing.maiden_name;
+      } else {
+        map.set(key, {
+          email: key,
+          phone: profile.phone,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          maiden_name: profile.maiden_name,
+          total_orders: 0,
+          non_repair_orders: 0,
+          total_quotes: 0,
+          total_spend: 0,
+          non_repair_spend: 0,
+          last_visit: profile.created_at,
+          first_seen: profile.created_at,
+          articles_sample: "",
+        });
+      }
+    }
+
+    let customers = Array.from(map.values()).sort(
+      (a, b) => new Date(b.last_visit).getTime() - new Date(a.last_visit).getTime()
+    );
+
+    if (search) {
+      customers = customers.filter((c) => {
+        const name = `${c.first_name ?? ""} ${c.last_name ?? ""}`.toLowerCase();
+        return (
+          name.includes(search) ||
+          (c.maiden_name ?? "").toLowerCase().includes(search) ||
+          (c.email ?? "").toLowerCase().includes(search) ||
+          (c.phone ?? "").toLowerCase().includes(search) ||
+          (c.articles_sample ?? "").toLowerCase().includes(search)
+        );
+      });
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const result = customers.map(({ articles_sample: _a, ...rest }) => rest);
+
+    return NextResponse.json({ customers: result });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ customers: [], error: msg }, { status: 500 });
+  }
+}
