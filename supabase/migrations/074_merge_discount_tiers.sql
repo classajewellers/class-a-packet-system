@@ -37,8 +37,13 @@ SELECT
   discount_percent,
   eligible_ownership_only,
   true                           AS manual_only
-FROM discount_tiers
-ON CONFLICT (tenant_id, tier_name) DO NOTHING;
+FROM discount_tiers dt
+WHERE NOT EXISTS (
+  SELECT 1 FROM vip_tier_config v
+  WHERE v.tenant_id = dt.tenant_id
+    AND v.tier_name = dt.name
+    AND v.manual_only = true
+);
 
 -- ── 5. Migrate existing customer.discount_tier_id → tier_override_id ─────────
 -- (Investigation confirmed no rows have this set in prod, but handled correctly.)
