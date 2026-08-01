@@ -19,7 +19,7 @@ export async function GET(
       .from("customer_partners")
       .select("id, email_1, email_2")
       .eq("tenant_id", tenantId)
-      .or(`email_1.eq.${email},email_2.eq.${email}`);
+      .or(`email_1.ilike.${email},email_2.ilike.${email}`);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -114,8 +114,8 @@ export async function DELETE(
       .from("customer_partners")
       .delete()
       .eq("tenant_id", tenantId)
-      .eq("email_1", email_1)
-      .eq("email_2", email_2);
+      .ilike("email_1", email_1)
+      .ilike("email_2", email_2);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

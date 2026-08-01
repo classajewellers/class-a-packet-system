@@ -26,7 +26,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const pkQ = supabase
         .from("packets")
         .select("customer_email, customer_first_name, customer_last_name")
-        .in("customer_email", emails)
+        .or(emails.map(e => `customer_email.ilike.${e}`).join(","))
         .order("created_at", { ascending: false });
       const { data: packets } = await (tenantId ? pkQ.eq("tenant_id", tenantId) : pkQ);
       for (const p of packets ?? []) {

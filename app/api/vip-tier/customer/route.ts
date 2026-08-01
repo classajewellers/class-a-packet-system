@@ -38,7 +38,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const packetQ = supabase
       .from("packets")
       .select("customer_email, total_charges, job_type, packet_type")
-      .in("customer_email", emails)
+      .or(emails.map(e => `customer_email.ilike.${e}`).join(","))
       .neq("packet_type", "repair");
     const { data: packets } = await (tenantId ? packetQ.eq("tenant_id", tenantId) : packetQ);
 
