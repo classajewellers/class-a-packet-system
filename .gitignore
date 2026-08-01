@@ -41,3 +41,6 @@ next-env.d.ts
 # env files (never commit real credentials)
 .env
 .env.local
+
+# Claude Code local settings (may contain tokens)
+.claude/settings.local.json
