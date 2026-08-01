@@ -210,12 +210,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const result = customers.map(({ articles_sample: _a, ...rest }) => rest);
 
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+    const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\./)?.[1] ?? supabaseUrl;
     const response = NextResponse.json({
       customers: result,
       _debug_query_time: new Date().toISOString(),
       _debug_request_id: crypto.randomUUID(),
       _debug_packets_josh: _debugJoshPackets,
       _debug_customers_josh: _debugCustRows,
+      _debug_supabase_project_ref: projectRef,
+      _debug_env_source: "NEXT_PUBLIC_SUPABASE_URL",
     });
     response.headers.set("x-debug-commit", "69fc203-fix3-marker");
     return response;
