@@ -222,26 +222,51 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     let _debug_raw_pg_conn_var: string = pgConnStr ? (process.env.DATABASE_URL ? "DATABASE_URL" : "DIRECT_URL") : "none_set__add_DATABASE_URL_or_DIRECT_URL_to_vercel_env";
 
     if (pgConnStr && !(pgConnStr.startsWith("file:") || pgConnStr.startsWith("sqlite"))) {
+      // Extract host from DATABASE_URL without exposing the password
+      let pgHostRef = "unknown";
+      try {
+        const u = new URL(pgConnStr);
+        pgHostRef = u.hostname; // e.g. aws-0-ap-southeast-2.pooler.supabase.com or db.PROJECTREF.supabase.co
+        _debug_raw_pg_conn_var = `${_debug_raw_pg_conn_var} | host=${pgHostRef}`;
+      } catch { /* noop */ }
+
       const pgClient = new Client({ connectionString: pgConnStr, ssl: { rejectUnauthorized: false } });
       try {
         await pgClient.connect();
-        const selResult = await pgClient.query(
-          "SELECT id, customer_email FROM packets WHERE customer_email ILIKE '%josh%'"
+
+        // Find what schema packets lives in
+        const schemaResult = await pgClient.query(
+          "SELECT table_schema FROM information_schema.tables WHERE table_name = 'packets'"
         );
-        _debug_raw_pg_select = selResult.rows;
+        const packetSchemas = schemaResult.rows.map((r: { table_schema: string }) => r.table_schema);
+        _debug_raw_pg_update_count = `packets_schemas_found: ${JSON.stringify(packetSchemas)}`;
 
-        if (selResult.rows.length > 0) {
-          const updResult = await pgClient.query(
-            "UPDATE packets SET customer_email = NULL WHERE customer_email ILIKE '%josh%'"
+        // Try explicit public schema first, then any found schema
+        const schemasToTry = packetSchemas.length > 0 ? packetSchemas : ["public"];
+        for (const schema of schemasToTry) {
+          const selResult = await pgClient.query(
+            `SELECT id, customer_email FROM ${schema}.packets WHERE customer_email ILIKE '%josh%'`
           );
-          _debug_raw_pg_update_count = updResult.rowCount;
+          if (selResult.rows.length > 0) {
+            _debug_raw_pg_select = { schema, rows: selResult.rows };
 
-          const verifyResult = await pgClient.query(
-            "SELECT id, customer_email FROM packets WHERE customer_email ILIKE '%josh%'"
-          );
-          _debug_raw_pg_verify = verifyResult.rows;
-        } else {
-          _debug_raw_pg_update_count = "not_run__select_returned_0_rows";
+            const updResult = await pgClient.query(
+              `UPDATE ${schema}.packets SET customer_email = NULL WHERE customer_email ILIKE '%josh%'`
+            );
+            _debug_raw_pg_update_count = { schema, rowCount: updResult.rowCount };
+
+            const verifyResult = await pgClient.query(
+              `SELECT id, customer_email FROM ${schema}.packets WHERE customer_email ILIKE '%josh%'`
+            );
+            _debug_raw_pg_verify = { schema, rows: verifyResult.rows };
+            break;
+          } else {
+            _debug_raw_pg_select = { schema, rows: [], note: "0 rows — tried next schema" };
+          }
+        }
+
+        if (_debug_raw_pg_update_count === "skipped") {
+          _debug_raw_pg_update_count = "not_run__no_josh_row_found_in_any_schema";
           _debug_raw_pg_verify = [];
         }
       } catch (pgErr) {
