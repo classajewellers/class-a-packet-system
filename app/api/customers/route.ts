@@ -201,7 +201,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const result = customers.map(({ articles_sample: _a, ...rest }) => rest);
 
-    const response = NextResponse.json({ customers: result });
+    const response = NextResponse.json({
+      customers: result,
+      _debug_query_time: new Date().toISOString(),
+      _debug_request_id: crypto.randomUUID(),
+    });
     response.headers.set("x-debug-commit", "69fc203-fix3-marker");
     return response;
   } catch (err) {
