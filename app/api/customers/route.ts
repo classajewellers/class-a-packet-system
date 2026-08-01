@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { Client } from "pg";
 
 export const dynamic = "force-dynamic";
 
@@ -212,6 +213,44 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
     const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\./)?.[1] ?? supabaseUrl;
+
+    // Raw direct-Postgres debug block — bypasses supabase-js/PostgREST entirely
+    const pgConnStr = process.env.DATABASE_URL || process.env.DIRECT_URL || null;
+    let _debug_raw_pg_select: unknown = "no_connection_string";
+    let _debug_raw_pg_update_count: unknown = "skipped";
+    let _debug_raw_pg_verify: unknown = "skipped";
+    let _debug_raw_pg_conn_var: string = pgConnStr ? (process.env.DATABASE_URL ? "DATABASE_URL" : "DIRECT_URL") : "none_set__add_DATABASE_URL_or_DIRECT_URL_to_vercel_env";
+
+    if (pgConnStr && !(pgConnStr.startsWith("file:") || pgConnStr.startsWith("sqlite"))) {
+      const pgClient = new Client({ connectionString: pgConnStr, ssl: { rejectUnauthorized: false } });
+      try {
+        await pgClient.connect();
+        const selResult = await pgClient.query(
+          "SELECT id, customer_email FROM packets WHERE customer_email ILIKE '%josh%'"
+        );
+        _debug_raw_pg_select = selResult.rows;
+
+        if (selResult.rows.length > 0) {
+          const updResult = await pgClient.query(
+            "UPDATE packets SET customer_email = NULL WHERE customer_email ILIKE '%josh%'"
+          );
+          _debug_raw_pg_update_count = updResult.rowCount;
+
+          const verifyResult = await pgClient.query(
+            "SELECT id, customer_email FROM packets WHERE customer_email ILIKE '%josh%'"
+          );
+          _debug_raw_pg_verify = verifyResult.rows;
+        } else {
+          _debug_raw_pg_update_count = "not_run__select_returned_0_rows";
+          _debug_raw_pg_verify = [];
+        }
+      } catch (pgErr) {
+        _debug_raw_pg_select = `pg_error: ${pgErr instanceof Error ? pgErr.message : String(pgErr)}`;
+      } finally {
+        await pgClient.end().catch(() => {});
+      }
+    }
+
     const response = NextResponse.json({
       customers: result,
       _debug_query_time: new Date().toISOString(),
@@ -220,6 +259,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       _debug_customers_josh: _debugCustRows,
       _debug_supabase_project_ref: projectRef,
       _debug_env_source: "NEXT_PUBLIC_SUPABASE_URL",
+      _debug_raw_pg_conn_var,
+      _debug_raw_pg_select,
+      _debug_raw_pg_update_count,
+      _debug_raw_pg_verify,
     });
     response.headers.set("x-debug-commit", "69fc203-fix3-marker");
     return response;
