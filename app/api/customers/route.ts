@@ -271,40 +271,43 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // Fix via supabase-js — use a fresh server client (no set_tenant_config) so no session-var side effects
+    // Fix via supabase-js using the TENANT client (same client that can see the row on primary)
     let _debug_supa_update: unknown = "not_run";
     let _debug_supa_verify: unknown = "not_run";
     let _debug_packet_tenant_id: unknown = "not_checked";
     if (_debugJoshPackets.length > 0) {
-      const { createServerSupabaseClient } = await import("@/lib/supabase-server");
-      const freshClient = createServerSupabaseClient();
-
-      // First: read the actual tenant_id on the offending row
-      const { data: rowDetail } = await freshClient
+      // First: read full row detail including tenant_id — use tenant client (finds the row)
+      const { data: rowDetail, error: rowDetailErr } = await supabase
         .from("packets")
         .select("id, customer_email, tenant_id")
         .ilike("customer_email", "%josh%");
-      _debug_packet_tenant_id = rowDetail ?? [];
+      _debug_packet_tenant_id = rowDetailErr
+        ? `error: ${rowDetailErr.message}`
+        : (rowDetail ?? []);
 
-      // UPDATE scoped to the exact id(s) found — no ambiguity
+      // UPDATE by exact id — tenant client, no ambiguity about which row
       const ids = (rowDetail ?? []).map((r: { id: string }) => r.id);
       if (ids.length > 0) {
-        const { data: updData, error: updErr } = await freshClient
+        const { data: updData, error: updErr } = await supabase
           .from("packets")
           .update({ customer_email: null })
           .in("id", ids)
           .select("id, customer_email");
-        _debug_supa_update = updErr ? `error: ${updErr.message}` : { updated: updData };
+        _debug_supa_update = updErr
+          ? `error: ${updErr.message}`
+          : { updated: updData, ids_targeted: ids };
       } else {
         _debug_supa_update = "no_ids_found";
       }
 
-      // Verify
-      const { data: verifyRows } = await freshClient
+      // Verify via tenant client
+      const { data: verifyRows, error: verifyErr } = await supabase
         .from("packets")
         .select("id, customer_email")
         .ilike("customer_email", "%josh%");
-      _debug_supa_verify = verifyRows ?? [];
+      _debug_supa_verify = verifyErr
+        ? `error: ${verifyErr.message}`
+        : (verifyRows ?? []);
     }
 
     const response = NextResponse.json({
