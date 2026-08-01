@@ -255,28 +255,49 @@ export async function PATCH(
 
   try {
     const body = await req.json();
-    const tenantId = req.headers.get('x-tenant-id') ?? ''
+    const tenantId = req.headers.get('x-tenant-id') ?? '';
+    if (!tenantId) return NextResponse.json({ error: "x-tenant-id required" }, { status: 400 });
     const supabase = await createTenantSupabaseClient(tenantId);
 
-    // Build update object from provided fields only
-    const updateFields: Record<string, unknown> = { email, tenant_id: tenantId };
+    const patchFields: Record<string, unknown> = {};
     const allowedFields = ["notes", "maiden_name", "wishlist_notes", "customer_followup_notes"] as const;
     for (const field of allowedFields) {
-      if (field in body) updateFields[field] = body[field];
+      if (field in body) patchFields[field] = body[field];
     }
 
-    // Upsert into customers table
-    const { error } = await supabase
+    const RETURN_COLS = "id, email, notes, maiden_name, wishlist_notes, customer_followup_notes";
+
+    // SELECT-then-UPDATE/INSERT: avoids any upsert dependency on DB-level unique constraints
+    const { data: existing } = await supabase
       .from("customers")
-      .upsert(updateFields, { onConflict: "email" });
+      .select("id")
+      .ilike("email", email)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
 
-    if (error) {
-      // If table doesn't exist, silently succeed
-      if (error.code === "42P01") return NextResponse.json({ ok: true });
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    let customer: Record<string, unknown> | null = null;
+
+    if (existing?.id) {
+      const { data, error } = await supabase
+        .from("customers")
+        .update(patchFields)
+        .eq("id", String(existing.id))
+        .eq("tenant_id", tenantId)
+        .select(RETURN_COLS)
+        .maybeSingle();
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      customer = data as Record<string, unknown>;
+    } else {
+      const { data, error } = await supabase
+        .from("customers")
+        .insert({ email, tenant_id: tenantId, ...patchFields })
+        .select(RETURN_COLS)
+        .single();
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      customer = data as Record<string, unknown>;
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, customer });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });

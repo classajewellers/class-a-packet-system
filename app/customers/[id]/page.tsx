@@ -145,8 +145,10 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState<EditForm>({ first_name: "", last_name: "", email: "", phone: "", street: "", suburb: "", state: "", postcode: "" });
   const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Notes
   const [notes, setNotes] = useState("");
@@ -299,6 +301,13 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
     if (smsLoaded) smsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [smsMessages, smsLoaded]);
 
+  // ── Auto-dismiss saveError banner after 5 seconds ─────────────────────────
+  useEffect(() => {
+    if (!saveError) return;
+    const t = setTimeout(() => setSaveError(null), 5000);
+    return () => clearTimeout(t);
+  }, [saveError]);
+
   // ── Partner search (debounced) ────────────────────────────────────────────
   useEffect(() => {
     if (!partnerQuery.trim()) { setPartnerResults([]); return; }
@@ -318,39 +327,51 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
     return () => clearTimeout(t);
   }, [partnerQuery, partners, email, user?.tenantId]);
 
-  // ── Patch helper ──────────────────────────────────────────────────────────
+  // ── Patch helper — throws on non-2xx so callers can surface errors ────────
   async function patch(fields: Record<string, unknown>) {
-    await fetch(`/api/customers/${encodeURIComponent(email)}`, {
+    const res = await fetch(`/api/customers/${encodeURIComponent(email)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", 'x-tenant-id': user?.tenantId ?? '' },
       body: JSON.stringify(fields),
     });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as { error?: string };
+      throw new Error(body.error ?? `Save failed (${res.status})`);
+    }
   }
 
   function saveNotes(v: string) {
     if (notesTimer.current) clearTimeout(notesTimer.current);
     notesTimer.current = setTimeout(async () => {
       setNotesSaving(true);
-      try { await patch({ notes: v }); } finally { setNotesSaving(false); }
+      try { await patch({ notes: v }); }
+      catch (err) { setSaveError(err instanceof Error ? err.message : "Failed to save notes"); }
+      finally { setNotesSaving(false); }
     }, 800);
   }
 
   async function saveMaidenName() {
     setMaidenNameSaving(true);
-    try { await patch({ maiden_name: maidenName }); } finally { setMaidenNameSaving(false); }
+    try { await patch({ maiden_name: maidenName }); }
+    catch (err) { setSaveError(err instanceof Error ? err.message : "Failed to save maiden name"); }
+    finally { setMaidenNameSaving(false); }
   }
 
   function saveWishlist(v: string) {
     if (wishlistTimer.current) clearTimeout(wishlistTimer.current);
     wishlistTimer.current = setTimeout(async () => {
       setWishlistSaving(true);
-      try { await patch({ wishlist_notes: v }); } finally { setWishlistSaving(false); }
+      try { await patch({ wishlist_notes: v }); }
+      catch (err) { setSaveError(err instanceof Error ? err.message : "Failed to save wishlist"); }
+      finally { setWishlistSaving(false); }
     }, 800);
   }
 
   async function saveFollowup() {
     setFollowupSaving(true);
-    try { await patch({ customer_followup_notes: followupNotes }); } finally { setFollowupSaving(false); }
+    try { await patch({ customer_followup_notes: followupNotes }); }
+    catch (err) { setSaveError(err instanceof Error ? err.message : "Failed to save follow-up notes"); }
+    finally { setFollowupSaving(false); }
   }
 
   async function linkPartner(partnerEmail: string) {
@@ -440,6 +461,7 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
       state:      customer?.state      ?? "",
       postcode:   customer?.postcode   ?? "",
     });
+    setEditError(null);
     setEditOpen(true);
   }
 
@@ -463,7 +485,7 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
           router.replace(`/customers/${encodeURIComponent(newEmail)}`);
         }
       } else {
-        console.error("[saveEdit] error:", json.error);
+        setEditError(json.error ?? "Failed to save changes. Please try again.");
       }
     } catch (err) {
       console.error("[saveEdit] fetch threw:", err);
@@ -671,6 +693,12 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
               </div>
             )}
 
+            {editError && (
+              <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', marginTop: 12 }}>
+                <p style={{ fontSize: 13, color: '#DC2626', margin: 0 }}>{editError}</p>
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
               <button onClick={() => { setEditOpen(false); setDeleteConfirm(false); }} style={{ ...BTN_SM, color: '#374151', border: '1px solid #E8E8F0', padding: '8px 16px', fontSize: 13 }}>Cancel</button>
               <button onClick={saveEdit} disabled={editSaving || !hydrated || !user} style={{ ...BTN, opacity: (editSaving || !hydrated || !user) ? 0.7 : 1 }}>
@@ -689,6 +717,13 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
           onUpdate={handlePacketUpdate}
           onRetry={handleRetry}
         />
+      )}
+
+      {saveError && (
+        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '12px 20px', zIndex: 100, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', display: 'flex', alignItems: 'center', gap: 12, whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 13, color: '#DC2626', fontWeight: 500 }}>{saveError}</span>
+          <button onClick={() => setSaveError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: 18, lineHeight: 1, padding: 0 }}>×</button>
+        </div>
       )}
 
       <div className="max-w-4xl mx-auto space-y-5">

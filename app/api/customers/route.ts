@@ -53,16 +53,25 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       // quotes table may not exist
     }
 
-    // Fetch customers table for maiden_name
-    let maidenNameMap = new Map<string, string | null>();
+    // Fetch customers table — source of truth for name/phone when set,
+    // and the only source for profile-only customers with no packets/quotes yet.
+    let customerProfileMap = new Map<string, { first_name: string | null; last_name: string | null; phone: string | null; maiden_name: string | null; created_at: string }>();
     try {
-      const custQ = supabase.from("customers").select("email, maiden_name");
+      const custQ = supabase.from("customers").select("email, first_name, last_name, phone, maiden_name, created_at");
       const { data: custData } = await (tenantId ? custQ.eq("tenant_id", tenantId) : custQ);
       for (const c of custData ?? []) {
-        if (c.email) maidenNameMap.set(c.email.toLowerCase().trim(), c.maiden_name ?? null);
+        if (c.email) {
+          customerProfileMap.set(c.email.toLowerCase().trim(), {
+            first_name: c.first_name ?? null,
+            last_name: c.last_name ?? null,
+            phone: c.phone ?? null,
+            maiden_name: c.maiden_name ?? null,
+            created_at: c.created_at ?? new Date().toISOString(),
+          });
+        }
       }
     } catch {
-      // customers table may not have maiden_name yet
+      // customers table may not exist
     }
 
     // ── Aggregate by email ───────────────────────────────────────────────────
@@ -96,7 +105,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           phone: p.customer_phone ?? null,
           first_name: p.customer_first_name ?? null,
           last_name: p.customer_last_name ?? null,
-          maiden_name: maidenNameMap.get(key) ?? null,
+          maiden_name: customerProfileMap.get(key)?.maiden_name ?? null,
           total_orders: 1,
           non_repair_orders: isRepair ? 0 : 1,
           total_quotes: 0,
@@ -125,7 +134,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           phone: q.customer_phone ?? null,
           first_name: q.customer_first_name ?? null,
           last_name: q.customer_last_name ?? null,
-          maiden_name: maidenNameMap.get(key) ?? null,
+          maiden_name: customerProfileMap.get(key)?.maiden_name ?? null,
           total_orders: 0,
           non_repair_orders: 0,
           total_quotes: 1,
@@ -138,10 +147,34 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // Backfill maiden_name for any entries that came from quotes only
-    for (const [key, row] of Array.from(map)) {
-      if (!row.maiden_name && maidenNameMap.has(key)) {
-        row.maiden_name = maidenNameMap.get(key) ?? null;
+    // Merge customers table into the map:
+    // - For emails already in the map (from packets/quotes): apply profile name/phone as
+    //   source of truth (staff edits the customers table; packet data is frozen at entry time).
+    // - For emails only in the customers table: add them so profile-only customers
+    //   (no packets or quotes yet) appear in the Customers tab.
+    for (const [key, profile] of Array.from(customerProfileMap)) {
+      const existing = map.get(key);
+      if (existing) {
+        if (profile.first_name) existing.first_name = profile.first_name;
+        if (profile.last_name) existing.last_name = profile.last_name;
+        if (profile.phone) existing.phone = profile.phone;
+        existing.maiden_name = profile.maiden_name ?? existing.maiden_name;
+      } else {
+        map.set(key, {
+          email: key,
+          phone: profile.phone,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          maiden_name: profile.maiden_name,
+          total_orders: 0,
+          non_repair_orders: 0,
+          total_quotes: 0,
+          total_spend: 0,
+          non_repair_spend: 0,
+          last_visit: profile.created_at,
+          first_seen: profile.created_at,
+          articles_sample: "",
+        });
       }
     }
 
