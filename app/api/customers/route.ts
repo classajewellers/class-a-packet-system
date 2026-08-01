@@ -201,7 +201,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const result = customers.map(({ articles_sample: _a, ...rest }) => rest);
 
-    return NextResponse.json({ customers: result });
+    const response = NextResponse.json({ customers: result });
+    response.headers.set("x-debug-commit", "69fc203-fix3-marker");
+    return response;
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ customers: [], error: msg }, { status: 500 });
