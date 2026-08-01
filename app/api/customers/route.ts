@@ -40,6 +40,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ customers: [], error: pErr.message }, { status: 500 });
     }
 
+    // TEMP DEBUG: surface raw rows for josh@classa.com.au to identify stale DB data
+    const _debugJoshPackets = (packets ?? [])
+      .filter(p => (p.customer_email ?? "").toLowerCase().includes("josh") || (p.customer_email ?? "").toLowerCase().includes("classa"))
+      .map(p => ({ email: p.customer_email, first_name: p.customer_first_name, last_name: p.customer_last_name }));
+
     // Fetch quotes — only columns needed
     let quotes: { customer_email: string | null; customer_phone: string | null; customer_first_name: string | null; customer_last_name: string | null; created_at: string }[] = [];
     try {
@@ -56,9 +61,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // Fetch customers table — source of truth for name/phone when set,
     // and the only source for profile-only customers with no packets/quotes yet.
     let customerProfileMap = new Map<string, { first_name: string | null; last_name: string | null; phone: string | null; maiden_name: string | null; created_at: string }>();
+    let _debugCustRows: { email: string | null; first_name: string | null; last_name: string | null; tenant_id?: string | null }[] = [];
     try {
-      const custQ = supabase.from("customers").select("email, first_name, last_name, phone, maiden_name, created_at");
+      const custQ = supabase.from("customers").select("email, first_name, last_name, phone, maiden_name, created_at, tenant_id");
       const { data: custData } = await (tenantId ? custQ.eq("tenant_id", tenantId) : custQ);
+      _debugCustRows = (custData ?? [])
+        .filter(c => (c.email ?? "").toLowerCase().includes("josh") || (c.email ?? "").toLowerCase().includes("classa"))
+        .map(c => ({ email: c.email, first_name: c.first_name, last_name: c.last_name, tenant_id: c.tenant_id }));
       for (const c of custData ?? []) {
         if (c.email) {
           customerProfileMap.set(c.email.toLowerCase().trim(), {
@@ -205,6 +214,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       customers: result,
       _debug_query_time: new Date().toISOString(),
       _debug_request_id: crypto.randomUUID(),
+      _debug_packets_josh: _debugJoshPackets,
+      _debug_customers_josh: _debugCustRows,
     });
     response.headers.set("x-debug-commit", "69fc203-fix3-marker");
     return response;
