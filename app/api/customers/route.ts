@@ -278,18 +278,36 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // Fix via supabase-js — same path that can see the row, bypasses the replica issue
+    // Fix via supabase-js — use a fresh server client (no set_tenant_config) so no session-var side effects
     let _debug_supa_update: unknown = "not_run";
     let _debug_supa_verify: unknown = "not_run";
+    let _debug_packet_tenant_id: unknown = "not_checked";
     if (_debugJoshPackets.length > 0) {
-      const { error: updErr, count } = await supabase
-        .from("packets")
-        .update({ customer_email: null })
-        .ilike("customer_email", "%josh%")
-        .select();
-      _debug_supa_update = updErr ? `error: ${updErr.message}` : `ok, count=${count}`;
+      const { createServerSupabaseClient } = await import("@/lib/supabase-server");
+      const freshClient = createServerSupabaseClient();
 
-      const { data: verifyRows } = await supabase
+      // First: read the actual tenant_id on the offending row
+      const { data: rowDetail } = await freshClient
+        .from("packets")
+        .select("id, customer_email, tenant_id")
+        .ilike("customer_email", "%josh%");
+      _debug_packet_tenant_id = rowDetail ?? [];
+
+      // UPDATE scoped to the exact id(s) found — no ambiguity
+      const ids = (rowDetail ?? []).map((r: { id: string }) => r.id);
+      if (ids.length > 0) {
+        const { data: updData, error: updErr } = await freshClient
+          .from("packets")
+          .update({ customer_email: null })
+          .in("id", ids)
+          .select("id, customer_email");
+        _debug_supa_update = updErr ? `error: ${updErr.message}` : { updated: updData };
+      } else {
+        _debug_supa_update = "no_ids_found";
+      }
+
+      // Verify
+      const { data: verifyRows } = await freshClient
         .from("packets")
         .select("id, customer_email")
         .ilike("customer_email", "%josh%");
