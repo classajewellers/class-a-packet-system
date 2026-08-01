@@ -226,8 +226,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       let pgHostRef = "unknown";
       try {
         const u = new URL(pgConnStr);
-        pgHostRef = u.hostname; // e.g. aws-0-ap-southeast-2.pooler.supabase.com or db.PROJECTREF.supabase.co
-        _debug_raw_pg_conn_var = `${_debug_raw_pg_conn_var} | host=${pgHostRef}`;
+        pgHostRef = u.hostname;
+        // For Supabase pooler URLs the project ref is in the username (postgres.PROJECTREF)
+        const pgUser = u.username; // e.g. "postgres.giucusqyobfsdfwwfyue"
+        _debug_raw_pg_conn_var = `${_debug_raw_pg_conn_var} | host=${pgHostRef} | user=${pgUser}`;
       } catch { /* noop */ }
 
       const pgClient = new Client({ connectionString: pgConnStr, ssl: { rejectUnauthorized: false } });
