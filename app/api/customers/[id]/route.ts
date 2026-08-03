@@ -27,12 +27,9 @@ export async function GET(
       ? supabase.from("customers").select(CUST_COLS).eq("id", customerIdParam)
       : supabase.from("customers").select(CUST_COLS).ilike("email", email);
 
-    // Use limit(1) + order before maybeSingle so case-variant duplicate email rows
-    // don't cause PGRST116 — prefer the most recently created customers row.
+    // Fetch all rows (no limit) so we can coalesce across case-variant duplicate rows.
     const custQFinal = (tenantId ? custQ.eq("tenant_id", tenantId) : custQ)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .order("created_at", { ascending: false });
 
     const [packetsResult, quotesResult, notesResult] = await Promise.all([
       (tenantId ? pkQ.eq("tenant_id", tenantId) : pkQ),
@@ -44,22 +41,25 @@ export async function GET(
 
     const packets = packetsResult.data ?? [];
     const quotes  = quotesResult.data  ?? [];
-    const cust                    = notesResult.data;
+    // Most-recently-created row wins for id, notes, contact, and address fields.
+    // For first_name/last_name: scan ALL rows for the first non-null value so a
+    // null-named duplicate (different email case) never hides the correct name.
+    const custRows = notesResult.data ?? [];
+    const cust = custRows[0] ?? null;
     const notes                   = cust?.notes ?? null;
     const customerId              = cust?.id ?? null;
     const maiden_name             = cust?.maiden_name ?? null;
     const wishlist_notes          = cust?.wishlist_notes ?? null;
     const customer_followup_notes = cust?.customer_followup_notes ?? null;
 
-    // If a customers row exists, it is the source of truth — use its values even if null
-    // (a null value means the user explicitly cleared it; don't fall back to packet data).
-    // Only fall back to packet/quote data when no customers row exists yet.
     const latest = packets[0] ?? quotes[0] ?? null;
     const customer = {
       email,
       phone:      cust ? cust.phone      : (latest?.customer_phone      ?? null),
-      first_name: cust ? cust.first_name : (latest?.customer_first_name ?? null),
-      last_name:  cust ? cust.last_name  : (latest?.customer_last_name  ?? null),
+      // Scan all customers rows for the first non-null name; fall back to packet/quote
+      // only when NO customers rows exist at all.
+      first_name: custRows.find(r => r.first_name)?.first_name ?? (custRows.length === 0 ? (latest?.customer_first_name ?? null) : null),
+      last_name:  custRows.find(r => r.last_name)?.last_name   ?? (custRows.length === 0 ? (latest?.customer_last_name  ?? null) : null),
       street:     cust ? cust.address    : (latest?.customer_street     ?? null),
       suburb:     cust ? cust.suburb     : (latest?.customer_suburb     ?? null),
       state:      cust ? cust.state      : (latest?.customer_state      ?? null),
