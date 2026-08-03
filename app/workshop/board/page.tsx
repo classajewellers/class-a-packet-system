@@ -100,7 +100,7 @@ const LS_GROUPING_KEY = "workshop_grouping_v1";
 
 const JOB_TYPE_LABELS: Record<string, string> = {
   repair: "Repair", custom_order: "Custom", stock_work: "Stock",
-  online_order: "Online", collection_order: "Collection",
+  online_order: "Online Order", collection_order: "Collection",
 };
 const JOB_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   repair:           { bg: "#EEF2FF", color: "#4F46E5" },

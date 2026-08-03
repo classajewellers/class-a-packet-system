@@ -568,6 +568,7 @@ async function processOrder(rawBody: Record<string, unknown>): Promise<void> {
   const insertData = {
     reference_number:      referenceNumber,
     packet_type:           "online_order",
+    job_type:              "online_order",
     customer_first_name:   firstName,
     customer_last_name:    lastName,
     customer_email:        email,

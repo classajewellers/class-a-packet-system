@@ -47,7 +47,7 @@ interface WorkshopConfig {
 
 const JOB_TYPE_LABELS: Record<string, string> = {
   repair: "Repair", custom_order: "Custom", stock_work: "Stock",
-  online_order: "Online", collection_order: "Collection",
+  online_order: "Online Order", collection_order: "Collection",
 };
 const JOB_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   repair:           { bg: "#EEF2FF", color: "#4F46E5" },
@@ -374,7 +374,7 @@ export default function WorkshopPage() {
           <option value="repair">Repairs</option>
           <option value="custom_order">Custom</option>
           <option value="collection_order">Collection</option>
-          <option value="online_order">Online</option>
+          <option value="online_order">Online Order</option>
           <option value="stock_work">Stock</option>
         </select>
 
