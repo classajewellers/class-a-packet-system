@@ -30,6 +30,7 @@ interface WorkshopPacket {
   workshop_intake_substatus: string | null;
   blocked_reason: string | null;
   blocked_note: string | null;
+  delivery_method: string | null;
 }
 
 interface TeamMember { id: string; name: string; profile_id: string | null; active: boolean; }
@@ -199,6 +200,7 @@ export default function WorkshopPage() {
   const [assigneeFilter,  setAssigneeFilter]  = useState("all");
   const [blockedFilter,   setBlockedFilter]   = useState(false);
   const [overdueFilter,   setOverdueFilter]   = useState(false);
+  const [deliveryFilter,  setDeliveryFilter]  = useState("all");
 
   // Sort
   const [sortKey, setSortKey] = useState<SortKey>("due_date");
@@ -243,8 +245,9 @@ export default function WorkshopPage() {
 
   const q = search.trim().toLowerCase();
   const filtered = packets.filter(p => {
-    if (jobTypeFilter !== "all" && p.job_type !== jobTypeFilter) return false;
-    if (stageFilter   !== "all" && p.status   !== stageFilter)   return false;
+    if (jobTypeFilter   !== "all" && p.job_type       !== jobTypeFilter)   return false;
+    if (stageFilter     !== "all" && p.status         !== stageFilter)     return false;
+    if (deliveryFilter  !== "all" && p.delivery_method !== deliveryFilter)  return false;
     if (overdueFilter && !isOverdue(p)) return false;
     if (blockedFilter && !p.blocked_reason) return false;
     if (assigneeFilter !== "all") {
@@ -378,6 +381,13 @@ export default function WorkshopPage() {
           <option value="stock_work">Stock</option>
         </select>
 
+        {/* Delivery method */}
+        <select value={deliveryFilter} onChange={e => setDeliveryFilter(e.target.value)} style={{ border: "1px solid #E8E8F0", borderRadius: 8, padding: "6px 10px", fontSize: 13, color: "#374151", background: "#fff", outline: "none", cursor: "pointer" }}>
+          <option value="all">All Delivery</option>
+          <option value="pickup">Pickup</option>
+          <option value="shipping">Shipping</option>
+        </select>
+
         {/* Stage */}
         <select value={stageFilter} onChange={e => setStageFilter(e.target.value)} style={{ border: "1px solid #E8E8F0", borderRadius: 8, padding: "6px 10px", fontSize: 13, color: "#374151", background: "#fff", outline: "none", cursor: "pointer" }}>
           <option value="all">All Stages</option>
@@ -498,7 +508,11 @@ export default function WorkshopPage() {
 
                       {/* Type */}
                       <td style={{ padding: "10px 14px" }}>
-                        <Badge label={JOB_TYPE_LABELS[jt] ?? jt} bg={jtColor.bg} color={jtColor.color} />
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                          <Badge label={JOB_TYPE_LABELS[jt] ?? jt} bg={jtColor.bg} color={jtColor.color} />
+                          {p.delivery_method === "pickup" && <Badge label="🏪 Pickup" bg="#ECFDF5" color="#059669" />}
+                          {p.delivery_method === "shipping" && <Badge label="📦 Shipping" bg="#EFF6FF" color="#2563EB" />}
+                        </div>
                       </td>
 
                       {/* Stage */}

@@ -133,6 +133,16 @@ function isNativeShopifyFormat(body: Record<string, unknown>): boolean {
   );
 }
 
+// Returns 'pickup' when the shipping method title indicates local/in-store pickup,
+// 'shipping' otherwise. Checks for "pickup", "pick up", and "collect" keywords.
+function detectDeliveryMethod(shippingMethod: string | null): "pickup" | "shipping" {
+  if (!shippingMethod) return "shipping";
+  const lower = shippingMethod.toLowerCase();
+  return lower.includes("pickup") || lower.includes("pick up") || lower.includes("collect")
+    ? "pickup"
+    : "shipping";
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ── SHARED UTILITIES ──────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -565,10 +575,16 @@ async function processOrder(rawBody: Record<string, unknown>): Promise<void> {
   console.log("[shopify/webhook] dispatchDate:", dispatchDate);
   console.log("[shopify/webhook] pricing:", { originalPrice, finalPrice, discountAmount });
 
+  const shopifyOrderId: string | null = isNative
+    ? (String((rawBody as ShopifyOrder).id ?? "") || null)
+    : (String((rawBody as ZapierFlatOrder).id ?? "") || null);
+
   const insertData = {
     reference_number:      referenceNumber,
     packet_type:           "online_order",
     job_type:              "online_order",
+    delivery_method:       detectDeliveryMethod(shippingMethod),
+    shopify_order_id:      shopifyOrderId,
     customer_first_name:   firstName,
     customer_last_name:    lastName,
     customer_email:        email,
@@ -588,7 +604,6 @@ async function processOrder(rawBody: Record<string, unknown>): Promise<void> {
     staff_member:          "Online Store",
     order_number:          orderNum,
     shipping_method:       shippingMethod,
-    delivery_method:       null,
     shipping_address_same: true,
     shipping_street:       null,
     shipping_suburb:       null,

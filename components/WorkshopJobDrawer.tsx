@@ -49,6 +49,9 @@ export interface WorkshopPacket {
   blocked_reason: string | null;
   blocked_note: string | null;
   blocked_at: string | null;
+  delivery_method: string | null;
+  shopify_order_id: string | null;
+  shopify_fulfillment_id: string | null;
 }
 
 export interface TeamMember     { id: string; tenant_id: string; name: string; profile_id: string | null; sort_order: number; active: boolean; }
@@ -199,6 +202,11 @@ function activityLabel(event: ActivityEvent): string {
       return `Assigned to: ${(nv.subcontractor as string | null) ?? (nv.assigned_to ? "team member" : "Unassigned")}`;
     case "valuation_assigned":
       return `Valuer set: ${String(nv.valuer ?? "—")}`;
+    case "shopify_pickup": {
+      const actor = nv.actor_name ? ` by ${nv.actor_name}` : "";
+      const fid = nv.shopify_fulfillment_id ? ` (Shopify #${nv.shopify_fulfillment_id})` : "";
+      return `Picked Up — fulfilled in Shopify${fid}${actor}`;
+    }
     default:
       return event.event_type.replace(/_/g, " ");
   }
@@ -255,6 +263,10 @@ export default function WorkshopJobDrawer({
   const [activityEvents,  setActivityEvents]  = useState<ActivityEvent[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
 
+  // Pickup fulfillment
+  const [pickingUp,    setPickingUp]    = useState(false);
+  const [pickupError,  setPickupError]  = useState<string | null>(null);
+
   useEffect(() => {
     setLocal(packet);
     setBlockingOpen(false); setBlockReason(""); setBlockNote("");
@@ -290,6 +302,23 @@ export default function WorkshopJobDrawer({
       }
     } catch { setSaveError("Network error"); } finally { setSaving(false); }
   }, [local.id, local.customer_display_name, local.assigned_to_name, h, onUpdate, profiles]);
+
+  const handlePickedUp = useCallback(async () => {
+    setPickingUp(true); setPickupError(null);
+    try {
+      const res = await fetch(`/api/workshop/packets/${local.id}/pickup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-tenant-id": tenantId, "x-actor-name": user?.name ?? "" },
+      });
+      const json = await res.json();
+      if (!res.ok) { setPickupError(json.error ?? `Error ${res.status}`); return; }
+      if (json.packet) {
+        const updated: WorkshopPacket = { ...json.packet, customer_display_name: local.customer_display_name, assigned_to_name: local.assigned_to_name };
+        setLocal(updated); onUpdate(updated);
+      }
+    } catch { setPickupError("Network error — Shopify fulfillment may not have been created. Check Shopify directly."); }
+    finally { setPickingUp(false); }
+  }, [local.id, local.customer_display_name, local.assigned_to_name, tenantId, user, onUpdate]);
 
   const submitQc = async () => {
     if (!qcAction) return;
@@ -421,6 +450,34 @@ export default function WorkshopJobDrawer({
           })}
         </div>
         {saving && <div style={{ fontSize: 11, color: "#635BFF", marginBottom: 10 }}>Saving…</div>}
+
+        {/* Pickup fulfillment — only for in-store pickup online orders */}
+        {local.delivery_method === "pickup" && local.job_type === "online_order" && local.status !== "collected" && (
+          <div style={{ marginBottom: 14 }}>
+            {pickupError && (
+              <div style={{ background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: 8, padding: "8px 12px", marginBottom: 8, fontSize: 13, color: "#DC2626" }}>
+                {pickupError}
+              </div>
+            )}
+            <button
+              onClick={handlePickedUp}
+              disabled={pickingUp}
+              style={{ width: "100%", background: pickingUp ? "#D1FAE5" : "#10B981", color: "#fff", border: "none", borderRadius: 8, padding: "10px 0", fontSize: 14, fontWeight: 700, cursor: pickingUp ? "default" : "pointer", opacity: pickingUp ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+            >
+              {pickingUp ? "Fulfilling in Shopify…" : "✓ Picked Up — Fulfil in Shopify"}
+            </button>
+            {local.shopify_fulfillment_id && (
+              <div style={{ fontSize: 11, color: "#6B7280", marginTop: 4, textAlign: "center" }}>
+                Shopify fulfillment #{local.shopify_fulfillment_id}
+              </div>
+            )}
+          </div>
+        )}
+        {local.delivery_method === "pickup" && local.status === "collected" && local.shopify_fulfillment_id && (
+          <div style={{ marginBottom: 14, background: "#D1FAE5", border: "1px solid #6EE7B7", borderRadius: 8, padding: "8px 12px", fontSize: 13, color: "#065F46" }}>
+            ✓ Picked up and fulfilled in Shopify (#{local.shopify_fulfillment_id})
+          </div>
+        )}
 
         {LABEL("Blocked Status")}
         <div style={{ marginBottom: 14 }}>
@@ -900,6 +957,12 @@ export default function WorkshopJobDrawer({
             )}
             {local.workshop_needs_valuation && (
               <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: "#FDF4FF", color: "#9333EA", border: "1px solid #E9D5FF" }}>Needs Valuation</span>
+            )}
+            {local.delivery_method === "pickup" && (
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#ECFDF5", color: "#059669", border: "1px solid #A7F3D0" }}>🏪 Pickup</span>
+            )}
+            {local.delivery_method === "shipping" && (
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#EFF6FF", color: "#2563EB", border: "1px solid #BFDBFE" }}>📦 Shipping</span>
             )}
           </div>
         </div>

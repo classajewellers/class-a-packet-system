@@ -24,6 +24,7 @@ interface WorkshopPacket {
   due_date: string | null;
   articles: string | null;
   workshop_subcontractor_name: string | null;
+  delivery_method: string | null;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -111,10 +112,11 @@ export default function WorkshopHistoryPage() {
   const [packets, setPackets] = useState<WorkshopPacket[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [search,        setSearch]        = useState("");
-  const [jobTypeFilter, setJobTypeFilter] = useState("all");
-  const [sortKey,       setSortKey]       = useState<SortKey>("collected_at");
-  const [sortDir,       setSortDir]       = useState<SortDir>("desc");
+  const [search,          setSearch]          = useState("");
+  const [jobTypeFilter,   setJobTypeFilter]   = useState("all");
+  const [deliveryFilter,  setDeliveryFilter]  = useState("all");
+  const [sortKey,         setSortKey]         = useState<SortKey>("collected_at");
+  const [sortDir,         setSortDir]         = useState<SortDir>("desc");
 
   const headers = { "x-tenant-id": tenantId };
 
@@ -134,6 +136,7 @@ export default function WorkshopHistoryPage() {
   const q = search.trim().toLowerCase();
   const filtered = packets.filter(p => {
     if (jobTypeFilter !== "all" && p.job_type !== jobTypeFilter) return false;
+    if (deliveryFilter !== "all" && p.delivery_method !== deliveryFilter) return false;
     if (q) {
       const name = displayName(p).toLowerCase();
       const ref  = (p.reference_number ?? "").toLowerCase();
@@ -214,8 +217,14 @@ export default function WorkshopHistoryPage() {
           <option value="stock_work">Stock</option>
         </select>
 
-        {(search || jobTypeFilter !== "all") && (
-          <button onClick={() => { setSearch(""); setJobTypeFilter("all"); }} style={{ padding: "5px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid #E8E8F0", background: "#fff", color: "#9CA3AF", cursor: "pointer" }}>
+        <select value={deliveryFilter} onChange={e => setDeliveryFilter(e.target.value)} style={{ border: "1px solid #E8E8F0", borderRadius: 8, padding: "6px 10px", fontSize: 13, color: "#374151", background: "#fff", outline: "none", cursor: "pointer" }}>
+          <option value="all">All Delivery</option>
+          <option value="pickup">Pickup</option>
+          <option value="shipping">Shipping</option>
+        </select>
+
+        {(search || jobTypeFilter !== "all" || deliveryFilter !== "all") && (
+          <button onClick={() => { setSearch(""); setJobTypeFilter("all"); setDeliveryFilter("all"); }} style={{ padding: "5px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid #E8E8F0", background: "#fff", color: "#9CA3AF", cursor: "pointer" }}>
             Clear
           </button>
         )}
@@ -286,7 +295,11 @@ export default function WorkshopHistoryPage() {
 
                       {/* Type */}
                       <td style={{ padding: "10px 14px" }}>
-                        <Badge label={JOB_TYPE_LABELS[jt] ?? jt} bg={jtColor.bg} color={jtColor.color} />
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                          <Badge label={JOB_TYPE_LABELS[jt] ?? jt} bg={jtColor.bg} color={jtColor.color} />
+                          {p.delivery_method === "pickup"   && <Badge label="🏪 Pickup"   bg="#ECFDF5" color="#059669" />}
+                          {p.delivery_method === "shipping" && <Badge label="📦 Shipping" bg="#EFF6FF" color="#2563EB" />}
+                        </div>
                       </td>
 
                       {/* Due Date */}

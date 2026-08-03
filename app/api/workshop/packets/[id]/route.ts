@@ -34,6 +34,8 @@ const ALLOWED_FIELDS = [
   "blocked_reason",
   "blocked_note",
   "blocked_at",
+  "delivery_method",
+  "shopify_order_id",
 ];
 
 // Fields that trigger a revert to intake/pre_check when the packet is not already in intake

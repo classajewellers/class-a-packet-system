@@ -56,6 +56,7 @@ interface WorkshopPacket {
   blocked_reason: string | null;
   blocked_note: string | null;
   blocked_at: string | null;
+  delivery_method: string | null;
 }
 
 interface TeamMember     { id: string; tenant_id: string; name: string; profile_id: string | null; sort_order: number; active: boolean; }
@@ -459,6 +460,8 @@ function JobCard({ packet, config, accent, grouping, draggingDisabled, onDragSta
           </span>
         )}
         {packet.workshop_needs_valuation && <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: "#FDF4FF", color: "#9333EA", border: "1px solid #E9D5FF" }}>Needs Valuation</span>}
+        {packet.delivery_method === "pickup"   && <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: "#ECFDF5", color: "#059669" }}>🏪 Pickup</span>}
+        {packet.delivery_method === "shipping" && <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: "#EFF6FF", color: "#2563EB" }}>📦 Shipping</span>}
       </div>
 
       {/* Footer row */}
@@ -891,12 +894,13 @@ export default function WorkshopBoardPage() {
   const [grouping, setGrouping] = useState<GroupingKey>("stage");
 
   // Filters
-  const [search,        setSearch]        = useState("");
-  const [jobTypeFilter, setJobTypeFilter] = useState("all");
-  const [statusFilter,  setStatusFilter]  = useState("all");
-  const [blockedFilter, setBlockedFilter] = useState("all");
-  const [dueDateFrom,   setDueDateFrom]   = useState("");
-  const [dueDateTo,     setDueDateTo]     = useState("");
+  const [search,          setSearch]          = useState("");
+  const [jobTypeFilter,   setJobTypeFilter]   = useState("all");
+  const [statusFilter,    setStatusFilter]    = useState("all");
+  const [blockedFilter,   setBlockedFilter]   = useState("all");
+  const [deliveryFilter,  setDeliveryFilter]  = useState("all");
+  const [dueDateFrom,     setDueDateFrom]     = useState("");
+  const [dueDateTo,       setDueDateTo]       = useState("");
 
   const dragId = useRef<string | null>(null);
 
@@ -961,6 +965,7 @@ export default function WorkshopBoardPage() {
     if (statusFilter === "ready"     && p.status !== "ready") return false;
     if (blockedFilter === "blocked"     && !p.blocked_reason) return false;
     if (blockedFilter === "not_blocked" && !!p.blocked_reason) return false;
+    if (deliveryFilter !== "all" && p.delivery_method !== deliveryFilter) return false;
     if (dueDateFrom && p.due_date && p.due_date < dueDateFrom) return false;
     if (dueDateTo   && p.due_date && p.due_date > dueDateTo)   return false;
     if (q) {
@@ -968,7 +973,7 @@ export default function WorkshopBoardPage() {
       if (!name.includes(q) && !(p.reference_number ?? "").toLowerCase().includes(q) && !(p.articles ?? "").toLowerCase().includes(q)) return false;
     }
     return true;
-  }), [packets, jobTypeFilter, statusFilter, blockedFilter, dueDateFrom, dueDateTo, q]);
+  }), [packets, jobTypeFilter, statusFilter, blockedFilter, deliveryFilter, dueDateFrom, dueDateTo, q]);
 
   const activeColumns = useMemo(() => {
     switch (grouping) {
@@ -1030,7 +1035,7 @@ export default function WorkshopBoardPage() {
     } catch { fetchPackets(); }
   };
 
-  const hasActiveFilters = jobTypeFilter !== "all" || statusFilter !== "all" || blockedFilter !== "all" || !!dueDateFrom || !!dueDateTo || !!search;
+  const hasActiveFilters = jobTypeFilter !== "all" || statusFilter !== "all" || blockedFilter !== "all" || deliveryFilter !== "all" || !!dueDateFrom || !!dueDateTo || !!search;
 
   const GROUPING_OPTIONS: { key: GroupingKey; label: string }[] = [
     { key: "stage",        label: "Stage" },
@@ -1129,6 +1134,13 @@ export default function WorkshopBoardPage() {
           <option value="not_blocked">Not blocked</option>
         </select>
 
+        {/* Delivery method */}
+        <select value={deliveryFilter} onChange={e => setDeliveryFilter(e.target.value)} style={{ border: "1px solid #E8E8F0", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: "#374151", background: "#fff", outline: "none", cursor: "pointer" }}>
+          <option value="all">All Delivery</option>
+          <option value="pickup">Pickup</option>
+          <option value="shipping">Shipping</option>
+        </select>
+
         {/* Due date range */}
         <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
           <span style={{ fontSize: 12, color: "#9CA3AF", whiteSpace: "nowrap" }}>Due:</span>
@@ -1138,7 +1150,7 @@ export default function WorkshopBoardPage() {
         </div>
 
         {hasActiveFilters && (
-          <button onClick={() => { setSearch(""); setJobTypeFilter("all"); setStatusFilter("all"); setBlockedFilter("all"); setDueDateFrom(""); setDueDateTo(""); }}
+          <button onClick={() => { setSearch(""); setJobTypeFilter("all"); setStatusFilter("all"); setBlockedFilter("all"); setDeliveryFilter("all"); setDueDateFrom(""); setDueDateTo(""); }}
             style={{ padding: "5px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid #E8E8F0", background: "#fff", color: "#9CA3AF", cursor: "pointer" }}>
             Clear filters
           </button>
