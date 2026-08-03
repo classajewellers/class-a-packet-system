@@ -41,10 +41,17 @@ export async function GET(
 
     const packets = packetsResult.data ?? [];
     const quotes  = quotesResult.data  ?? [];
-    // Most-recently-created row wins for id, notes, contact, and address fields.
-    // For first_name/last_name: scan ALL rows for the first non-null value so a
-    // null-named duplicate (different email case) never hides the correct name.
     const custRows = notesResult.data ?? [];
+
+    // DEBUG: expose query inputs + raw result so we can diagnose via DevTools Network tab
+    const _debug = {
+      tenantId_received: req.headers.get('x-tenant-id'),
+      email_decoded: email,
+      customerIdParam,
+      custRows_count: custRows.length,
+      custRows_ids: custRows.map(r => r.id),
+      custQ_error: notesResult.error ? { message: notesResult.error.message, code: (notesResult.error as { code?: string }).code } : null,
+    };
     const cust = custRows[0] ?? null;
     const notes                   = cust?.notes ?? null;
     const customerId              = cust?.id ?? null;
@@ -83,7 +90,7 @@ export async function GET(
       ),
     };
 
-    return NextResponse.json({ customer, packets, quotes });
+    return NextResponse.json({ customer, packets, quotes, _debug });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });
