@@ -28,7 +28,6 @@ export async function GET(
       : supabase.from("customers").select(CUST_COLS).ilike("email", email);
 
     // Fetch all rows (no limit) so we can coalesce across case-variant duplicate rows.
-    console.log("[DEBUG cust query] email:", JSON.stringify(email), "tenantId:", JSON.stringify(tenantId), "customerIdParam:", JSON.stringify(customerIdParam));
     const custQFinal = (tenantId ? custQ.eq("tenant_id", tenantId) : custQ)
       .order("created_at", { ascending: false });
 
@@ -38,7 +37,6 @@ export async function GET(
       custQFinal,
     ]);
 
-    console.log("[DEBUG cust result] error:", JSON.stringify(notesResult.error), "rows:", JSON.stringify((notesResult.data ?? []).map((r: Record<string,unknown>) => ({ id: r.id, email_in_row: undefined, first_name: r.first_name, last_name: r.last_name }))));
     if (notesResult.error) console.error("[GET /customers/[id]] customers query error:", notesResult.error.message, notesResult.error.code);
 
     const packets = packetsResult.data ?? [];
