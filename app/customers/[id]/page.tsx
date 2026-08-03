@@ -199,6 +199,7 @@ export default function CustomerProfilePage({ params }: { params: { id: string }
   // ── Initial load ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!hydrated) return;
+    console.log("[DEBUG customer fetch] user?.tenantId =", JSON.stringify(user?.tenantId), "| user?.role =", JSON.stringify(user?.role), "| hydrated =", hydrated);
     fetch(`/api/customers/${encodeURIComponent(email)}`, { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } })
       .then(r => r.json())
       .then(json => {
