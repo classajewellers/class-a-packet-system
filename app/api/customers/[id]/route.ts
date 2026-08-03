@@ -27,11 +27,20 @@ export async function GET(
       ? supabase.from("customers").select(CUST_COLS).eq("id", customerIdParam)
       : supabase.from("customers").select(CUST_COLS).ilike("email", email);
 
+    // Use limit(1) + order before maybeSingle so case-variant duplicate email rows
+    // don't cause PGRST116 — prefer the most recently created customers row.
+    const custQFinal = (tenantId ? custQ.eq("tenant_id", tenantId) : custQ)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
     const [packetsResult, quotesResult, notesResult] = await Promise.all([
       (tenantId ? pkQ.eq("tenant_id", tenantId) : pkQ),
       (tenantId ? qtQ.eq("tenant_id", tenantId) : qtQ),
-      (tenantId ? custQ.eq("tenant_id", tenantId) : custQ).maybeSingle(),
+      custQFinal,
     ]);
+
+    if (notesResult.error) console.error("[GET /customers/[id]] customers query error:", notesResult.error.message, notesResult.error.code);
 
     const packets = packetsResult.data ?? [];
     const quotes  = quotesResult.data  ?? [];

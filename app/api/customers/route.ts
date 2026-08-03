@@ -54,20 +54,25 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const customerProfileMap = new Map<string, { first_name: string | null; last_name: string | null; phone: string | null; maiden_name: string | null; created_at: string }>();
     try {
       const custQ = supabase.from("customers").select("email, first_name, last_name, phone, maiden_name, created_at");
-      const { data: custData } = await (tenantId ? custQ.eq("tenant_id", tenantId) : custQ);
+      const { data: custData, error: custErr } = await (tenantId ? custQ.eq("tenant_id", tenantId) : custQ);
+      if (custErr) console.error("[customers] customers query error:", custErr.message, custErr.code);
       for (const c of custData ?? []) {
-        if (c.email) {
-          customerProfileMap.set(c.email.toLowerCase().trim(), {
-            first_name: c.first_name ?? null,
-            last_name: c.last_name ?? null,
-            phone: c.phone ?? null,
-            maiden_name: c.maiden_name ?? null,
-            created_at: c.created_at ?? new Date().toISOString(),
-          });
-        }
+        if (!c.email) continue;
+        const key = c.email.toLowerCase().trim();
+        const prev = customerProfileMap.get(key);
+        // Null-coalesce: a null value in a later row must not overwrite a good name from an
+        // earlier row. Handles case-variant duplicate rows (Josh@ vs josh@) in the customers
+        // table — both normalize to the same key but only one has the correct name.
+        customerProfileMap.set(key, {
+          first_name:  c.first_name  ?? prev?.first_name  ?? null,
+          last_name:   c.last_name   ?? prev?.last_name   ?? null,
+          phone:       c.phone       ?? prev?.phone       ?? null,
+          maiden_name: c.maiden_name ?? prev?.maiden_name ?? null,
+          created_at:  c.created_at  ?? prev?.created_at  ?? new Date().toISOString(),
+        });
       }
-    } catch {
-      // customers table may not exist
+    } catch (err) {
+      console.error("[customers] customers table query threw:", err);
     }
 
     const map = new Map<string, CustomerRow>();
