@@ -4,11 +4,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
-
-// No user session — hardcode Class A tenant ID
-const CLASSA_TENANT_ID = "00000000-0000-0000-0000-000000000001";
 import { generateReferenceNumber } from "@/lib/referenceNumber";
 import { todayISO } from "@/lib/formatters";
+
+// Fallback tenant for legacy Zapier webhooks that have no X-Shopify-Shop-Domain header.
+// Native Shopify webhooks (registered via OAuth) are identified by shop_domain lookup.
+const CLASSA_TENANT_ID = "00000000-0000-0000-0000-000000000001";
+
+/**
+ * Resolve the tenant_id for an incoming webhook.
+ * Native Shopify webhooks carry X-Shopify-Shop-Domain — look it up in
+ * tenant_shopify_connections. Zapier webhooks don't have this header,
+ * so fall back to the Class A hardcode.
+ */
+async function resolveTenantId(shopDomain: string | null): Promise<string> {
+  if (!shopDomain) return CLASSA_TENANT_ID;
+  try {
+    const supabase = createServerSupabaseClient();
+    const { data } = await supabase
+      .from("tenant_shopify_connections")
+      .select("tenant_id")
+      .eq("shop_domain", shopDomain.toLowerCase())
+      .maybeSingle();
+    if (data?.tenant_id) return data.tenant_id;
+  } catch (err) {
+    console.warn("[shopify/webhook] tenant lookup failed, falling back to Class A:", err);
+  }
+  return CLASSA_TENANT_ID;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -439,8 +462,8 @@ function extractDispatchDateZapier(raw: any): string | null {
 // ═══════════════════════════════════════════════════════════════════════════════
 // Called via waitUntil() so the 200 is already sent before any DB work begins.
 
-async function processOrder(rawBody: Record<string, unknown>): Promise<void> {
-  console.log("[shopify/webhook] processOrder started");
+async function processOrder(rawBody: Record<string, unknown>, tenantId: string): Promise<void> {
+  console.log("[shopify/webhook] processOrder started — tenant_id:", tenantId);
   try {
   // ── A. Generate reference number ──────────────────────────────────────────
   let referenceNumber: string;
@@ -622,11 +645,11 @@ async function processOrder(rawBody: Record<string, unknown>): Promise<void> {
   console.log("[shopify/webhook] insertData (pre-insert):", JSON.stringify({ ...insertData, packet_data: "[omitted]" }, null, 2));
 
   const supabase = createServerSupabaseClient();
-  console.log("[shopify/webhook] calling supabase.from(packets).insert — tenant_id:", CLASSA_TENANT_ID);
+  console.log("[shopify/webhook] calling supabase.from(packets).insert — tenant_id:", tenantId);
 
   const { data, error } = await supabase
     .from("packets")
-    .insert({ ...insertData, tenant_id: CLASSA_TENANT_ID })
+    .insert({ ...insertData, tenant_id: tenantId })
     .select("reference_number, id")
     .single();
 
@@ -656,6 +679,11 @@ async function processOrder(rawBody: Record<string, unknown>): Promise<void> {
 export async function POST(req: NextRequest): Promise<NextResponse> {
   console.log("[shopify/webhook] received");
 
+  // Shopify native webhooks send X-Shopify-Shop-Domain on every request.
+  // Zapier webhooks do not — they fall back to the Class A hardcoded tenant.
+  const shopDomain = req.headers.get("x-shopify-shop-domain") ?? null;
+  console.log("[shopify/webhook] shop domain:", shopDomain ?? "(none — Zapier)");
+
   // Parse body first — the request stream can only be read once, and we must
   // do it before handing off to waitUntil.
   let rawBody: Record<string, unknown>;
@@ -670,9 +698,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   console.log("[shopify/webhook] body keys:", Object.keys(rawBody));
   console.log("[shopify/webhook] orderNumber:", rawBody.name ?? rawBody.orderNumber);
 
+  // Resolve tenant before handing off — resolveTenantId is fast (single indexed lookup).
+  const tenantId = await resolveTenantId(shopDomain);
+  console.log("[shopify/webhook] resolved tenant_id:", tenantId);
+
   // Register background processing — runs after response is sent.
   waitUntil(
-    processOrder(rawBody).catch((err) =>
+    processOrder(rawBody, tenantId).catch((err) =>
       console.error("[shopify/webhook] processOrder threw:", err)
     )
   );

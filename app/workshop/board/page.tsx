@@ -57,6 +57,8 @@ interface WorkshopPacket {
   blocked_note: string | null;
   blocked_at: string | null;
   delivery_method: string | null;
+  shopify_order_id: string | null;
+  shopify_fulfillment_id: string | null;
 }
 
 interface TeamMember     { id: string; tenant_id: string; name: string; profile_id: string | null; sort_order: number; active: boolean; }

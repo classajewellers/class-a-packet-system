@@ -13,6 +13,13 @@ interface MarginBracket { id: string; cost_min: number; cost_max: number | null;
 interface MeleeStone { id: string; size_label: string; stone_type: string; price_per_stone: number; updated_at: string; }
 interface StoreDetails { bank_name: string; account_name: string; bsb: string; account_number: string; }
 type SaveState = Record<string, 'saving' | 'saved' | 'error'>;
+interface ShopifyConnection {
+  connected: boolean;
+  shop_domain?: string | null;
+  scopes?: string | null;
+  connected_at?: string | null;
+  webhook_registered?: boolean;
+}
 type Section = 'integrations' | 'pricing' | 'store';
 type PricingTab = 'metal' | 'fixed' | 'margin' | 'melee';
 
@@ -43,6 +50,12 @@ export default function SettingsPage() {
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
 
+  /* Shopify connection state */
+  const [shopifyConn, setShopifyConn] = useState<ShopifyConnection | null>(null);
+  const [shopifyConnLoading, setShopifyConnLoading] = useState(false);
+  const [shopInput, setShopInput] = useState('');
+  const [shopifyDisconnecting, setShopifyDisconnecting] = useState(false);
+
   /* Pricing state */
   const [pricingTab, setPricingTab] = useState<PricingTab>('metal');
   const [metalRates, setMetalRates] = useState<MetalRate[]>([]);
@@ -72,6 +85,43 @@ export default function SettingsPage() {
     const stored = localStorage.getItem("sapphire_last_sync");
     if (stored) setLastSynced(stored);
   }, []);
+
+  /* Shopify: read query params on load (success/error redirected back from OAuth) */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("shopify_connected") || params.get("shopify_error") || params.get("webhook_warning")) {
+      setSection('integrations');
+      // Remove query params without full reload
+      const clean = window.location.pathname;
+      window.history.replaceState({}, '', clean);
+    }
+  }, []);
+
+  /* Shopify: load connection status when integrations tab is active */
+  useEffect(() => {
+    if (section !== 'integrations' || !user?.tenantId || shopifyConn !== null || shopifyConnLoading) return;
+    setShopifyConnLoading(true);
+    fetch('/api/shopify/connection', { headers: { 'x-tenant-id': user.tenantId } })
+      .then(r => r.json())
+      .then((json: ShopifyConnection) => setShopifyConn(json))
+      .catch(() => setShopifyConn({ connected: false }))
+      .finally(() => setShopifyConnLoading(false));
+  }, [section, user, shopifyConn, shopifyConnLoading]);
+
+  /* Shopify: disconnect */
+  async function disconnectShopify() {
+    if (!confirm('Disconnect Shopify? Incoming orders will stop syncing.')) return;
+    setShopifyDisconnecting(true);
+    try {
+      await fetch('/api/shopify/connection', {
+        method: 'DELETE',
+        headers: { 'x-tenant-id': user?.tenantId ?? '' },
+      });
+      setShopifyConn({ connected: false });
+    } finally {
+      setShopifyDisconnecting(false);
+    }
+  }
 
   /* Pricing: lazy load when section first visited */
   useEffect(() => {
@@ -256,6 +306,7 @@ export default function SettingsPage() {
 
           {/* ── Integrations ── */}
           {section === 'integrations' && (
+            <>
             <div style={{ ...card, padding: 24 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
                 <div style={{ flex: 1 }}>
@@ -305,6 +356,92 @@ export default function SettingsPage() {
                 </div>
               )}
             </div>
+
+            {/* ── Shopify Connect ── */}
+            <div style={{ ...card, padding: 24, marginTop: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                  </svg>
+                </div>
+                <span style={{ fontSize: 15, fontWeight: 700, color: '#1A1760' }}>Shopify</span>
+                {shopifyConnLoading && <span style={{ fontSize: 12, color: '#9CA3AF' }}>Loading…</span>}
+                {!shopifyConnLoading && shopifyConn?.connected && (
+                  <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: '#DCFCE7', color: '#16A34A' }}>Connected</span>
+                )}
+                {!shopifyConnLoading && shopifyConn && !shopifyConn.connected && (
+                  <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: '#F3F4F6', color: '#6B7280' }}>Not connected</span>
+                )}
+              </div>
+
+              {shopifyConn?.connected ? (
+                <div>
+                  <p style={{ fontSize: 13, color: '#374151', marginBottom: 4 }}>
+                    <strong>{shopifyConn.shop_domain}</strong>
+                  </p>
+                  {shopifyConn.connected_at && (
+                    <p style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 4 }}>
+                      Connected {formatDateAU(shopifyConn.connected_at.split('T')[0])}
+                    </p>
+                  )}
+                  <p style={{ fontSize: 12, color: shopifyConn.webhook_registered ? '#16A34A' : '#B45309', marginBottom: 12 }}>
+                    {shopifyConn.webhook_registered ? '✓ Webhook registered' : '⚠ Webhook not registered — orders may not sync automatically'}
+                  </p>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <a
+                      href={`/api/shopify/oauth/install?shop=${shopifyConn.shop_domain}`}
+                      style={{ fontSize: 13, fontWeight: 600, color: '#635BFF', background: '#EEF2FF', border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', textDecoration: 'none' }}
+                    >
+                      Reconnect
+                    </a>
+                    <button
+                      onClick={disconnectShopify}
+                      disabled={shopifyDisconnecting}
+                      style={{ fontSize: 13, fontWeight: 600, color: '#DC2626', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', opacity: shopifyDisconnecting ? 0.6 : 1 }}
+                    >
+                      {shopifyDisconnecting ? 'Disconnecting…' : 'Disconnect'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 12 }}>
+                    Connect your Shopify store to automatically sync online orders into Workshop.
+                  </p>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #E8E8F0', borderRadius: 8, overflow: 'hidden', background: '#F9FAFB' }}>
+                      <input
+                        type="text"
+                        value={shopInput}
+                        onChange={e => setShopInput(e.target.value.trim())}
+                        placeholder="yourstore"
+                        style={{ border: 'none', outline: 'none', padding: '8px 10px', fontSize: 13, background: 'transparent', color: '#1A1A2E', width: 140 }}
+                      />
+                      <span style={{ fontSize: 13, color: '#9CA3AF', paddingRight: 10, whiteSpace: 'nowrap' }}>.myshopify.com</span>
+                    </div>
+                    <a
+                      href={shopInput ? `/api/shopify/oauth/install?shop=${encodeURIComponent(shopInput)}` : '#'}
+                      onClick={e => { if (!shopInput) e.preventDefault(); }}
+                      style={{
+                        fontSize: 13, fontWeight: 600, padding: '8px 16px',
+                        background: shopInput ? '#059669' : '#E5E7EB',
+                        color: shopInput ? '#fff' : '#9CA3AF',
+                        borderRadius: 8, textDecoration: 'none',
+                        cursor: shopInput ? 'pointer' : 'default',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Connect Shopify →
+                    </a>
+                  </div>
+                  <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 8 }}>
+                    Enter your store subdomain only — e.g. <code>classajewellers</code>, not the full URL.
+                  </p>
+                </div>
+              )}
+            </div>
+            </>
           )}
 
           {/* ── Pricing ── */}
