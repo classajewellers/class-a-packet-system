@@ -13,6 +13,24 @@ import {
 
 const PAYMENT_METHODS = ["Cash", "EFTPOS", "Credit Card", "Bank Transfer", "Layby", "Finance", "Other"];
 
+/** Build "Grandparent › Parent › Leaf" path by climbing parent_id links. */
+function buildLocationPath(
+  locationId: string | null | undefined,
+  locations: Array<{ id: string; name: string; parent_id?: string | null }>,
+  fallback?: string
+): string {
+  if (!locationId) return fallback ?? "";
+  const byId = new Map(locations.map(l => [l.id, l]));
+  const parts: string[] = [];
+  let cur = byId.get(locationId);
+  let safety = 0;
+  while (cur && safety++ < 10) {
+    parts.unshift(cur.name);
+    cur = cur.parent_id ? byId.get(cur.parent_id) : undefined;
+  }
+  return parts.length ? parts.join(" › ") : (fallback ?? "");
+}
+
 type Params = { params: { id: string } };
 
 // ── Formatters ───────────────────────────────────────────────────────────────
@@ -579,7 +597,8 @@ export default function InventoryItemPage({ params }: Params) {
           )}
           {piece.location && (
             <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 13, color: "#6B7280", flexShrink: 0 }}>
-              <MapPin size={13} /> {piece.location.name}
+              <MapPin size={13} />
+              {buildLocationPath(piece.location?.id, ref?.locations ?? [], piece.location.name)}
             </span>
           )}
           {piece.title && <span style={{ fontSize: 15, color: "#374151" }}>{piece.title}</span>}
@@ -862,7 +881,7 @@ export default function InventoryItemPage({ params }: Params) {
           {/* Inventory state */}
           <SectionCard title="Inventory">
             <EF label="Status" field="status_id" opts={ref?.statuses.map(s => ({ value: s.id, label: s.name })) ?? []} />
-            <EF label="Location" field="location_id" opts={ref?.locations.map(l => ({ value: l.id, label: l.name })) ?? []} />
+            <EF label="Location" field="location_id" opts={ref?.locations.map(l => ({ value: l.id, label: buildLocationPath(l.id, ref.locations, l.name) })) ?? []} />
             <EF label="Supplier" field="supplier_id" opts={ref?.suppliers.map(s => ({ value: s.id, label: s.name })) ?? []} />
             <EF label="Assigned To" field="assigned_to" />
           </SectionCard>
@@ -937,7 +956,7 @@ export default function InventoryItemPage({ params }: Params) {
               <div>
                 <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>Move Item</h2>
                 <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9CA3AF" }}>
-                  Currently: {piece.location?.name ?? "no location"} · {piece.status?.name ?? "no status"}
+                  Currently: {buildLocationPath(piece.location?.id, ref?.locations ?? [], piece.location?.name ?? "no location")} · {piece.status?.name ?? "no status"}
                 </p>
               </div>
               <button onClick={() => setShowMove(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><X size={20} /></button>
@@ -949,7 +968,7 @@ export default function InventoryItemPage({ params }: Params) {
                 <select value={moveForm.to_location_id} onChange={e => setMoveForm(f => ({ ...f, to_location_id: e.target.value }))}
                   style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, background: "#fff" }}>
                   <option value="">— Keep current —</option>
-                  {ref?.locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  {ref?.locations.map(l => <option key={l.id} value={l.id}>{buildLocationPath(l.id, ref.locations, l.name)}</option>)}
                 </select>
               </div>
               <div>
