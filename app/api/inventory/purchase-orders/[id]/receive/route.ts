@@ -92,27 +92,57 @@ export async function POST(
   const prefix = categoryPrefix(categoryName);
   const sku    = await generateSku(supabase, prefix);
 
-  // Find "In stock" status for this tenant
-  const { data: inStockStatus } = await supabase
-    .from("inventory_statuses")
-    .select("id")
-    .ilike("name", "%in stock%")
-    .eq("is_active", true)
-    .limit(1)
-    .single();
+  // Default to a processing/awaiting status — prefer "Awaiting pricing" or any
+  // "awaiting" status so newly received pieces don't skip the pricing workflow.
+  // Falls back to "In stock" if no awaiting status is configured.
+  let statusId: string | null = null;
+  if (!specs.status_id) {
+    const { data: awaitingStatus } = await supabase
+      .from("inventory_statuses")
+      .select("id")
+      .ilike("name", "%await%")
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
+      .limit(1)
+      .maybeSingle();
 
-  // Find first active location
+    if (awaitingStatus?.id) {
+      statusId = awaitingStatus.id;
+    } else {
+      const { data: inStockStatus } = await supabase
+        .from("inventory_statuses")
+        .select("id")
+        .ilike("name", "%in stock%")
+        .eq("is_active", true)
+        .limit(1)
+        .maybeSingle();
+      statusId = inStockStatus?.id ?? null;
+    }
+  }
+  // If the form explicitly passed a status_id, that takes precedence (handled via ...specs spread)
+
+  // Default location — used only when location_id not provided in specs
   const { data: firstLocation } = await supabase
     .from("inventory_locations")
     .select("id")
     .eq("is_active", true)
     .order("sort_order", { ascending: true })
     .limit(1)
-    .single();
+    .maybeSingle();
 
-  const statusId   = inStockStatus?.id  ?? null;
-  const locationId = firstLocation?.id  ?? null;
+  const locationId = firstLocation?.id ?? null;
   const now        = new Date().toISOString();
+
+  // specs may override status_id and location_id — compute effective values for the movement log
+  const effectiveStatusId   = specs.status_id   ?? statusId;
+  const effectiveLocationId = specs.location_id ?? locationId;
+
+  // Strip fields that don't belong in inventory_pieces to avoid DB errors
+  // (actual_cost, product_id, location_id, status_id are valid piece columns)
+  const {
+    status_id: _sid, location_id: _lid, // will be set explicitly above
+    ...otherSpecs
+  } = specs;
 
   // Create the inventory piece
   const { data: piece, error: pieceErr } = await supabase
@@ -120,11 +150,11 @@ export async function POST(
     .insert({
       tenant_id:   tenantId,
       sku,
-      status_id:   statusId,
-      location_id: locationId,
+      status_id:   effectiveStatusId,
+      location_id: effectiveLocationId,
       created_at:  now,
       updated_at:  now,
-      ...specs,
+      ...otherSpecs,
     })
     .select("id,sku")
     .single();
@@ -133,17 +163,17 @@ export async function POST(
     return NextResponse.json({ error: pieceErr?.message ?? "Failed to create piece" }, { status: 500 });
   }
 
-  // Log inventory movement
+  // Log inventory movement reflecting the actual assigned status/location
   await supabase.from("inventory_movements").insert({
-    tenant_id:       tenantId,
-    piece_id:        piece.id,
+    tenant_id:        tenantId,
+    piece_id:         piece.id,
     from_location_id: null,
-    to_location_id:  locationId,
-    from_status_id:  null,
-    to_status_id:    statusId,
-    moved_by:        null,
-    notes:           `Received via PO ${po?.po_number ?? params.id}`,
-    moved_at:        now,
+    to_location_id:   effectiveLocationId,
+    from_status_id:   null,
+    to_status_id:     effectiveStatusId,
+    moved_by:         null,
+    notes:            `Received via PO ${po?.po_number ?? params.id}`,
+    moved_at:         now,
   });
 
   // Mark PO line received

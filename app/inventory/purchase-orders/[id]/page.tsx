@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
-import { ArrowLeft, Package, CheckCircle2, SkipForward, Sparkles, Loader, X } from "lucide-react";
+import { ArrowLeft, Package, CheckCircle2, SkipForward, Sparkles, Loader, X, ChevronDown } from "lucide-react";
+import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
 
 type POStatus = "draft" | "ordered" | "partially_received" | "received";
 
@@ -74,30 +75,48 @@ function DetailItem({ label, value }: { label: string; value?: string | null }) 
 
 // Receive card for a single line
 function ReceiveCard({
-  line, tenantId, poId, categories, onDone,
+  line, tenantId, poId, categories, locations, products, onDone,
 }: {
-  line: PoLine; tenantId: string; poId: string; categories: any[]; onDone: () => void;
+  line: PoLine;
+  tenantId: string;
+  poId: string;
+  categories: any[];
+  locations: any[];
+  products: any[];
+  onDone: () => void;
 }) {
   const headers = { "x-tenant-id": tenantId };
   const [specs, setSpecs] = useState({
-    title:       line.title       ?? "",
-    category_id: line.category_id ?? "",
-    metal_type:  line.metal_type  ?? "",
-    metal_karat: line.metal_karat ?? "",
-    metal_colour: line.metal_colour ?? "",
-    diamond_type:    line.stone_type    ?? "",
+    title:           line.title          ?? "",
+    category_id:     line.category_id    ?? "",
+    metal_type:      line.metal_type     ?? "",
+    metal_karat:     line.metal_karat    ?? "",
+    metal_colour:    line.metal_colour   ?? "",
+    diamond_type:    line.stone_type     ?? "",
     diamond_carat:   line.stone_carat != null ? String(line.stone_carat) : "",
-    diamond_colour:  line.stone_colour  ?? "",
-    diamond_clarity: line.stone_clarity ?? "",
-    finger_size: line.finger_size ?? "",
-    notes:       line.notes       ?? "",
+    diamond_colour:  line.stone_colour   ?? "",
+    diamond_clarity: line.stone_clarity  ?? "",
+    finger_size:     line.finger_size    ?? "",
+    notes:           line.notes          ?? "",
+    // New fields
+    actual_cost: line.unit_cost != null ? String(line.unit_cost) : "",
+    location_id: "",   // "" = use route default
+    product_id:  "",   // "" = unlinked
   });
-  const [saving, setSaving]   = useState(false);
+  const [saving, setSaving]     = useState(false);
   const [skipping, setSkipping] = useState(false);
-  const [done, setDone]       = useState(false);
-  const [aiDesc, setAiDesc]   = useState("");
+  const [done, setDone]         = useState(false);
+  const [aiDesc, setAiDesc]     = useState("");
   const [aiLoading, setAiLoading] = useState(false);
-  const [pieceResult, setPieceResult] = useState<{ sku: string } | null>(null);
+  const [pieceResult, setPieceResult] = useState<{ id: string; sku: string } | null>(null);
+  const [showAttach, setShowAttach] = useState(false);
+
+  // Product typeahead
+  const [productSearch, setProductSearch] = useState("");
+  const [productOpen, setProductOpen]     = useState(false);
+  const filteredProducts = productSearch
+    ? products.filter((p: any) => p.name.toLowerCase().includes(productSearch.toLowerCase())).slice(0, 8)
+    : [];
 
   const IF = { width: "100%", boxSizing: "border-box" as const, padding: "7px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13 };
   const LF = { fontSize: 12, fontWeight: 500 as const, color: "#374151", display: "block" as const, marginBottom: 2 };
@@ -131,17 +150,20 @@ function ReceiveCard({
 
   async function handleConfirm() {
     setSaving(true);
-    const payload = {
-      line_id: line.id,
-      specs: {
-        ...specs,
-        diamond_carat: specs.diamond_carat ? parseFloat(specs.diamond_carat) : null,
-      },
+    const builtSpecs: Record<string, any> = {
+      ...specs,
+      diamond_carat: specs.diamond_carat ? parseFloat(specs.diamond_carat) : null,
+      actual_cost:   specs.actual_cost   ? parseFloat(specs.actual_cost)   : null,
     };
+    // Strip empty-string optionals so route uses its defaults
+    if (!builtSpecs.location_id) delete builtSpecs.location_id;
+    if (!builtSpecs.product_id)  delete builtSpecs.product_id;
+    if (builtSpecs.actual_cost == null) delete builtSpecs.actual_cost;
+
     const res = await fetch(`/api/inventory/purchase-orders/${poId}/receive`, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ line_id: line.id, specs: builtSpecs }),
     });
     const json = await res.json();
     setSaving(false);
@@ -162,14 +184,33 @@ function ReceiveCard({
 
   if (done) {
     return (
-      <div style={{ background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: 12, padding: 20, display: "flex", alignItems: "center", gap: 12 }}>
-        <CheckCircle2 size={20} style={{ color: "#059669", flexShrink: 0 }} />
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: "#065F46" }}>
-            {pieceResult ? `Created ${pieceResult.sku}` : "Skipped"}
+      <div style={{ background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+          <CheckCircle2 size={20} style={{ color: "#059669", flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "#065F46" }}>
+              {pieceResult ? `Created ${pieceResult.sku}` : "Skipped"}
+            </div>
+            <div style={{ fontSize: 13, color: "#6B7280", marginTop: 2 }}>{line.title ?? "Untitled item"}</div>
           </div>
-          <div style={{ fontSize: 13, color: "#6B7280", marginTop: 2 }}>{line.title ?? "Untitled item"}</div>
+          {pieceResult && (
+            <button
+              onClick={() => setShowAttach(a => !a)}
+              style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", borderRadius: 8, border: "1px solid #6EE7B7", background: "#D1FAE5", color: "#065F46", fontSize: 12, fontWeight: 500, cursor: "pointer" }}
+            >
+              Attachments <ChevronDown size={12} style={{ transform: showAttach ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+            </button>
+          )}
         </div>
+        {pieceResult && showAttach && (
+          <div style={{ padding: "0 20px 20px", borderTop: "1px solid #A7F3D0" }}>
+            <InventoryAttachmentsPanel
+              entityType="inventory_piece"
+              entityId={pieceResult.id}
+              readOnly={false}
+            />
+          </div>
+        )}
       </div>
     );
   }
@@ -248,6 +289,74 @@ function ReceiveCard({
           <label style={LF}>Notes</label>
           <input value={specs.notes} onChange={e => setSpecs(s => ({ ...s, notes: e.target.value }))} style={IF} />
         </div>
+
+        {/* Receiving-specific fields */}
+        <div>
+          <label style={LF}>Actual Cost ($)</label>
+          <input
+            type="number" step="0.01" min="0"
+            value={specs.actual_cost}
+            onChange={e => setSpecs(s => ({ ...s, actual_cost: e.target.value }))}
+            placeholder="e.g. 450.00"
+            style={IF}
+          />
+        </div>
+        <div>
+          <label style={LF}>Location</label>
+          <select
+            value={specs.location_id}
+            onChange={e => setSpecs(s => ({ ...s, location_id: e.target.value }))}
+            style={{ ...IF, background: "#fff" }}
+          >
+            <option value="">Use default</option>
+            {locations.filter((l: any) => l.is_active !== false).map((l: any) => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
+        </div>
+        <div style={{ position: "relative" }}>
+          <label style={LF}>Link to Product</label>
+          <input
+            value={productSearch || (specs.product_id ? (products.find((p: any) => p.id === specs.product_id)?.name ?? "") : "")}
+            onChange={e => {
+              setProductSearch(e.target.value);
+              if (!e.target.value) setSpecs(s => ({ ...s, product_id: "" }));
+              setProductOpen(true);
+            }}
+            onFocus={() => setProductOpen(true)}
+            onBlur={() => setTimeout(() => setProductOpen(false), 150)}
+            placeholder="Search products…"
+            style={IF}
+          />
+          {productOpen && filteredProducts.length > 0 && (
+            <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, zIndex: 20, boxShadow: "0 4px 12px rgba(0,0,0,0.08)", maxHeight: 220, overflowY: "auto" }}>
+              {filteredProducts.map((p: any) => (
+                <div
+                  key={p.id}
+                  onMouseDown={() => {
+                    setSpecs(s => ({ ...s, product_id: p.id }));
+                    setProductSearch("");
+                    setProductOpen(false);
+                  }}
+                  style={{ padding: "8px 12px", fontSize: 13, cursor: "pointer", borderBottom: "1px solid #F3F4F6" }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "#F9FAFB")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "")}
+                >
+                  {p.name}
+                </div>
+              ))}
+            </div>
+          )}
+          {specs.product_id && (
+            <button
+              type="button"
+              onClick={() => { setSpecs(s => ({ ...s, product_id: "" })); setProductSearch(""); }}
+              style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", padding: 2 }}
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
@@ -279,8 +388,11 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   const [po, setPo]           = useState<PurchaseOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState<any[]>([]);
+  const [locations, setLocations]   = useState<any[]>([]);
+  const [products, setProducts]     = useState<any[]>([]);
   const [showReceive, setShowReceive] = useState(false);
   const [receivedCount, setReceivedCount] = useState(0);
+  const [allDone, setAllDone] = useState(false);
   const [toast, setToast]     = useState("");
 
   const headers = { "x-tenant-id": tenantId };
@@ -288,9 +400,10 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   const fetchPo = useCallback(async () => {
     if (!tenantId) return;
     setLoading(true);
-    const [poRes, refRes] = await Promise.all([
+    const [poRes, refRes, prodRes] = await Promise.all([
       fetch(`/api/inventory/purchase-orders/${params.id}`, { headers }),
       fetch("/api/inventory/reference", { headers }),
+      fetch("/api/inventory/products?limit=500", { headers }),
     ]);
     if (poRes.ok) {
       const json = await poRes.json();
@@ -299,6 +412,11 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
     if (refRes.ok) {
       const json = await refRes.json();
       setCategories(json.categories ?? []);
+      setLocations(json.locations ?? []);
+    }
+    if (prodRes.ok) {
+      const json = await prodRes.json();
+      setProducts(json.products ?? []);
     }
     setLoading(false);
   }, [tenantId, params.id]);
@@ -310,12 +428,16 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   function handleLineDone() {
     setReceivedCount(c => {
       const next = c + 1;
-      if (next >= unreceived.length) {
-        setToast("All lines processed — redirecting…");
-        setTimeout(() => { fetchPo(); setShowReceive(false); setToast(""); }, 1800);
-      }
+      if (next >= unreceived.length) setAllDone(true);
       return next;
     });
+  }
+
+  function handleFinish() {
+    fetchPo();
+    setShowReceive(false);
+    setAllDone(false);
+    setReceivedCount(0);
   }
 
   async function handleMarkOrdered() {
@@ -364,8 +486,16 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
           </div>
         </div>
 
-        {toast && (
-          <div style={{ padding: "12px 16px", background: "#ECFDF5", color: "#065F46", borderRadius: 10, fontSize: 14, fontWeight: 500, marginBottom: 16 }}>{toast}</div>
+        {allDone && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "#ECFDF5", color: "#065F46", borderRadius: 10, fontSize: 14, fontWeight: 500, marginBottom: 16 }}>
+            <span>All lines processed</span>
+            <button
+              onClick={handleFinish}
+              style={{ padding: "6px 16px", borderRadius: 8, border: "none", background: "#059669", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+            >
+              Finish
+            </button>
+          </div>
         )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -376,6 +506,8 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
               tenantId={tenantId}
               poId={po.id}
               categories={categories}
+              locations={locations}
+              products={products}
               onDone={handleLineDone}
             />
           ))}
