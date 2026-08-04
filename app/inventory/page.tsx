@@ -11,7 +11,7 @@ import {
   InventoryProduct,
   InventoryVariant,
 } from "@/lib/types";
-import { Search, Plus, X, Filter, Sparkles, Loader, ChevronDown, ChevronRight, Package } from "lucide-react";
+import { Search, Plus, X, Filter, Sparkles, Loader, ChevronDown, ChevronRight, Package, Upload } from "lucide-react";
 
 const PAGE_SIZE = 50;
 
@@ -259,6 +259,14 @@ export default function InventoryPage() {
             </button>
           )}
 
+          {isManager && (
+            <button
+              onClick={() => router.push("/inventory/import")}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 14, fontWeight: 500, background: "#F9FAFB", color: "#374151", border: "1px solid #E5E7EB", cursor: "pointer" }}
+            >
+              <Upload size={15} /> Import CSV
+            </button>
+          )}
           {isManager && (
             <button
               onClick={openAdd}

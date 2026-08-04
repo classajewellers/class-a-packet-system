@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
-import { Plus, X, Package, ChevronRight } from "lucide-react";
+import { Plus, X, Package, ChevronRight, Upload } from "lucide-react";
 
 export default function ProductsPage() {
   const router = useRouter();
@@ -70,12 +70,20 @@ export default function ProductsPage() {
           </p>
         </div>
         {isManager && (
-          <button
-            onClick={() => { setShowNew(true); setNewError(""); }}
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 14, fontWeight: 500, background: "#111827", color: "#fff", border: "none", cursor: "pointer" }}
-          >
-            <Plus size={15} /> New Product
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => router.push("/inventory/import")}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 14, fontWeight: 500, background: "#F9FAFB", color: "#374151", border: "1px solid #E5E7EB", cursor: "pointer" }}
+            >
+              <Upload size={15} /> Import CSV
+            </button>
+            <button
+              onClick={() => { setShowNew(true); setNewError(""); }}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 14, fontWeight: 500, background: "#111827", color: "#fff", border: "none", cursor: "pointer" }}
+            >
+              <Plus size={15} /> New Product
+            </button>
+          </div>
         )}
       </div>
 

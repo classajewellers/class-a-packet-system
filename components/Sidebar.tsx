@@ -232,6 +232,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
                 <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
                   <SubLink href="/inventory"                         label="Stock Register" />
                   <SubLink href="/inventory/products"                label="Products" />
+                  {isManager && <SubLink href="/inventory/import"          label="Import CSV" />}
                   {isManager && <SubLink href="/inventory/purchase-orders" label="Purchase Orders" />}
                   {isManager && <SubLink href="/inventory/settings"        label="Settings" />}
                   <SubLink href="/inventory/product-templates"       label="Product Templates" />
