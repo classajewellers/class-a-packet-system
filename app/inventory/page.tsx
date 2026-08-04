@@ -392,17 +392,13 @@ export default function InventoryPage() {
                         <Package size={14} style={{ color: "#635BFF" }} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>{product.title ?? product.name}</div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>{product.name}</div>
                         <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
                           {catName && <span style={{ fontSize: 11, color: "#9CA3AF" }}>{catName}</span>}
                           {product.collection && <span style={{ fontSize: 11, color: "#9CA3AF" }}>· {product.collection}</span>}
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: 16, marginRight: 8 }}>
-                        <div style={{ textAlign: "right" }}>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{product.variant_count ?? 0}</div>
-                          <div style={{ fontSize: 10, color: "#9CA3AF" }}>variants</div>
-                        </div>
                         <div style={{ textAlign: "right" }}>
                           <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{product.piece_count ?? 0}</div>
                           <div style={{ fontSize: 10, color: "#9CA3AF" }}>pieces</div>

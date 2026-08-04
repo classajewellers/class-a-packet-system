@@ -714,25 +714,22 @@ export type InvoiceStatus = 'pending' | 'received' | 'partial' | 'disputed';
 export interface InventoryProduct {
   id: string;
   tenant_id?: string;
-  // New schema
-  title?: string;
+  name: string;
   category_id?: string | null;
   collection?: string | null;
-  is_active?: boolean;
-  updated_at?: string | null;
-  // Legacy
-  name?: string;
-  department?: string | null;
-  // Common
-  description: string | null;
-  notes: string | null;
+  design?: string | null;
+  style?: string | null;
+  setting_type?: string | null;
+  marketing_description?: string | null;
+  website_description?: string | null;
+  seo_title?: string | null;
+  seo_description?: string | null;
+  care_instructions?: string | null;
   created_at: string;
   // Computed
-  variant_count?: number;
   piece_count?: number;
   // Joined
   category?: { id: string; name: string } | string | null;
-  variants?: InventoryVariant[];
 }
 
 export interface InventoryVariant {

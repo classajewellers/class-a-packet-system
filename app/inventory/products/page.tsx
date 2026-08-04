@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
-import { InventoryProduct } from "@/lib/types";
 import { Plus, X, Package, ChevronRight } from "lucide-react";
 
 export default function ProductsPage() {
@@ -13,11 +12,11 @@ export default function ProductsPage() {
   const tenantId = user?.tenantId ?? "";
   const isManager = hydrated ? canManage(user?.role) : false;
 
-  const [products, setProducts] = useState<InventoryProduct[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [showNew, setShowNew] = useState(false);
-  const [newForm, setNewForm] = useState({ title: "", category_id: "", collection: "", description: "" });
+  const [newForm, setNewForm] = useState({ name: "", category_id: "", collection: "" });
   const [newSaving, setNewSaving] = useState(false);
   const [newError, setNewError] = useState("");
   const [ref, setRef] = useState<any>(null);
@@ -39,7 +38,7 @@ export default function ProductsPage() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   async function handleCreate() {
-    if (!newForm.title.trim()) { setNewError("Title is required"); return; }
+    if (!newForm.name.trim()) { setNewError("Name is required"); return; }
     setNewSaving(true);
     setNewError("");
     const res = await fetch("/api/inventory/products", {
@@ -51,7 +50,7 @@ export default function ProductsPage() {
     setNewSaving(false);
     if (!res.ok) { setNewError(json.error ?? "Failed to create"); return; }
     setShowNew(false);
-    setNewForm({ title: "", category_id: "", collection: "", description: "" });
+    setNewForm({ name: "", category_id: "", collection: "" });
     router.push(`/inventory/products/${json.product.id}`);
   }
 
@@ -89,7 +88,7 @@ export default function ProductsPage() {
             <Package size={40} style={{ color: "#E5E7EB", marginBottom: 12 }} />
             <div style={{ fontSize: 15, fontWeight: 600, color: "#374151", marginBottom: 6 }}>No products yet</div>
             <div style={{ fontSize: 13, color: "#9CA3AF", marginBottom: 20 }}>
-              Create your first product to start grouping stock by style and variant.
+              Create a product to group and describe your stock by style.
             </div>
             {isManager && (
               <button
@@ -120,7 +119,7 @@ export default function ProductsPage() {
                   <Package size={18} style={{ color: "#635BFF" }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: "#111827" }}>{product.title ?? product.name}</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: "#111827" }}>{product.name}</div>
                   <div style={{ display: "flex", gap: 8, marginTop: 3, flexWrap: "wrap" }}>
                     {catName && (
                       <span style={{ fontSize: 11, padding: "1px 8px", borderRadius: 999, background: "#F3F4F6", color: "#6B7280", fontWeight: 500 }}>{catName}</span>
@@ -128,17 +127,14 @@ export default function ProductsPage() {
                     {product.collection && (
                       <span style={{ fontSize: 11, color: "#9CA3AF" }}>{product.collection}</span>
                     )}
+                    {product.style && (
+                      <span style={{ fontSize: 11, color: "#9CA3AF" }}>{product.style}</span>
+                    )}
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: 20, marginRight: 16, flexShrink: 0 }}>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{product.variant_count ?? 0}</div>
-                    <div style={{ fontSize: 11, color: "#9CA3AF" }}>variants</div>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{product.piece_count ?? 0}</div>
-                    <div style={{ fontSize: 11, color: "#9CA3AF" }}>pieces</div>
-                  </div>
+                <div style={{ marginRight: 16, flexShrink: 0, textAlign: "right" }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{product.piece_count ?? 0}</div>
+                  <div style={{ fontSize: 11, color: "#9CA3AF" }}>pieces</div>
                 </div>
                 <ChevronRight size={16} style={{ color: "#D1D5DB", flexShrink: 0 }} />
               </div>
@@ -158,8 +154,8 @@ export default function ProductsPage() {
             {newError && <div style={{ padding: "10px 14px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, fontSize: 13, marginBottom: 16 }}>{newError}</div>}
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div>
-                <label style={LF}>Title <span style={{ color: "#EF4444" }}>*</span></label>
-                <input value={newForm.title} onChange={e => setNewForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Diamond Solitaire Ring" style={IF} />
+                <label style={LF}>Name <span style={{ color: "#EF4444" }}>*</span></label>
+                <input value={newForm.name} onChange={e => setNewForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Diamond Solitaire Ring" style={IF} />
               </div>
               <div>
                 <label style={LF}>Category</label>
@@ -171,10 +167,6 @@ export default function ProductsPage() {
               <div>
                 <label style={LF}>Collection</label>
                 <input value={newForm.collection} onChange={e => setNewForm(f => ({ ...f, collection: e.target.value }))} placeholder="e.g. Eternal" style={IF} />
-              </div>
-              <div>
-                <label style={LF}>Description</label>
-                <textarea value={newForm.description} onChange={e => setNewForm(f => ({ ...f, description: e.target.value }))} rows={2} style={{ ...IF, resize: "vertical" }} />
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 20 }}>

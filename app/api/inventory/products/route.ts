@@ -12,25 +12,24 @@ export async function GET(req: NextRequest) {
     const { data, error } = await supabase
       .from("inventory_products")
       .select(`
-        id, title, collection, description, is_active, created_at,
+        id, name, collection, category_id, design, style, created_at,
         category:inventory_categories(id, name),
-        _variants:inventory_variants(id),
         _pieces:inventory_pieces(id)
       `)
       .eq("tenant_id", tenantId)
-      .order("title");
+      .order("name");
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     const products = (data ?? []).map((p: any) => ({
       id: p.id,
-      title: p.title,
+      name: p.name,
       collection: p.collection,
-      description: p.description,
-      is_active: p.is_active,
+      category_id: p.category_id,
+      design: p.design,
+      style: p.style,
       created_at: p.created_at,
       category: p.category,
-      variant_count: (p._variants as any[])?.length ?? 0,
       piece_count: (p._pieces as any[])?.length ?? 0,
     }));
 
@@ -46,19 +45,25 @@ export async function POST(req: NextRequest) {
     const supabase = await createTenantSupabaseClient(tenantId);
     const body = await req.json();
 
-    if (!body.title?.trim()) {
-      return NextResponse.json({ error: "title is required" }, { status: 400 });
+    if (!body.name?.trim()) {
+      return NextResponse.json({ error: "name is required" }, { status: 400 });
     }
 
     const { data, error } = await supabase
       .from("inventory_products")
       .insert({
-        tenant_id: tenantId,
-        title: body.title.trim(),
-        category_id: body.category_id || null,
-        collection: body.collection || null,
-        description: body.description || null,
-        notes: body.notes || null,
+        tenant_id:             tenantId,
+        name:                  body.name.trim(),
+        category_id:           body.category_id           || null,
+        collection:            body.collection            || null,
+        design:                body.design                || null,
+        style:                 body.style                 || null,
+        setting_type:          body.setting_type          || null,
+        marketing_description: body.marketing_description || null,
+        website_description:   body.website_description   || null,
+        seo_title:             body.seo_title             || null,
+        seo_description:       body.seo_description       || null,
+        care_instructions:     body.care_instructions     || null,
       })
       .select(`*, category:inventory_categories(id, name)`)
       .single();

@@ -6,10 +6,9 @@ export const revalidate = 0;
 
 const PIECE_SELECT = `
   id, sku, title, metal_type, metal_karat, metal_colour, finger_size,
-  retail_price, created_at,
+  cost_price, retail_price, created_at,
   status:inventory_statuses(id, name, colour),
-  location:inventory_locations(id, name),
-  category:inventory_categories(id, name)
+  location:inventory_locations(id, name)
 `.trim();
 
 export async function GET(
@@ -19,19 +18,13 @@ export async function GET(
   const tenantId = req.headers.get("x-tenant-id") ?? "";
   const supabase = await createTenantSupabaseClient(tenantId);
 
-  const [productRes, variantsRes, piecesRes] = await Promise.all([
+  const [productRes, piecesRes] = await Promise.all([
     supabase
       .from("inventory_products")
       .select(`*, category:inventory_categories(id, name)`)
       .eq("id", params.id)
       .eq("tenant_id", tenantId)
       .single(),
-    supabase
-      .from("inventory_variants")
-      .select("*")
-      .eq("product_id", params.id)
-      .eq("tenant_id", tenantId)
-      .order("created_at"),
     supabase
       .from("inventory_pieces")
       .select(PIECE_SELECT)
@@ -44,20 +37,9 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const variants = variantsRes.data ?? [];
-  const allPieces = piecesRes.data ?? [];
-
-  const variantsWithPieces = variants.map((v: any) => ({
-    ...v,
-    pieces: allPieces.filter((p: any) => p.variant_id === v.id),
-  }));
-
-  const unlinkedPieces = allPieces.filter((p: any) => !p.variant_id);
-
   return NextResponse.json({
     product: productRes.data,
-    variants: variantsWithPieces,
-    unlinked_pieces: unlinkedPieces,
+    pieces: piecesRes.data ?? [],
   });
 }
 
@@ -73,12 +55,17 @@ export async function PATCH(
     const { data, error } = await supabase
       .from("inventory_products")
       .update({
-        title: body.title,
-        category_id: body.category_id ?? null,
-        collection: body.collection ?? null,
-        description: body.description ?? null,
-        notes: body.notes ?? null,
-        is_active: body.is_active,
+        name:                  body.name,
+        category_id:           body.category_id           ?? null,
+        collection:            body.collection            ?? null,
+        design:                body.design                ?? null,
+        style:                 body.style                 ?? null,
+        setting_type:          body.setting_type          ?? null,
+        marketing_description: body.marketing_description ?? null,
+        website_description:   body.website_description   ?? null,
+        seo_title:             body.seo_title             ?? null,
+        seo_description:       body.seo_description       ?? null,
+        care_instructions:     body.care_instructions     ?? null,
       })
       .eq("id", params.id)
       .eq("tenant_id", tenantId)

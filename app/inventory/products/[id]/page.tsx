@@ -4,21 +4,12 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
-import { InventoryProduct, InventoryVariant, InventoryPiece } from "@/lib/types";
-import { ArrowLeft, Plus, Edit2, Save, X, Trash2, ChevronDown, ChevronRight, Sparkles, Loader } from "lucide-react";
+import { ArrowLeft, Edit2, Trash2, Plus, X, Sparkles, Loader } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type Params = { params: { id: string } };
-
-function Pill({ children }: { children: React.ReactNode }) {
-  return (
-    <span style={{ display: "inline-block", padding: "2px 9px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#EEF2FF", color: "#635BFF", border: "1px solid #C7D2FE" }}>
-      {children}
-    </span>
-  );
-}
 
 function StatusDot({ colour, name }: { colour?: string | null; name?: string | null }) {
   if (!name) return <span style={{ color: "#9CA3AF", fontSize: 12 }}>—</span>;
@@ -31,16 +22,10 @@ function StatusDot({ colour, name }: { colour?: string | null; name?: string | n
   );
 }
 
-const BLANK_VARIANT = {
-  title: "", metal_type: "", metal_karat: "", metal_colour: "",
-  finger_size: "", chain_length: "", diamond_type: "",
-  diamond_carat: "", diamond_colour: "", diamond_clarity: "",
-};
-
 const BLANK_PIECE = {
   title: "", category_id: "", status_id: "", location_id: "",
   metal_type: "", metal_karat: "", metal_colour: "", finger_size: "",
-  notes: "", product_id: "", variant_id: "",
+  cost_price: "", retail_price: "", notes: "",
 };
 
 export default function ProductDetailPage({ params }: Params) {
@@ -49,40 +34,24 @@ export default function ProductDetailPage({ params }: Params) {
   const tenantId = user?.tenantId ?? "";
   const isManager = hydrated ? canManage(user?.role) : false;
 
-  const [product, setProduct]   = useState<InventoryProduct | null>(null);
-  const [variants, setVariants] = useState<InventoryVariant[]>([]);
-  const [unlinked, setUnlinked] = useState<InventoryPiece[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [ref, setRef]           = useState<any>(null);
+  const [product, setProduct] = useState<any>(null);
+  const [pieces, setPieces]   = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [ref, setRef]         = useState<any>(null);
 
-  // Product edit
-  const [editing, setEditing]   = useState(false);
-  const [editForm, setEditForm] = useState<any>({});
+  const [editing, setEditing]       = useState(false);
+  const [editForm, setEditForm]     = useState<any>({});
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError]   = useState("");
 
-  // Variant expand state
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [showAddPiece, setShowAddPiece] = useState(false);
+  const [pieceForm, setPieceForm]       = useState(BLANK_PIECE);
+  const [pieceSaving, setPieceSaving]   = useState(false);
+  const [pieceError, setPieceError]     = useState("");
+  const [aiDesc, setAiDesc]             = useState("");
+  const [aiLoading, setAiLoading]       = useState(false);
 
-  // Add variant modal
-  const [showAddVariant, setShowAddVariant] = useState(false);
-  const [variantForm, setVariantForm]       = useState(BLANK_VARIANT);
-  const [variantSaving, setVariantSaving]   = useState(false);
-  const [variantError, setVariantError]     = useState("");
-
-  // Edit variant modal
-  const [editVariantId, setEditVariantId]   = useState<string | null>(null);
-  const [editVariantForm, setEditVariantForm] = useState(BLANK_VARIANT);
-  const [editVariantSaving, setEditVariantSaving] = useState(false);
-  const [editVariantError, setEditVariantError]   = useState("");
-
-  // Add piece modal
-  const [addPieceVariantId, setAddPieceVariantId] = useState<string | null>(null);
-  const [pieceForm, setPieceForm]   = useState(BLANK_PIECE);
-  const [pieceSaving, setPieceSaving] = useState(false);
-  const [pieceError, setPieceError]   = useState("");
-  const [aiDesc, setAiDesc]         = useState("");
-  const [aiLoading, setAiLoading]   = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const headers = { "x-tenant-id": tenantId };
 
@@ -96,8 +65,7 @@ export default function ProductDetailPage({ params }: Params) {
     if (prodRes.ok) {
       const json = await prodRes.json();
       setProduct(json.product);
-      setVariants(json.variants ?? []);
-      setUnlinked(json.unlinked_pieces ?? []);
+      setPieces(json.pieces ?? []);
     }
     if (refRes.ok) setRef(await refRes.json());
     setLoading(false);
@@ -121,49 +89,17 @@ export default function ProductDetailPage({ params }: Params) {
     setEditing(false);
   }
 
-  async function handleAddVariant() {
+  async function handleDelete() {
     if (!product) return;
-    setVariantSaving(true);
-    setVariantError("");
-    const body = { ...variantForm, product_id: product.id, diamond_carat: variantForm.diamond_carat ? Number(variantForm.diamond_carat) : null };
-    const res = await fetch("/api/inventory/variants", {
-      method: "POST",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const json = await res.json();
-    setVariantSaving(false);
-    if (!res.ok) { setVariantError(json.error ?? "Failed"); return; }
-    setShowAddVariant(false);
-    setVariantForm(BLANK_VARIANT);
-    fetchAll();
-  }
-
-  async function handleSaveVariant() {
-    if (!editVariantId) return;
-    setEditVariantSaving(true);
-    setEditVariantError("");
-    const body = { ...editVariantForm, diamond_carat: editVariantForm.diamond_carat ? Number(editVariantForm.diamond_carat) : null };
-    const res = await fetch(`/api/inventory/variants/${editVariantId}`, {
-      method: "PATCH",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const json = await res.json();
-    setEditVariantSaving(false);
-    if (!res.ok) { setEditVariantError(json.error ?? "Failed"); return; }
-    setEditVariantId(null);
-    fetchAll();
-  }
-
-  async function handleDeleteVariant(variantId: string, pieceCount: number) {
-    if (pieceCount > 0) {
-      alert(`Cannot delete — ${pieceCount} piece(s) still linked. Unlink or reassign them first.`);
+    if (pieces.length > 0) {
+      alert(`Cannot delete — ${pieces.length} piece(s) still linked. Unlink them first.`);
       return;
     }
-    if (!confirm("Delete this variant?")) return;
-    const res = await fetch(`/api/inventory/variants/${variantId}`, { method: "DELETE", headers });
-    if (res.ok) fetchAll();
+    if (!confirm(`Delete product "${product.name}"? This cannot be undone.`)) return;
+    setDeleting(true);
+    const res = await fetch(`/api/inventory/products/${product.id}`, { method: "DELETE", headers });
+    setDeleting(false);
+    if (res.ok) router.push("/inventory/products");
     else {
       const json = await res.json();
       alert(json.error ?? "Delete failed");
@@ -193,26 +129,15 @@ export default function ProductDetailPage({ params }: Params) {
     }));
   }
 
-  function openAddPiece(variant: InventoryVariant) {
-    setPieceForm({
-      ...BLANK_PIECE,
-      product_id:   product?.id ?? "",
-      variant_id:   variant.id,
-      title:        product?.title ?? product?.name ?? "",
-      metal_type:   variant.metal_type ?? "",
-      metal_karat:  variant.metal_karat ?? "",
-      metal_colour: variant.metal_colour ?? "",
-      finger_size:  variant.finger_size ?? "",
-    });
-    setAddPieceVariantId(variant.id);
-    setAiDesc("");
-    setPieceError("");
-  }
-
   async function handleAddPiece() {
     setPieceSaving(true);
     setPieceError("");
-    const body = { ...pieceForm };
+    const body = {
+      ...pieceForm,
+      product_id:   product.id,
+      cost_price:   pieceForm.cost_price   ? Number(pieceForm.cost_price)   : null,
+      retail_price: pieceForm.retail_price ? Number(pieceForm.retail_price) : null,
+    };
     const res = await fetch("/api/inventory/pieces", {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
@@ -221,7 +146,8 @@ export default function ProductDetailPage({ params }: Params) {
     const json = await res.json();
     setPieceSaving(false);
     if (!res.ok) { setPieceError(json.error ?? "Failed"); return; }
-    setAddPieceVariantId(null);
+    setShowAddPiece(false);
+    setPieceForm(BLANK_PIECE);
     router.push(`/inventory/${json.piece.id}`);
   }
 
@@ -238,50 +164,10 @@ export default function ProductDetailPage({ params }: Params) {
 
   const LF = { fontSize: 13, fontWeight: 500 as const, color: "#374151", display: "block" as const, marginBottom: 4 };
   const IF = { width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 };
-
-  function VariantSpecPills({ v }: { v: InventoryVariant }) {
-    const specs = [
-      v.metal_karat, v.metal_colour, v.metal_type,
-      v.finger_size && `Size ${v.finger_size}`,
-      v.chain_length && `${v.chain_length} chain`,
-      v.diamond_carat && `${v.diamond_carat}ct`,
-      v.diamond_colour,
-      v.diamond_clarity,
-    ].filter(Boolean) as string[];
-    if (specs.length === 0) return <span style={{ fontSize: 12, color: "#9CA3AF" }}>No specs</span>;
-    return (
-      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-        {specs.map((s, i) => <Pill key={i}>{s}</Pill>)}
-      </div>
-    );
-  }
-
-  function VariantFormFields({ form, setForm }: { form: typeof BLANK_VARIANT; setForm: (f: typeof BLANK_VARIANT) => void }) {
-    const set = (k: keyof typeof BLANK_VARIANT) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
-    return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <div>
-          <label style={LF}>Label / Title</label>
-          <input value={form.title} onChange={set("title")} placeholder="e.g. 18ct Yellow Gold / Size N" style={IF} />
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 16px" }}>
-          <div><label style={LF}>Metal Type</label><input value={form.metal_type} onChange={set("metal_type")} placeholder="Yellow Gold" style={IF} /></div>
-          <div><label style={LF}>Carat</label><input value={form.metal_karat} onChange={set("metal_karat")} placeholder="18ct" style={IF} /></div>
-          <div><label style={LF}>Metal Colour</label><input value={form.metal_colour} onChange={set("metal_colour")} placeholder="Yellow" style={IF} /></div>
-          <div><label style={LF}>Finger Size</label><input value={form.finger_size} onChange={set("finger_size")} placeholder="N" style={IF} /></div>
-          <div><label style={LF}>Chain Length</label><input value={form.chain_length} onChange={set("chain_length")} placeholder='45cm' style={IF} /></div>
-          <div><label style={LF}>Diamond Type</label><input value={form.diamond_type} onChange={set("diamond_type")} placeholder="Round Brilliant" style={IF} /></div>
-          <div><label style={LF}>Diamond Carat</label><input value={form.diamond_carat} onChange={set("diamond_carat")} placeholder="0.50" style={IF} /></div>
-          <div><label style={LF}>Diamond Colour</label><input value={form.diamond_colour} onChange={set("diamond_colour")} placeholder="G" style={IF} /></div>
-          <div><label style={LF}>Diamond Clarity</label><input value={form.diamond_clarity} onChange={set("diamond_clarity")} placeholder="VS1" style={IF} /></div>
-        </div>
-      </div>
-    );
-  }
+  const TA = { ...IF, resize: "vertical" as const };
 
   return (
     <div style={{ padding: "32px 32px 64px", maxWidth: 960, margin: "0 auto" }}>
-      {/* Back */}
       <button
         onClick={() => router.push("/inventory/products")}
         style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: "#6B7280", fontSize: 14, marginBottom: 20, padding: 0 }}
@@ -289,35 +175,66 @@ export default function ProductDetailPage({ params }: Params) {
         <ArrowLeft size={16} /> Products
       </button>
 
-      {/* Product header card */}
+      {/* Product header / edit card */}
       <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 24, marginBottom: 16 }}>
         {!editing ? (
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
-            <div>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: 0 }}>{product.title ?? product.name}</h1>
+                <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: 0 }}>{product.name}</h1>
                 {catName && <span style={{ fontSize: 11, padding: "2px 9px", borderRadius: 999, background: "#F3F4F6", color: "#6B7280", fontWeight: 500 }}>{catName}</span>}
               </div>
-              {product.collection && <div style={{ fontSize: 13, color: "#9CA3AF", marginBottom: 6 }}>{product.collection}</div>}
-              {product.description && <div style={{ fontSize: 14, color: "#374151" }}>{product.description}</div>}
-              <div style={{ display: "flex", gap: 16, marginTop: 12 }}>
-                <span style={{ fontSize: 13, color: "#6B7280" }}><strong style={{ color: "#111827" }}>{variants.length}</strong> variants</span>
-                <span style={{ fontSize: 13, color: "#6B7280" }}><strong style={{ color: "#111827" }}>{variants.reduce((n, v) => n + (v.pieces?.length ?? 0), 0)}</strong> pieces</span>
+              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13, color: "#6B7280", marginBottom: 8 }}>
+                {product.collection    && <span>Collection: <strong style={{ color: "#374151" }}>{product.collection}</strong></span>}
+                {product.style         && <span>Style: <strong style={{ color: "#374151" }}>{product.style}</strong></span>}
+                {product.design        && <span>Design: <strong style={{ color: "#374151" }}>{product.design}</strong></span>}
+                {product.setting_type  && <span>Setting: <strong style={{ color: "#374151" }}>{product.setting_type}</strong></span>}
+              </div>
+              {product.marketing_description && (
+                <p style={{ fontSize: 14, color: "#374151", margin: "8px 0 0", maxWidth: 640 }}>{product.marketing_description}</p>
+              )}
+              <div style={{ marginTop: 12, fontSize: 13, color: "#6B7280" }}>
+                <strong style={{ color: "#111827" }}>{pieces.length}</strong> piece{pieces.length !== 1 ? "s" : ""} linked
               </div>
             </div>
             {isManager && (
-              <button onClick={() => { setEditForm({ title: product.title, category_id: typeof product.category === "object" && product.category ? (product.category as any).id : "", collection: product.collection, description: product.description, notes: product.notes }); setEditing(true); setEditError(""); }}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer", color: "#374151", flexShrink: 0 }}>
-                <Edit2 size={14} /> Edit
-              </button>
+              <div style={{ display: "flex", gap: 8, flexShrink: 0, marginLeft: 16 }}>
+                <button onClick={() => {
+                  setEditForm({
+                    name: product.name,
+                    category_id: typeof product.category === "object" && product.category ? (product.category as any).id : (product.category_id ?? ""),
+                    collection: product.collection ?? "",
+                    design: product.design ?? "",
+                    style: product.style ?? "",
+                    setting_type: product.setting_type ?? "",
+                    marketing_description: product.marketing_description ?? "",
+                    website_description: product.website_description ?? "",
+                    seo_title: product.seo_title ?? "",
+                    seo_description: product.seo_description ?? "",
+                    care_instructions: product.care_instructions ?? "",
+                  });
+                  setEditing(true);
+                  setEditError("");
+                }}
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer", color: "#374151" }}>
+                  <Edit2 size={14} /> Edit
+                </button>
+                <button onClick={handleDelete} disabled={deleting}
+                  style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #FECACA", background: "#FEF2F2", color: "#DC2626", fontSize: 14, cursor: "pointer" }}>
+                  <Trash2 size={14} />
+                </button>
+              </div>
             )}
           </div>
         ) : (
           <div>
             <h3 style={{ margin: "0 0 16px", fontSize: 12, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.06em" }}>Edit Product</h3>
             {editError && <div style={{ padding: "10px 14px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, fontSize: 13, marginBottom: 14 }}>{editError}</div>}
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <div><label style={LF}>Title</label><input value={editForm.title ?? ""} onChange={e => setEditForm((f: any) => ({ ...f, title: e.target.value }))} style={IF} /></div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 20px" }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={LF}>Name <span style={{ color: "#EF4444" }}>*</span></label>
+                <input value={editForm.name ?? ""} onChange={e => setEditForm((f: any) => ({ ...f, name: e.target.value }))} style={IF} />
+              </div>
               <div>
                 <label style={LF}>Category</label>
                 <select value={editForm.category_id ?? ""} onChange={e => setEditForm((f: any) => ({ ...f, category_id: e.target.value }))} style={{ ...IF, background: "#fff" }}>
@@ -325,11 +242,44 @@ export default function ProductDetailPage({ params }: Params) {
                   {ref?.categories?.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
-              <div><label style={LF}>Collection</label><input value={editForm.collection ?? ""} onChange={e => setEditForm((f: any) => ({ ...f, collection: e.target.value }))} style={IF} /></div>
-              <div><label style={LF}>Description</label><textarea value={editForm.description ?? ""} onChange={e => setEditForm((f: any) => ({ ...f, description: e.target.value }))} rows={2} style={{ ...IF, resize: "vertical" }} /></div>
-              <div><label style={LF}>Notes</label><textarea value={editForm.notes ?? ""} onChange={e => setEditForm((f: any) => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...IF, resize: "vertical" }} /></div>
+              <div>
+                <label style={LF}>Collection</label>
+                <input value={editForm.collection ?? ""} onChange={e => setEditForm((f: any) => ({ ...f, collection: e.target.value }))} style={IF} />
+              </div>
+              <div>
+                <label style={LF}>Style</label>
+                <input value={editForm.style ?? ""} onChange={e => setEditForm((f: any) => ({ ...f, style: e.target.value }))} placeholder="e.g. Solitaire, Halo, Three-Stone" style={IF} />
+              </div>
+              <div>
+                <label style={LF}>Design</label>
+                <input value={editForm.design ?? ""} onChange={e => setEditForm((f: any) => ({ ...f, design: e.target.value }))} style={IF} />
+              </div>
+              <div>
+                <label style={LF}>Setting Type</label>
+                <input value={editForm.setting_type ?? ""} onChange={e => setEditForm((f: any) => ({ ...f, setting_type: e.target.value }))} placeholder="e.g. Claw, Bezel, Pavé" style={IF} />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={LF}>Marketing Description</label>
+                <textarea value={editForm.marketing_description ?? ""} onChange={e => setEditForm((f: any) => ({ ...f, marketing_description: e.target.value }))} rows={3} style={TA} />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={LF}>Website Description</label>
+                <textarea value={editForm.website_description ?? ""} onChange={e => setEditForm((f: any) => ({ ...f, website_description: e.target.value }))} rows={2} style={TA} />
+              </div>
+              <div>
+                <label style={LF}>SEO Title</label>
+                <input value={editForm.seo_title ?? ""} onChange={e => setEditForm((f: any) => ({ ...f, seo_title: e.target.value }))} style={IF} />
+              </div>
+              <div>
+                <label style={LF}>SEO Description</label>
+                <input value={editForm.seo_description ?? ""} onChange={e => setEditForm((f: any) => ({ ...f, seo_description: e.target.value }))} style={IF} />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={LF}>Care Instructions</label>
+                <textarea value={editForm.care_instructions ?? ""} onChange={e => setEditForm((f: any) => ({ ...f, care_instructions: e.target.value }))} rows={2} style={TA} />
+              </div>
             </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+            <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
               <button onClick={() => setEditing(false)} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer" }}>Cancel</button>
               <button onClick={handleSaveProduct} disabled={editSaving} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 14, fontWeight: 500, cursor: editSaving ? "not-allowed" : "pointer", opacity: editSaving ? 0.7 : 1 }}>
                 {editSaving ? "Saving…" : "Save"}
@@ -339,173 +289,67 @@ export default function ProductDetailPage({ params }: Params) {
         )}
       </div>
 
-      {/* Variants */}
+      {/* Pieces */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#111827" }}>Variants</h2>
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#111827" }}>Linked Pieces ({pieces.length})</h2>
         {isManager && (
-          <button onClick={() => { setVariantForm(BLANK_VARIANT); setVariantError(""); setShowAddVariant(true); }}
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer", color: "#374151" }}>
-            <Plus size={14} /> Add Variant
+          <button
+            onClick={() => { setPieceForm({ ...BLANK_PIECE }); setPieceError(""); setAiDesc(""); setShowAddPiece(true); }}
+            style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer", color: "#374151" }}
+          >
+            <Plus size={14} /> Add Piece
           </button>
         )}
       </div>
 
-      {variants.length === 0 ? (
-        <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 32, textAlign: "center", marginBottom: 16 }}>
-          <div style={{ fontSize: 14, color: "#9CA3AF" }}>No variants yet. Add a variant to start tracking stock.</div>
-        </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-          {variants.map(variant => {
-            const isOpen = expanded[variant.id] ?? false;
-            const pieces = variant.pieces ?? [];
-            return (
-              <div key={variant.id} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
-                {/* Variant header */}
-                <div
-                  style={{ display: "flex", alignItems: "center", padding: "14px 18px", cursor: "pointer" }}
-                  onClick={() => setExpanded(e => ({ ...e, [variant.id]: !isOpen }))}
-                >
-                  <div style={{ marginRight: 12, color: "#9CA3AF" }}>
-                    {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    {variant.title && <div style={{ fontSize: 14, fontWeight: 600, color: "#111827", marginBottom: 4 }}>{variant.title}</div>}
-                    <VariantSpecPills v={variant} />
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginLeft: 12 }}>
-                    <span style={{ fontSize: 13, color: "#6B7280" }}>
-                      <strong style={{ color: "#111827" }}>{pieces.length}</strong> piece{pieces.length !== 1 ? "s" : ""}
-                    </span>
-                    {isManager && (
-                      <div style={{ display: "flex", gap: 4 }} onClick={e => e.stopPropagation()}>
-                        <button
-                          onClick={() => { setEditVariantId(variant.id); setEditVariantForm({ title: variant.title ?? "", metal_type: variant.metal_type ?? "", metal_karat: variant.metal_karat ?? "", metal_colour: variant.metal_colour ?? "", finger_size: variant.finger_size ?? "", chain_length: variant.chain_length ?? "", diamond_type: variant.diamond_type ?? "", diamond_carat: String(variant.diamond_carat ?? ""), diamond_colour: variant.diamond_colour ?? "", diamond_clarity: variant.diamond_clarity ?? "" }); setEditVariantError(""); }}
-                          style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #E5E7EB", background: "#fff", fontSize: 12, cursor: "pointer", color: "#374151" }}
-                        >Edit</button>
-                        <button
-                          onClick={() => openAddPiece(variant)}
-                          style={{ padding: "4px 10px", borderRadius: 6, border: "none", background: "#111827", color: "#fff", fontSize: 12, cursor: "pointer" }}
-                        ><Plus size={11} style={{ display: "inline", marginRight: 3 }} />Piece</button>
-                        <button
-                          onClick={() => handleDeleteVariant(variant.id, pieces.length)}
-                          style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #FECACA", background: "#FEF2F2", color: "#DC2626", fontSize: 12, cursor: "pointer" }}
-                        ><Trash2 size={11} /></button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Expanded pieces */}
-                {isOpen && (
-                  <div style={{ borderTop: "1px solid #F3F4F6" }}>
-                    {pieces.length === 0 ? (
-                      <div style={{ padding: "12px 52px", fontSize: 13, color: "#9CA3AF" }}>No pieces linked to this variant.</div>
-                    ) : (
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                        <thead>
-                          <tr style={{ background: "#F9FAFB" }}>
-                            {["SKU", "Title", "Status", "Location", ""].map(h => (
-                              <th key={h} style={{ padding: "8px 16px 8px " + (h === "SKU" ? "52px" : "16px"), textAlign: "left", fontWeight: 600, color: "#9CA3AF", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em" }}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {pieces.map((piece, i) => (
-                            <tr
-                              key={piece.id}
-                              onClick={() => router.push(`/inventory/${piece.id}`)}
-                              style={{ borderTop: "1px solid #F3F4F6", cursor: "pointer" }}
-                              onMouseEnter={e => (e.currentTarget.style.background = "#F9FAFB")}
-                              onMouseLeave={e => (e.currentTarget.style.background = "")}
-                            >
-                              <td style={{ padding: "10px 16px 10px 52px", fontFamily: "monospace", fontWeight: 600, color: "#111827" }}>{piece.sku}</td>
-                              <td style={{ padding: "10px 16px", color: "#374151" }}>{piece.title ?? "—"}</td>
-                              <td style={{ padding: "10px 16px" }}><StatusDot colour={(piece.status as any)?.colour} name={(piece.status as any)?.name} /></td>
-                              <td style={{ padding: "10px 16px", color: "#6B7280" }}>{(piece.location as any)?.name ?? "—"}</td>
-                              <td style={{ padding: "10px 16px", color: "#9CA3AF", fontSize: 12 }}>View →</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Unlinked pieces */}
-      {unlinked.length > 0 && (
-        <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
-          <div style={{ padding: "14px 18px", borderBottom: "1px solid #F3F4F6", display: "flex", alignItems: "center", gap: 8 }}>
-            <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#9CA3AF" }}>UNLINKED PIECES ({unlinked.length})</h3>
+      <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
+        {pieces.length === 0 ? (
+          <div style={{ padding: 40, textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>
+            No pieces linked to this product yet.
           </div>
+        ) : (
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: "#F9FAFB" }}>
+                {["SKU", "Title", "Metal", "Status", "Location", "Retail", ""].map(h => (
+                  <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontWeight: 600, color: "#9CA3AF", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
             <tbody>
-              {unlinked.map(piece => (
-                <tr key={piece.id} onClick={() => router.push(`/inventory/${piece.id}`)} style={{ borderBottom: "1px solid #F3F4F6", cursor: "pointer" }}
+              {pieces.map(piece => (
+                <tr
+                  key={piece.id}
+                  onClick={() => router.push(`/inventory/${piece.id}`)}
+                  style={{ borderTop: "1px solid #F3F4F6", cursor: "pointer" }}
                   onMouseEnter={e => (e.currentTarget.style.background = "#F9FAFB")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "")}>
-                  <td style={{ padding: "10px 18px", fontFamily: "monospace", fontWeight: 600, color: "#111827", width: 120 }}>{piece.sku}</td>
+                  onMouseLeave={e => (e.currentTarget.style.background = "")}
+                >
+                  <td style={{ padding: "10px 16px", fontFamily: "monospace", fontWeight: 600, color: "#111827" }}>{piece.sku}</td>
                   <td style={{ padding: "10px 16px", color: "#374151" }}>{piece.title ?? "—"}</td>
-                  <td style={{ padding: "10px 16px", color: "#9CA3AF", fontSize: 12, textAlign: "right" }}>View →</td>
+                  <td style={{ padding: "10px 16px", color: "#6B7280" }}>
+                    {[piece.metal_karat, piece.metal_colour, piece.metal_type].filter(Boolean).join(" ") || "—"}
+                  </td>
+                  <td style={{ padding: "10px 16px" }}><StatusDot colour={piece.status?.colour} name={piece.status?.name} /></td>
+                  <td style={{ padding: "10px 16px", color: "#6B7280" }}>{piece.location?.name ?? "—"}</td>
+                  <td style={{ padding: "10px 16px", color: "#374151" }}>
+                    {piece.retail_price != null ? `$${Number(piece.retail_price).toLocaleString()}` : "—"}
+                  </td>
+                  <td style={{ padding: "10px 16px", color: "#9CA3AF", fontSize: 12 }}>View →</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      )}
-
-      {/* Add Variant Modal */}
-      {showAddVariant && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: "100%", maxWidth: 480, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", maxHeight: "90vh", overflowY: "auto" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>Add Variant</h2>
-              <button onClick={() => setShowAddVariant(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><X size={20} /></button>
-            </div>
-            {variantError && <div style={{ padding: "10px 14px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, fontSize: 13, marginBottom: 14 }}>{variantError}</div>}
-            <VariantFormFields form={variantForm} setForm={setVariantForm} />
-            <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
-              <button onClick={() => setShowAddVariant(false)} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer" }}>Cancel</button>
-              <button onClick={handleAddVariant} disabled={variantSaving} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 14, fontWeight: 500, cursor: variantSaving ? "not-allowed" : "pointer", opacity: variantSaving ? 0.7 : 1 }}>
-                {variantSaving ? "Creating…" : "Create Variant"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Variant Modal */}
-      {editVariantId && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: "100%", maxWidth: 480, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", maxHeight: "90vh", overflowY: "auto" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>Edit Variant</h2>
-              <button onClick={() => setEditVariantId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><X size={20} /></button>
-            </div>
-            {editVariantError && <div style={{ padding: "10px 14px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, fontSize: 13, marginBottom: 14 }}>{editVariantError}</div>}
-            <VariantFormFields form={editVariantForm} setForm={setEditVariantForm} />
-            <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
-              <button onClick={() => setEditVariantId(null)} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer" }}>Cancel</button>
-              <button onClick={handleSaveVariant} disabled={editVariantSaving} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 14, fontWeight: 500, cursor: editVariantSaving ? "not-allowed" : "pointer", opacity: editVariantSaving ? 0.7 : 1 }}>
-                {editVariantSaving ? "Saving…" : "Save Variant"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Add Piece Modal */}
-      {addPieceVariantId && (
+      {showAddPiece && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
           <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: "100%", maxWidth: 500, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", maxHeight: "90vh", overflowY: "auto" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>Add Piece</h2>
-              <button onClick={() => setAddPieceVariantId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><X size={20} /></button>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>Add Piece to {product.name}</h2>
+              <button onClick={() => setShowAddPiece(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><X size={20} /></button>
             </div>
 
             {/* AI parse */}
@@ -536,6 +380,8 @@ export default function ProductDetailPage({ params }: Params) {
                 <div><label style={LF}>Carat</label><input value={pieceForm.metal_karat} onChange={e => setPieceForm(f => ({ ...f, metal_karat: e.target.value }))} style={IF} /></div>
                 <div><label style={LF}>Metal Colour</label><input value={pieceForm.metal_colour} onChange={e => setPieceForm(f => ({ ...f, metal_colour: e.target.value }))} style={IF} /></div>
                 <div><label style={LF}>Finger Size</label><input value={pieceForm.finger_size} onChange={e => setPieceForm(f => ({ ...f, finger_size: e.target.value }))} style={IF} /></div>
+                <div><label style={LF}>Cost Price</label><input type="number" value={pieceForm.cost_price} onChange={e => setPieceForm(f => ({ ...f, cost_price: e.target.value }))} placeholder="0.00" style={IF} /></div>
+                <div><label style={LF}>Retail Price</label><input type="number" value={pieceForm.retail_price} onChange={e => setPieceForm(f => ({ ...f, retail_price: e.target.value }))} placeholder="0.00" style={IF} /></div>
               </div>
               <div>
                 <label style={LF}>Status</label>
@@ -551,10 +397,10 @@ export default function ProductDetailPage({ params }: Params) {
                   {ref?.locations?.map((l: any) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
               </div>
-              <div><label style={LF}>Notes</label><textarea value={pieceForm.notes} onChange={e => setPieceForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...IF, resize: "vertical" }} /></div>
+              <div><label style={LF}>Notes</label><textarea value={pieceForm.notes} onChange={e => setPieceForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...IF, resize: "vertical" as const }} /></div>
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
-              <button onClick={() => setAddPieceVariantId(null)} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer" }}>Cancel</button>
+              <button onClick={() => setShowAddPiece(false)} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer" }}>Cancel</button>
               <button onClick={handleAddPiece} disabled={pieceSaving} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 14, fontWeight: 500, cursor: pieceSaving ? "not-allowed" : "pointer", opacity: pieceSaving ? 0.7 : 1 }}>
                 {pieceSaving ? "Creating…" : "Create & Open"}
               </button>

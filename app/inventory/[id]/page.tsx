@@ -333,7 +333,7 @@ export default function InventoryItemPage({ params }: Params) {
                     onClick={() => router.push(`/inventory/products/${piece.product_id}`)}
                     style={{ fontSize: 14, fontWeight: 600, color: "#635BFF", background: "none", border: "none", cursor: "pointer", padding: 0 }}
                   >
-                    {products.find((p: any) => p.id === piece.product_id)?.title ?? piece.product_id}
+                    {products.find((p: any) => p.id === piece.product_id)?.name ?? piece.product_id}
                   </button>
                 </div>
                 {piece.variant_id && (

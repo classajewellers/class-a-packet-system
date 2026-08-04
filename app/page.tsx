@@ -229,7 +229,7 @@ export default function DashboardPage() {
               label="Low Stock"
               value={lowStockCount ?? "—"}
               sub="items below reorder point"
-              href="/inventory/stock?lowstock=true"
+              href="/inventory?lowstock=true"
             />
           </>
         )}
@@ -356,7 +356,7 @@ export default function DashboardPage() {
           <div style={card}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: "1px solid #E8E8F0" }}>
               <span style={{ fontWeight: 600, fontSize: 14, color: "#1A1A2E" }}>Recent Movements</span>
-              <Link href="/inventory/stock" style={{ textDecoration: "none", color: "#635BFF", fontSize: 12, fontWeight: 500 }}>
+              <Link href="/inventory" style={{ textDecoration: "none", color: "#635BFF", fontSize: 12, fontWeight: 500 }}>
                 View all →
               </Link>
             </div>
