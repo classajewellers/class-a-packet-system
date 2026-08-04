@@ -48,14 +48,14 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
   const [quotesOpen, setQuotesOpen]       = useState(pathname.startsWith("/quotes"));
   const [inventoryOpen, setInventoryOpen] = useState(pathname.startsWith("/inventory"));
   const [settingsOpen, setSettingsOpen]   = useState(
-    pathname.startsWith("/settings") || pathname.startsWith("/pricing") || pathname.startsWith("/admin/users") || pathname.startsWith("/workshop/settings") || pathname.startsWith("/quotes/settings")
+    pathname.startsWith("/settings") || pathname.startsWith("/pricing") || pathname.startsWith("/admin/users") || pathname.startsWith("/workshop/settings") || pathname.startsWith("/quotes/settings") || pathname.startsWith("/inventory/settings")
   );
 
   // Auto-expand the relevant section when navigating directly to a sub-route
   useEffect(() => {
     if (pathname.startsWith("/quotes"))    setQuotesOpen(true);
     if (pathname.startsWith("/inventory")) setInventoryOpen(true);
-    if (pathname.startsWith("/settings") || pathname.startsWith("/pricing") || pathname.startsWith("/admin/users") || pathname.startsWith("/workshop/settings") || pathname.startsWith("/quotes/settings")) setSettingsOpen(true);
+    if (pathname.startsWith("/settings") || pathname.startsWith("/pricing") || pathname.startsWith("/admin/users") || pathname.startsWith("/workshop/settings") || pathname.startsWith("/quotes/settings") || pathname.startsWith("/inventory/settings")) setSettingsOpen(true);
   }, [pathname]);
 
   const initials = (name: string) =>
@@ -230,12 +230,11 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
               />
               {inventoryOpen && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
-                  <SubLink href="/inventory"                         label="Stock Register" />
+                  <SubLink href="/inventory"                         label="Stock" />
                   <SubLink href="/inventory/products"                label="Products" />
-                  {isManager && <SubLink href="/inventory/import"          label="Import CSV" />}
-                  {isManager && <SubLink href="/inventory/purchase-orders" label="Purchase Orders" />}
-                  {isManager && <SubLink href="/inventory/settings"        label="Settings" />}
-                  <SubLink href="/inventory/product-templates"       label="Product Templates" />
+                  {isManager && <SubLink href="/inventory/purchase-orders" label="Purchasing" />}
+                  {isManager && <SubLink href="/inventory/locations"       label="Locations" />}
+                  {isManager && <SubLink href="/inventory/suppliers"       label="Suppliers" />}
                 </div>
               )}
             </div>
@@ -263,6 +262,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
                   {can("settings") && <SubLink href="/settings/vip-tiers" label="VIP Tiers" />}
                   {can("settings") && isManager && <SubLink href="/settings/tenants" label="Stores" />}
                   {can("workshop") && isManager && <SubLink href="/workshop/settings" label="Workshop" />}
+                  {isManager       && <SubLink href="/inventory/settings"  label="Inventory" />}
                   {isManager       && <SubLink href="/quotes/settings"     label="Repair Quoting" />}
                   {isAdmin         && <SubLink href="/admin/users"         label="Admin Users" />}
                 </div>
