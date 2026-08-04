@@ -50,17 +50,28 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Resolve the "in stock" status UUID for this tenant once, reuse per charm
+  const { data: inStockStatus } = await db
+    .from("inventory_statuses")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .ilike("name", "%in stock%")
+    .eq("is_active", true)
+    .limit(1)
+    .single();
+  const inStockStatusId: string | null = inStockStatus?.id ?? null;
+
   // Enrich with inventory stock count (using supplier_code on inventory_pieces)
   const enriched = await Promise.all(
     (components ?? []).map(async (c) => {
-      if (!c.supplier_code) return { ...c, stock_count: 0 };
+      if (!c.supplier_code || !inStockStatusId) return { ...c, stock_count: 0 };
       try {
         const { count } = await db
           .from("inventory_pieces")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", tenantId)
           .eq("supplier_code", c.supplier_code)
-          .eq("status", "available");
+          .eq("status_id", inStockStatusId);
         return { ...c, stock_count: count ?? 0 };
       } catch {
         return { ...c, stock_count: 0 };

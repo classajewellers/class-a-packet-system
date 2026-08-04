@@ -109,6 +109,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "No chain component found in library" }, { status: 422 });
   }
 
+  // ── Resolve "in stock" status UUID for inventory_pieces FK lookup ─────────
+  const { data: inStockStatus } = await db
+    .from("inventory_statuses")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .ilike("name", "%in stock%")
+    .eq("is_active", true)
+    .limit(1)
+    .single();
+  const inStockStatusId: string | null = inStockStatus?.id ?? null;
+
   // ── Fetch gold prices for gram_weight calculation ─────────────────────────
   const { data: goldPrices } = await db.from("pricing_gold_prices").select("*");
   const metalSearch = METAL_GOLD_SEARCH[metal];
@@ -161,20 +172,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Stock check
     let fromStock = false;
     let inventoryPieceId: string | null = null;
-    if (comp.supplier_code) {
+    if (comp.supplier_code && inStockStatusId) {
       try {
         const { data: stockPieces } = await db
           .from("inventory_pieces")
           .select("id")
           .eq("tenant_id", tenantId)
           .eq("supplier_code", comp.supplier_code as string)
-          .eq("status", "available")
+          .eq("status_id", inStockStatusId)
           .limit(1);
         if (stockPieces?.length) {
           fromStock = true;
           inventoryPieceId = stockPieces[0].id;
         }
-      } catch { /* no supplier_code column — skip */ }
+      } catch { /* status_id lookup failed — skip */ }
     }
 
     selectedCharms.push({
