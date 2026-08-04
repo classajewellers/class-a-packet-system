@@ -168,7 +168,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           .select("id")
           .eq("tenant_id", tenantId)
           .eq("supplier_code", comp.supplier_code as string)
-          .eq("status", "in_stock")
+          .eq("status", "available")
           .limit(1);
         if (stockPieces?.length) {
           fromStock = true;

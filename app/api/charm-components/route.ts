@@ -60,7 +60,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", tenantId)
           .eq("supplier_code", c.supplier_code)
-          .eq("status", "in_stock");
+          .eq("status", "available");
         return { ...c, stock_count: count ?? 0 };
       } catch {
         return { ...c, stock_count: 0 };
