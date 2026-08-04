@@ -6,6 +6,7 @@ import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
 import { InventoryPiece, InventoryReferenceData } from "@/lib/types";
 import { calculateLivePricing, GoldRate, MarginBracket } from "@/lib/inventoryPricing";
+import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
 import {
   ArrowLeft, Edit2, Save, X, ArrowRight,
   Lock, AlertTriangle, TrendingDown, Package, MapPin, Clock, DollarSign, Bookmark, BookmarkX,
@@ -923,6 +924,15 @@ export default function InventoryItemPage({ params }: Params) {
               <p style={{ margin: 0, fontSize: 14, color: piece.notes ? "#374151" : "#D1D5DB", lineHeight: 1.6 }}>{piece.notes ?? "—"}</p>
             )}
           </div>
+
+          {/* Files & Attachments */}
+          {!editing && (
+            <InventoryAttachmentsPanel
+              entityType="inventory_piece"
+              entityId={params.id}
+              readOnly={!isManager}
+            />
+          )}
 
           {/* Delete */}
           {isManager && !editing && (

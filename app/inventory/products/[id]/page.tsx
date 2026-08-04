@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
 import { ArrowLeft, Edit2, Trash2, Plus, X, Sparkles, Loader } from "lucide-react";
+import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
 
 type Params = { params: { id: string } };
 
@@ -285,6 +286,13 @@ export default function ProductDetailPage({ params }: Params) {
           </div>
         )}
       </div>
+
+      {/* Files & Attachments */}
+      <InventoryAttachmentsPanel
+        entityType="inventory_product"
+        entityId={params.id}
+        readOnly={!isManager}
+      />
 
       {/* Pieces */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>

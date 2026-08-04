@@ -260,6 +260,10 @@ export interface Packet {
 // ─────────────────────────────────────────────
 // Attachments
 // ─────────────────────────────────────────────
+export type AttachmentType =
+  | 'photo' | 'certificate' | 'invoice' | 'valuation'
+  | 'cad_file' | 'workshop_document' | 'other';
+
 export interface Attachment {
   id: string;
   tenant_id: string;
@@ -271,6 +275,12 @@ export interface Attachment {
   file_size: number | null;
   uploaded_by: string | null;
   created_at: string;
+  // extended fields (added migration 083)
+  attachment_type?: AttachmentType | null;
+  display_name?: string | null;
+  notes?: string | null;
+  archived?: boolean;
+  // client-side: signed URL generated server-side
   signed_url?: string | null;
 }
 
