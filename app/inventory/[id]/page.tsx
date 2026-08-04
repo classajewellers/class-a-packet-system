@@ -8,8 +8,10 @@ import { InventoryPiece, InventoryReferenceData } from "@/lib/types";
 import { calculateLivePricing, GoldRate, MarginBracket } from "@/lib/inventoryPricing";
 import {
   ArrowLeft, Edit2, Save, X, ArrowRight,
-  Lock, AlertTriangle, TrendingDown, Package, MapPin, Clock,
+  Lock, AlertTriangle, TrendingDown, Package, MapPin, Clock, DollarSign,
 } from "lucide-react";
+
+const PAYMENT_METHODS = ["Cash", "EFTPOS", "Credit Card", "Bank Transfer", "Layby", "Finance", "Other"];
 
 type Params = { params: { id: string } };
 
@@ -199,17 +201,40 @@ export default function InventoryItemPage({ params }: Params) {
   const [linkSaving, setLinkSaving]       = useState(false);
   const [linkError, setLinkError]         = useState("");
 
+  // ── Staff list for Mark as Sold modal ────────────────────────────────────────
+  const [staffList, setStaffList] = useState<{ id: string; full_name: string }[]>([]);
+
+  // ── Mark as Sold ─────────────────────────────────────────────────────────────
+  const [showSell, setShowSell]   = useState(false);
+  const [sellForm, setSellForm]   = useState({
+    sold_price: "",
+    discount_amount: "",
+    payment_method: "",
+    staff_id: "",
+    customer_id: "",
+    notes: "",
+  });
+  const [sellSaving, setSellSaving]   = useState(false);
+  const [sellError, setSellError]     = useState("");
+  const [sellSuccess, setSellSuccess] = useState<{ id: string; gross_profit: number | null; note: string | null } | null>(null);
+  // Customer search state
+  const [custSearch, setCustSearch]           = useState("");
+  const [custResults, setCustResults]         = useState<{ id: string; first_name: string | null; last_name: string | null; email: string | null }[]>([]);
+  const [custDropdown, setCustDropdown]       = useState(false);
+  const [custDisplay, setCustDisplay]         = useState("");
+
   const headers = { "x-tenant-id": tenantId };
 
   const fetchAll = useCallback(async () => {
     if (!tenantId) return;
     setLoading(true);
-    const [pieceRes, refRes, movRes, pricingRes, prodRes] = await Promise.all([
+    const [pieceRes, refRes, movRes, pricingRes, prodRes, staffRes] = await Promise.all([
       fetch(`/api/inventory/pieces/${params.id}`, { headers }),
       fetch("/api/inventory/reference", { headers }),
       fetch(`/api/inventory/movements?piece_id=${params.id}&limit=50`, { headers }),
       fetch("/api/pricing", { headers }),
       fetch("/api/inventory/products", { headers }),
+      fetch("/api/settings/users/list", { headers }),
     ]);
     if (!pieceRes.ok) { setLoading(false); return; }
     const [pieceJson, refJson, movJson] = await Promise.all([
@@ -224,6 +249,7 @@ export default function InventoryItemPage({ params }: Params) {
       setMarginBrackets(pj.marginBrackets ?? []);
     }
     if (prodRes.ok) setProducts((await prodRes.json()).products ?? []);
+    if (staffRes.ok) setStaffList((await staffRes.json()).users ?? []);
     setLoading(false);
   }, [tenantId, params.id]);
 
@@ -297,6 +323,79 @@ export default function InventoryItemPage({ params }: Params) {
     setLinkEditing(false);
   }
 
+  // ── Customer search for sell modal ──────────────────────────────────────────
+  useEffect(() => {
+    if (custSearch.length < 2) { setCustResults([]); setCustDropdown(false); return; }
+    const t = setTimeout(() => {
+      fetch(`/api/customers/search?q=${encodeURIComponent(custSearch)}`, { headers })
+        .then(r => r.json())
+        .then(json => {
+          setCustResults(json.results ?? []);
+          setCustDropdown((json.results ?? []).length > 0);
+        })
+        .catch(() => setCustResults([]));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [custSearch, tenantId]);
+
+  function selectCustomer(c: { id: string; first_name: string | null; last_name: string | null; email: string | null }) {
+    setSellForm(f => ({ ...f, customer_id: c.id }));
+    setCustDisplay(`${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || c.email || c.id);
+    setCustSearch("");
+    setCustDropdown(false);
+  }
+
+  async function handleSell() {
+    if (!piece) return;
+    const price = parseFloat(sellForm.sold_price);
+    if (!sellForm.sold_price || isNaN(price) || price <= 0) {
+      setSellError("Sold price is required and must be greater than zero");
+      return;
+    }
+    setSellSaving(true);
+    setSellError("");
+    const res = await fetch("/api/inventory/sales", {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        piece_id:        piece.id,
+        sold_price:      price,
+        discount_amount: parseFloat(sellForm.discount_amount || "0") || 0,
+        staff_id:        sellForm.staff_id   || null,
+        customer_id:     sellForm.customer_id || null,
+        payment_method:  sellForm.payment_method || null,
+        notes:           sellForm.notes      || null,
+        moved_by:        user?.name          || null,
+      }),
+    });
+    const json = await res.json();
+    setSellSaving(false);
+    if (!res.ok) { setSellError(json.error ?? "Failed to record sale"); return; }
+    setSellSuccess({
+      id: json.sale?.id ?? "",
+      gross_profit: json.gross_profit,
+      note: json.gross_profit_note ?? null,
+    });
+    fetchAll();
+  }
+
+  function openSellModal() {
+    setSellForm({
+      sold_price: piece?.retail_price != null ? String(piece.retail_price) : "",
+      discount_amount: "",
+      payment_method: "",
+      staff_id: user?.id ?? "",
+      customer_id: "",
+      notes: "",
+    });
+    setCustDisplay("");
+    setCustSearch("");
+    setCustResults([]);
+    setSellError("");
+    setSellSuccess(null);
+    setShowSell(true);
+  }
+
   function fv(key: keyof InventoryPiece): any {
     return editing ? (form[key] ?? "") : (piece?.[key] ?? "");
   }
@@ -358,6 +457,9 @@ export default function InventoryItemPage({ params }: Params) {
   const linkedProduct = products.find((p: any) => p.id === piece.product_id);
   const meleeQty = (piece as any).melee_quantity;
 
+  // Determine if already sold by checking current status name (case-insensitive)
+  const isSold = (piece.status?.name ?? "").toLowerCase().includes("sold");
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -394,10 +496,18 @@ export default function InventoryItemPage({ params }: Params) {
           )}
           {isManager && !editing && (
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => setShowMove(true)}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 13, cursor: "pointer", color: "#374151", fontWeight: 500 }}>
-                <ArrowRight size={14} /> Move
-              </button>
+              {!isSold && (
+                <button onClick={() => setShowMove(true)}
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 13, cursor: "pointer", color: "#374151", fontWeight: 500 }}>
+                  <ArrowRight size={14} /> Move
+                </button>
+              )}
+              {!isSold && (
+                <button onClick={openSellModal}
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "none", background: "#10B981", color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
+                  <DollarSign size={14} /> Mark as Sold
+                </button>
+              )}
               <button onClick={startEdit}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
                 <Edit2 size={14} /> Edit
@@ -726,6 +836,187 @@ export default function InventoryItemPage({ params }: Params) {
                 {moveSaving ? "Saving…" : "Log Movement"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Mark as Sold Modal ── */}
+      {showSell && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 32, width: "100%", maxWidth: 480, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", maxHeight: "90vh", overflowY: "auto" as const }}>
+
+            {sellSuccess ? (
+              /* ── Success state ── */
+              <div style={{ textAlign: "center", padding: "8px 0" }}>
+                <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#D1FAE5", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+                  <DollarSign size={24} style={{ color: "#10B981" }} />
+                </div>
+                <h2 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 700, color: "#111827" }}>Sale Recorded</h2>
+                <p style={{ margin: "0 0 16px", fontSize: 14, color: "#6B7280" }}>{piece.sku} has been marked as sold.</p>
+                {sellSuccess.gross_profit != null && (
+                  <div style={{ background: "#F0FDF4", border: "1px solid #86EFAC", borderRadius: 8, padding: "10px 16px", marginBottom: 12 }}>
+                    <div style={{ fontSize: 12, color: "#166534", fontWeight: 600 }}>Gross Profit</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "monospace", color: "#15803D" }}>{fmtMoney(sellSuccess.gross_profit)}</div>
+                  </div>
+                )}
+                {sellSuccess.note && (
+                  <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "10px 16px", marginBottom: 12, fontSize: 12, color: "#92400E", textAlign: "left" as const }}>
+                    ⚠ {sellSuccess.note}
+                  </div>
+                )}
+                <button onClick={() => { setShowSell(false); setSellSuccess(null); }}
+                  style={{ width: "100%", padding: "10px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 14, fontWeight: 500, cursor: "pointer", marginTop: 8 }}>
+                  Done
+                </button>
+              </div>
+            ) : (
+              /* ── Form state ── */
+              <>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+                  <div>
+                    <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>Mark as Sold</h2>
+                    <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9CA3AF" }}>{piece.sku}{piece.title ? ` — ${piece.title}` : ""}</p>
+                  </div>
+                  <button onClick={() => setShowSell(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><X size={20} /></button>
+                </div>
+
+                {sellError && (
+                  <div style={{ padding: "10px 14px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, fontSize: 13, marginBottom: 16 }}>{sellError}</div>
+                )}
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+                  {/* Sold price + discount — side by side */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div>
+                      <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>
+                        Sold Price <span style={{ color: "#EF4444" }}>*</span>
+                      </label>
+                      <input
+                        type="number" min="0" step="0.01"
+                        value={sellForm.sold_price}
+                        onChange={e => setSellForm(f => ({ ...f, sold_price: e.target.value }))}
+                        placeholder="0.00"
+                        style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Discount</label>
+                      <input
+                        type="number" min="0" step="0.01"
+                        value={sellForm.discount_amount}
+                        onChange={e => setSellForm(f => ({ ...f, discount_amount: e.target.value }))}
+                        placeholder="0.00"
+                        style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Net price preview */}
+                  {sellForm.sold_price && (
+                    <div style={{ fontSize: 13, color: "#6B7280", padding: "6px 10px", background: "#F9FAFB", borderRadius: 6 }}>
+                      Net: <strong style={{ fontFamily: "monospace", color: "#111827" }}>
+                        {fmtMoney(parseFloat(sellForm.sold_price || "0") - parseFloat(sellForm.discount_amount || "0"))}
+                      </strong>
+                      {piece.retail_price != null && (
+                        <span style={{ color: "#9CA3AF", marginLeft: 8 }}>
+                          (listed at {fmtMoney(piece.retail_price)})
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Payment method */}
+                  <div>
+                    <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Payment Method</label>
+                    <select
+                      value={sellForm.payment_method}
+                      onChange={e => setSellForm(f => ({ ...f, payment_method: e.target.value }))}
+                      style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, background: "#fff" }}>
+                      <option value="">— Select —</option>
+                      {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Customer — search/select */}
+                  <div style={{ position: "relative" as const }}>
+                    <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Customer</label>
+                    {custDisplay ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#F9FAFB" }}>
+                        <span style={{ flex: 1, fontSize: 14, color: "#111827" }}>{custDisplay}</span>
+                        <button
+                          onClick={() => { setSellForm(f => ({ ...f, customer_id: "" })); setCustDisplay(""); }}
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", padding: 0 }}>
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <input
+                          type="text"
+                          value={custSearch}
+                          onChange={e => setCustSearch(e.target.value)}
+                          onBlur={() => setTimeout(() => setCustDropdown(false), 200)}
+                          placeholder="Search by name or email…"
+                          style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }}
+                        />
+                        {custDropdown && custResults.length > 0 && (
+                          <div style={{ position: "absolute" as const, top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.1)", zIndex: 10, marginTop: 4, overflow: "hidden" }}>
+                            {custResults.map(c => (
+                              <div key={c.id}
+                                onMouseDown={() => selectCustomer(c)}
+                                style={{ padding: "10px 14px", cursor: "pointer", fontSize: 14 }}
+                                onMouseEnter={e => (e.currentTarget.style.background = "#F9FAFB")}
+                                onMouseLeave={e => (e.currentTarget.style.background = "")}>
+                                <div style={{ fontWeight: 500, color: "#111827" }}>{`${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || "—"}</div>
+                                {c.email && <div style={{ fontSize: 12, color: "#9CA3AF" }}>{c.email}</div>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Salesperson */}
+                  <div>
+                    <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Salesperson</label>
+                    <select
+                      value={sellForm.staff_id}
+                      onChange={e => setSellForm(f => ({ ...f, staff_id: e.target.value }))}
+                      style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, background: "#fff" }}>
+                      <option value="">— None —</option>
+                      {staffList.map(s => (
+                        <option key={s.id} value={s.id}>{s.full_name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Notes */}
+                  <div>
+                    <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Notes</label>
+                    <input
+                      type="text"
+                      value={sellForm.notes}
+                      onChange={e => setSellForm(f => ({ ...f, notes: e.target.value }))}
+                      placeholder="Optional — order ref, special instructions…"
+                      style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 8, marginTop: 24 }}>
+                  <button onClick={() => setShowSell(false)}
+                    style={{ flex: 1, padding: "11px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer" }}>
+                    Cancel
+                  </button>
+                  <button onClick={handleSell} disabled={sellSaving}
+                    style={{ flex: 1, padding: "11px", borderRadius: 8, border: "none", background: "#10B981", color: "#fff", fontSize: 14, fontWeight: 600, cursor: sellSaving ? "not-allowed" : "pointer", opacity: sellSaving ? 0.7 : 1 }}>
+                    {sellSaving ? "Recording…" : "Confirm Sale"}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
