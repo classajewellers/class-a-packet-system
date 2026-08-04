@@ -6,9 +6,6 @@ import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
 import { ArrowLeft, Edit2, Trash2, Plus, X, Sparkles, Loader } from "lucide-react";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
 type Params = { params: { id: string } };
 
 function StatusDot({ colour, name }: { colour?: string | null; name?: string | null }) {
