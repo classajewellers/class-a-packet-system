@@ -89,6 +89,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const prevStatusId = piece.status_id ?? null;
   const now = new Date().toISOString();
 
+  // ── Step 2b: Check for active reservation — enforce customer match ──────────
+  const { data: activeRes } = await supabase
+    .from("inventory_reservations")
+    .select("id, customer_id, customer:customers(first_name, last_name)")
+    .eq("piece_id", piece_id)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (activeRes) {
+    const resCustomerId = activeRes.customer_id ?? null;
+    const saleCustomerId = customer_id ?? null;
+    // Block if reserved for a DIFFERENT customer
+    if (resCustomerId && saleCustomerId && resCustomerId !== saleCustomerId) {
+      const name = activeRes.customer
+        ? `${(activeRes.customer as any).first_name ?? ""} ${(activeRes.customer as any).last_name ?? ""}`.trim()
+        : "another customer";
+      return NextResponse.json(
+        { error: `This item is reserved for ${name}. Release the reservation first, or sell to that customer.` },
+        { status: 409 }
+      );
+    }
+  }
+
   // ── Step 3: Calculate gross profit ─────────────────────────────────────────
   // Prefer actual_cost, fall back to cost_price; if both null, store null
   const costBasis = piece.actual_cost ?? piece.cost_price ?? null;
@@ -131,6 +154,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (pieceUpdateErr) {
     return NextResponse.json({ error: `Sale recorded but failed to update piece status: ${pieceUpdateErr.message}` }, { status: 500 });
+  }
+
+  // ── Step 5b: Convert active reservation if one exists ──────────────────────
+  if (activeRes) {
+    await supabase
+      .from("inventory_reservations")
+      .update({
+        status:            "converted",
+        released_at:       now,
+        converted_sale_id: sale.id,
+        release_reason:    "Converted to sale",
+      })
+      .eq("id", activeRes.id)
+      .eq("tenant_id", tenantId);
   }
 
   // ── Step 6: Insert inventory_movements ─────────────────────────────────────

@@ -8,7 +8,7 @@ import { InventoryPiece, InventoryReferenceData } from "@/lib/types";
 import { calculateLivePricing, GoldRate, MarginBracket } from "@/lib/inventoryPricing";
 import {
   ArrowLeft, Edit2, Save, X, ArrowRight,
-  Lock, AlertTriangle, TrendingDown, Package, MapPin, Clock, DollarSign,
+  Lock, AlertTriangle, TrendingDown, Package, MapPin, Clock, DollarSign, Bookmark, BookmarkX,
 } from "lucide-react";
 
 const PAYMENT_METHODS = ["Cash", "EFTPOS", "Credit Card", "Bank Transfer", "Layby", "Finance", "Other"];
@@ -223,18 +223,44 @@ export default function InventoryItemPage({ params }: Params) {
   const [custDropdown, setCustDropdown]       = useState(false);
   const [custDisplay, setCustDisplay]         = useState("");
 
+  // ── Reservations ─────────────────────────────────────────────────────────────
+  type Reservation = {
+    id: string; status: string; reason: string | null; expires_at: string | null;
+    quote_reference: string | null; order_reference: string | null;
+    created_at: string; released_at: string | null; release_reason: string | null;
+    customer: { id: string; first_name: string | null; last_name: string | null; email: string | null } | null;
+    created_by_profile: { id: string; full_name: string } | null;
+    previous_status: { id: string; name: string; colour: string } | null;
+  };
+  const [reservations, setReservations]   = useState<Reservation[]>([]);
+  const [activeRes, setActiveRes]         = useState<Reservation | null>(null);
+  const [showReserve, setShowReserve]     = useState(false);
+  const [reserveForm, setReserveForm]     = useState({ reason: "", expires_at: "", quote_reference: "", order_reference: "" });
+  const [resCustId, setResCustId]         = useState("");
+  const [resCustDisplay, setResCustDisplay] = useState("");
+  const [resCustSearch, setResCustSearch] = useState("");
+  const [resCustResults, setResCustResults] = useState<{ id: string; first_name: string | null; last_name: string | null; email: string | null }[]>([]);
+  const [resCustDropdown, setResCustDropdown] = useState(false);
+  const [resSaving, setResSaving]         = useState(false);
+  const [resError, setResError]           = useState("");
+  const [showRelease, setShowRelease]     = useState(false);
+  const [releaseReason, setReleaseReason] = useState("");
+  const [relSaving, setRelSaving]         = useState(false);
+  const [relError, setRelError]           = useState("");
+
   const headers = { "x-tenant-id": tenantId };
 
   const fetchAll = useCallback(async () => {
     if (!tenantId) return;
     setLoading(true);
-    const [pieceRes, refRes, movRes, pricingRes, prodRes, staffRes] = await Promise.all([
+    const [pieceRes, refRes, movRes, pricingRes, prodRes, staffRes, resRes] = await Promise.all([
       fetch(`/api/inventory/pieces/${params.id}`, { headers }),
       fetch("/api/inventory/reference", { headers }),
       fetch(`/api/inventory/movements?piece_id=${params.id}&limit=50`, { headers }),
       fetch("/api/pricing", { headers }),
       fetch("/api/inventory/products", { headers }),
       fetch("/api/settings/users/list", { headers }),
+      fetch(`/api/inventory/reservations?piece_id=${params.id}`, { headers }),
     ]);
     if (!pieceRes.ok) { setLoading(false); return; }
     const [pieceJson, refJson, movJson] = await Promise.all([
@@ -250,6 +276,12 @@ export default function InventoryItemPage({ params }: Params) {
     }
     if (prodRes.ok) setProducts((await prodRes.json()).products ?? []);
     if (staffRes.ok) setStaffList((await staffRes.json()).users ?? []);
+    if (resRes.ok) {
+      const rj = await resRes.json();
+      const all: Reservation[] = rj.reservations ?? [];
+      setReservations(all);
+      setActiveRes(all.find(r => r.status === "active") ?? null);
+    }
     setLoading(false);
   }, [tenantId, params.id]);
 
@@ -396,6 +428,69 @@ export default function InventoryItemPage({ params }: Params) {
     setShowSell(true);
   }
 
+  // ── Reservation customer search ──────────────────────────────────────────────
+  useEffect(() => {
+    if (resCustSearch.length < 2) { setResCustResults([]); setResCustDropdown(false); return; }
+    const t = setTimeout(() => {
+      fetch(`/api/customers/search?q=${encodeURIComponent(resCustSearch)}`, { headers })
+        .then(r => r.json())
+        .then(json => { setResCustResults(json.results ?? []); setResCustDropdown((json.results ?? []).length > 0); })
+        .catch(() => setResCustResults([]));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [resCustSearch, tenantId]);
+
+  function selectResCust(c: { id: string; first_name: string | null; last_name: string | null; email: string | null }) {
+    setResCustId(c.id);
+    setResCustDisplay(`${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || c.email || c.id);
+    setResCustSearch("");
+    setResCustDropdown(false);
+  }
+
+  async function handleReserve() {
+    if (!piece) return;
+    setResSaving(true);
+    setResError("");
+    const res = await fetch("/api/inventory/reservations", {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        piece_id:        piece.id,
+        customer_id:     resCustId || null,
+        reason:          reserveForm.reason || null,
+        quote_reference: reserveForm.quote_reference || null,
+        order_reference: reserveForm.order_reference || null,
+        expires_at:      reserveForm.expires_at || null,
+        created_by:      user?.id ?? null,
+        moved_by:        user?.name ?? null,
+      }),
+    });
+    const json = await res.json();
+    setResSaving(false);
+    if (!res.ok) { setResError(json.error ?? "Failed to create reservation"); return; }
+    setShowReserve(false);
+    setReserveForm({ reason: "", expires_at: "", quote_reference: "", order_reference: "" });
+    setResCustId(""); setResCustDisplay(""); setResCustSearch("");
+    fetchAll();
+  }
+
+  async function handleRelease() {
+    if (!activeRes) return;
+    setRelSaving(true);
+    setRelError("");
+    const res = await fetch(`/api/inventory/reservations/${activeRes.id}/release`, {
+      method: "PATCH",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ release_reason: releaseReason || null, moved_by: user?.name ?? null }),
+    });
+    const json = await res.json();
+    setRelSaving(false);
+    if (!res.ok) { setRelError(json.error ?? "Failed to release"); return; }
+    setShowRelease(false);
+    setReleaseReason("");
+    fetchAll();
+  }
+
   function fv(key: keyof InventoryPiece): any {
     return editing ? (form[key] ?? "") : (piece?.[key] ?? "");
   }
@@ -457,8 +552,10 @@ export default function InventoryItemPage({ params }: Params) {
   const linkedProduct = products.find((p: any) => p.id === piece.product_id);
   const meleeQty = (piece as any).melee_quantity;
 
-  // Determine if already sold by checking current status name (case-insensitive)
-  const isSold = (piece.status?.name ?? "").toLowerCase().includes("sold");
+  // Determine sold / reserved state from current status name (case-insensitive)
+  const isSold     = (piece.status?.name ?? "").toLowerCase().includes("sold");
+  const isReserved = activeRes?.status === "active";
+  const resExpired = isReserved && activeRes?.expires_at != null && new Date(activeRes.expires_at) < new Date();
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -495,12 +592,35 @@ export default function InventoryItemPage({ params }: Params) {
             </span>
           )}
           {isManager && !editing && (
-            <div style={{ display: "flex", gap: 8 }}>
-              {!isSold && (
-                <button onClick={() => setShowMove(true)}
-                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 13, cursor: "pointer", color: "#374151", fontWeight: 500 }}>
-                  <ArrowRight size={14} /> Move
-                </button>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {/* Reserved badge or Reserve/Move buttons */}
+              {isReserved ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", borderRadius: 8, background: resExpired ? "#FEF2F2" : "#FFF7ED", border: `1px solid ${resExpired ? "#FECACA" : "#FED7AA"}`, fontSize: 12, fontWeight: 600, color: resExpired ? "#DC2626" : "#C2410C" }}>
+                    <Bookmark size={12} />
+                    {resExpired ? "Reservation Expired" : "Reserved"}
+                    {activeRes?.customer && (
+                      <span style={{ fontWeight: 400, marginLeft: 2 }}>
+                        — {`${activeRes.customer.first_name ?? ""} ${activeRes.customer.last_name ?? ""}`.trim() || activeRes.customer.email}
+                      </span>
+                    )}
+                  </span>
+                  <button onClick={() => { setReleaseReason(""); setRelError(""); setShowRelease(true); }}
+                    style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 12, cursor: "pointer", color: "#374151" }}>
+                    <BookmarkX size={13} /> Release
+                  </button>
+                </div>
+              ) : !isSold && (
+                <>
+                  <button onClick={() => setShowMove(true)}
+                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 13, cursor: "pointer", color: "#374151", fontWeight: 500 }}>
+                    <ArrowRight size={14} /> Move
+                  </button>
+                  <button onClick={() => { setReserveForm({ reason: "", expires_at: "", quote_reference: "", order_reference: "" }); setResCustId(""); setResCustDisplay(""); setResCustSearch(""); setResError(""); setShowReserve(true); }}
+                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 13, cursor: "pointer", color: "#374151", fontWeight: 500 }}>
+                    <Bookmark size={14} /> Reserve
+                  </button>
+                </>
               )}
               {!isSold && (
                 <button onClick={openSellModal}
@@ -746,6 +866,27 @@ export default function InventoryItemPage({ params }: Params) {
             <EF label="Supplier" field="supplier_id" opts={ref?.suppliers.map(s => ({ value: s.id, label: s.name })) ?? []} />
             <EF label="Assigned To" field="assigned_to" />
           </SectionCard>
+
+          {/* Active reservation card */}
+          {isReserved && activeRes && (
+            <div style={{ background: resExpired ? "#FEF2F2" : "#FFFBEB", border: `1px solid ${resExpired ? "#FECACA" : "#FDE68A"}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <Bookmark size={13} style={{ color: resExpired ? "#DC2626" : "#D97706" }} />
+                <h3 style={{ margin: 0, fontSize: 11, fontWeight: 700, color: resExpired ? "#DC2626" : "#D97706", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>
+                  {resExpired ? "Reservation Expired" : "Reserved"}
+                </h3>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 20px" }}>
+                <FieldView label="Customer" value={activeRes.customer ? `${activeRes.customer.first_name ?? ""} ${activeRes.customer.last_name ?? ""}`.trim() || activeRes.customer.email : null} />
+                <FieldView label="Reserved By" value={activeRes.created_by_profile?.full_name} />
+                <FieldView label="Reserved On" value={fmtDate(activeRes.created_at)} />
+                {activeRes.expires_at && <FieldView label="Expires" value={fmtDate(activeRes.expires_at)} />}
+                {activeRes.reason && <div style={{ gridColumn: "1 / -1" }}><FieldView label="Reason" value={activeRes.reason} /></div>}
+                {activeRes.quote_reference && <FieldView label="Quote Ref" value={activeRes.quote_reference} />}
+                {activeRes.order_reference && <FieldView label="Order Ref" value={activeRes.order_reference} />}
+              </div>
+            </div>
+          )}
 
           {/* Dates */}
           <SectionCard title="Dates">
@@ -1017,6 +1158,123 @@ export default function InventoryItemPage({ params }: Params) {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Reserve Modal ── */}
+      {showReserve && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 32, width: "100%", maxWidth: 460, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>Reserve Item</h2>
+                <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9CA3AF" }}>{piece.sku}{piece.title ? ` — ${piece.title}` : ""}</p>
+              </div>
+              <button onClick={() => setShowReserve(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><X size={20} /></button>
+            </div>
+
+            {resError && <div style={{ padding: "10px 14px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, fontSize: 13, marginBottom: 16 }}>{resError}</div>}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {/* Customer search */}
+              <div style={{ position: "relative" as const }}>
+                <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Customer</label>
+                {resCustDisplay ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#F9FAFB" }}>
+                    <span style={{ flex: 1, fontSize: 14, color: "#111827" }}>{resCustDisplay}</span>
+                    <button onClick={() => { setResCustId(""); setResCustDisplay(""); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", padding: 0 }}><X size={14} /></button>
+                  </div>
+                ) : (
+                  <>
+                    <input type="text" value={resCustSearch} onChange={e => setResCustSearch(e.target.value)} onBlur={() => setTimeout(() => setResCustDropdown(false), 200)}
+                      placeholder="Search by name or email…"
+                      style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }} />
+                    {resCustDropdown && resCustResults.length > 0 && (
+                      <div style={{ position: "absolute" as const, top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.1)", zIndex: 10, marginTop: 4, overflow: "hidden" }}>
+                        {resCustResults.map(c => (
+                          <div key={c.id} onMouseDown={() => selectResCust(c)}
+                            style={{ padding: "10px 14px", cursor: "pointer", fontSize: 14 }}
+                            onMouseEnter={e => (e.currentTarget.style.background = "#F9FAFB")}
+                            onMouseLeave={e => (e.currentTarget.style.background = "")}>
+                            <div style={{ fontWeight: 500, color: "#111827" }}>{`${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || "—"}</div>
+                            {c.email && <div style={{ fontSize: 12, color: "#9CA3AF" }}>{c.email}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Reason */}
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Reason</label>
+                <input type="text" value={reserveForm.reason} onChange={e => setReserveForm(f => ({ ...f, reason: e.target.value }))}
+                  placeholder="e.g. Layby, customer on order, workshop hold…"
+                  style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }} />
+              </div>
+
+              {/* Expiry + refs side by side */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Expiry Date</label>
+                  <input type="date" value={reserveForm.expires_at} onChange={e => setReserveForm(f => ({ ...f, expires_at: e.target.value }))}
+                    style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Quote Ref</label>
+                  <input type="text" value={reserveForm.quote_reference} onChange={e => setReserveForm(f => ({ ...f, quote_reference: e.target.value }))}
+                    placeholder="Optional"
+                    style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }} />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Order Ref</label>
+                <input type="text" value={reserveForm.order_reference} onChange={e => setReserveForm(f => ({ ...f, order_reference: e.target.value }))}
+                  placeholder="Optional"
+                  style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }} />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginTop: 24 }}>
+              <button onClick={() => setShowReserve(false)} style={{ flex: 1, padding: "11px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer" }}>Cancel</button>
+              <button onClick={handleReserve} disabled={resSaving}
+                style={{ flex: 1, padding: "11px", borderRadius: 8, border: "none", background: "#F59E0B", color: "#fff", fontSize: 14, fontWeight: 600, cursor: resSaving ? "not-allowed" : "pointer", opacity: resSaving ? 0.7 : 1 }}>
+                {resSaving ? "Reserving…" : "Reserve Item"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Release Reservation Modal ── */}
+      {showRelease && activeRes && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 32, width: "100%", maxWidth: 400, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>Release Reservation</h2>
+              <button onClick={() => setShowRelease(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><X size={20} /></button>
+            </div>
+            <p style={{ margin: "0 0 16px", fontSize: 13, color: "#6B7280" }}>
+              This will return <strong>{piece.sku}</strong> to its previous status
+              {activeRes.previous_status ? ` (${activeRes.previous_status.name})` : ""}.
+            </p>
+            {relError && <div style={{ padding: "10px 14px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, fontSize: 13, marginBottom: 14 }}>{relError}</div>}
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Reason (optional)</label>
+              <input type="text" value={releaseReason} onChange={e => setReleaseReason(e.target.value)}
+                placeholder="e.g. Customer changed mind, quote expired…"
+                style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }} />
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
+              <button onClick={() => setShowRelease(false)} style={{ flex: 1, padding: "11px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer" }}>Cancel</button>
+              <button onClick={handleRelease} disabled={relSaving}
+                style={{ flex: 1, padding: "11px", borderRadius: 8, border: "none", background: "#6B7280", color: "#fff", fontSize: 14, fontWeight: 600, cursor: relSaving ? "not-allowed" : "pointer", opacity: relSaving ? 0.7 : 1 }}>
+                {relSaving ? "Releasing…" : "Release"}
+              </button>
+            </div>
           </div>
         </div>
       )}
