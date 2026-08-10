@@ -19,7 +19,7 @@ interface PoLine {
   stone_clarity: string;
   finger_size: string;
   quantity: string;
-  unit_cost: string;
+  estimated_cost: string;
   notes: string;
   // AI state
   aiDesc: string;
@@ -31,7 +31,7 @@ function blankLine(): PoLine {
     _id: crypto.randomUUID(),
     title: "", category_id: "", metal_type: "", metal_karat: "", metal_colour: "",
     stone_type: "", stone_carat: "", stone_colour: "", stone_clarity: "",
-    finger_size: "", quantity: "1", unit_cost: "", notes: "",
+    finger_size: "", quantity: "1", estimated_cost: "", notes: "",
     aiDesc: "", aiLoading: false,
   };
 }
@@ -132,12 +132,12 @@ export default function NewPurchaseOrderPage() {
         metal_colour: l.metal_colour || null,
         stone_type:  l.stone_type  || null,
         stone_carat: l.stone_carat ? parseFloat(l.stone_carat) : null,
-        stone_colour: l.stone_colour || null,
-        stone_clarity: l.stone_clarity || null,
-        finger_size: l.finger_size || null,
-        quantity:    parseInt(l.quantity) || 1,
-        unit_cost:   l.unit_cost ? parseFloat(l.unit_cost) : null,
-        notes:       l.notes || null,
+        stone_colour:    l.stone_colour    || null,
+        stone_clarity:   l.stone_clarity   || null,
+        finger_size:     l.finger_size     || null,
+        quantity:        parseInt(l.quantity) || 1,
+        estimated_cost:  l.estimated_cost ? parseFloat(l.estimated_cost) : null,
+        notes:           l.notes || null,
       })),
     };
 
@@ -325,8 +325,8 @@ export default function NewPurchaseOrderPage() {
                   <input type="number" min="1" value={line.quantity} onChange={e => updateLine(line._id, { quantity: e.target.value })} style={IF} />
                 </div>
                 <div>
-                  <label style={LF}>Unit Cost ($)</label>
-                  <input type="number" step="0.01" value={line.unit_cost} onChange={e => updateLine(line._id, { unit_cost: e.target.value })} placeholder="0.00" style={IF} />
+                  <label style={LF}>Estimated Cost ($)</label>
+                  <input type="number" step="0.01" value={line.estimated_cost} onChange={e => updateLine(line._id, { estimated_cost: e.target.value })} placeholder="0.00" style={IF} />
                 </div>
                 <div style={{ gridColumn: "1 / -1" }}>
                   <label style={LF}>Notes</label>

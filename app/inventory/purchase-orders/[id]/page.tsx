@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
-import { ArrowLeft, Package, CheckCircle2, SkipForward, Sparkles, Loader, X, ChevronDown } from "lucide-react";
+import { ArrowLeft, Package, CheckCircle2, SkipForward, Sparkles, Loader, X, ChevronDown, DollarSign } from "lucide-react";
 import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
 
 type POStatus = "draft" | "ordered" | "partially_received" | "received";
@@ -24,6 +24,8 @@ interface PoLine {
   finger_size: string | null;
   quantity: number;
   unit_cost: number | null;
+  estimated_cost: number | null;
+  actual_cost: number | null;
   notes: string | null;
   received: boolean;
   piece_id: string | null;
@@ -98,8 +100,10 @@ function ReceiveCard({
     diamond_clarity: line.stone_clarity  ?? "",
     finger_size:     line.finger_size    ?? "",
     notes:           line.notes          ?? "",
-    // New fields
-    actual_cost: line.unit_cost != null ? String(line.unit_cost) : "",
+    // New fields — prefill from estimated_cost (preferred) or unit_cost (legacy)
+    actual_cost: line.estimated_cost != null
+      ? String(line.estimated_cost)
+      : line.unit_cost != null ? String(line.unit_cost) : "",
     location_id: "",   // "" = use route default
     product_id:  "",   // "" = unlinked
   });
@@ -395,6 +399,12 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   const [allDone, setAllDone] = useState(false);
   const [toast, setToast]     = useState("");
 
+  // Confirm actual cost modal
+  const [confirmLine, setConfirmLine]     = useState<PoLine | null>(null);
+  const [confirmCost, setConfirmCost]     = useState("");
+  const [confirmSaving, setConfirmSaving] = useState(false);
+  const [confirmError, setConfirmError]   = useState("");
+
   const headers = { "x-tenant-id": tenantId };
 
   const fetchPo = useCallback(async () => {
@@ -438,6 +448,37 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
     setShowReceive(false);
     setAllDone(false);
     setReceivedCount(0);
+  }
+
+  function openConfirmModal(line: PoLine) {
+    setConfirmLine(line);
+    setConfirmCost(line.actual_cost != null ? String(line.actual_cost) : "");
+    setConfirmError("");
+  }
+
+  async function handleConfirmActualCost() {
+    if (!confirmLine) return;
+    const cost = parseFloat(confirmCost);
+    if (isNaN(cost) || cost < 0) {
+      setConfirmError("Enter a valid amount (0 or greater)");
+      return;
+    }
+    setConfirmSaving(true);
+    setConfirmError("");
+    const res = await fetch(
+      `/api/inventory/purchase-orders/lines/${confirmLine.id}`,
+      {
+        method: "PATCH",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ actual_cost: cost }),
+      }
+    );
+    const json = await res.json();
+    setConfirmSaving(false);
+    if (!res.ok) { setConfirmError(json.error ?? "Failed to save"); return; }
+    setConfirmLine(null);
+    setConfirmCost("");
+    fetchPo();
   }
 
   async function handleMarkOrdered() {
@@ -572,51 +613,166 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
 
       {/* Lines table */}
       <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
-        <div style={{ padding: "14px 20px", borderBottom: "1px solid #E5E7EB" }}>
+        <div style={{ padding: "14px 20px", borderBottom: "1px solid #E5E7EB", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.06em" }}>Line Items</span>
+          {po.lines.some(l => l.actual_cost == null) && (
+            <span style={{ fontSize: 12, color: "#D97706", fontWeight: 500 }}>
+              {po.lines.filter(l => l.actual_cost == null).length} line{po.lines.filter(l => l.actual_cost == null).length !== 1 ? "s" : ""} pending invoice
+            </span>
+          )}
         </div>
         {po.lines.length === 0 ? (
           <div style={{ padding: 32, textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>No line items</div>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead>
-              <tr style={{ background: "#F9FAFB" }}>
-                {["Title", "Category", "Metal", "Stone", "Size", "Qty", "Unit Cost", "Status"].map(h => (
-                  <th key={h} style={{ padding: "8px 16px", textAlign: "left", fontWeight: 600, color: "#6B7280", fontSize: 11, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {po.lines.map((line, i) => (
-                <tr key={line.id} style={{ borderTop: i > 0 ? "1px solid #F3F4F6" : "none" }}>
-                  <td style={{ padding: "10px 16px", color: "#374151" }}>{line.title ?? <span style={{ color: "#D1D5DB" }}>—</span>}</td>
-                  <td style={{ padding: "10px 16px", color: "#6B7280" }}>{line.category?.name ?? "—"}</td>
-                  <td style={{ padding: "10px 16px", color: "#6B7280" }}>{[line.metal_karat, line.metal_colour, line.metal_type].filter(Boolean).join(" ") || "—"}</td>
-                  <td style={{ padding: "10px 16px", color: "#6B7280" }}>
-                    {line.stone_carat ? `${line.stone_carat}ct` : ""}
-                    {line.stone_colour ? ` ${line.stone_colour}` : ""}
-                    {line.stone_clarity ? ` ${line.stone_clarity}` : ""}
-                    {!line.stone_carat && !line.stone_colour ? "—" : ""}
-                  </td>
-                  <td style={{ padding: "10px 16px", color: "#6B7280" }}>{line.finger_size ?? "—"}</td>
-                  <td style={{ padding: "10px 16px", color: "#374151", textAlign: "center" }}>{line.quantity}</td>
-                  <td style={{ padding: "10px 16px", color: "#374151" }}>{line.unit_cost != null ? `$${line.unit_cost.toLocaleString("en-AU", { minimumFractionDigits: 2 })}` : "—"}</td>
-                  <td style={{ padding: "10px 16px" }}>
-                    {line.received ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                        <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: "#ECFDF5", color: "#065F46", border: "1px solid #A7F3D0" }}>Received</span>
-                        {line.piece && <span style={{ fontSize: 11, color: "#9CA3AF", fontFamily: "monospace" }}>{line.piece.sku}</span>}
-                      </div>
-                    ) : (
-                      <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#F3F4F6", color: "#6B7280" }}>Pending</span>
-                    )}
-                  </td>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: "#F9FAFB" }}>
+                  {["Title", "Metal", "Qty", "Est. Cost", "Actual Cost", "Invoice", "Receipt"].map(h => (
+                    <th key={h} style={{ padding: "8px 16px", textAlign: "left", fontWeight: 600, color: "#6B7280", fontSize: 11, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em" }}>{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {po.lines.map((line, i) => {
+                  const estCost = line.estimated_cost ?? line.unit_cost;
+                  const invoiced = line.actual_cost != null;
+                  return (
+                    <tr key={line.id} style={{ borderTop: i > 0 ? "1px solid #F3F4F6" : "none" }}>
+                      <td style={{ padding: "10px 16px", color: "#374151", maxWidth: 200 }}>
+                        <div>{line.title ?? <span style={{ color: "#D1D5DB" }}>—</span>}</div>
+                        {line.category?.name && <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>{line.category.name}</div>}
+                      </td>
+                      <td style={{ padding: "10px 16px", color: "#6B7280", whiteSpace: "nowrap" }}>
+                        {[line.metal_karat, line.metal_colour, line.metal_type].filter(Boolean).join(" ") || "—"}
+                      </td>
+                      <td style={{ padding: "10px 16px", color: "#374151", textAlign: "center" }}>{line.quantity}</td>
+                      <td style={{ padding: "10px 16px", color: "#6B7280", fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                        {estCost != null ? `$${Number(estCost).toLocaleString("en-AU", { minimumFractionDigits: 2 })}` : "—"}
+                      </td>
+                      <td style={{ padding: "10px 16px", fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                        {invoiced ? (
+                          <span style={{ color: "#111827", fontWeight: 500 }}>
+                            ${Number(line.actual_cost).toLocaleString("en-AU", { minimumFractionDigits: 2 })}
+                          </span>
+                        ) : (
+                          <span style={{ color: "#D1D5DB" }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+                        {invoiced ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: "#ECFDF5", color: "#065F46", border: "1px solid #A7F3D0" }}>Invoiced</span>
+                            {isManager && (
+                              <button
+                                onClick={() => openConfirmModal(line)}
+                                style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}
+                              >
+                                Edit
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#FFFBEB", color: "#92400E", border: "1px solid #FDE68A" }}>Pending Invoice</span>
+                            {isManager && (
+                              <button
+                                onClick={() => openConfirmModal(line)}
+                                style={{ display: "flex", alignItems: "center", gap: 3, padding: "3px 8px", borderRadius: 6, border: "1px solid #E5E7EB", background: "#fff", fontSize: 11, cursor: "pointer", color: "#374151", fontWeight: 500, whiteSpace: "nowrap" }}
+                              >
+                                <DollarSign size={11} /> Confirm
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: "10px 16px" }}>
+                        {line.received ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                            <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: "#ECFDF5", color: "#065F46", border: "1px solid #A7F3D0" }}>Received</span>
+                            {line.piece && <span style={{ fontSize: 11, color: "#9CA3AF", fontFamily: "monospace" }}>{line.piece.sku}</span>}
+                          </div>
+                        ) : (
+                          <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#F3F4F6", color: "#6B7280" }}>Pending</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
+
+      {/* Confirm Actual Cost Modal */}
+      {confirmLine && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 32, width: "100%", maxWidth: 400, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>
+                  {confirmLine.actual_cost != null ? "Update Actual Cost" : "Confirm Invoice Amount"}
+                </h2>
+                <p style={{ margin: "4px 0 0", fontSize: 13, color: "#6B7280" }}>
+                  {confirmLine.title ?? "Untitled item"}
+                </p>
+              </div>
+              <button onClick={() => setConfirmLine(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280", padding: 0 }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            {(confirmLine.estimated_cost ?? confirmLine.unit_cost) != null && (
+              <div style={{ padding: "10px 14px", background: "#F9FAFB", borderRadius: 8, fontSize: 13, color: "#6B7280", marginBottom: 16 }}>
+                Estimated: <strong style={{ fontFamily: "monospace", color: "#374151" }}>
+                  ${Number(confirmLine.estimated_cost ?? confirmLine.unit_cost).toLocaleString("en-AU", { minimumFractionDigits: 2 })}
+                </strong>
+              </div>
+            )}
+
+            {confirmError && (
+              <div style={{ padding: "8px 12px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, fontSize: 13, marginBottom: 14 }}>{confirmError}</div>
+            )}
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 6 }}>
+                Invoice Amount ($) <span style={{ color: "#EF4444" }}>*</span>
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={confirmCost}
+                onChange={e => setConfirmCost(e.target.value)}
+                placeholder="0.00"
+                autoFocus
+                style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 15, fontFamily: "monospace" }}
+                onKeyDown={e => { if (e.key === "Enter") handleConfirmActualCost(); }}
+              />
+              <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 6 }}>
+                This records the actual amount on the supplier invoice.
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => setConfirmLine(null)}
+                style={{ flex: 1, padding: "10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmActualCost}
+                disabled={confirmSaving || !confirmCost}
+                style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 14, fontWeight: 500, cursor: confirmSaving || !confirmCost ? "not-allowed" : "pointer", opacity: confirmSaving || !confirmCost ? 0.7 : 1 }}
+              >
+                {confirmSaving ? "Saving…" : "Confirm Invoice"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
-import { Plus, Package } from "lucide-react";
+import { Plus, Package, AlertCircle } from "lucide-react";
 
 type POStatus = "draft" | "ordered" | "partially_received" | "received";
 
@@ -20,6 +20,8 @@ interface PurchaseOrder {
   notes: string | null;
   line_count: number;
   received_count: number;
+  pending_invoice_total: number;
+  pending_invoice_count: number;
   total_value?: number | null;
   created_at: string;
 }
@@ -85,6 +87,10 @@ export default function PurchaseOrdersPage() {
   const supplierName = (po: PurchaseOrder) =>
     po.supplier?.name ?? po.supplier_name ?? "—";
 
+  const activePOs = pos.filter(p => p.status !== "draft");
+  const totalPendingInvoice = activePOs.reduce((sum, p) => sum + (p.pending_invoice_total ?? 0), 0);
+  const totalPendingCount   = activePOs.reduce((sum, p) => sum + (p.pending_invoice_count ?? 0), 0);
+
   return (
     <div style={{ padding: "32px 32px 64px", maxWidth: 1200, margin: "0 auto" }}>
       {/* Header */}
@@ -108,6 +114,21 @@ export default function PurchaseOrdersPage() {
           </button>
         )}
       </div>
+
+      {/* Pending invoice summary */}
+      {!loading && totalPendingCount > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 20px", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 12, marginBottom: 16 }}>
+          <AlertCircle size={18} style={{ color: "#D97706", flexShrink: 0 }} />
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "#92400E" }}>
+              Unbilled work in flight: ${totalPendingInvoice.toLocaleString("en-AU", { minimumFractionDigits: 2 })} estimated
+            </div>
+            <div style={{ fontSize: 12, color: "#B45309", marginTop: 2 }}>
+              {totalPendingCount} line{totalPendingCount !== 1 ? "s" : ""} across active POs have not been invoiced yet
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>

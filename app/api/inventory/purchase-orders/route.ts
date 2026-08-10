@@ -7,7 +7,7 @@ export const revalidate = 0;
 const PO_SELECT = `
   *,
   supplier:inventory_suppliers(id,name),
-  lines:inventory_po_lines(id,received)
+  lines:inventory_po_lines(id,received,estimated_cost,actual_cost)
 `.trim();
 
 async function generatePoNumber(
@@ -49,12 +49,20 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Annotate each PO with line counts
-  const pos = (data ?? []).map((po: any) => ({
-    ...po,
-    line_count:      po.lines?.length ?? 0,
-    received_count:  po.lines?.filter((l: any) => l.received).length ?? 0,
-  }));
+  // Annotate each PO with line counts and pending invoice total
+  const pos = (data ?? []).map((po: any) => {
+    const lines: any[] = po.lines ?? [];
+    const pendingLines = lines.filter((l: any) => l.actual_cost == null);
+    return {
+      ...po,
+      line_count:            lines.length,
+      received_count:        lines.filter((l: any) => l.received).length,
+      pending_invoice_total: pendingLines.reduce(
+        (sum: number, l: any) => sum + Number(l.estimated_cost ?? 0), 0
+      ),
+      pending_invoice_count: pendingLines.length,
+    };
+  });
 
   return NextResponse.json({ purchase_orders: pos }, { headers: { "Cache-Control": "no-store" } });
 }
