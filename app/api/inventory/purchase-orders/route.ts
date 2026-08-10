@@ -76,6 +76,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const body = await req.json();
   const { lines, po_number: clientPoNumber, ...poData } = body;
 
+  // DEBUG — remove before finishing
+  const _debug: Record<string, any> = {
+    tenantId,
+    linesReceived: lines,
+    linesIsArray: Array.isArray(lines),
+    linesLength: Array.isArray(lines) ? lines.length : null,
+  };
+
   const year = new Date().getFullYear();
   const po_number = clientPoNumber?.trim()
     ? clientPoNumber.trim()
@@ -89,6 +97,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (poErr) return NextResponse.json({ error: poErr.message }, { status: 500 });
 
+  _debug.poId = po?.id;
+
   // Insert lines if provided
   if (Array.isArray(lines) && lines.length > 0) {
     const lineInserts = lines.map((l: any) => ({
@@ -97,11 +107,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       tenant_id: tenantId,
       received:  false,
     }));
-    const { error: lineErr } = await supabase
+    _debug.lineInserts = lineInserts;
+
+    const { data: lineData, error: lineErr } = await supabase
       .from("inventory_po_lines")
-      .insert(lineInserts);
-    if (lineErr) return NextResponse.json({ error: `Line insert failed: ${lineErr.message}` }, { status: 500 });
+      .insert(lineInserts)
+      .select();
+
+    _debug.lineInsertData  = lineData;
+    _debug.lineInsertError = lineErr ? { message: lineErr.message, code: lineErr.code, details: lineErr.details, hint: lineErr.hint } : null;
+
+    if (lineErr) return NextResponse.json({ error: `Line insert failed: ${lineErr.message}`, _debug }, { status: 500 });
+  } else {
+    _debug.lineInsertSkipped = true;
+    _debug.reason = Array.isArray(lines) ? "lines array was empty" : `lines was ${typeof lines} (not an array)`;
   }
 
-  return NextResponse.json({ purchase_order: po });
+  return NextResponse.json({ purchase_order: po, _debug });
 }
