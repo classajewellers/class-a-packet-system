@@ -55,11 +55,15 @@ export async function PATCH(
     for (const line of lines) {
       if (line.id) {
         const { id: lineId, category: _cat, piece: _pc, ...lineUpdate } = line;
-        await supabase.from("inventory_po_lines").update(lineUpdate).eq("id", lineId);
+        const { error: luErr } = await supabase
+          .from("inventory_po_lines").update(lineUpdate).eq("id", lineId);
+        if (luErr) return NextResponse.json({ error: `Line update failed: ${luErr.message}` }, { status: 500 });
       } else {
-        await supabase.from("inventory_po_lines").insert({
-          ...line, po_id: params.id, tenant_id: tenantId, received: false,
-        });
+        const { error: liErr } = await supabase
+          .from("inventory_po_lines").insert({
+            ...line, po_id: params.id, tenant_id: tenantId, received: false,
+          });
+        if (liErr) return NextResponse.json({ error: `Line insert failed: ${liErr.message}` }, { status: 500 });
       }
     }
   }

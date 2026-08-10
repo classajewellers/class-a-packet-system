@@ -42,6 +42,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   let query = supabase
     .from("inventory_purchase_orders")
     .select(PO_SELECT)
+    .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false });
 
   if (status) query = query.eq("status", status);
@@ -99,7 +100,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const { error: lineErr } = await supabase
       .from("inventory_po_lines")
       .insert(lineInserts);
-    if (lineErr) console.error("[po POST] line insert error:", lineErr.message);
+    if (lineErr) return NextResponse.json({ error: `Line insert failed: ${lineErr.message}` }, { status: 500 });
   }
 
   return NextResponse.json({ purchase_order: po });
