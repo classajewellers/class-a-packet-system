@@ -10,7 +10,8 @@ const PO_DETAIL_SELECT = `
   lines:inventory_po_lines(
     *,
     category:inventory_categories(id,name),
-    piece:inventory_pieces(id,sku)
+    piece:inventory_pieces(id,sku),
+    packet:packets(id,reference_number,customer_first_name,customer_last_name,packet_type)
   )
 `.trim();
 
@@ -54,7 +55,7 @@ export async function PATCH(
   if (Array.isArray(lines)) {
     for (const line of lines) {
       if (line.id) {
-        const { id: lineId, category: _cat, piece: _pc, ...lineUpdate } = line;
+        const { id: lineId, category: _cat, piece: _pc, packet: _pkt, ...lineUpdate } = line;
         const { error: luErr } = await supabase
           .from("inventory_po_lines").update(lineUpdate).eq("id", lineId);
         if (luErr) return NextResponse.json({ error: `Line update failed: ${luErr.message}` }, { status: 500 });

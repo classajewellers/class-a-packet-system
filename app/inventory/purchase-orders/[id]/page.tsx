@@ -27,6 +27,14 @@ interface PoLine {
   estimated_cost: number | null;
   actual_cost: number | null;
   supplier_design_no: string | null;
+  packet_id: string | null;
+  packet?: {
+    id: string;
+    reference_number: string;
+    customer_first_name: string | null;
+    customer_last_name: string | null;
+    packet_type: string | null;
+  } | null;
   notes: string | null;
   received: boolean;
   piece_id: string | null;
@@ -640,12 +648,35 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                   const invoiced = line.actual_cost != null;
                   return (
                     <tr key={line.id} style={{ borderTop: i > 0 ? "1px solid #F3F4F6" : "none" }}>
-                      <td style={{ padding: "10px 16px", color: "#374151", maxWidth: 220 }}>
+                      <td style={{ padding: "10px 16px", color: "#374151", maxWidth: 240 }}>
                         <div>{line.title ?? <span style={{ color: "#D1D5DB" }}>—</span>}</div>
                         {line.category?.name && <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>{line.category.name}</div>}
                         {line.supplier_design_no && (
                           <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2, fontFamily: "monospace" }}>
                             Ref: {line.supplier_design_no}
+                          </div>
+                        )}
+                        {line.packet ? (
+                          <div style={{ marginTop: 4 }}>
+                            <a
+                              href={`/workshop/board`}
+                              style={{
+                                display: "inline-flex", alignItems: "center", gap: 3,
+                                padding: "2px 7px", borderRadius: 6, fontSize: 11, fontWeight: 600,
+                                background: "#EEF2FF", color: "#4338CA", border: "1px solid #C7D2FE",
+                                textDecoration: "none",
+                              }}
+                              title={[line.packet.customer_first_name, line.packet.customer_last_name].filter(Boolean).join(" ") || undefined}
+                            >
+                              {line.packet.reference_number}
+                            </a>
+                          </div>
+                        ) : (
+                          <div style={{ marginTop: 4 }}>
+                            <span style={{
+                              display: "inline-block", padding: "2px 7px", borderRadius: 6, fontSize: 11,
+                              fontWeight: 500, background: "#F3F4F6", color: "#9CA3AF",
+                            }}>Stock</span>
                           </div>
                         )}
                       </td>

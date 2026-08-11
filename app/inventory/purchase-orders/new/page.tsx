@@ -6,6 +6,14 @@ import { useUser } from "@/context/UserContext";
 import { InventoryReferenceData } from "@/lib/types";
 import { ArrowLeft, Plus, X, Sparkles, Loader } from "lucide-react";
 
+interface OpenPacket {
+  id: string;
+  reference_number: string;
+  customer_first_name: string | null;
+  customer_last_name: string | null;
+  packet_type: string | null;
+}
+
 interface PoLine {
   _id: string; // local only
   title: string;
@@ -21,6 +29,8 @@ interface PoLine {
   quantity: string;
   estimated_cost: string;
   supplier_design_no: string;
+  forOrder: boolean; // local state only — tracks "Stock" vs "Customer Order" mode
+  packet_id: string; // uuid when an order is selected, "" when none yet chosen
   notes: string;
   // AI state
   aiDesc: string;
@@ -32,13 +42,62 @@ function blankLine(): PoLine {
     _id: crypto.randomUUID(),
     title: "", category_id: "", metal_type: "", metal_karat: "", metal_colour: "",
     stone_type: "", stone_carat: "", stone_colour: "", stone_clarity: "",
-    finger_size: "", quantity: "1", estimated_cost: "", supplier_design_no: "", notes: "",
+    finger_size: "", quantity: "1", estimated_cost: "", supplier_design_no: "",
+    forOrder: false, packet_id: "", notes: "",
     aiDesc: "", aiLoading: false,
   };
 }
 
 const LF = { fontSize: 13, fontWeight: 500 as const, color: "#374151", display: "block" as const, marginBottom: 3 };
 const IF = { width: "100%", boxSizing: "border-box" as const, padding: "7px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13 };
+
+function packetLabel(p: OpenPacket): string {
+  const name = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "Unknown";
+  return `${p.reference_number} — ${name}`;
+}
+
+function PacketPicker({ packets, value, onChange }: {
+  packets: OpenPacket[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const lower = search.toLowerCase();
+  const filtered = search
+    ? packets.filter(p => packetLabel(p).toLowerCase().includes(lower)).slice(0, 10)
+    : packets.slice(0, 10);
+  const selected = packets.find(p => p.id === value);
+
+  return (
+    <div style={{ flex: 1, position: "relative" }}>
+      <input
+        value={search || (selected ? packetLabel(selected) : "")}
+        onChange={e => { setSearch(e.target.value); if (!e.target.value) onChange(""); }}
+        onFocus={e => e.target.select()}
+        placeholder="Search orders…"
+        style={{ ...IF, borderColor: value ? "#6366F1" : "#E5E7EB" }}
+      />
+      {(search || !value) && filtered.length > 0 && (
+        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, zIndex: 30, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", maxHeight: 200, overflowY: "auto" }}>
+          {filtered.map(p => (
+            <div
+              key={p.id}
+              onMouseDown={() => { onChange(p.id); setSearch(""); }}
+              style={{ padding: "8px 12px", fontSize: 13, cursor: "pointer", background: p.id === value ? "#EEF2FF" : "#fff", color: "#111827" }}
+              onMouseEnter={e => { if (p.id !== value) (e.currentTarget as HTMLElement).style.background = "#F9FAFB"; }}
+              onMouseLeave={e => { if (p.id !== value) (e.currentTarget as HTMLElement).style.background = "#fff"; }}
+            >
+              <span style={{ fontWeight: 600, fontFamily: "monospace" }}>{p.reference_number}</span>
+              <span style={{ color: "#6B7280", marginLeft: 8 }}>
+                {[p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "Unknown"}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function NewPurchaseOrderPage() {
   const router = useRouter();
@@ -47,6 +106,7 @@ export default function NewPurchaseOrderPage() {
 
   const [ref, setRef]             = useState<InventoryReferenceData | null>(null);
   const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [openPackets, setOpenPackets] = useState<OpenPacket[]>([]);
 
   const [poNumber, setPoNumber]         = useState("");
   const [supplierId, setSupplierId]     = useState("");
@@ -64,11 +124,18 @@ export default function NewPurchaseOrderPage() {
 
   const fetchRef = useCallback(async () => {
     if (!tenantId) return;
-    const res = await fetch("/api/inventory/reference", { headers });
-    if (res.ok) {
-      const json = await res.json();
+    const [refRes, pktsRes] = await Promise.all([
+      fetch("/api/inventory/reference", { headers }),
+      fetch("/api/inventory/open-packets", { headers }),
+    ]);
+    if (refRes.ok) {
+      const json = await refRes.json();
       setRef(json);
       setSuppliers(json.suppliers ?? []);
+    }
+    if (pktsRes.ok) {
+      const json = await pktsRes.json();
+      setOpenPackets(json.packets ?? []);
     }
   }, [tenantId]);
 
@@ -139,6 +206,7 @@ export default function NewPurchaseOrderPage() {
         quantity:           parseInt(l.quantity)  || 1,
         estimated_cost:     l.estimated_cost ? parseFloat(l.estimated_cost) : null,
         supplier_design_no: l.supplier_design_no || null,
+        packet_id:          l.packet_id          || null,
         notes:              l.notes              || null,
       })),
     };
@@ -333,6 +401,26 @@ export default function NewPurchaseOrderPage() {
                 <div>
                   <label style={LF}>Supplier Design No.</label>
                   <input value={line.supplier_design_no} onChange={e => updateLine(line._id, { supplier_design_no: e.target.value })} placeholder="Supplier's ref/job no." style={IF} />
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label style={LF}>For</label>
+                  <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                    <select
+                      value={line.forOrder ? "order" : "stock"}
+                      onChange={e => updateLine(line._id, { forOrder: e.target.value === "order", packet_id: "" })}
+                      style={{ ...IF, width: "auto", minWidth: 120, background: "#fff" }}
+                    >
+                      <option value="stock">Stock</option>
+                      <option value="order">Customer Order</option>
+                    </select>
+                    {line.forOrder && (
+                      <PacketPicker
+                        packets={openPackets}
+                        value={line.packet_id}
+                        onChange={id => updateLine(line._id, { packet_id: id })}
+                      />
+                    )}
+                  </div>
                 </div>
                 <div style={{ gridColumn: "1 / -1" }}>
                   <label style={LF}>Notes</label>
