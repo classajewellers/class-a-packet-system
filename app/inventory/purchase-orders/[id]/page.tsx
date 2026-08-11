@@ -17,15 +17,16 @@ interface PoLine {
   metal_type: string | null;
   metal_karat: string | null;
   metal_colour: string | null;
-  stone_type: string | null;
-  stone_carat: number | null;
-  stone_colour: string | null;
-  stone_clarity: string | null;
+  diamond_type: string | null;
+  diamond_carat: number | null;
+  diamond_colour: string | null;
+  diamond_clarity: string | null;
   finger_size: string | null;
   quantity: number;
   unit_cost: number | null;
   estimated_cost: number | null;
   actual_cost: number | null;
+  supplier_design_no: string | null;
   notes: string | null;
   received: boolean;
   piece_id: string | null;
@@ -94,10 +95,10 @@ function ReceiveCard({
     metal_type:      line.metal_type     ?? "",
     metal_karat:     line.metal_karat    ?? "",
     metal_colour:    line.metal_colour   ?? "",
-    diamond_type:    line.stone_type     ?? "",
-    diamond_carat:   line.stone_carat != null ? String(line.stone_carat) : "",
-    diamond_colour:  line.stone_colour   ?? "",
-    diamond_clarity: line.stone_clarity  ?? "",
+    diamond_type:    line.diamond_type    ?? "",
+    diamond_carat:   line.diamond_carat != null ? String(line.diamond_carat) : "",
+    diamond_colour:  line.diamond_colour  ?? "",
+    diamond_clarity: line.diamond_clarity ?? "",
     finger_size:     line.finger_size    ?? "",
     notes:           line.notes          ?? "",
     // New fields — prefill from estimated_cost (preferred) or unit_cost (legacy)
@@ -224,7 +225,7 @@ function ReceiveCard({
       <div style={{ fontSize: 14, fontWeight: 600, color: "#111827", marginBottom: 4 }}>{line.title ?? "Untitled item"}</div>
       <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 16 }}>
         {[line.metal_karat, line.metal_colour, line.metal_type].filter(Boolean).join(" ")}
-        {line.stone_carat ? ` · ${line.stone_carat}ct ${line.stone_colour ?? ""} ${line.stone_type ?? ""}`.trim() : ""}
+        {line.diamond_carat ? ` · ${line.diamond_carat}ct ${line.diamond_colour ?? ""} ${line.diamond_type ?? ""}`.trim() : ""}
         {line.finger_size ? ` · Size ${line.finger_size}` : ""}
       </div>
 
@@ -639,9 +640,14 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                   const invoiced = line.actual_cost != null;
                   return (
                     <tr key={line.id} style={{ borderTop: i > 0 ? "1px solid #F3F4F6" : "none" }}>
-                      <td style={{ padding: "10px 16px", color: "#374151", maxWidth: 200 }}>
+                      <td style={{ padding: "10px 16px", color: "#374151", maxWidth: 220 }}>
                         <div>{line.title ?? <span style={{ color: "#D1D5DB" }}>—</span>}</div>
                         {line.category?.name && <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>{line.category.name}</div>}
+                        {line.supplier_design_no && (
+                          <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2, fontFamily: "monospace" }}>
+                            Ref: {line.supplier_design_no}
+                          </div>
+                        )}
                       </td>
                       <td style={{ padding: "10px 16px", color: "#6B7280", whiteSpace: "nowrap" }}>
                         {[line.metal_karat, line.metal_colour, line.metal_type].filter(Boolean).join(" ") || "—"}

@@ -20,6 +20,7 @@ interface PoLine {
   finger_size: string;
   quantity: string;
   estimated_cost: string;
+  supplier_design_no: string;
   notes: string;
   // AI state
   aiDesc: string;
@@ -31,7 +32,7 @@ function blankLine(): PoLine {
     _id: crypto.randomUUID(),
     title: "", category_id: "", metal_type: "", metal_karat: "", metal_colour: "",
     stone_type: "", stone_carat: "", stone_colour: "", stone_clarity: "",
-    finger_size: "", quantity: "1", estimated_cost: "", notes: "",
+    finger_size: "", quantity: "1", estimated_cost: "", supplier_design_no: "", notes: "",
     aiDesc: "", aiLoading: false,
   };
 }
@@ -125,19 +126,20 @@ export default function NewPurchaseOrderPage() {
       notes:         notes || null,
       status,
       lines: lines.map(l => ({
-        title:       l.title      || null,
-        category_id: l.category_id || null,
-        metal_type:  l.metal_type  || null,
-        metal_karat: l.metal_karat || null,
-        metal_colour: l.metal_colour || null,
-        stone_type:  l.stone_type  || null,
-        stone_carat: l.stone_carat ? parseFloat(l.stone_carat) : null,
-        stone_colour:    l.stone_colour    || null,
-        stone_clarity:   l.stone_clarity   || null,
-        finger_size:     l.finger_size     || null,
-        quantity:        parseInt(l.quantity) || 1,
-        estimated_cost:  l.estimated_cost ? parseFloat(l.estimated_cost) : null,
-        notes:           l.notes || null,
+        title:              l.title              || null,
+        category_id:        l.category_id        || null,
+        metal_type:         l.metal_type         || null,
+        metal_karat:        l.metal_karat        || null,
+        metal_colour:       l.metal_colour       || null,
+        diamond_type:       l.stone_type         || null,
+        diamond_carat:      l.stone_carat ? parseFloat(l.stone_carat) : null,
+        diamond_colour:     l.stone_colour       || null,
+        diamond_clarity:    l.stone_clarity      || null,
+        finger_size:        l.finger_size        || null,
+        quantity:           parseInt(l.quantity)  || 1,
+        estimated_cost:     l.estimated_cost ? parseFloat(l.estimated_cost) : null,
+        supplier_design_no: l.supplier_design_no || null,
+        notes:              l.notes              || null,
       })),
     };
 
@@ -327,6 +329,10 @@ export default function NewPurchaseOrderPage() {
                 <div>
                   <label style={LF}>Estimated Cost ($)</label>
                   <input type="number" step="0.01" value={line.estimated_cost} onChange={e => updateLine(line._id, { estimated_cost: e.target.value })} placeholder="0.00" style={IF} />
+                </div>
+                <div>
+                  <label style={LF}>Supplier Design No.</label>
+                  <input value={line.supplier_design_no} onChange={e => updateLine(line._id, { supplier_design_no: e.target.value })} placeholder="Supplier's ref/job no." style={IF} />
                 </div>
                 <div style={{ gridColumn: "1 / -1" }}>
                   <label style={LF}>Notes</label>
