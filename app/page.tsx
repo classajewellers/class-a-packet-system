@@ -9,6 +9,16 @@ import { Packet, InventoryMovement, InventoryMovementType } from "@/lib/types";
 import { useUser } from "@/context/UserContext";
 import { packetTypeLabel, formatDateAU, formatCurrency } from "@/lib/formatters";
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+interface WeekBucket { week_start: string; week_end: string; total: number; count: number; }
+interface CashflowData {
+  weeks: WeekBucket[];
+  overdue: { total: number; count: number };
+  later: { total: number; count: number };
+  unscheduled: { total: number; count: number };
+  coverage: { total_pending_lines: number; scheduled_lines: number; unscheduled_lines: number };
+}
+
 // ── Movement helpers ──────────────────────────────────────────────────────────
 const MOVEMENT_BADGE: Record<InventoryMovementType, { bg: string; fg: string; label: string }> = {
   receive:      { bg: "#DCFCE7", fg: "#166534", label: "Receive" },
@@ -98,6 +108,122 @@ function startOfMonthISO() {
   return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
 }
 
+// ── Purchase Cashflow Widget ──────────────────────────────────────────────────
+function fmtCcy(n: number): string {
+  return "$" + n.toLocaleString("en-AU", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+function fmtWeekLabel(start: string, end: string): string {
+  // start/end are YYYY-MM-DD; format as "DD/MM – DD/MM"
+  const [sy, sm, sd] = start.split("-");
+  const [, em, ed]   = end.split("-");
+  return `${sd}/${sm} – ${ed}/${em}`;
+}
+
+function PoCashflowWidget({ data }: { data: CashflowData | null | "loading" }) {
+  if (data === "loading") {
+    return (
+      <div style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ padding: "14px 20px", borderBottom: "1px solid #E8E8F0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span style={{ fontWeight: 600, fontSize: 15, color: "#1A1A2E" }}>Purchase Cashflow Forecast</span>
+        </div>
+        <div style={{ padding: "24px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Loading…</div>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const { weeks, overdue, later, unscheduled, coverage } = data;
+  const hasPendingSpend = coverage.total_pending_lines > 0;
+  const unscheduledPct  = coverage.total_pending_lines > 0
+    ? Math.round((coverage.unscheduled_lines / coverage.total_pending_lines) * 100)
+    : 0;
+
+  const rows: { label: string; sublabel?: string; total: number; count: number; alert?: boolean; muted?: boolean }[] = [];
+
+  if (overdue.count > 0) {
+    rows.push({ label: "Overdue", sublabel: "expected date passed", total: overdue.total, count: overdue.count, alert: true });
+  }
+  for (const w of weeks) {
+    rows.push({ label: fmtWeekLabel(w.week_start, w.week_end), total: w.total, count: w.count, muted: w.count === 0 });
+  }
+  if (later.count > 0) {
+    rows.push({ label: "Later (8+ wks)", total: later.total, count: later.count });
+  }
+  if (unscheduled.count > 0) {
+    rows.push({ label: "Unscheduled", sublabel: "no expected date set", total: unscheduled.total, count: unscheduled.count });
+  }
+
+  const grandTotal = rows.reduce((s, r) => s + r.total, 0);
+
+  return (
+    <div style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ padding: "14px 20px", borderBottom: "1px solid #E8E8F0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div>
+          <span style={{ fontWeight: 600, fontSize: 15, color: "#1A1A2E" }}>Purchase Cashflow Forecast</span>
+          <span style={{ marginLeft: 10, fontSize: 12, color: "#9CA3AF" }}>pending uninvoiced lines by PO expected date</span>
+        </div>
+        <Link href="/inventory/purchase-orders" style={{ textDecoration: "none", color: "#635BFF", fontSize: 13, fontWeight: 500 }}>
+          View POs →
+        </Link>
+      </div>
+
+      {!hasPendingSpend ? (
+        <div style={{ padding: "24px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>No pending purchase spend</div>
+      ) : (
+        <>
+          {unscheduledPct >= 50 && (
+            <div style={{ padding: "10px 20px", background: "#FFFBEB", borderBottom: "1px solid #FDE68A", fontSize: 12, color: "#92400E" }}>
+              {unscheduledPct}% of pending lines have no expected date — forecast accuracy is limited. Set expected delivery dates on POs to improve this view.
+            </div>
+          )}
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: "#F9FAFB" }}>
+                  <th style={{ padding: "8px 20px", textAlign: "left", fontWeight: 600, color: "#6B7280", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", whiteSpace: "nowrap" }}>Period</th>
+                  <th style={{ padding: "8px 16px", textAlign: "right", fontWeight: 600, color: "#6B7280", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", whiteSpace: "nowrap" }}>Lines</th>
+                  <th style={{ padding: "8px 20px", textAlign: "right", fontWeight: 600, color: "#6B7280", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", whiteSpace: "nowrap" }}>Est. Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, i) => (
+                  <tr
+                    key={row.label}
+                    style={{
+                      borderTop: "1px solid #F3F4F6",
+                      background: row.alert ? "#FEF2F2" : row.muted ? "transparent" : "transparent",
+                    }}
+                  >
+                    <td style={{ padding: "10px 20px", color: row.muted ? "#D1D5DB" : row.alert ? "#7F1D1D" : "#1A1A2E" }}>
+                      {row.label}
+                      {row.sublabel && <span style={{ fontSize: 11, color: row.alert ? "#EF4444" : "#9CA3AF", marginLeft: 6 }}>{row.sublabel}</span>}
+                    </td>
+                    <td style={{ padding: "10px 16px", textAlign: "right", color: row.muted ? "#D1D5DB" : "#6B7280" }}>
+                      {row.count > 0 ? row.count : "—"}
+                    </td>
+                    <td style={{ padding: "10px 20px", textAlign: "right", fontFamily: "monospace", fontWeight: row.count > 0 ? 600 : 400, color: row.muted ? "#D1D5DB" : row.alert ? "#DC2626" : "#111827" }}>
+                      {row.count > 0 ? fmtCcy(row.total) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ borderTop: "2px solid #E8E8F0", background: "#F9FAFB" }}>
+                  <td style={{ padding: "10px 20px", fontWeight: 700, color: "#1A1A2E", fontSize: 13 }}>Total pending</td>
+                  <td style={{ padding: "10px 16px", textAlign: "right", fontWeight: 600, color: "#374151", fontSize: 13 }}>{coverage.total_pending_lines}</td>
+                  <td style={{ padding: "10px 20px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: "#111827", fontSize: 14 }}>{fmtCcy(grandTotal)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { user } = useUser();
   const router = useRouter();
@@ -106,6 +232,7 @@ export default function DashboardPage() {
   const [revenueThisMonth, setRevenueThisMonth] = useState<number | null>(null);
   const [lowStockCount, setLowStockCount] = useState<number | null>(null);
   const [recentMovements, setRecentMovements] = useState<InventoryMovement[]>([]);
+  const [cashflow, setCashflow] = useState<CashflowData | null | "loading">("loading");
 
   useEffect(() => {
     fetch("/api/admin/packets?limit=200", { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } })
@@ -136,6 +263,12 @@ export default function DashboardPage() {
       .then((r) => r.json())
       .then((json) => setRecentMovements(json.movements ?? []))
       .catch(() => {});
+
+    // Purchase cashflow forecast
+    fetch("/api/inventory/purchase-cashflow", { cache: "no-store", headers: { 'x-tenant-id': user?.tenantId ?? '' } })
+      .then((r) => r.json())
+      .then((json) => setCashflow(json.error ? null : json))
+      .catch(() => setCashflow(null));
   }, []);
 
   const today = todayISO();
@@ -409,6 +542,11 @@ export default function DashboardPage() {
           </div>
 
         </div>
+      </div>
+
+      {/* ── Purchase Cashflow Forecast ── */}
+      <div style={{ marginTop: 20 }}>
+        <PoCashflowWidget data={cashflow} />
       </div>
     </div>
   );
