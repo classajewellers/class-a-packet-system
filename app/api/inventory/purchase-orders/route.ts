@@ -89,6 +89,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (poErr) return NextResponse.json({ error: poErr.message }, { status: 500 });
 
+  // DEBUG — remove after diagnosis
+  const _debug: Record<string, any> = {
+    linesReceived: lines,
+    linesIsArray: Array.isArray(lines),
+    linesLength: Array.isArray(lines) ? lines.length : null,
+  };
+
   // Insert lines if provided
   if (Array.isArray(lines) && lines.length > 0) {
     const lineInserts = lines.map((l: any) => ({
@@ -97,11 +104,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       tenant_id: tenantId,
       received:  false,
     }));
+    _debug.lineInserts = lineInserts;
+
     const { error: lineErr } = await supabase
       .from("inventory_po_lines")
       .insert(lineInserts);
-    if (lineErr) return NextResponse.json({ error: `Line insert failed: ${lineErr.message}` }, { status: 500 });
+    _debug.lineInsertError = lineErr ? { message: lineErr.message, code: lineErr.code } : null;
+    if (lineErr) return NextResponse.json({ error: `Line insert failed: ${lineErr.message}`, _debug }, { status: 500 });
+  } else {
+    _debug.lineInsertSkipped = true;
   }
 
-  return NextResponse.json({ purchase_order: po });
+  return NextResponse.json({ purchase_order: po, _debug });
 }
