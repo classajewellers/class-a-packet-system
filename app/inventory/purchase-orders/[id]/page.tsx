@@ -4,10 +4,10 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
-import { ArrowLeft, Package, CheckCircle2, SkipForward, Sparkles, Loader, X, ChevronDown, DollarSign } from "lucide-react";
+import { ArrowLeft, Package, CheckCircle2, SkipForward, Sparkles, Loader, X, ChevronDown, DollarSign, Pencil, Ban, AlertTriangle } from "lucide-react";
 import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
 
-type POStatus = "draft" | "ordered" | "partially_received" | "received";
+type POStatus = "draft" | "ordered" | "partially_received" | "received" | "cancelled";
 
 interface PoLine {
   id: string;
@@ -41,6 +41,28 @@ interface PoLine {
   piece?: { id: string; sku: string } | null;
 }
 
+interface EditPoLine {
+  id: string;
+  title: string;
+  category_id: string;
+  metal_type: string;
+  metal_karat: string;
+  metal_colour: string;
+  diamond_type: string;
+  diamond_carat: string;
+  diamond_colour: string;
+  diamond_clarity: string;
+  finger_size: string;
+  quantity: string;
+  estimated_cost: string;
+  actual_cost: number | null;
+  supplier_design_no: string;
+  packet_id: string;
+  notes: string;
+  received: boolean;
+  forOrder: boolean;
+}
+
 interface PurchaseOrder {
   id: string;
   po_number: string;
@@ -60,6 +82,7 @@ const STATUS_CONFIG: Record<POStatus, { label: string; bg: string; fg: string; b
   ordered:            { label: "Ordered",         bg: "#EFF6FF", fg: "#1D4ED8", border: "#BFDBFE" },
   partially_received: { label: "Partly Received", bg: "#FFFBEB", fg: "#92400E", border: "#FDE68A" },
   received:           { label: "Received",        bg: "#ECFDF5", fg: "#065F46", border: "#A7F3D0" },
+  cancelled:          { label: "Cancelled",       bg: "#F9FAFB", fg: "#6B7280", border: "#E5E7EB" },
 };
 
 function StatusBadge({ status }: { status: POStatus }) {
@@ -403,6 +426,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   const [categories, setCategories] = useState<any[]>([]);
   const [locations, setLocations]   = useState<any[]>([]);
   const [products, setProducts]     = useState<any[]>([]);
+  const [suppliers, setSuppliers]   = useState<{ id: string; name: string }[]>([]);
   const [showReceive, setShowReceive] = useState(false);
   const [receivedCount, setReceivedCount] = useState(0);
   const [allDone, setAllDone] = useState(false);
@@ -413,6 +437,19 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   const [confirmCost, setConfirmCost]     = useState("");
   const [confirmSaving, setConfirmSaving] = useState(false);
   const [confirmError, setConfirmError]   = useState("");
+
+  // Edit mode
+  const [editMode, setEditMode]     = useState(false);
+  const [editHeader, setEditHeader] = useState({ supplier_id: "", order_date: "", expected_date: "", notes: "" });
+  const [editLines, setEditLines]   = useState<EditPoLine[]>([]);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError]   = useState("");
+  const [openPackets, setOpenPackets] = useState<any[]>([]);
+
+  // Cancel PO modal
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelling, setCancelling]           = useState(false);
+  const [cancelError, setCancelError]         = useState("");
 
   const headers = { "x-tenant-id": tenantId };
 
@@ -432,6 +469,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
       const json = await refRes.json();
       setCategories(json.categories ?? []);
       setLocations(json.locations ?? []);
+      setSuppliers(json.suppliers ?? []);
     }
     if (prodRes.ok) {
       const json = await prodRes.json();
@@ -499,6 +537,115 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
     fetchPo();
   }
 
+  async function enterEditMode() {
+    if (!po) return;
+    setEditHeader({
+      supplier_id:   po.supplier_id   ?? "",
+      order_date:    po.order_date    ?? "",
+      expected_date: po.expected_date ?? "",
+      notes:         po.notes         ?? "",
+    });
+    setEditLines(po.lines.map(l => ({
+      id:                l.id,
+      title:             l.title             ?? "",
+      category_id:       l.category_id       ?? "",
+      metal_type:        l.metal_type        ?? "",
+      metal_karat:       l.metal_karat       ?? "",
+      metal_colour:      l.metal_colour      ?? "",
+      diamond_type:      l.diamond_type      ?? "",
+      diamond_carat:     l.diamond_carat != null ? String(l.diamond_carat) : "",
+      diamond_colour:    l.diamond_colour    ?? "",
+      diamond_clarity:   l.diamond_clarity   ?? "",
+      finger_size:       l.finger_size       ?? "",
+      quantity:          String(l.quantity),
+      estimated_cost:    l.estimated_cost != null ? String(l.estimated_cost) : "",
+      actual_cost:       l.actual_cost,
+      supplier_design_no: l.supplier_design_no ?? "",
+      packet_id:         l.packet_id         ?? "",
+      notes:             l.notes             ?? "",
+      received:          l.received,
+      forOrder:          l.packet_id != null,
+    })));
+    setEditError("");
+    setEditMode(true);
+    const res = await fetch("/api/inventory/open-packets", { headers });
+    if (res.ok) {
+      const json = await res.json();
+      setOpenPackets(json.packets ?? []);
+    }
+  }
+
+  async function handleSaveEdit() {
+    if (!po) return;
+    // Warn before saving if any invoiced line was modified
+    const invoicedModified = editLines.some(el => {
+      const orig = po.lines.find(l => l.id === el.id);
+      if (!orig || orig.actual_cost == null) return false;
+      return (
+        el.title !== (orig.title ?? "") ||
+        el.estimated_cost !== (orig.estimated_cost != null ? String(orig.estimated_cost) : "") ||
+        el.metal_type !== (orig.metal_type ?? "") ||
+        el.diamond_type !== (orig.diamond_type ?? "")
+      );
+    });
+    if (invoicedModified) {
+      const ok = window.confirm(
+        "One or more invoiced lines have been modified. These changes are cosmetic only and won't affect the supplier invoice. Save anyway?"
+      );
+      if (!ok) return;
+    }
+    setEditSaving(true);
+    setEditError("");
+    const res = await fetch(`/api/inventory/purchase-orders/${params.id}`, {
+      method: "PATCH",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        supplier_id:   editHeader.supplier_id   || null,
+        order_date:    editHeader.order_date    || null,
+        expected_date: editHeader.expected_date || null,
+        notes:         editHeader.notes         || null,
+        lines: editLines.map(l => ({
+          id:                l.id,
+          title:             l.title             || null,
+          category_id:       l.category_id       || null,
+          metal_type:        l.metal_type        || null,
+          metal_karat:       l.metal_karat       || null,
+          metal_colour:      l.metal_colour      || null,
+          diamond_type:      l.diamond_type      || null,
+          diamond_carat:     l.diamond_carat     ? Number(l.diamond_carat) : null,
+          diamond_colour:    l.diamond_colour    || null,
+          diamond_clarity:   l.diamond_clarity   || null,
+          finger_size:       l.finger_size       || null,
+          quantity:          Number(l.quantity)  || 1,
+          estimated_cost:    l.estimated_cost    ? Number(l.estimated_cost) : null,
+          supplier_design_no: l.supplier_design_no || null,
+          packet_id:         l.forOrder ? (l.packet_id || null) : null,
+          notes:             l.notes             || null,
+        })),
+      }),
+    });
+    const json = await res.json();
+    setEditSaving(false);
+    if (!res.ok) { setEditError(json.error ?? "Failed to save"); return; }
+    setEditMode(false);
+    fetchPo();
+  }
+
+  async function handleCancelPO() {
+    setCancelling(true);
+    setCancelError("");
+    const res = await fetch(`/api/inventory/purchase-orders/${params.id}`, {
+      method: "PATCH",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "cancelled" }),
+    });
+    const json = await res.json();
+    setCancelling(false);
+    if (!res.ok) { setCancelError(json.error ?? "Failed to cancel"); return; }
+    setShowCancelModal(false);
+    fetchPo();
+  }
+
   if (!hydrated) return null;
 
   if (loading) {
@@ -521,8 +668,211 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
 
   const supplierName = po.supplier?.name ?? po.supplier_name ?? "—";
   const canReceive   = isManager && (po.status === "ordered" || po.status === "partially_received") && unreceived.length > 0;
+  const canEdit      = isManager && po.status !== "cancelled";
+  const canCancel    = isManager && po.status !== "cancelled";
 
-  // Receive mode view
+  // ── Edit mode ──────────────────────────────────────────────────────────────
+  if (editMode) {
+    const IF = { width: "100%", boxSizing: "border-box" as const, padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13 };
+    const LF = { fontSize: 12, fontWeight: 600 as const, color: "#374151", display: "block" as const, marginBottom: 4 };
+
+    return (
+      <div style={{ padding: "32px 32px 64px", maxWidth: 900, margin: "0 auto" }}>
+        {/* Edit header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button onClick={() => setEditMode(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280", padding: 0 }}>
+              <X size={20} />
+            </button>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "#111827" }}>Edit {po.po_number}</h1>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {editError && <span style={{ fontSize: 13, color: "#DC2626" }}>{editError}</span>}
+            <button
+              onClick={() => setEditMode(false)}
+              style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer" }}
+            >
+              Discard
+            </button>
+            <button
+              onClick={handleSaveEdit}
+              disabled={editSaving}
+              style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 14, fontWeight: 500, cursor: editSaving ? "not-allowed" : "pointer", opacity: editSaving ? 0.7 : 1 }}
+            >
+              {editSaving ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
+        </div>
+
+        {/* Order details */}
+        <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 24, marginBottom: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 16 }}>Order Details</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px 24px" }}>
+            <div>
+              <label style={LF}>Supplier</label>
+              <select
+                value={editHeader.supplier_id}
+                onChange={e => setEditHeader(h => ({ ...h, supplier_id: e.target.value }))}
+                style={{ ...IF, background: "#fff" }}
+              >
+                <option value="">— No supplier —</option>
+                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={LF}>Order Date</label>
+              <input
+                type="date"
+                value={editHeader.order_date}
+                onChange={e => setEditHeader(h => ({ ...h, order_date: e.target.value }))}
+                style={IF}
+              />
+            </div>
+            <div>
+              <label style={LF}>Expected Delivery</label>
+              <input
+                type="date"
+                value={editHeader.expected_date}
+                onChange={e => setEditHeader(h => ({ ...h, expected_date: e.target.value }))}
+                style={IF}
+              />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={LF}>Notes</label>
+              <textarea
+                value={editHeader.notes}
+                onChange={e => setEditHeader(h => ({ ...h, notes: e.target.value }))}
+                rows={2}
+                style={{ ...IF, resize: "vertical" as const }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Line items */}
+        <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
+          <div style={{ padding: "14px 20px", borderBottom: "1px solid #E5E7EB" }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>Line Items</span>
+          </div>
+          {editLines.length === 0 ? (
+            <div style={{ padding: 32, textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>No line items</div>
+          ) : (
+            editLines.map((line, idx) => {
+              const isInvoiced = line.actual_cost != null;
+              const setLine = (patch: Partial<EditPoLine>) =>
+                setEditLines(ls => ls.map((l, i) => i === idx ? { ...l, ...patch } : l));
+
+              return (
+                <div
+                  key={line.id}
+                  style={{ padding: 20, borderTop: idx > 0 ? "1px solid #F3F4F6" : "none", background: isInvoiced ? "#FFFCF5" : "#fff" }}
+                >
+                  {isInvoiced && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, fontSize: 12, color: "#92400E", marginBottom: 14 }}>
+                      <AlertTriangle size={13} />
+                      This line has been invoiced (actual cost: ${Number(line.actual_cost).toLocaleString("en-AU", { minimumFractionDigits: 2 })}). Changes here are cosmetic only.
+                    </div>
+                  )}
+                  <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: "10px 16px", marginBottom: 12 }}>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <label style={LF}>Title</label>
+                      <input value={line.title} onChange={e => setLine({ title: e.target.value })} style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Metal Type</label>
+                      <input value={line.metal_type} onChange={e => setLine({ metal_type: e.target.value })} style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Karat</label>
+                      <input value={line.metal_karat} onChange={e => setLine({ metal_karat: e.target.value })} style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Metal Colour</label>
+                      <input value={line.metal_colour} onChange={e => setLine({ metal_colour: e.target.value })} style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Stone Type</label>
+                      <input value={line.diamond_type} onChange={e => setLine({ diamond_type: e.target.value })} style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Stone Carat</label>
+                      <input type="number" step="0.01" value={line.diamond_carat} onChange={e => setLine({ diamond_carat: e.target.value })} style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Stone Colour</label>
+                      <input value={line.diamond_colour} onChange={e => setLine({ diamond_colour: e.target.value })} style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Stone Clarity</label>
+                      <input value={line.diamond_clarity} onChange={e => setLine({ diamond_clarity: e.target.value })} style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Finger Size</label>
+                      <input value={line.finger_size} onChange={e => setLine({ finger_size: e.target.value })} style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Qty</label>
+                      <input type="number" min="1" value={line.quantity} onChange={e => setLine({ quantity: e.target.value })} style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>
+                        Est. Cost ($){isInvoiced && <span style={{ color: "#D97706", marginLeft: 4 }}>⚠</span>}
+                      </label>
+                      <input type="number" step="0.01" min="0" value={line.estimated_cost} onChange={e => setLine({ estimated_cost: e.target.value })} style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Supplier Design No</label>
+                      <input value={line.supplier_design_no} onChange={e => setLine({ supplier_design_no: e.target.value })} style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Notes</label>
+                      <input value={line.notes} onChange={e => setLine({ notes: e.target.value })} style={IF} />
+                    </div>
+                  </div>
+                  {/* Stock / Order toggle */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: "1px solid #E5E7EB", fontSize: 13 }}>
+                      <button
+                        type="button"
+                        onClick={() => setLine({ forOrder: false, packet_id: "" })}
+                        style={{ padding: "6px 14px", background: !line.forOrder ? "#111827" : "#fff", color: !line.forOrder ? "#fff" : "#374151", border: "none", cursor: "pointer", fontWeight: !line.forOrder ? 600 : 400 }}
+                      >
+                        For Stock
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLine({ forOrder: true })}
+                        style={{ padding: "6px 14px", background: line.forOrder ? "#111827" : "#fff", color: line.forOrder ? "#fff" : "#374151", border: "none", cursor: "pointer", fontWeight: line.forOrder ? 600 : 400 }}
+                      >
+                        Customer Order
+                      </button>
+                    </div>
+                    {line.forOrder && (
+                      <select
+                        value={line.packet_id}
+                        onChange={e => setLine({ packet_id: e.target.value })}
+                        style={{ flex: 1, padding: "7px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13, background: "#fff" }}
+                      >
+                        <option value="">— Select packet —</option>
+                        {openPackets.map((p: any) => (
+                          <option key={p.id} value={p.id}>
+                            {p.reference_number}{p.customer_first_name ? ` · ${[p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ")}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  // ── Receive mode ───────────────────────────────────────────────────────────
   if (showReceive) {
     return (
       <div style={{ padding: "32px 32px 64px", maxWidth: 900, margin: "0 auto" }}>
@@ -568,6 +918,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
     );
   }
 
+  // ── Detail view ────────────────────────────────────────────────────────────
   return (
     <div style={{ padding: "32px 32px 64px", maxWidth: 900, margin: "0 auto" }}>
       {/* Back */}
@@ -587,7 +938,23 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
           </div>
           <div style={{ fontSize: 14, color: "#6B7280" }}>{supplierName}</div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {canEdit && (
+            <button
+              onClick={enterEditMode}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", color: "#374151", fontSize: 14, cursor: "pointer" }}
+            >
+              <Pencil size={14} /> Edit PO
+            </button>
+          )}
+          {canCancel && (
+            <button
+              onClick={() => { setCancelError(""); setShowCancelModal(true); }}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", fontSize: 14, cursor: "pointer" }}
+            >
+              <Ban size={14} /> Cancel PO
+            </button>
+          )}
           {isManager && po.status === "draft" && (
             <button
               onClick={handleMarkOrdered}
@@ -805,6 +1172,47 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                 style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 14, fontWeight: 500, cursor: confirmSaving || !confirmCost ? "not-allowed" : "pointer", opacity: confirmSaving || !confirmCost ? 0.7 : 1 }}
               >
                 {confirmSaving ? "Saving…" : "Confirm Invoice"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel PO Modal */}
+      {showCancelModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 32, width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>Cancel Purchase Order</h2>
+                <p style={{ margin: "4px 0 0", fontSize: 13, color: "#6B7280" }}>{po.po_number}</p>
+              </div>
+              <button onClick={() => setShowCancelModal(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280", padding: 0 }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ padding: "12px 16px", background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: 10, fontSize: 13, color: "#7F1D1D", marginBottom: 20, lineHeight: 1.5 }}>
+              This will mark the PO as cancelled. All line items and cost data are preserved. The PO will be hidden from the main list by default.
+            </div>
+
+            {cancelError && (
+              <div style={{ padding: "8px 12px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, fontSize: 13, marginBottom: 14 }}>{cancelError}</div>
+            )}
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => setShowCancelModal(false)}
+                style={{ flex: 1, padding: "10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer" }}
+              >
+                Keep PO
+              </button>
+              <button
+                onClick={handleCancelPO}
+                disabled={cancelling}
+                style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: "#DC2626", color: "#fff", fontSize: 14, fontWeight: 500, cursor: cancelling ? "not-allowed" : "pointer", opacity: cancelling ? 0.7 : 1 }}
+              >
+                {cancelling ? "Cancelling…" : "Cancel PO"}
               </button>
             </div>
           </div>

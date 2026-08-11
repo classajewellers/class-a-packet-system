@@ -6,7 +6,7 @@ import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
 import { Plus, Package, AlertCircle } from "lucide-react";
 
-type POStatus = "draft" | "ordered" | "partially_received" | "received";
+type POStatus = "draft" | "ordered" | "partially_received" | "received" | "cancelled";
 
 interface PurchaseOrder {
   id: string;
@@ -31,6 +31,7 @@ const STATUS_CONFIG: Record<POStatus, { label: string; bg: string; fg: string; b
   ordered:            { label: "Ordered",            bg: "#EFF6FF", fg: "#1D4ED8", border: "#BFDBFE" },
   partially_received: { label: "Partly Received",    bg: "#FFFBEB", fg: "#92400E", border: "#FDE68A" },
   received:           { label: "Received",           bg: "#ECFDF5", fg: "#065F46", border: "#A7F3D0" },
+  cancelled:          { label: "Cancelled",          bg: "#F9FAFB", fg: "#6B7280", border: "#E5E7EB" },
 };
 
 function StatusBadge({ status }: { status: POStatus }) {
@@ -64,8 +65,9 @@ export default function PurchaseOrdersPage() {
   const tenantId: string = user?.tenantId ?? "";
   const isManager = hydrated ? canManage(user?.role) : false;
 
-  const [pos, setPos]         = useState<PurchaseOrder[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [pos, setPos]               = useState<PurchaseOrder[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [showCancelled, setShowCancelled] = useState(false);
 
   const headers = { "x-tenant-id": tenantId };
 
@@ -87,7 +89,8 @@ export default function PurchaseOrdersPage() {
   const supplierName = (po: PurchaseOrder) =>
     po.supplier?.name ?? po.supplier_name ?? "—";
 
-  const activePOs = pos.filter(p => p.status !== "draft");
+  const displayedPos = showCancelled ? pos : pos.filter(p => p.status !== "cancelled");
+  const activePOs = pos.filter(p => p.status !== "draft" && p.status !== "cancelled");
   const totalPendingInvoice = activePOs.reduce((sum, p) => sum + (p.pending_invoice_total ?? 0), 0);
   const totalPendingCount   = activePOs.reduce((sum, p) => sum + (p.pending_invoice_count ?? 0), 0);
 
@@ -98,21 +101,31 @@ export default function PurchaseOrdersPage() {
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 700, color: "#111827", margin: 0 }}>Purchase Orders</h1>
           <p style={{ fontSize: 14, color: "#6B7280", margin: "4px 0 0" }}>
-            {loading ? "Loading…" : `${pos.length} order${pos.length !== 1 ? "s" : ""}`}
+            {loading ? "Loading…" : `${displayedPos.length} order${displayedPos.length !== 1 ? "s" : ""}`}
           </p>
         </div>
-        {isManager && (
-          <button
-            onClick={() => router.push("/inventory/purchase-orders/new")}
-            style={{
-              display: "flex", alignItems: "center", gap: 6,
-              padding: "8px 16px", borderRadius: 8, fontSize: 14, fontWeight: 500,
-              background: "#111827", color: "#fff", border: "none", cursor: "pointer",
-            }}
-          >
-            <Plus size={15} /> New PO
-          </button>
-        )}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {pos.some(p => p.status === "cancelled") && (
+            <button
+              onClick={() => setShowCancelled(s => !s)}
+              style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 13, cursor: "pointer", color: showCancelled ? "#374151" : "#9CA3AF" }}
+            >
+              {showCancelled ? "Hide Cancelled" : "Show Cancelled"}
+            </button>
+          )}
+          {isManager && (
+            <button
+              onClick={() => router.push("/inventory/purchase-orders/new")}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "8px 16px", borderRadius: 8, fontSize: 14, fontWeight: 500,
+                background: "#111827", color: "#fff", border: "none", cursor: "pointer",
+              }}
+            >
+              <Plus size={15} /> New PO
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Pending invoice summary */}
@@ -143,7 +156,7 @@ export default function PurchaseOrdersPage() {
           <tbody>
             {loading ? (
               Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} />)
-            ) : pos.length === 0 ? (
+            ) : displayedPos.length === 0 ? (
               <tr>
                 <td colSpan={8} style={{ padding: 48, textAlign: "center" }}>
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
@@ -160,13 +173,14 @@ export default function PurchaseOrdersPage() {
                   </div>
                 </td>
               </tr>
-            ) : pos.map((po, i) => (
+            ) : displayedPos.map((po, i) => (
               <tr
                 key={po.id}
                 onClick={() => router.push(`/inventory/purchase-orders/${po.id}`)}
                 style={{
-                  borderBottom: i < pos.length - 1 ? "1px solid #F3F4F6" : "none",
+                  borderBottom: i < displayedPos.length - 1 ? "1px solid #F3F4F6" : "none",
                   cursor: "pointer",
+                  opacity: po.status === "cancelled" ? 0.6 : 1,
                 }}
                 onMouseEnter={e => (e.currentTarget.style.background = "#F9FAFB")}
                 onMouseLeave={e => (e.currentTarget.style.background = "")}
