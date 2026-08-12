@@ -878,7 +878,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
     return (
       <div style={{ padding: "32px 32px 64px", maxWidth: 900, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
-          <button onClick={() => setShowReceive(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280", padding: 0 }}>
+          <button onClick={() => { fetchPo(); setShowReceive(false); setAllDone(false); setReceivedCount(0); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280", padding: 0 }}>
             <X size={20} />
           </button>
           <div>
