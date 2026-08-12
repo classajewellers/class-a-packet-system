@@ -57,12 +57,19 @@ export interface LoggedInUser {
   tenantId: string | null;
   tenantSlug: string | null;
   permissions: UserPermissions | null;
+  can_see_costs: boolean;
 }
 
 /** Returns true for roles that can access manager-level features.
  *  Explicitly returns false for null (role not yet loaded) and undefined. */
 export function canManage(role: UserRole | undefined): boolean {
   return role === "admin" || role === "manager";
+}
+
+/** Returns true only when the user has been explicitly granted finance/cost visibility.
+ *  No role bypass — requires an admin to opt-in each user individually. */
+export function canSeeCosts(user: LoggedInUser | null): boolean {
+  return user?.can_see_costs === true;
 }
 
 /** Returns true if the user has access to the given module.

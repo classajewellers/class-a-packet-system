@@ -46,16 +46,18 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    const { full_name, role, permissions } = body as {
+    const { full_name, role, permissions, can_see_costs } = body as {
       full_name?: string;
       role?: string;
       permissions?: Record<string, boolean>;
+      can_see_costs?: boolean;
     };
 
     const updates: Record<string, unknown> = {};
-    if (full_name !== undefined) updates.full_name = full_name;
-    if (role !== undefined)      updates.role = role;
-    if (permissions !== undefined) updates.permissions = permissions;
+    if (full_name !== undefined)    updates.full_name = full_name;
+    if (role !== undefined)         updates.role = role;
+    if (permissions !== undefined)  updates.permissions = permissions;
+    if (can_see_costs !== undefined) updates.can_see_costs = can_see_costs;
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
@@ -90,7 +92,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const supabase = await createTenantSupabaseClient(tenantId);
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, full_name, email, role, auth_user_id, created_at, permissions")
+      .select("id, full_name, email, role, auth_user_id, created_at, permissions, can_see_costs")
       .eq("tenant_id", tenantId)
       .order("full_name", { ascending: true });
 

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Packet, InventoryMovement, InventoryMovementType } from "@/lib/types";
 import { useUser } from "@/context/UserContext";
+import { canSeeCosts } from "@/lib/userTypes";
 import { packetTypeLabel, formatDateAU, formatCurrency } from "@/lib/formatters";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -544,10 +545,12 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Purchase Cashflow Forecast ── */}
-      <div style={{ marginTop: 20 }}>
-        <PoCashflowWidget data={cashflow} />
-      </div>
+      {/* ── Purchase Cashflow Forecast — finance-gated ── */}
+      {canSeeCosts(user) && (
+        <div style={{ marginTop: 20 }}>
+          <PoCashflowWidget data={cashflow} />
+        </div>
+      )}
     </div>
   );
 }

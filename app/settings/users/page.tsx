@@ -15,6 +15,7 @@ interface UserProfile {
   auth_user_id: string | null;
   created_at: string;
   permissions: UserPermissions | null;
+  can_see_costs: boolean | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -35,21 +36,24 @@ function permsSummary(profile: UserProfile): string {
 function EditModal({
   profile,
   tenantId,
+  viewerIsAdmin,
   onClose,
   onSaved,
 }: {
   profile: UserProfile;
   tenantId: string;
+  viewerIsAdmin: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [fullName, setFullName]   = useState(profile.full_name ?? "");
-  const [role, setRole]           = useState<"staff" | "manager">(
+  const [fullName, setFullName]       = useState(profile.full_name ?? "");
+  const [role, setRole]               = useState<"staff" | "manager">(
     profile.role === "manager" ? "manager" : "staff"
   );
-  const [perms, setPerms]         = useState<UserPermissions>(resolvedPerms(profile));
-  const [saving, setSaving]       = useState(false);
-  const [error, setError]         = useState("");
+  const [perms, setPerms]             = useState<UserPermissions>(resolvedPerms(profile));
+  const [costVisible, setCostVisible] = useState<boolean>(profile.can_see_costs ?? false);
+  const [saving, setSaving]           = useState(false);
+  const [error, setError]             = useState("");
 
   const isStaff = role === "staff";
 
@@ -64,9 +68,10 @@ function EditModal({
         method: "PATCH",
         headers: { "Content-Type": "application/json", "x-tenant-id": tenantId },
         body: JSON.stringify({
-          full_name:   fullName.trim(),
+          full_name:     fullName.trim(),
           role,
-          permissions: isStaff ? perms : null,
+          permissions:   isStaff ? perms : null,
+          ...(viewerIsAdmin ? { can_see_costs: costVisible } : {}),
         }),
       });
       const json = await res.json();
@@ -139,15 +144,31 @@ function EditModal({
                 </label>
               ))}
             </div>
-            <div style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8, background: "#F9FAFB", border: "1px solid #E8E8F0" }}>
-              <span style={{ fontSize: 12, color: "#6B7280" }}>Staff role — cost data is never visible regardless of module access.</span>
-            </div>
           </div>
         )}
 
         {!isStaff && (
           <div style={{ marginBottom: 24, padding: "12px 14px", borderRadius: 8, background: "#EEF2FF", border: "1px solid #C7D2FE" }}>
             <span style={{ fontSize: 13, color: "#4338CA", fontWeight: 500 }}>Managers have full access to all modules.</span>
+          </div>
+        )}
+
+        {/* Finance / Cost Visibility — admin-only */}
+        {viewerIsAdmin && (
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#1A1760", marginBottom: 10 }}>Finance Access</div>
+            <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", borderRadius: 8, border: `1px solid ${costVisible ? "#C7D2FE" : "#E8E8F0"}`, background: costVisible ? "#EEF2FF" : "#F9FAFB", gap: 12, cursor: "pointer" }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: costVisible ? "#4338CA" : "#6B7280" }}>Finance / Cost Visibility</div>
+                <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>Purchase costs, cashflow forecast, and invoice amounts</div>
+              </div>
+              <div
+                onClick={() => setCostVisible(v => !v)}
+                style={{ width: 36, height: 20, borderRadius: 10, background: costVisible ? "#635BFF" : "#D1D5DB", position: "relative", cursor: "pointer", transition: "background .2s", flexShrink: 0 }}
+              >
+                <div style={{ position: "absolute", top: 2, left: costVisible ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+              </div>
+            </label>
           </div>
         )}
 
@@ -441,6 +462,7 @@ export default function UsersSettingsPage() {
         <EditModal
           profile={editing}
           tenantId={tenantId}
+          viewerIsAdmin={user.role === "admin"}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);

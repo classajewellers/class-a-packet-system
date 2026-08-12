@@ -14,7 +14,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const supabase = await createTenantSupabaseClient(tenantId);
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, full_name, email, role, auth_user_id, created_at, permissions")
+      .select("id, full_name, email, role, auth_user_id, created_at, permissions, can_see_costs")
       .eq("tenant_id", tenantId)
       .order("full_name", { ascending: true });
 

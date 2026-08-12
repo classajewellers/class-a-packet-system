@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
-import { canManage } from "@/lib/userTypes";
+import { canManage, canSeeCosts } from "@/lib/userTypes";
 import { Plus, Package, AlertCircle } from "lucide-react";
 
 type POStatus = "draft" | "ordered" | "partially_received" | "received" | "cancelled";
@@ -128,8 +128,8 @@ export default function PurchaseOrdersPage() {
         </div>
       </div>
 
-      {/* Pending invoice summary */}
-      {!loading && totalPendingCount > 0 && (
+      {/* Pending invoice summary — finance-gated */}
+      {!loading && totalPendingCount > 0 && canSeeCosts(user) && (
         <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 20px", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 12, marginBottom: 16 }}>
           <AlertCircle size={18} style={{ color: "#D97706", flexShrink: 0 }} />
           <div>

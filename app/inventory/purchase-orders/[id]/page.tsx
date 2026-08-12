@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
-import { canManage } from "@/lib/userTypes";
+import { canManage, canSeeCosts } from "@/lib/userTypes";
 import { ArrowLeft, Package, CheckCircle2, SkipForward, Sparkles, Loader, X, ChevronDown, DollarSign, Pencil, Ban, AlertTriangle } from "lucide-react";
 import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
 
@@ -420,6 +420,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   const { user, hydrated } = useUser();
   const tenantId: string = user?.tenantId ?? "";
   const isManager = hydrated ? canManage(user?.role) : false;
+  const showCosts = hydrated ? canSeeCosts(user) : false;
 
   const [po, setPo]           = useState<PurchaseOrder | null>(null);
   const [loading, setLoading] = useState(true);
@@ -991,7 +992,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
       <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
         <div style={{ padding: "14px 20px", borderBottom: "1px solid #E5E7EB", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.06em" }}>Line Items</span>
-          {po.lines.some(l => l.actual_cost == null) && (
+          {showCosts && po.lines.some(l => l.actual_cost == null) && (
             <span style={{ fontSize: 12, color: "#D97706", fontWeight: 500 }}>
               {po.lines.filter(l => l.actual_cost == null).length} line{po.lines.filter(l => l.actual_cost == null).length !== 1 ? "s" : ""} pending invoice
             </span>
@@ -1004,7 +1005,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ background: "#F9FAFB" }}>
-                  {["Title", "Metal", "Qty", "Est. Cost", "Actual Cost", "Invoice", "Receipt"].map(h => (
+                  {(["Title", "Metal", "Qty", ...(showCosts ? ["Est. Cost", "Actual Cost", "Invoice"] : []), "Receipt"] as string[]).map(h => (
                     <th key={h} style={{ padding: "8px 16px", textAlign: "left", fontWeight: 600, color: "#6B7280", fontSize: 11, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em" }}>{h}</th>
                   ))}
                 </tr>
@@ -1051,45 +1052,51 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                         {[line.metal_karat, line.metal_colour, line.metal_type].filter(Boolean).join(" ") || "—"}
                       </td>
                       <td style={{ padding: "10px 16px", color: "#374151", textAlign: "center" }}>{line.quantity}</td>
-                      <td style={{ padding: "10px 16px", color: "#6B7280", fontFamily: "monospace", whiteSpace: "nowrap" }}>
-                        {estCost != null ? `$${Number(estCost).toLocaleString("en-AU", { minimumFractionDigits: 2 })}` : "—"}
-                      </td>
-                      <td style={{ padding: "10px 16px", fontFamily: "monospace", whiteSpace: "nowrap" }}>
-                        {invoiced ? (
-                          <span style={{ color: "#111827", fontWeight: 500 }}>
-                            ${Number(line.actual_cost).toLocaleString("en-AU", { minimumFractionDigits: 2 })}
-                          </span>
-                        ) : (
-                          <span style={{ color: "#D1D5DB" }}>—</span>
-                        )}
-                      </td>
-                      <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
-                        {invoiced ? (
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: "#ECFDF5", color: "#065F46", border: "1px solid #A7F3D0" }}>Invoiced</span>
-                            {isManager && (
-                              <button
-                                onClick={() => openConfirmModal(line)}
-                                style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}
-                              >
-                                Edit
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#FFFBEB", color: "#92400E", border: "1px solid #FDE68A" }}>Pending Invoice</span>
-                            {isManager && (
-                              <button
-                                onClick={() => openConfirmModal(line)}
-                                style={{ display: "flex", alignItems: "center", gap: 3, padding: "3px 8px", borderRadius: 6, border: "1px solid #E5E7EB", background: "#fff", fontSize: 11, cursor: "pointer", color: "#374151", fontWeight: 500, whiteSpace: "nowrap" }}
-                              >
-                                <DollarSign size={11} /> Confirm
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </td>
+                      {showCosts && (
+                        <td style={{ padding: "10px 16px", color: "#6B7280", fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                          {estCost != null ? `$${Number(estCost).toLocaleString("en-AU", { minimumFractionDigits: 2 })}` : "—"}
+                        </td>
+                      )}
+                      {showCosts && (
+                        <td style={{ padding: "10px 16px", fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                          {invoiced ? (
+                            <span style={{ color: "#111827", fontWeight: 500 }}>
+                              ${Number(line.actual_cost).toLocaleString("en-AU", { minimumFractionDigits: 2 })}
+                            </span>
+                          ) : (
+                            <span style={{ color: "#D1D5DB" }}>—</span>
+                          )}
+                        </td>
+                      )}
+                      {showCosts && (
+                        <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+                          {invoiced ? (
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: "#ECFDF5", color: "#065F46", border: "1px solid #A7F3D0" }}>Invoiced</span>
+                              {isManager && (
+                                <button
+                                  onClick={() => openConfirmModal(line)}
+                                  style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}
+                                >
+                                  Edit
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#FFFBEB", color: "#92400E", border: "1px solid #FDE68A" }}>Pending Invoice</span>
+                              {isManager && (
+                                <button
+                                  onClick={() => openConfirmModal(line)}
+                                  style={{ display: "flex", alignItems: "center", gap: 3, padding: "3px 8px", borderRadius: 6, border: "1px solid #E5E7EB", background: "#fff", fontSize: 11, cursor: "pointer", color: "#374151", fontWeight: 500, whiteSpace: "nowrap" }}
+                                >
+                                  <DollarSign size={11} /> Confirm
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                      )}
                       <td style={{ padding: "10px 16px" }}>
                         {line.received ? (
                           <div style={{ display: "flex", alignItems: "center", gap: 5 }}>

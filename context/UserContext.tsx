@@ -47,15 +47,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const fetchingRef  = useRef(false);
 
   const fallbackUser = (userId: string, userEmail: string): LoggedInUser => ({
-    id:          userId,
-    name:        userEmail.split("@")[0],
-    role:        "manager" as UserRole,
-    email:       userEmail,
-    tenantId:    "00000000-0000-0000-0000-000000000001",
-    tenantSlug:  "classa",
-    initials:    userEmail.substring(0, 2).toUpperCase(),
-    loggedInAt:  new Date().toISOString(),
-    permissions: null,
+    id:            userId,
+    name:          userEmail.split("@")[0],
+    role:          "manager" as UserRole,
+    email:         userEmail,
+    tenantId:      "00000000-0000-0000-0000-000000000001",
+    tenantSlug:    "classa",
+    initials:      userEmail.substring(0, 2).toUpperCase(),
+    loggedInAt:    new Date().toISOString(),
+    permissions:   null,
+    can_see_costs: false,
   });
 
   const loadProfile = async (userId: string, userEmail: string) => {
@@ -112,15 +113,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
       };
 
       setUser({
-        id:          String(data.id ?? userId),
-        name:        String(data.full_name ?? userEmail),
-        role:        (data.role as UserRole) ?? "manager",
-        email:       String(data.email ?? userEmail),
-        tenantId:    data.tenant_id ? String(data.tenant_id) : "00000000-0000-0000-0000-000000000001",
-        tenantSlug:  "classa",
-        initials:    String(data.full_name ?? userEmail).substring(0, 2).toUpperCase(),
-        loggedInAt:  new Date().toISOString(),
+        id:            String(data.id ?? userId),
+        name:          String(data.full_name ?? userEmail),
+        role:          (data.role as UserRole) ?? "manager",
+        email:         String(data.email ?? userEmail),
+        tenantId:      data.tenant_id ? String(data.tenant_id) : "00000000-0000-0000-0000-000000000001",
+        tenantSlug:    "classa",
+        initials:      String(data.full_name ?? userEmail).substring(0, 2).toUpperCase(),
+        loggedInAt:    new Date().toISOString(),
         permissions,
+        can_see_costs: data.can_see_costs === true,
       });
       setRoleLoading(false);
     } catch (err) {
