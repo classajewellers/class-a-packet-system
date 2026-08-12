@@ -44,7 +44,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const router       = useRouter();
   const supabaseRef  = useRef(createBrowserSupabaseClient());
-  const fetchingRef  = useRef(false);
+
+  // Promise-based lock: callers await this instead of skipping immediately.
+  // Using a Promise (vs a boolean fetchingRef) prevents the race where the
+  // IIFE's loadProfile call returns early while SIGNED_IN's in-flight fetch
+  // is still running, causing setHydrated(true) to fire with user=null.
+  const loadingRef = useRef<Promise<void> | null>(null);
 
   const fallbackUser = (userId: string, userEmail: string): LoggedInUser => ({
     id:            userId,
@@ -59,26 +64,35 @@ export function UserProvider({ children }: { children: ReactNode }) {
     can_see_costs: false,
   });
 
-  const loadProfile = async (userId: string, userEmail: string) => {
-    // Prevent concurrent fetches — SIGNED_IN can fire twice on login
-    if (fetchingRef.current) {
-      console.log("[UserContext] fetch already in progress, skipping");
+  // accessToken: pass the session JWT from callers that already hold it
+  // (onAuthStateChange provides session directly; IIFE calls getSession() before
+  // calling loadProfile). This avoids an async getSession() call inside loadProfile
+  // which would extend the time between setUser() and setHydrated(true).
+  const loadProfile = async (userId: string, userEmail: string, accessToken?: string) => {
+    if (loadingRef.current) {
+      // Another load is in flight — wait for it to finish, then return.
+      // This ensures the IIFE awaits the SIGNED_IN handler's fetch before
+      // setHydrated(true) fires, preventing hydrated=true with user=null.
+      console.log("[UserContext] load already in progress, waiting");
+      await loadingRef.current;
       return;
     }
-    fetchingRef.current = true;
+
+    let resolveLoading!: () => void;
+    loadingRef.current = new Promise<void>(resolve => { resolveLoading = resolve; });
 
     try {
       console.log("[UserContext] fetching profile for:", userId);
+
+      // Use caller-provided session JWT when available so RLS policy
+      // (auth_user_id = auth.uid()) evaluates against the real user identity.
+      // Falls back to anon key when no session is available.
+      const token = accessToken ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
       // Raw REST fetch with 5s AbortController timeout —
       // bypasses the Supabase JS client which can hang indefinitely
       const controller = new AbortController();
       const timeoutId  = setTimeout(() => controller.abort(), 5000);
-
-      // Get the user's session JWT so the RLS policy (auth_user_id = auth.uid())
-      // evaluates against the real user identity — anon key returns null for auth.uid()
-      const { data: sessionData } = await supabaseRef.current.auth.getSession();
-      const token = sessionData?.session?.access_token ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
       let data: Record<string, unknown> | null = null;
 
@@ -135,7 +149,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setUser(fallbackUser(userId, userEmail));
       setRoleLoading(false);
     } finally {
-      fetchingRef.current = false;
+      resolveLoading();
+      loadingRef.current = null;
     }
   };
 
@@ -153,7 +168,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
 
         if (data?.user) {
-          await loadProfile(data.user.id, data.user.email ?? "");
+          // Fetch session token here (outside loadProfile) so loadProfile has no
+          // extra async work before its own profile fetch — keeping the lock window tight.
+          const { data: sessionData } = await supabase.auth.getSession();
+          const accessToken = sessionData?.session?.access_token;
+          await loadProfile(data.user.id, data.user.email ?? "", accessToken);
         } else {
           console.log("[UserContext] no authenticated user, hydrating as guest");
           setRoleLoading(false);
@@ -176,7 +195,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
           event === "USER_UPDATED"
         ) {
           if (session?.user) {
-            await loadProfile(session.user.id, session.user.email ?? "");
+            // session.access_token is available directly — no getSession() needed
+            await loadProfile(session.user.id, session.user.email ?? "", session.access_token);
           }
         } else if (event === "SIGNED_OUT") {
           console.log("[UserContext] SIGNED_OUT event, clearing user");
