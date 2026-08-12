@@ -15,6 +15,16 @@ const FIELD_ALIASES: Record<string, string[]> = {
   lead_time_days: ['lead_time_days', 'lead_time'],
 }
 
+// Strip BOM, leading non-alphanumeric chars (e.g. Xero's "*ContactName"),
+// surrounding whitespace, then lowercase — applied to CSV headers before lookup.
+function normalizeHeader(h: string): string {
+  return h
+    .replace(/^﻿/, '')       // UTF-8 BOM on first column
+    .trim()
+    .replace(/^[^a-zA-Z0-9]+/, '') // leading *, #, quotes, etc.
+    .toLowerCase()
+}
+
 // Build a flat normalised-alias → vault-field map once.
 function buildAliasMap(): Map<string, string> {
   const m = new Map<string, string>()
@@ -40,7 +50,7 @@ type MappedRow = {
 function mapRow(rawRow: Record<string, string>): MappedRow {
   const out: Record<string, string | null> = {}
   for (const [rawKey, rawVal] of Object.entries(rawRow)) {
-    const field = ALIAS_MAP.get(rawKey.trim().toLowerCase())
+    const field = ALIAS_MAP.get(normalizeHeader(rawKey))
     if (field && !(field in out)) {
       out[field] = rawVal.trim() || null
     }

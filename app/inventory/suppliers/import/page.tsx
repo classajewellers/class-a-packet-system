@@ -61,6 +61,16 @@ const FIELD_LABELS: Record<string, string> = {
   lead_time_days: "Lead Time (days)",
 };
 
+// Strip BOM, leading non-alphanumeric chars (e.g. Xero's "*ContactName"),
+// surrounding whitespace, then lowercase — mirrors server-side normalizeHeader().
+function normalizeHeader(h: string): string {
+  return h
+    .replace(/^﻿/, '')       // UTF-8 BOM on first column
+    .trim()
+    .replace(/^[^a-zA-Z0-9]+/, '') // leading *, #, quotes, etc.
+    .toLowerCase();
+}
+
 function detectMappings(rows: Array<Record<string, string>>): Record<string, string | null> {
   // Returns vault-field → csv-header-that-matched (or null if not found)
   const detections: Record<string, string | null> = {};
@@ -69,7 +79,7 @@ function detectMappings(rows: Array<Record<string, string>>): Record<string, str
   for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
     detections[field] = null;
     for (const alias of aliases) {
-      const match = headers.find((h) => h.trim().toLowerCase() === alias.toLowerCase());
+      const match = headers.find((h) => normalizeHeader(h) === alias.toLowerCase());
       if (match) { detections[field] = match; break; }
     }
   }
