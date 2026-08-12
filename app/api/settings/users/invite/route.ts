@@ -8,7 +8,7 @@ export const revalidate = 0;
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const body = await req.json();
-    const { name, email, role, permissions } = body as { name: string; email: string; role: "manager" | "staff"; permissions?: Record<string, boolean> | null };
+    const { name, email, role, permissions, can_see_costs } = body as { name: string; email: string; role: "manager" | "staff"; permissions?: Record<string, boolean> | null; can_see_costs?: boolean };
     const tenantId = req.headers.get("x-tenant-id") ?? "";
     const fullName = name?.trim();
     const normalizedEmail = email?.toLowerCase().trim();
@@ -56,6 +56,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         tenant_id:   tenantId,
         status:      "active",
         ...(permissions !== undefined && permissions !== null ? { permissions } : {}),
+        ...(can_see_costs !== undefined ? { can_see_costs } : {}),
       });
 
     if (profileError) {

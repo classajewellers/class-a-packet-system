@@ -187,17 +187,20 @@ function EditModal({
 
 function InviteModal({
   tenantId,
+  viewerIsAdmin,
   onClose,
   onSuccess,
 }: {
   tenantId: string;
+  viewerIsAdmin: boolean;
   onClose: () => void;
   onSuccess: (email: string) => void;
 }) {
-  const [form, setForm]     = useState({ name: "", email: "", role: "staff" });
-  const [perms, setPerms]   = useState<UserPermissions>({ ...DEFAULT_STAFF_PERMISSIONS });
-  const [saving, setSaving] = useState(false);
-  const [error, setError]   = useState("");
+  const [form, setForm]           = useState({ name: "", email: "", role: "staff" });
+  const [perms, setPerms]         = useState<UserPermissions>({ ...DEFAULT_STAFF_PERMISSIONS });
+  const [costVisible, setCostVisible] = useState(false);
+  const [saving, setSaving]       = useState(false);
+  const [error, setError]         = useState("");
 
   const set = (k: keyof typeof form, v: string) => setForm(f => ({ ...f, [k]: v }));
   const togglePerm = (module: keyof UserPermissions) =>
@@ -218,6 +221,7 @@ function InviteModal({
           email:       form.email,
           role:        form.role,
           permissions: isStaff ? perms : null,
+          ...(viewerIsAdmin ? { can_see_costs: costVisible } : {}),
         }),
       });
       const json = await res.json();
@@ -288,6 +292,25 @@ function InviteModal({
                 </label>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Finance / Cost Visibility — admin-only */}
+        {viewerIsAdmin && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#1A1760", marginBottom: 10 }}>Finance Access</div>
+            <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", borderRadius: 8, border: `1px solid ${costVisible ? "#C7D2FE" : "#E8E8F0"}`, background: costVisible ? "#EEF2FF" : "#F9FAFB", gap: 12, cursor: "pointer" }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: costVisible ? "#4338CA" : "#6B7280" }}>Finance / Cost Visibility</div>
+                <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>Purchase costs, cashflow forecast, and invoice amounts</div>
+              </div>
+              <div
+                onClick={() => setCostVisible(v => !v)}
+                style={{ width: 36, height: 20, borderRadius: 10, background: costVisible ? "#635BFF" : "#D1D5DB", position: "relative", cursor: "pointer", transition: "background .2s", flexShrink: 0 }}
+              >
+                <div style={{ position: "absolute", top: 2, left: costVisible ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+              </div>
+            </label>
           </div>
         )}
 
@@ -449,6 +472,7 @@ export default function UsersSettingsPage() {
       {showInvite && (
         <InviteModal
           tenantId={tenantId}
+          viewerIsAdmin={user.role === "admin"}
           onClose={() => setShowInvite(false)}
           onSuccess={email => {
             setShowInvite(false);
