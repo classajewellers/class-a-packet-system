@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
 import { InventorySupplier } from "@/lib/types";
-import { Plus, Pencil, Trash2, X, Mail, Phone, Clock } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Mail, Phone, Clock, Upload } from "lucide-react";
 
 const BLANK_FORM = { name: "", contact_name: "", email: "", phone: "", lead_time_days: "", notes: "" };
 
@@ -164,10 +165,19 @@ export default function InventorySuppliersPage() {
             {suppliers.length} supplier{suppliers.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <button onClick={openNew} style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 500 }}>
-          <Plus size={15} />
-          New Supplier
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link
+            href="/inventory/suppliers/import"
+            style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 14px", background: "#fff", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 500, textDecoration: "none" }}
+          >
+            <Upload size={14} />
+            Import CSV
+          </Link>
+          <button onClick={openNew} style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 500 }}>
+            <Plus size={15} />
+            New Supplier
+          </button>
+        </div>
       </div>
 
       {/* Table */}
