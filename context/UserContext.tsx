@@ -75,6 +75,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const controller = new AbortController();
       const timeoutId  = setTimeout(() => controller.abort(), 5000);
 
+      // Get the user's session JWT so the RLS policy (auth_user_id = auth.uid())
+      // evaluates against the real user identity — anon key returns null for auth.uid()
+      const { data: sessionData } = await supabaseRef.current.auth.getSession();
+      const token = sessionData?.session?.access_token ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
       let data: Record<string, unknown> | null = null;
 
       try {
@@ -84,7 +89,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             signal: controller.signal,
             headers: {
               "apikey":        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-              "Authorization": `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,
+              "Authorization": `Bearer ${token}`,
               "Content-Type":  "application/json",
             },
           }
