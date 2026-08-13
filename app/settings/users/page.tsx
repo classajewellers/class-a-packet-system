@@ -333,6 +333,7 @@ export default function UsersSettingsPage() {
 
   const [users, setUsers]           = useState<UserProfile[]>([]);
   const [loading, setLoading]       = useState(true);
+  const [listError, setListError]   = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
   const [editing, setEditing]       = useState<UserProfile | null>(null);
   const [toast, setToast]           = useState("");
@@ -347,10 +348,18 @@ export default function UsersSettingsPage() {
   const fetchUsers = useCallback(async () => {
     if (!tenantId) return;
     setLoading(true);
+    setListError(null);
     try {
       const res  = await fetch("/api/settings/users/list", { headers: { "x-tenant-id": tenantId } });
       const json = await res.json();
-      setUsers(json.users ?? []);
+      if (!res.ok) {
+        const msg = json.error ?? `API error ${res.status}`;
+        console.error("[settings/users] list failed:", msg);
+        setListError(msg);
+        setUsers([]);
+      } else {
+        setUsers(json.users ?? []);
+      }
     } finally {
       setLoading(false);
     }
@@ -400,6 +409,11 @@ export default function UsersSettingsPage() {
       </div>
 
       {/* Table */}
+      {listError && (
+        <div style={{ marginBottom: 16, padding: "12px 16px", background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: 10, fontSize: 13, color: "#991B1B" }}>
+          <strong>Failed to load users:</strong> {listError}
+        </div>
+      )}
       <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E8E8F0", overflow: "hidden" }}>
         {loading ? (
           <p style={{ padding: 24, color: "#9ca3af", fontSize: 14 }}>Loading users…</p>
