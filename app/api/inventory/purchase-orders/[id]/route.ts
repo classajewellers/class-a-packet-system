@@ -40,7 +40,7 @@ export async function PATCH(
   const supabase = await createTenantSupabaseClient(tenantId);
 
   const body = await req.json();
-  const { lines, supplier: _sup, ...updateData } = body;
+  const { lines, deleted_line_ids, supplier: _sup, ...updateData } = body;
 
   const { data, error } = await supabase
     .from("inventory_purchase_orders")
@@ -51,7 +51,18 @@ export async function PATCH(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Upsert lines if provided
+  // Delete removed lines — only non-received lines belonging to this PO
+  if (Array.isArray(deleted_line_ids) && deleted_line_ids.length > 0) {
+    const { error: delErr } = await supabase
+      .from("inventory_po_lines")
+      .delete()
+      .in("id", deleted_line_ids)
+      .eq("po_id", params.id)
+      .eq("received", false);
+    if (delErr) return NextResponse.json({ error: `Line delete failed: ${delErr.message}` }, { status: 500 });
+  }
+
+  // Upsert lines if provided — lines with id are updated, lines without id are inserted
   if (Array.isArray(lines)) {
     for (const line of lines) {
       if (line.id) {

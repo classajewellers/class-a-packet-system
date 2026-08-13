@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage, canSeeCosts } from "@/lib/userTypes";
-import { ArrowLeft, Package, CheckCircle2, SkipForward, Sparkles, Loader, X, ChevronDown, DollarSign, Pencil, Ban, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Package, CheckCircle2, SkipForward, Sparkles, Loader, X, ChevronDown, DollarSign, Pencil, Ban, AlertTriangle, Plus, Trash2 } from "lucide-react";
 import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
 
 type POStatus = "draft" | "ordered" | "partially_received" | "received" | "cancelled";
@@ -443,9 +443,10 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   const [editMode, setEditMode]     = useState(false);
   const [editHeader, setEditHeader] = useState({ supplier_id: "", order_date: "", expected_date: "", notes: "" });
   const [editLines, setEditLines]   = useState<EditPoLine[]>([]);
-  const [editSaving, setEditSaving] = useState(false);
-  const [editError, setEditError]   = useState("");
-  const [openPackets, setOpenPackets] = useState<any[]>([]);
+  const [editSaving, setEditSaving]           = useState(false);
+  const [editError, setEditError]             = useState("");
+  const [deletedLineIds, setDeletedLineIds]   = useState<string[]>([]);
+  const [openPackets, setOpenPackets]         = useState<any[]>([]);
 
   // Cancel PO modal
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -568,6 +569,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
       forOrder:          l.packet_id != null,
     })));
     setEditError("");
+    setDeletedLineIds([]);
     setEditMode(true);
     const res = await fetch("/api/inventory/open-packets", { headers });
     if (res.ok) {
@@ -601,10 +603,11 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
       method: "PATCH",
       headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify({
-        supplier_id:   editHeader.supplier_id   || null,
-        order_date:    editHeader.order_date    || null,
-        expected_date: editHeader.expected_date || null,
-        notes:         editHeader.notes         || null,
+        supplier_id:      editHeader.supplier_id   || null,
+        order_date:       editHeader.order_date    || null,
+        expected_date:    editHeader.expected_date || null,
+        notes:            editHeader.notes         || null,
+        deleted_line_ids: deletedLineIds.length > 0 ? deletedLineIds : undefined,
         lines: editLines.map(l => ({
           id:                l.id,
           title:             l.title             || null,
@@ -760,14 +763,33 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
           ) : (
             editLines.map((line, idx) => {
               const isInvoiced = line.actual_cost != null;
+              const isNew = !line.id;
               const setLine = (patch: Partial<EditPoLine>) =>
                 setEditLines(ls => ls.map((l, i) => i === idx ? { ...l, ...patch } : l));
+              const removeLine = () => {
+                if (line.id) setDeletedLineIds(ids => [...ids, line.id]);
+                setEditLines(ls => ls.filter((_, i) => i !== idx));
+              };
 
               return (
                 <div
-                  key={line.id}
+                  key={idx}
                   style={{ padding: 20, borderTop: idx > 0 ? "1px solid #F3F4F6" : "none", background: isInvoiced ? "#FFFCF5" : "#fff" }}
                 >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "#9CA3AF" }}>
+                      {isNew ? "New line" : `Line ${idx + 1}`}
+                    </span>
+                    {!line.received && (
+                      <button
+                        type="button"
+                        onClick={removeLine}
+                        style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 6, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", fontSize: 11, cursor: "pointer" }}
+                      >
+                        <Trash2 size={11} /> Remove
+                      </button>
+                    )}
+                  </div>
                   {isInvoiced && (
                     <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, fontSize: 12, color: "#92400E", marginBottom: 14 }}>
                       <AlertTriangle size={13} />
@@ -868,6 +890,21 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
             })
           )}
         </div>
+
+        <button
+          type="button"
+          onClick={() => setEditLines(ls => [...ls, {
+            id: "", title: "", category_id: "", metal_type: "", metal_karat: "",
+            metal_colour: "", diamond_type: "", diamond_carat: "", diamond_colour: "",
+            diamond_clarity: "", finger_size: "", quantity: "1", estimated_cost: "",
+            actual_cost: null, supplier_design_no: "", packet_id: "", notes: "",
+            received: false, forOrder: false,
+          }])}
+          style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, padding: "8px 16px", borderRadius: 8, border: "1px dashed #D1D5DB", background: "#fff", color: "#6B7280", fontSize: 13, cursor: "pointer", width: "100%" }}
+        >
+          <Plus size={14} /> Add Line Item
+        </button>
+
         <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       </div>
     );
