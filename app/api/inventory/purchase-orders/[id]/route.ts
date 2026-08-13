@@ -71,9 +71,12 @@ export async function PATCH(
           .from("inventory_po_lines").update(lineUpdate).eq("id", lineId);
         if (luErr) return NextResponse.json({ error: `Line update failed: ${luErr.message}` }, { status: 500 });
       } else {
+        // Destructure id out so an empty-string id from the UI is never sent —
+        // Postgres rejects "" for a UUID column; omitting it triggers the DB default.
+        const { id: _newLineId, ...insertData } = line;
         const { error: liErr } = await supabase
           .from("inventory_po_lines").insert({
-            ...line, po_id: params.id, tenant_id: tenantId, received: false,
+            ...insertData, po_id: params.id, tenant_id: tenantId, received: false,
           });
         if (liErr) return NextResponse.json({ error: `Line insert failed: ${liErr.message}` }, { status: 500 });
       }
