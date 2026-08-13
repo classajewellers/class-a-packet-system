@@ -1154,6 +1154,18 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
         )}
       </div>
 
+      {/* Invoice attachments — PO-level, independent of line receiving */}
+      <div style={{ marginTop: 16 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 8, paddingLeft: 2 }}>
+          Invoice Documents
+        </div>
+        <InventoryAttachmentsPanel
+          entityType="purchase_order"
+          entityId={po.id}
+          readOnly={false}
+        />
+      </div>
+
       {/* Confirm Actual Cost Modal */}
       {confirmLine && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
