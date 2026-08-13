@@ -191,9 +191,10 @@ function ReceiveCard({
       diamond_carat: specs.diamond_carat ? parseFloat(specs.diamond_carat) : null,
       actual_cost:   specs.actual_cost   ? parseFloat(specs.actual_cost)   : null,
     };
-    // Strip empty-string optionals so route uses its defaults
-    if (!builtSpecs.location_id) delete builtSpecs.location_id;
-    if (!builtSpecs.product_id)  delete builtSpecs.product_id;
+    // Strip empty-string UUID fields — empty string is invalid for uuid columns
+    if (!builtSpecs.category_id)  delete builtSpecs.category_id;
+    if (!builtSpecs.location_id)  delete builtSpecs.location_id;
+    if (!builtSpecs.product_id)   delete builtSpecs.product_id;
     if (builtSpecs.actual_cost == null) delete builtSpecs.actual_cost;
 
     const res = await fetch(`/api/inventory/purchase-orders/${poId}/receive`, {

@@ -137,12 +137,19 @@ export async function POST(
   const effectiveStatusId   = specs.status_id   ?? statusId;
   const effectiveLocationId = specs.location_id ?? locationId;
 
-  // Strip fields that don't belong in inventory_pieces to avoid DB errors
-  // (actual_cost, product_id, location_id, status_id are valid piece columns)
+  // Destructure out fields handled explicitly, and sanitise UUID fields so an
+  // empty string from the form never reaches a uuid column (Postgres rejects "").
   const {
-    status_id: _sid, location_id: _lid, // will be set explicitly above
+    status_id:   _sid,
+    location_id: _lid,
+    category_id: rawCategoryId,
+    product_id:  rawProductId,
     ...otherSpecs
   } = specs;
+
+  // Only forward UUID fields when they carry a real value
+  if (rawCategoryId) otherSpecs.category_id = rawCategoryId;
+  if (rawProductId)  otherSpecs.product_id  = rawProductId;
 
   // Create the inventory piece
   const { data: piece, error: pieceErr } = await supabase
