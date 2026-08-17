@@ -47,7 +47,12 @@ async function generateSku(
 }
 
 // POST /api/inventory/purchase-orders/[id]/receive
-// Body: { line_id: string, specs: { title?, category_id?, metal_type?, ... }, skip?: boolean }
+// Body:
+//   { line_id, skip }                          — mark received without creating piece(s)
+//   { line_id, specs, quantity_to_receive, mode, actual_unit_cost }
+//
+//   mode: "individual" — create quantity_to_receive separate inventory_pieces (default)
+//   mode: "batch"      — create 1 inventory_piece with quantity=quantity_to_receive
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -56,29 +61,84 @@ export async function POST(
   const supabase = await createTenantSupabaseClient(tenantId);
 
   const body = await req.json();
-  const { line_id, specs = {}, skip = false } = body;
+  const {
+    line_id,
+    specs = {},
+    skip = false,
+    quantity_to_receive = 1,
+    mode = "individual",
+    actual_unit_cost,
+  } = body;
 
   if (!line_id) return NextResponse.json({ error: "line_id is required" }, { status: 400 });
 
-  // Mark line received (skip = just mark without creating a piece)
-  if (skip) {
-    await supabase
+  // Fetch PO and line for context
+  const [{ data: po }, { data: line, error: lineErr }] = await Promise.all([
+    supabase
+      .from("inventory_purchase_orders")
+      .select("po_number")
+      .eq("id", params.id)
+      .single(),
+    supabase
       .from("inventory_po_lines")
-      .update({ received: true })
-      .eq("id", line_id);
+      .select("id, quantity, received_quantity, estimated_cost")
+      .eq("id", line_id)
+      .single(),
+  ]);
 
-    await checkAndUpdatePoStatus(supabase, params.id);
-    return NextResponse.json({ skipped: true });
+  if (lineErr || !line) {
+    return NextResponse.json({ error: "PO line not found" }, { status: 404 });
   }
 
-  // Fetch PO for the PO number (used in movement notes)
-  const { data: po } = await supabase
-    .from("inventory_purchase_orders")
-    .select("po_number")
-    .eq("id", params.id)
+  const orderedQty  = Number(line.quantity ?? 1);
+  const alreadyRecd = Number(line.received_quantity ?? 0);
+  const remaining   = orderedQty - alreadyRecd;
+  const qty         = Math.min(Number(quantity_to_receive) || 1, remaining);
+
+  if (qty <= 0) {
+    return NextResponse.json({ error: "No remaining quantity to receive" }, { status: 400 });
+  }
+
+  // ── Skip: mark received without creating inventory pieces ──────────────────
+  if (skip) {
+    const newReceivedQty = alreadyRecd + qty;
+    const fullyReceived  = newReceivedQty >= orderedQty;
+
+    const { error: updErr } = await supabase
+      .from("inventory_po_lines")
+      .update({
+        received_quantity: newReceivedQty,
+        received: fullyReceived,
+        ...(fullyReceived ? {} : {}),
+      })
+      .eq("id", line_id);
+
+    if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
+
+    await checkAndUpdatePoStatus(supabase, params.id);
+    return NextResponse.json({ skipped: true, received_quantity: newReceivedQty });
+  }
+
+  // ── Create receiving event ─────────────────────────────────────────────────
+  const { data: event, error: evtErr } = await supabase
+    .from("inventory_receiving_events")
+    .insert({
+      tenant_id:         tenantId,
+      po_id:             params.id,
+      po_line_id:        line_id,
+      received_at:       new Date().toISOString(),
+      quantity_received: qty,
+      expected_unit_cost: line.estimated_cost != null ? Number(line.estimated_cost) : null,
+      actual_unit_cost:  actual_unit_cost != null ? Number(actual_unit_cost) : null,
+    })
+    .select("id")
     .single();
 
-  // Resolve category name for SKU generation
+  if (evtErr || !event) {
+    return NextResponse.json({ error: evtErr?.message ?? "Failed to create receiving event" }, { status: 500 });
+  }
+
+  // ── Resolve category name for SKU prefix ──────────────────────────────────
   let categoryName: string | null = null;
   if (specs.category_id) {
     const { data: cat } = await supabase
@@ -90,11 +150,8 @@ export async function POST(
   }
 
   const prefix = categoryPrefix(categoryName);
-  const sku    = await generateSku(supabase, prefix);
 
-  // Default to a processing/awaiting status — prefer "Awaiting pricing" or any
-  // "awaiting" status so newly received pieces don't skip the pricing workflow.
-  // Falls back to "In stock" if no awaiting status is configured.
+  // ── Resolve default status ─────────────────────────────────────────────────
   let statusId: string | null = null;
   if (!specs.status_id) {
     const { data: awaitingStatus } = await supabase
@@ -119,9 +176,8 @@ export async function POST(
       statusId = inStockStatus?.id ?? null;
     }
   }
-  // If the form explicitly passed a status_id, that takes precedence (handled via ...specs spread)
 
-  // Default location — used only when location_id not provided in specs
+  // ── Resolve default location ───────────────────────────────────────────────
   const { data: firstLocation } = await supabase
     .from("inventory_locations")
     .select("id")
@@ -133,12 +189,10 @@ export async function POST(
   const locationId = firstLocation?.id ?? null;
   const now        = new Date().toISOString();
 
-  // specs may override status_id and location_id — compute effective values for the movement log
   const effectiveStatusId   = specs.status_id   ?? statusId;
   const effectiveLocationId = specs.location_id ?? locationId;
 
-  // Destructure out fields handled explicitly, and sanitise UUID fields so an
-  // empty string from the form never reaches a uuid column (Postgres rejects "").
+  // Sanitise UUID fields — empty string is invalid for uuid columns
   const {
     status_id:   _sid,
     location_id: _lid,
@@ -147,51 +201,115 @@ export async function POST(
     ...otherSpecs
   } = specs;
 
-  // Only forward UUID fields when they carry a real value
   if (rawCategoryId) otherSpecs.category_id = rawCategoryId;
   if (rawProductId)  otherSpecs.product_id  = rawProductId;
 
-  // Create the inventory piece
-  const { data: piece, error: pieceErr } = await supabase
-    .from("inventory_pieces")
-    .insert({
-      tenant_id:   tenantId,
-      sku,
-      status_id:   effectiveStatusId,
-      location_id: effectiveLocationId,
-      created_at:  now,
-      updated_at:  now,
-      ...otherSpecs,
-    })
-    .select("id,sku")
-    .single();
+  const baseActualCost = actual_unit_cost != null ? Number(actual_unit_cost) : null;
 
-  if (pieceErr || !piece) {
-    return NextResponse.json({ error: pieceErr?.message ?? "Failed to create piece" }, { status: 500 });
+  // ── Create inventory pieces ────────────────────────────────────────────────
+  const createdPieces: { id: string; sku: string }[] = [];
+
+  if (mode === "batch") {
+    // One piece record with quantity representing the batch
+    const sku = await generateSku(supabase, prefix);
+    const { data: piece, error: pieceErr } = await supabase
+      .from("inventory_pieces")
+      .insert({
+        tenant_id:          tenantId,
+        sku,
+        status_id:          effectiveStatusId,
+        location_id:        effectiveLocationId,
+        po_line_id:         line_id,
+        receiving_event_id: event.id,
+        quantity:           qty,
+        actual_cost:        baseActualCost,
+        created_at:         now,
+        updated_at:         now,
+        ...otherSpecs,
+      })
+      .select("id,sku")
+      .single();
+
+    if (pieceErr || !piece) {
+      return NextResponse.json({ error: pieceErr?.message ?? "Failed to create piece" }, { status: 500 });
+    }
+
+    await supabase.from("inventory_movements").insert({
+      tenant_id:        tenantId,
+      piece_id:         piece.id,
+      from_location_id: null,
+      to_location_id:   effectiveLocationId,
+      from_status_id:   null,
+      to_status_id:     effectiveStatusId,
+      moved_by:         null,
+      notes:            `Received via PO ${po?.po_number ?? params.id} (batch qty ${qty})`,
+      moved_at:         now,
+    });
+
+    createdPieces.push(piece);
+  } else {
+    // Individual mode: create one piece per unit received
+    for (let i = 0; i < qty; i++) {
+      const sku = await generateSku(supabase, prefix);
+      const { data: piece, error: pieceErr } = await supabase
+        .from("inventory_pieces")
+        .insert({
+          tenant_id:          tenantId,
+          sku,
+          status_id:          effectiveStatusId,
+          location_id:        effectiveLocationId,
+          po_line_id:         line_id,
+          receiving_event_id: event.id,
+          quantity:           1,
+          actual_cost:        baseActualCost,
+          created_at:         now,
+          updated_at:         now,
+          ...otherSpecs,
+        })
+        .select("id,sku")
+        .single();
+
+      if (pieceErr || !piece) {
+        return NextResponse.json({ error: pieceErr?.message ?? `Failed to create piece ${i + 1}` }, { status: 500 });
+      }
+
+      await supabase.from("inventory_movements").insert({
+        tenant_id:        tenantId,
+        piece_id:         piece.id,
+        from_location_id: null,
+        to_location_id:   effectiveLocationId,
+        from_status_id:   null,
+        to_status_id:     effectiveStatusId,
+        moved_by:         null,
+        notes:            `Received via PO ${po?.po_number ?? params.id}`,
+        moved_at:         now,
+      });
+
+      createdPieces.push(piece);
+    }
   }
 
-  // Log inventory movement reflecting the actual assigned status/location
-  await supabase.from("inventory_movements").insert({
-    tenant_id:        tenantId,
-    piece_id:         piece.id,
-    from_location_id: null,
-    to_location_id:   effectiveLocationId,
-    from_status_id:   null,
-    to_status_id:     effectiveStatusId,
-    moved_by:         null,
-    notes:            `Received via PO ${po?.po_number ?? params.id}`,
-    moved_at:         now,
-  });
+  // ── Update PO line received_quantity and received flag ────────────────────
+  const newReceivedQty = alreadyRecd + qty;
+  const fullyReceived  = newReceivedQty >= orderedQty;
 
-  // Mark PO line received
   await supabase
     .from("inventory_po_lines")
-    .update({ received: true, piece_id: piece.id })
+    .update({
+      received_quantity: newReceivedQty,
+      received: fullyReceived,
+      // Keep piece_id pointing to the first piece for backward compatibility
+      ...(createdPieces[0] ? { piece_id: createdPieces[0].id } : {}),
+    })
     .eq("id", line_id);
 
   await checkAndUpdatePoStatus(supabase, params.id);
 
-  return NextResponse.json({ piece });
+  return NextResponse.json({
+    pieces: createdPieces,
+    received_quantity: newReceivedQty,
+    fully_received: fullyReceived,
+  });
 }
 
 async function checkAndUpdatePoStatus(
@@ -200,18 +318,19 @@ async function checkAndUpdatePoStatus(
 ) {
   const { data: lines } = await supabase
     .from("inventory_po_lines")
-    .select("received")
+    .select("quantity, received_quantity")
     .eq("po_id", poId);
 
   if (!lines || lines.length === 0) return;
 
-  const total    = lines.length;
-  const received = lines.filter(l => l.received).length;
+  const total     = lines.length;
+  const received  = lines.filter(l => Number(l.received_quantity ?? 0) >= Number(l.quantity ?? 1)).length;
+  const anyRcvd   = lines.some(l => Number(l.received_quantity ?? 0) > 0);
 
   let newStatus: string;
-  if (received === 0)       newStatus = "ordered";
-  else if (received < total) newStatus = "partially_received";
-  else                       newStatus = "received";
+  if (received === 0 && !anyRcvd) newStatus = "ordered";
+  else if (received < total)      newStatus = "partially_received";
+  else                            newStatus = "received";
 
   await supabase
     .from("inventory_purchase_orders")

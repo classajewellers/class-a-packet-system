@@ -37,8 +37,9 @@ interface PoLine {
   } | null;
   notes: string | null;
   received: boolean;
+  received_quantity: number;
   piece_id: string | null;
-  piece?: { id: string; sku: string } | null;
+  pieces?: { id: string; sku: string; quantity: number }[];
 }
 
 interface EditPoLine {
@@ -120,6 +121,11 @@ function ReceiveCard({
   onDone: () => void;
 }) {
   const headers = { "x-tenant-id": tenantId };
+
+  const alreadyReceived = Number(line.received_quantity ?? 0);
+  const orderedQty      = Number(line.quantity ?? 1);
+  const remaining       = orderedQty - alreadyReceived;
+
   const [specs, setSpecs] = useState({
     title:           line.title          ?? "",
     category_id:     line.category_id    ?? "",
@@ -132,20 +138,23 @@ function ReceiveCard({
     diamond_clarity: line.diamond_clarity ?? "",
     finger_size:     line.finger_size    ?? "",
     notes:           line.notes          ?? "",
-    // New fields — prefill from estimated_cost (preferred) or unit_cost (legacy)
-    actual_cost: line.estimated_cost != null
-      ? String(line.estimated_cost)
-      : line.unit_cost != null ? String(line.unit_cost) : "",
-    location_id: "",   // "" = use route default
-    product_id:  "",   // "" = unlinked
+    location_id: "",
+    product_id:  "",
   });
+  const [actualUnitCost, setActualUnitCost] = useState(
+    line.estimated_cost != null ? String(line.estimated_cost) : ""
+  );
+  const [receiveQty, setReceiveQty] = useState(remaining);
+  // individual = one piece per unit; batch = one piece record with quantity > 1
+  const [receiveMode, setReceiveMode] = useState<"individual" | "batch">("individual");
+
   const [saving, setSaving]     = useState(false);
   const [skipping, setSkipping] = useState(false);
   const [done, setDone]         = useState(false);
   const [aiDesc, setAiDesc]     = useState("");
   const [aiLoading, setAiLoading] = useState(false);
-  const [pieceResult, setPieceResult] = useState<{ id: string; sku: string } | null>(null);
-  const [showAttach, setShowAttach] = useState(false);
+  const [createdPieces, setCreatedPieces] = useState<{ id: string; sku: string }[]>([]);
+  const [showAttach, setShowAttach]   = useState<string | null>(null); // piece id
 
   // Product typeahead
   const [productSearch, setProductSearch] = useState("");
@@ -189,22 +198,30 @@ function ReceiveCard({
     const builtSpecs: Record<string, any> = {
       ...specs,
       diamond_carat: specs.diamond_carat ? parseFloat(specs.diamond_carat) : null,
-      actual_cost:   specs.actual_cost   ? parseFloat(specs.actual_cost)   : null,
     };
     // Strip empty-string UUID fields — empty string is invalid for uuid columns
     if (!builtSpecs.category_id)  delete builtSpecs.category_id;
     if (!builtSpecs.location_id)  delete builtSpecs.location_id;
     if (!builtSpecs.product_id)   delete builtSpecs.product_id;
-    if (builtSpecs.actual_cost == null) delete builtSpecs.actual_cost;
 
     const res = await fetch(`/api/inventory/purchase-orders/${poId}/receive`, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({ line_id: line.id, specs: builtSpecs }),
+      body: JSON.stringify({
+        line_id:            line.id,
+        specs:              builtSpecs,
+        quantity_to_receive: receiveQty,
+        mode:               receiveMode,
+        actual_unit_cost:   actualUnitCost ? parseFloat(actualUnitCost) : null,
+      }),
     });
     const json = await res.json();
     setSaving(false);
-    if (res.ok) { setPieceResult(json.piece); setDone(true); onDone(); }
+    if (res.ok) {
+      setCreatedPieces(json.pieces ?? []);
+      setDone(true);
+      onDone();
+    }
   }
 
   async function handleSkip() {
@@ -212,7 +229,7 @@ function ReceiveCard({
     await fetch(`/api/inventory/purchase-orders/${poId}/receive`, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({ line_id: line.id, skip: true }),
+      body: JSON.stringify({ line_id: line.id, skip: true, quantity_to_receive: receiveQty }),
     });
     setSkipping(false);
     setDone(true);
@@ -226,26 +243,36 @@ function ReceiveCard({
           <CheckCircle2 size={20} style={{ color: "#059669", flexShrink: 0 }} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: "#065F46" }}>
-              {pieceResult ? `Created ${pieceResult.sku}` : "Skipped"}
+              {createdPieces.length > 0
+                ? createdPieces.length === 1
+                  ? `Created ${createdPieces[0].sku}`
+                  : `Created ${createdPieces.length} pieces (${createdPieces.map(p => p.sku).join(", ")})`
+                : "Skipped"}
             </div>
             <div style={{ fontSize: 13, color: "#6B7280", marginTop: 2 }}>{line.title ?? "Untitled item"}</div>
           </div>
-          {pieceResult && (
-            <button
-              onClick={() => setShowAttach(a => !a)}
-              style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", borderRadius: 8, border: "1px solid #6EE7B7", background: "#D1FAE5", color: "#065F46", fontSize: 12, fontWeight: 500, cursor: "pointer" }}
-            >
-              Attachments <ChevronDown size={12} style={{ transform: showAttach ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
-            </button>
-          )}
         </div>
-        {pieceResult && showAttach && (
-          <div style={{ padding: "0 20px 20px", borderTop: "1px solid #A7F3D0" }}>
-            <InventoryAttachmentsPanel
-              entityType="inventory_piece"
-              entityId={pieceResult.id}
-              readOnly={false}
-            />
+        {createdPieces.length > 0 && (
+          <div style={{ padding: "0 20px 16px", borderTop: "1px solid #A7F3D0" }}>
+            {createdPieces.map(piece => (
+              <div key={piece.id} style={{ marginTop: 10 }}>
+                <button
+                  onClick={() => setShowAttach(prev => prev === piece.id ? null : piece.id)}
+                  style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", borderRadius: 8, border: "1px solid #6EE7B7", background: "#D1FAE5", color: "#065F46", fontSize: 12, fontWeight: 500, cursor: "pointer" }}
+                >
+                  {piece.sku} — Attachments <ChevronDown size={12} style={{ transform: showAttach === piece.id ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+                </button>
+                {showAttach === piece.id && (
+                  <div style={{ marginTop: 8 }}>
+                    <InventoryAttachmentsPanel
+                      entityType="inventory_piece"
+                      entityId={piece.id}
+                      readOnly={false}
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -254,11 +281,57 @@ function ReceiveCard({
 
   return (
     <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20 }}>
-      <div style={{ fontSize: 14, fontWeight: 600, color: "#111827", marginBottom: 4 }}>{line.title ?? "Untitled item"}</div>
+      {/* Header — title + qty summary */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4, gap: 12 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>{line.title ?? "Untitled item"}</div>
+        <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#6B7280", flexShrink: 0 }}>
+          <span>Ordered: <strong style={{ color: "#374151" }}>{orderedQty}</strong></span>
+          {alreadyReceived > 0 && <span>Received: <strong style={{ color: "#059669" }}>{alreadyReceived}</strong></span>}
+          <span>Remaining: <strong style={{ color: "#374151" }}>{remaining}</strong></span>
+        </div>
+      </div>
       <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 16 }}>
         {[line.metal_karat, line.metal_colour, line.metal_type].filter(Boolean).join(" ")}
         {line.diamond_carat ? ` · ${line.diamond_carat}ct ${line.diamond_colour ?? ""} ${line.diamond_type ?? ""}`.trim() : ""}
         {line.finger_size ? ` · Size ${line.finger_size}` : ""}
+        {line.estimated_cost != null && ` · Est. $${Number(line.estimated_cost).toLocaleString("en-AU", { minimumFractionDigits: 2 })}`}
+      </div>
+
+      {/* Quantity to receive + mode */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "10px 16px", marginBottom: 14, padding: "12px 14px", background: "#F9FAFB", borderRadius: 10, border: "1px solid #E5E7EB" }}>
+        <div>
+          <label style={LF}>Receive quantity</label>
+          <input
+            type="number" min="1" max={remaining}
+            value={receiveQty}
+            onChange={e => setReceiveQty(Math.max(1, Math.min(remaining, parseInt(e.target.value) || 1)))}
+            style={IF}
+          />
+        </div>
+        <div>
+          <label style={LF}>Tracking mode</label>
+          <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: "1px solid #E5E7EB" }}>
+            <button
+              type="button"
+              onClick={() => setReceiveMode("individual")}
+              style={{ flex: 1, padding: "7px 10px", background: receiveMode === "individual" ? "#111827" : "#fff", color: receiveMode === "individual" ? "#fff" : "#374151", border: "none", cursor: "pointer", fontSize: 12, fontWeight: receiveMode === "individual" ? 600 : 400 }}
+            >
+              Individual pieces
+            </button>
+            <button
+              type="button"
+              onClick={() => setReceiveMode("batch")}
+              style={{ flex: 1, padding: "7px 10px", background: receiveMode === "batch" ? "#111827" : "#fff", color: receiveMode === "batch" ? "#fff" : "#374151", border: "none", cursor: "pointer", fontSize: 12, fontWeight: receiveMode === "batch" ? 600 : 400 }}
+            >
+              Batch stock
+            </button>
+          </div>
+          <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>
+            {receiveMode === "individual"
+              ? `Creates ${receiveQty} separately tracked piece${receiveQty !== 1 ? "s" : ""}, each with its own SKU`
+              : `Creates 1 stock record with quantity ${receiveQty}`}
+          </div>
+        </div>
       </div>
 
       {/* AI row */}
@@ -329,11 +402,11 @@ function ReceiveCard({
 
         {/* Receiving-specific fields */}
         <div>
-          <label style={LF}>Actual Cost ($)</label>
+          <label style={LF}>Actual Unit Cost ($)</label>
           <input
             type="number" step="0.01" min="0"
-            value={specs.actual_cost}
-            onChange={e => setSpecs(s => ({ ...s, actual_cost: e.target.value }))}
+            value={actualUnitCost}
+            onChange={e => setActualUnitCost(e.target.value)}
             placeholder="e.g. 450.00"
             style={IF}
           />
@@ -409,7 +482,8 @@ function ReceiveCard({
           disabled={saving || skipping}
           style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 16px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 13, fontWeight: 500, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1 }}
         >
-          <CheckCircle2 size={14} /> {saving ? "Creating…" : "Confirm & Create Piece"}
+          <CheckCircle2 size={14} />
+          {saving ? "Creating…" : receiveMode === "batch" ? `Confirm & Create Batch (qty ${receiveQty})` : receiveQty === 1 ? "Confirm & Create Piece" : `Confirm & Create ${receiveQty} Pieces`}
         </button>
       </div>
     </div>
@@ -483,7 +557,8 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
 
   useEffect(() => { fetchPo(); }, [fetchPo]);
 
-  const unreceived = po?.lines.filter(l => !l.received) ?? [];
+  // Show lines that still have remaining qty to receive
+  const unreceived = po?.lines.filter(l => Number(l.received_quantity ?? 0) < Number(l.quantity ?? 1)) ?? [];
 
   function handleLineDone() {
     setReceivedCount(c => {
@@ -672,7 +747,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   }
 
   const supplierName = po.supplier?.name ?? po.supplier_name ?? "—";
-  const canReceive   = isManager && (po.status === "ordered" || po.status === "partially_received") && unreceived.length > 0;
+  const canReceive   = isManager && po.status !== "cancelled" && po.status !== "draft" && unreceived.length > 0;
   const canEdit      = isManager && po.status !== "cancelled";
   const canCancel    = isManager && po.status !== "cancelled";
 
@@ -1020,7 +1095,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
           <DetailItem label="Order Date" value={po.order_date ? new Date(po.order_date).toLocaleDateString("en-AU") : null} />
           <DetailItem label="Expected Delivery" value={po.expected_date ? new Date(po.expected_date).toLocaleDateString("en-AU") : null} />
           <DetailItem label="Lines" value={`${po.lines.length} item${po.lines.length !== 1 ? "s" : ""}`} />
-          <DetailItem label="Received" value={`${po.lines.filter(l => l.received).length} of ${po.lines.length}`} />
+          <DetailItem label="Received" value={`${po.lines.filter(l => Number(l.received_quantity ?? 0) >= Number(l.quantity ?? 1)).length} of ${po.lines.length} lines`} />
           <DetailItem label="Created" value={new Date(po.created_at).toLocaleDateString("en-AU")} />
           {po.notes && <div style={{ gridColumn: "1 / -1" }}><DetailItem label="Notes" value={po.notes} /></div>}
         </div>
@@ -1043,15 +1118,20 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ background: "#F9FAFB" }}>
-                  {(["Title", "Metal", "Qty", ...(showCosts ? ["Est. Cost", "Actual Cost", "Invoice"] : []), "Receipt"] as string[]).map(h => (
+                  {(["Title", "Metal", "Ordered", "Received", "Remaining", ...(showCosts ? ["Est. Cost", "Actual Cost", "Invoice"] : []), "Stock Pieces"] as string[]).map(h => (
                     <th key={h} style={{ padding: "8px 16px", textAlign: "left", fontWeight: 600, color: "#6B7280", fontSize: 11, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {po.lines.map((line, i) => {
-                  const estCost = line.estimated_cost ?? line.unit_cost;
-                  const invoiced = line.actual_cost != null;
+                  const estCost     = line.estimated_cost;
+                  const invoiced    = line.actual_cost != null;
+                  const orderedQty  = Number(line.quantity ?? 1);
+                  const receivedQty = Number(line.received_quantity ?? 0);
+                  const remaining   = orderedQty - receivedQty;
+                  const fullyRcvd   = receivedQty >= orderedQty;
+                  const linePieces  = line.pieces ?? [];
                   return (
                     <tr key={line.id} style={{ borderTop: i > 0 ? "1px solid #F3F4F6" : "none" }}>
                       <td style={{ padding: "10px 16px", color: "#374151", maxWidth: 240 }}>
@@ -1088,8 +1168,15 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                       </td>
                       <td style={{ padding: "10px 16px", color: "#6B7280", whiteSpace: "nowrap" }}>
                         {[line.metal_karat, line.metal_colour, line.metal_type].filter(Boolean).join(" ") || "—"}
+                        {line.diamond_carat && (
+                          <div style={{ fontSize: 11, marginTop: 2 }}>
+                            {[line.diamond_carat && `${line.diamond_carat}ct`, line.diamond_colour, line.diamond_type].filter(Boolean).join(" ")}
+                          </div>
+                        )}
                       </td>
-                      <td style={{ padding: "10px 16px", color: "#374151", textAlign: "center" }}>{line.quantity}</td>
+                      <td style={{ padding: "10px 16px", color: "#374151", textAlign: "center", fontWeight: 500 }}>{orderedQty}</td>
+                      <td style={{ padding: "10px 16px", textAlign: "center", color: receivedQty > 0 ? "#059669" : "#D1D5DB", fontWeight: receivedQty > 0 ? 600 : 400 }}>{receivedQty}</td>
+                      <td style={{ padding: "10px 16px", textAlign: "center", color: remaining > 0 ? "#92400E" : "#9CA3AF", fontWeight: remaining > 0 ? 500 : 400 }}>{remaining}</td>
                       {showCosts && (
                         <td style={{ padding: "10px 16px", color: "#6B7280", fontFamily: "monospace", whiteSpace: "nowrap" }}>
                           {estCost != null ? `$${Number(estCost).toLocaleString("en-AU", { minimumFractionDigits: 2 })}` : "—"}
@@ -1136,13 +1223,26 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                         </td>
                       )}
                       <td style={{ padding: "10px 16px" }}>
-                        {line.received ? (
-                          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                            <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: "#ECFDF5", color: "#065F46", border: "1px solid #A7F3D0" }}>Received</span>
-                            {line.piece && <span style={{ fontSize: 11, color: "#9CA3AF", fontFamily: "monospace" }}>{line.piece.sku}</span>}
+                        {linePieces.length > 0 ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                            {fullyRcvd && (
+                              <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: "#ECFDF5", color: "#065F46", border: "1px solid #A7F3D0", marginBottom: 2, display: "inline-block" }}>Received</span>
+                            )}
+                            {linePieces.map(piece => (
+                              <a
+                                key={piece.id}
+                                href={`/inventory/pieces/${piece.id}`}
+                                style={{ fontSize: 11, color: "#4338CA", fontFamily: "monospace", textDecoration: "none" }}
+                                title={piece.quantity > 1 ? `Batch qty: ${piece.quantity}` : undefined}
+                              >
+                                {piece.sku}{piece.quantity > 1 ? ` ×${piece.quantity}` : ""}
+                              </a>
+                            ))}
                           </div>
-                        ) : (
+                        ) : remaining > 0 ? (
                           <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#F3F4F6", color: "#6B7280" }}>Pending</span>
+                        ) : (
+                          <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#FFFBEB", color: "#92400E" }}>Skipped</span>
                         )}
                       </td>
                     </tr>
@@ -1184,10 +1284,10 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
               </button>
             </div>
 
-            {(confirmLine.estimated_cost ?? confirmLine.unit_cost) != null && (
+            {confirmLine.estimated_cost != null && (
               <div style={{ padding: "10px 14px", background: "#F9FAFB", borderRadius: 8, fontSize: 13, color: "#6B7280", marginBottom: 16 }}>
                 Estimated: <strong style={{ fontFamily: "monospace", color: "#374151" }}>
-                  ${Number(confirmLine.estimated_cost ?? confirmLine.unit_cost).toLocaleString("en-AU", { minimumFractionDigits: 2 })}
+                  ${Number(confirmLine.estimated_cost).toLocaleString("en-AU", { minimumFractionDigits: 2 })}
                 </strong>
               </div>
             )}

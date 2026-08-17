@@ -10,7 +10,7 @@ const PO_DETAIL_SELECT = `
   lines:inventory_po_lines(
     *,
     category:inventory_categories(id,name),
-    piece:inventory_pieces(id,sku),
+    pieces:inventory_pieces(id,sku,quantity),
     packet:packets(id,reference_number,customer_first_name,customer_last_name,packet_type)
   )
 `.trim();
