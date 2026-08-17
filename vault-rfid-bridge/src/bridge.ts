@@ -1,3 +1,4 @@
+import net from "net";
 import { BridgeConfig, PrintJob } from "./types";
 import { sendZpl } from "./zebra";
 
@@ -37,27 +38,41 @@ async function updateJobStatus(
   const body: Record<string, string> = { status };
   if (errorMessage) body.error_message = errorMessage;
 
-  const res = await vaultFetch(config, `/api/rfid/bridge/jobs/${jobId}`, {
-    method: "PATCH",
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "(no body)");
-    log("warn", `Failed to update job ${jobId} to ${status}: ${res.status} ${text}`);
+  try {
+    const res = await vaultFetch(config, `/api/rfid/bridge/jobs/${jobId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "(no body)");
+      log("warn", `Failed to update job ${jobId} to ${status}: HTTP ${res.status} ${text}`);
+    }
+  } catch (err: unknown) {
+    log("warn", `Network error updating job ${jobId}`, err instanceof Error ? err.message : err);
   }
 }
 
-async function processJob(config: BridgeConfig, job: PrintJob): Promise<void> {
-  log("info", `Processing job ${job.id} (piece_id=${job.piece_id})`);
+/** TCP connectivity check — connect and immediately close. Sends nothing to the printer. */
+function checkPrinterReachable(config: BridgeConfig): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    const timer = setTimeout(() => { socket.destroy(); resolve(false); }, config.printer.connectTimeoutMs);
+    socket.connect(config.printer.port, config.printer.host, () => {
+      clearTimeout(timer);
+      socket.destroy();
+      resolve(true);
+    });
+    socket.on("error", () => { clearTimeout(timer); resolve(false); });
+  });
+}
 
-  // Claim it
+async function processJob(config: BridgeConfig, job: PrintJob): Promise<void> {
+  log("info", `Claiming job ${job.id} (piece=${job.piece_id})`);
   await updateJobStatus(config, job.id, "claimed");
 
-  // Mark printing
+  log("info", `Sending ZPL for job ${job.id}`);
   await updateJobStatus(config, job.id, "printing");
 
-  // Send ZPL to printer
   try {
     await sendZpl(
       config.printer.host,
@@ -66,11 +81,14 @@ async function processJob(config: BridgeConfig, job: PrintJob): Promise<void> {
       config.printer.connectTimeoutMs,
       config.printer.writeTimeoutMs
     );
-    log("info", `Job ${job.id} sent to printer successfully`);
+    // "completed" means ZPL bytes were flushed over TCP.
+    // It does NOT mean the RFID chip encoded successfully.
+    // Physical verification is required before the tag becomes active in Vault.
+    log("info", `Job ${job.id} ZPL transmitted — awaiting physical verification`);
     await updateJobStatus(config, job.id, "completed");
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    log("error", `Job ${job.id} failed: ${msg}`);
+    log("error", `Job ${job.id} TCP send failed: ${msg}`);
     await updateJobStatus(config, job.id, "failed", msg);
   }
 }
@@ -86,7 +104,7 @@ async function poll(config: BridgeConfig): Promise<void> {
 
   if (!res.ok) {
     if (res.status === 401) {
-      log("error", "Bridge API key rejected by Vault — check config.json");
+      log("error", "Bridge API key rejected by Vault — check bridgeApiKey in config.json");
     } else {
       log("warn", `Poll returned HTTP ${res.status}`);
     }
@@ -107,29 +125,29 @@ async function poll(config: BridgeConfig): Promise<void> {
 }
 
 async function heartbeat(config: BridgeConfig): Promise<void> {
+  const printerReachable = await checkPrinterReachable(config);
   try {
     await vaultFetch(config, "/api/rfid/bridge/heartbeat", {
       method: "POST",
-      body: JSON.stringify({ version: BRIDGE_VERSION }),
+      body: JSON.stringify({ version: BRIDGE_VERSION, printer_reachable: printerReachable }),
     });
+    if (!printerReachable) {
+      log("warn", `Heartbeat sent — printer ${config.printer.host}:${config.printer.port} unreachable`);
+    }
   } catch {
-    // Heartbeat failure is non-fatal; poll errors are more informative
+    // Heartbeat failures are non-fatal
   }
 }
 
-export async function runBridge(config: BridgeConfig): Promise<never> {
-  log("info", `Vault RFID Bridge v${BRIDGE_VERSION} starting`);
-  log("info", `Vault URL: ${config.vaultApiUrl}`);
-  log("info", `Printer: ${config.printer.host}:${config.printer.port}`);
-  log("info", `Poll interval: ${config.pollIntervalMs}ms`);
+export async function runBridge(config: BridgeConfig, initiallyReachable = true): Promise<never> {
+  log("info", `Poll interval: ${config.pollIntervalMs}ms | Heartbeat: ${config.heartbeatIntervalMs}ms`);
+  if (!initiallyReachable) {
+    log("warn", "Starting with printer unreachable — jobs will fail until connectivity restored");
+  }
 
-  // Send initial heartbeat
   await heartbeat(config);
-
-  // Heartbeat timer (separate from poll)
   setInterval(() => heartbeat(config), config.heartbeatIntervalMs);
 
-  // Poll loop — one at a time, no concurrent printer access
   while (true) {
     await poll(config);
     await sleep(config.pollIntervalMs);

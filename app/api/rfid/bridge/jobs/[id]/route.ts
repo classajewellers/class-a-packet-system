@@ -6,12 +6,20 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 // PATCH /api/rfid/bridge/jobs/[id]
-// Bridge reports status transitions on a print job.
-// Valid transitions from the bridge:
-//   queued    → claimed   (bridge has taken the job)
-//   claimed   → printing  (ZPL sent to printer socket)
-//   printing  → completed (printer acknowledged / no error)
-//   *         → failed    (any error; include error_message in body)
+// Bridge reports status transitions.
+//
+// Tag lifecycle note:
+//   Job "completed" means ZPL was transmitted over TCP — NOT that the RFID chip
+//   encoded successfully. The ZD621R does not return encode confirmation over
+//   port 9100. Therefore: job completed → tag status "printed" (unverified).
+//   Tags only become "active" after physical verification via
+//   POST /api/rfid/pieces/[id]/verify.
+//
+// Valid bridge transitions:
+//   queued  → claimed   (bridge took the job)
+//   claimed → printing  (ZPL sent to printer socket)
+//   printing → completed (no TCP error)
+//   *       → failed    (any error; include error_message)
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -24,7 +32,10 @@ export async function PATCH(
   const { status, error_message } = await req.json();
   const validStatuses = ["claimed", "printing", "completed", "failed"];
   if (!validStatuses.includes(status)) {
-    return NextResponse.json({ error: `Invalid status. Allowed: ${validStatuses.join(", ")}` }, { status: 400 });
+    return NextResponse.json(
+      { error: `Invalid status. Allowed: ${validStatuses.join(", ")}` },
+      { status: 400 }
+    );
   }
 
   const supabase = createClient(
@@ -34,7 +45,6 @@ export async function PATCH(
 
   const now = new Date().toISOString();
 
-  // Fetch the job first to confirm it belongs to this tenant
   const { data: job, error: fetchErr } = await supabase
     .from("print_jobs")
     .select("id, tenant_id, rfid_tag_id, status, retry_count")
@@ -71,15 +81,15 @@ export async function PATCH(
     return NextResponse.json({ error: updateErr.message }, { status: 500 });
   }
 
-  // On completion: activate the RFID tag
   if (status === "completed" && job.rfid_tag_id) {
+    // ZPL transmitted — tag moves to "printed" (NOT "active").
+    // Tag only becomes "active" after physical verification.
     await supabase
       .from("inventory_rfid_tags")
-      .update({ status: "active", activated_at: now })
+      .update({ status: "printed" })
       .eq("id", job.rfid_tag_id)
       .eq("status", "pending");
 
-    // Update printer last_print_at
     if (identity.printerId) {
       await supabase
         .from("rfid_printers")
@@ -88,13 +98,17 @@ export async function PATCH(
     }
   }
 
-  // On failure: mark tag as damaged so it can be retried
   if (status === "failed" && job.rfid_tag_id) {
+    // TCP-level failure — tag is void/unencoded, mark damaged.
     await supabase
       .from("inventory_rfid_tags")
-      .update({ status: "damaged", retired_at: now, retirement_reason: "print_failed" })
+      .update({
+        status:             "damaged",
+        retired_at:         now,
+        retirement_reason:  "print_failed",
+      })
       .eq("id", job.rfid_tag_id)
-      .eq("status", "pending");
+      .in("status", ["pending", "printed"]);
 
     if (identity.printerId) {
       await supabase

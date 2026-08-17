@@ -9,8 +9,15 @@ export const revalidate = 0;
 // POST /api/rfid/print
 // Body: { piece_id, replace?: boolean }
 //
-// Creates an RFID tag record (status=pending) and a print_job (status=queued).
-// The bridge picks up the job and sends ZPL to the printer.
+// Tag lifecycle:
+//   pending  — EPC assigned, job queued (not yet on a physical tag)
+//   printed  — ZPL transmitted to printer (unverified; TCP success ≠ RFID encode)
+//   active   — physically verified; tag read and EPC confirmed correct
+//
+// Replacement safety:
+//   The existing active tag is NOT retired here. It stays active until the new
+//   tag is physically verified via POST /api/rfid/pieces/[id]/verify. Only at
+//   verification do we retire the old tag and activate the new one atomically.
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
   const supabase = await createTenantSupabaseClient(tenantId);
@@ -18,46 +25,65 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const { piece_id, replace = false } = await req.json();
   if (!piece_id) return NextResponse.json({ error: "piece_id required" }, { status: 400 });
 
-  // Fetch piece with enough data to build the label
-  const { data: piece, error: pErr } = await supabase
-    .from("inventory_pieces")
-    .select(`
-      id, sku, title, notes, barcode,
-      category:inventory_categories(id, name),
-      metal:inventory_metals(id, name),
-      stone:inventory_stones(id, name)
-    `)
-    .eq("id", piece_id)
-    .single();
+  // ── Guard: block if a tag is already pending or printed (not yet verified) ──
+  // This prevents double-print from rapid clicks or retried requests.
+  const { data: inflightTag } = await supabase
+    .from("inventory_rfid_tags")
+    .select("id, status, epc")
+    .eq("inventory_piece_id", piece_id)
+    .in("status", ["pending", "printed"])
+    .maybeSingle();
 
-  if (pErr || !piece) {
-    return NextResponse.json({ error: "Piece not found" }, { status: 404 });
+  if (inflightTag) {
+    return NextResponse.json(
+      {
+        error: inflightTag.status === "pending"
+          ? "A print job is already queued for this piece. Wait for it to complete."
+          : "This piece has a tag awaiting verification. Verify or discard it before printing again.",
+        tag: inflightTag,
+      },
+      { status: 409 }
+    );
   }
 
-  // Check for existing active tag
-  const { data: existingTag } = await supabase
+  // ── Guard: block if a job is already in-flight ─────────────────────────────
+  const { data: inflightJob } = await supabase
+    .from("print_jobs")
+    .select("id, status")
+    .eq("piece_id", piece_id)
+    .in("status", ["queued", "claimed", "printing"])
+    .maybeSingle();
+
+  if (inflightJob) {
+    return NextResponse.json(
+      { error: "A print job is already in progress for this piece.", job: inflightJob },
+      { status: 409 }
+    );
+  }
+
+  // ── Guard: check for existing active tag ───────────────────────────────────
+  const { data: existingActiveTag } = await supabase
     .from("inventory_rfid_tags")
     .select("id, epc, status")
     .eq("inventory_piece_id", piece_id)
     .eq("status", "active")
     .maybeSingle();
 
-  if (existingTag && !replace) {
+  if (existingActiveTag && !replace) {
     return NextResponse.json(
-      { error: "This piece already has an active RFID tag. Pass replace=true to issue a replacement.", existing_tag: existingTag },
+      {
+        error: "This piece already has a verified active RFID tag. Pass replace=true to request a replacement.",
+        existing_tag: existingActiveTag,
+      },
       { status: 409 }
     );
   }
 
-  // If replacing, retire existing active tag
-  if (existingTag && replace) {
-    await supabase
-      .from("inventory_rfid_tags")
-      .update({ status: "replaced", retired_at: new Date().toISOString(), retirement_reason: "replacement_requested" })
-      .eq("id", existingTag.id);
-  }
+  // NOTE: if replace=true and existingActiveTag exists, we do NOT retire it here.
+  // The old tag remains active until the new replacement tag is physically verified.
+  // Retirement happens atomically at verification time (POST /api/rfid/pieces/[id]/verify).
 
-  // Check for an active printer for this tenant
+  // ── Check for an active printer for this tenant ────────────────────────────
   const { data: printer } = await supabase
     .from("rfid_printers")
     .select("id")
@@ -68,28 +94,48 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (!printer) {
     return NextResponse.json(
-      { error: "No active RFID printer configured for this tenant. Set one up in Settings → RFID." },
+      { error: "No active RFID printer configured. Set one up in Settings → RFID." },
       { status: 422 }
     );
   }
 
-  // Generate a random 96-bit EPC (12 bytes → 24 hex chars)
-  const epc = randomBytes(12).toString("hex");
+  // ── Fetch piece ────────────────────────────────────────────────────────────
+  const { data: piece, error: pErr } = await supabase
+    .from("inventory_pieces")
+    .select(`
+      id, sku, title, notes, barcode,
+      metal:inventory_metals(id, name),
+      stone:inventory_stones(id, name)
+    `)
+    .eq("id", piece_id)
+    .single();
+
+  if (pErr || !piece) {
+    return NextResponse.json({ error: "Piece not found" }, { status: 404 });
+  }
+
+  // ── Generate EPC (random 96-bit, 24 hex chars) ─────────────────────────────
+  // EPC Gen2 standard is 96 bits minimum on all UHF RFID chips.
+  // This is opaque — not derived from any mutable product/pricing data.
+  const epc = randomBytes(12).toString("hex"); // always lowercase hex
   const now = new Date().toISOString();
 
-  // Generate ZPL
-  const metalName  = (piece as any).metal?.name  ?? null;
-  const stoneName  = (piece as any).stone?.name  ?? null;
+  // ── Build ZPL ──────────────────────────────────────────────────────────────
+  // Label dimensions use defaults until Sean confirms actual label spec.
+  // widthDots / lengthDots should come from printer config once confirmed.
+  const metalName  = (piece as any).metal?.name ?? null;
+  const stoneName  = (piece as any).stone?.name ?? null;
   const zplPayload = generateJewelleryZpl({
     epc,
-    sku:    piece.sku,
-    title:  piece.title ?? piece.sku,
-    metal:  metalName,
-    stone:  stoneName,
-    barcode: piece.barcode ?? piece.sku,
+    sku:       piece.sku,
+    title:     (piece as any).title ?? piece.sku,
+    metal:     metalName,
+    stone:     stoneName,
+    barcode:   (piece as any).barcode ?? piece.sku,
+    // widthDots / lengthDots: not configured yet — using defaults pending label spec
   });
 
-  // Create the RFID tag record
+  // ── Create RFID tag record ─────────────────────────────────────────────────
   const { data: tag, error: tagErr } = await supabase
     .from("inventory_rfid_tags")
     .insert({
@@ -106,8 +152,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: tagErr?.message ?? "Failed to create RFID tag record" }, { status: 500 });
   }
 
-  // Create the print job
-  const idempotencyKey = `rfid-${tag.id}`;
+  // ── Create print job ───────────────────────────────────────────────────────
+  // Idempotency key is scoped to the tag ID so that retries on the same tag
+  // (e.g. page refresh mid-request) don't create duplicate jobs.
+  // A second click that somehow passes the inflight check above would create a
+  // second tag (different ID → different key) — prevented by the inflightTag
+  // guard above which is checked before tag creation.
+  const idempotencyKey = `rfid-tag-${tag.id}`;
+
   const { data: job, error: jobErr } = await supabase
     .from("print_jobs")
     .insert({
@@ -119,11 +171,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       zpl_payload:     zplPayload,
       label_data: {
         epc,
-        sku:       piece.sku,
-        title:     piece.title,
-        metal:     metalName,
-        stone:     stoneName,
-        barcode:   piece.barcode ?? piece.sku,
+        sku:     piece.sku,
+        title:   (piece as any).title,
+        metal:   metalName,
+        stone:   stoneName,
+        barcode: (piece as any).barcode ?? piece.sku,
       },
       label_template:  "jewellery_v1",
       idempotency_key: idempotencyKey,
@@ -133,7 +185,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .single();
 
   if (jobErr || !job) {
-    // Roll back the tag record
+    // Roll back tag record
     await supabase.from("inventory_rfid_tags").delete().eq("id", tag.id);
     return NextResponse.json({ error: jobErr?.message ?? "Failed to create print job" }, { status: 500 });
   }

@@ -192,13 +192,14 @@ function Timeline({ piece, movements }: { piece: any; movements: any[] }) {
 // ── RFID Panel ───────────────────────────────────────────────────────────────
 
 function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId: string; isManager: boolean }) {
-  const [rfidState, setRfidState]   = useState<{ active_tag: any; active_job: any; recent_job: any } | null>(null);
-  const [printing, setPrinting]     = useState(false);
-  const [printError, setPrintError] = useState("");
-  const [pollTimer, setPollTimer]   = useState<ReturnType<typeof setInterval> | null>(null);
+  const [rfidState, setRfidState]     = useState<{ active_tag: any; printed_tag: any; active_job: any; recent_job: any } | null>(null);
+  const [printing, setPrinting]       = useState(false);
+  const [confirming, setConfirming]   = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [pollTimer, setPollTimer]     = useState<ReturnType<typeof setInterval> | null>(null);
 
   const fetchRfid = useCallback(async () => {
-    if (!tenantId) return;
+    if (!tenantId) return null;
     const res = await fetch(`/api/rfid/pieces/${pieceId}`, {
       headers: { "x-tenant-id": tenantId },
     });
@@ -207,11 +208,10 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
       setRfidState(data);
       return data;
     }
+    return null;
   }, [pieceId, tenantId]);
 
-  useEffect(() => {
-    fetchRfid();
-  }, [fetchRfid]);
+  useEffect(() => { fetchRfid(); }, [fetchRfid]);
 
   // Poll while a job is in-flight
   useEffect(() => {
@@ -228,10 +228,7 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
         setPollTimer(t);
       }
     } else {
-      if (pollTimer) {
-        clearInterval(pollTimer);
-        setPollTimer(null);
-      }
+      if (pollTimer) { clearInterval(pollTimer); setPollTimer(null); }
     }
     return () => { if (pollTimer) clearInterval(pollTimer); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -239,7 +236,7 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
 
   const handlePrint = async (replace = false) => {
     setPrinting(true);
-    setPrintError("");
+    setActionError("");
     try {
       const res = await fetch("/api/rfid/print", {
         method: "POST",
@@ -247,23 +244,38 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
         body: JSON.stringify({ piece_id: pieceId, replace }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        setPrintError(data.error ?? "Print request failed");
-        setPrinting(false);
-        return;
-      }
-      // Job queued — fetchRfid will pick it up and polling starts
+      if (!res.ok) { setActionError(data.error ?? "Print request failed"); setPrinting(false); return; }
       await fetchRfid();
     } catch {
-      setPrintError("Network error — is your bridge running?");
+      setActionError("Network error — is your bridge running?");
       setPrinting(false);
     }
   };
 
+  const handleConfirm = async () => {
+    setConfirming(true);
+    setActionError("");
+    try {
+      const res = await fetch(`/api/rfid/pieces/${pieceId}/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-tenant-id": tenantId },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) { setActionError(data.error ?? "Verification failed"); setConfirming(false); return; }
+      await fetchRfid();
+    } catch {
+      setActionError("Network error during verification");
+    } finally {
+      setConfirming(false);
+    }
+  };
+
   const activeTag  = rfidState?.active_tag;
+  const printedTag = rfidState?.printed_tag;
   const activeJob  = rfidState?.active_job;
   const recentJob  = rfidState?.recent_job;
-  const lastFailed = !activeTag && recentJob?.status === "failed";
+  const lastFailed = !activeTag && !printedTag && !activeJob && recentJob?.status === "failed";
 
   return (
     <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20, marginBottom: 16 }}>
@@ -277,31 +289,46 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
         {activeJob && (
           <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#F59E0B" }}>
             <RefreshCw size={10} style={{ animation: "spin 1s linear infinite" }} />
-            {activeJob.status === "queued" ? "Waiting for bridge…" : activeJob.status === "claimed" ? "Bridge claimed…" : "Printing…"}
+            {activeJob.status === "queued" ? "Waiting for bridge…" : activeJob.status === "claimed" ? "Bridge claimed…" : "Sending to printer…"}
           </span>
         )}
       </div>
 
-      {activeTag ? (
+      {/* Active (verified) tag */}
+      {activeTag && (
         <div style={{ marginBottom: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 99, background: "#D1FAE5", color: "#065F46", fontSize: 11, fontWeight: 600 }}>
-              <Wifi size={9} /> Active
-            </span>
-          </div>
-          <div style={{ fontFamily: "monospace", fontSize: 12, color: "#374151", letterSpacing: "0.04em", wordBreak: "break-all" as const }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 99, background: "#D1FAE5", color: "#065F46", fontSize: 11, fontWeight: 600, marginBottom: 6 }}>
+            <Wifi size={9} /> Verified active
+          </span>
+          <div style={{ fontFamily: "monospace", fontSize: 12, color: "#374151", letterSpacing: "0.04em", wordBreak: "break-all" as const, marginTop: 6 }}>
             EPC: {activeTag.epc}
           </div>
           {activeTag.activated_at && (
-            <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 3 }}>
-              Encoded {fmtDate(activeTag.activated_at)}
-            </div>
+            <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 3 }}>Verified {fmtDate(activeTag.activated_at)}</div>
           )}
         </div>
-      ) : (
+      )}
+
+      {/* Printed (awaiting physical verification) */}
+      {!activeTag && printedTag && !activeJob && (
+        <div style={{ marginBottom: 12 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 99, background: "#FEF3C7", color: "#92400E", fontSize: 11, fontWeight: 600, marginBottom: 6 }}>
+            Sent to printer — awaiting verification
+          </span>
+          <div style={{ fontFamily: "monospace", fontSize: 12, color: "#374151", letterSpacing: "0.04em", wordBreak: "break-all" as const, marginTop: 6 }}>
+            EPC: {printedTag.epc}
+          </div>
+          <p style={{ margin: "8px 0 0", fontSize: 12, color: "#6B7280" }}>
+            Physically read the tag to confirm it encoded correctly, then click Confirm below.
+          </p>
+        </div>
+      )}
+
+      {/* No tag and no in-flight job */}
+      {!activeTag && !printedTag && !activeJob && (
         <div style={{ marginBottom: 12 }}>
           <p style={{ margin: 0, fontSize: 13, color: "#9CA3AF" }}>
-            {activeJob ? "Printing in progress…" : lastFailed ? "Last print job failed." : "No RFID tag encoded for this piece."}
+            {lastFailed ? "Last print job failed." : "No RFID tag encoded for this piece."}
           </p>
           {lastFailed && recentJob?.last_error && (
             <p style={{ margin: "4px 0 0", fontSize: 12, color: "#DC2626" }}>{recentJob.last_error}</p>
@@ -309,38 +336,43 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
         </div>
       )}
 
-      {printError && (
-        <p style={{ margin: "0 0 10px", fontSize: 12, color: "#DC2626" }}>{printError}</p>
+      {actionError && (
+        <p style={{ margin: "0 0 10px", fontSize: 12, color: "#DC2626" }}>{actionError}</p>
       )}
 
       {isManager && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
-          {!activeTag && !activeJob && (
-            <button
-              onClick={() => handlePrint(false)}
-              disabled={printing}
+          {/* Print: available when no active/printed tag and no job in flight */}
+          {!activeTag && !printedTag && !activeJob && (
+            <button onClick={() => handlePrint(false)} disabled={printing}
               style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #D1D5DB", background: printing ? "#F3F4F6" : "#fff", color: printing ? "#9CA3AF" : "#111827", fontSize: 13, cursor: printing ? "not-allowed" : "pointer", fontWeight: 500 }}>
               <Printer size={13} />
               {printing ? "Sending…" : "Print RFID Tag"}
             </button>
           )}
+
+          {/* Confirm: available once tag is printed (unverified) */}
+          {printedTag && !activeJob && (
+            <button onClick={handleConfirm} disabled={confirming}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "none", background: confirming ? "#D1FAE5" : "#10B981", color: "#fff", fontSize: 13, cursor: confirming ? "not-allowed" : "pointer", fontWeight: 500 }}>
+              {confirming ? "Confirming…" : "Confirm Tag Encoded"}
+            </button>
+          )}
+
+          {/* Replace: available only when an active (verified) tag exists */}
           {activeTag && !activeJob && (
-            <button
-              onClick={() => handlePrint(true)}
-              disabled={printing}
+            <button onClick={() => handlePrint(true)} disabled={printing}
               style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", fontSize: 13, cursor: printing ? "not-allowed" : "pointer" }}>
               <Printer size={13} />
               Replace Tag
             </button>
           )}
-          {(lastFailed || (!activeTag && !activeJob)) && (
-            <button
-              onClick={fetchRfid}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#F9FAFB", color: "#6B7280", fontSize: 13, cursor: "pointer" }}>
-              <RefreshCw size={12} />
-              Refresh
-            </button>
-          )}
+
+          <button onClick={fetchRfid}
+            style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#F9FAFB", color: "#6B7280", fontSize: 13, cursor: "pointer" }}>
+            <RefreshCw size={12} />
+            Refresh
+          </button>
         </div>
       )}
 

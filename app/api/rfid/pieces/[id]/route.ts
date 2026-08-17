@@ -6,7 +6,12 @@ export const revalidate = 0;
 
 // GET /api/rfid/pieces/[id]
 // Returns the RFID tag and active print job status for a given piece_id.
-// Used by the piece detail page to poll for print job completion.
+//
+// Returns:
+//   active_tag  — tag with status 'active' (verified, encoded)
+//   printed_tag — tag with status 'printed' (sent to printer, awaiting verification)
+//   active_job  — print job currently in-flight (queued/claimed/printing)
+//   recent_job  — most recent job if no active job
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -14,12 +19,23 @@ export async function GET(
   const tenantId = req.headers.get("x-tenant-id") ?? "";
   const supabase = await createTenantSupabaseClient(tenantId);
 
-  const [{ data: activeTag }, { data: activeJob }] = await Promise.all([
+  const [
+    { data: activeTag },
+    { data: printedTag },
+    { data: activeJob },
+  ] = await Promise.all([
     supabase
       .from("inventory_rfid_tags")
       .select("id, epc, status, activated_at, print_job_id")
       .eq("inventory_piece_id", params.id)
       .eq("status", "active")
+      .maybeSingle(),
+
+    supabase
+      .from("inventory_rfid_tags")
+      .select("id, epc, status, print_job_id")
+      .eq("inventory_piece_id", params.id)
+      .eq("status", "printed")
       .maybeSingle(),
 
     supabase
@@ -32,7 +48,6 @@ export async function GET(
       .maybeSingle(),
   ]);
 
-  // Also fetch the most recent completed/failed job if no active job
   let recentJob = activeJob;
   if (!recentJob) {
     const { data: lastJob } = await supabase
@@ -47,6 +62,7 @@ export async function GET(
 
   return NextResponse.json({
     active_tag:  activeTag  ?? null,
+    printed_tag: printedTag ?? null,
     active_job:  activeJob  ?? null,
     recent_job:  recentJob  ?? null,
   });

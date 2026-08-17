@@ -106,7 +106,14 @@ CREATE TABLE IF NOT EXISTS inventory_rfid_tags (
   inventory_piece_id    uuid        NOT NULL REFERENCES inventory_pieces(id) ON DELETE RESTRICT,
   epc                   text        NOT NULL,  -- 24-char hex, 96-bit UHF EPC
   status                text        NOT NULL DEFAULT 'pending'
-                          CHECK (status IN ('pending','active','replaced','damaged','retired')),
+                          CHECK (status IN (
+                            'pending',   -- EPC assigned, print job queued (not yet on physical tag)
+                            'printed',   -- ZPL sent to printer; tag *may* be encoded (unverified)
+                            'active',    -- physically verified: tag read, EPC confirmed correct
+                            'replaced',  -- superseded by a newer active tag
+                            'damaged',   -- print failed / tag unreadable
+                            'retired'    -- manually retired
+                          )),
   print_job_id          uuid        REFERENCES print_jobs(id) ON DELETE SET NULL,
   assigned_at           timestamptz,
   assigned_by           uuid        REFERENCES profiles(id) ON DELETE SET NULL,
