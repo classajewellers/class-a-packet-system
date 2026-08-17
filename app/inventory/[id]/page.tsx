@@ -252,17 +252,35 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
     }
   };
 
+  const [epcInput, setEpcInput]   = useState("");
+  const [epcError, setEpcError]   = useState("");
+
   const handleConfirm = async () => {
+    const normalised = epcInput.trim().toLowerCase();
+    if (!/^[0-9a-f]{24}$/.test(normalised)) {
+      setEpcError("EPC must be exactly 24 hex characters (e.g. a3f1c2d4e5b6a7c8d9e0f1a2)");
+      return;
+    }
     setConfirming(true);
     setActionError("");
+    setEpcError("");
     try {
       const res = await fetch(`/api/rfid/pieces/${pieceId}/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-tenant-id": tenantId },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ confirmed_epc: normalised, verification_method: "uhf_reader_manual" }),
       });
       const data = await res.json();
-      if (!res.ok) { setActionError(data.error ?? "Verification failed"); setConfirming(false); return; }
+      if (!res.ok) {
+        if (data.code === "epc_mismatch") {
+          setEpcError(`EPC mismatch. Expected: ${data.expected_epc}. Got: ${data.confirmed_epc}`);
+        } else {
+          setActionError(data.error ?? "Verification failed");
+        }
+        setConfirming(false);
+        return;
+      }
+      setEpcInput("");
       await fetchRfid();
     } catch {
       setActionError("Network error during verification");
@@ -309,18 +327,37 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
         </div>
       )}
 
-      {/* Printed (awaiting physical verification) */}
+      {/* Printed (awaiting physical verification via UHF reader) */}
       {!activeTag && printedTag && !activeJob && (
         <div style={{ marginBottom: 12 }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 99, background: "#FEF3C7", color: "#92400E", fontSize: 11, fontWeight: 600, marginBottom: 6 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 99, background: "#FEF3C7", color: "#92400E", fontSize: 11, fontWeight: 600, marginBottom: 8 }}>
             Sent to printer — awaiting verification
           </span>
-          <div style={{ fontFamily: "monospace", fontSize: 12, color: "#374151", letterSpacing: "0.04em", wordBreak: "break-all" as const, marginTop: 6 }}>
-            EPC: {printedTag.epc}
+          <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>Expected EPC:</div>
+          <div style={{ fontFamily: "monospace", fontSize: 12, color: "#374151", letterSpacing: "0.04em", wordBreak: "break-all" as const, marginBottom: 10 }}>
+            {printedTag.epc}
           </div>
-          <p style={{ margin: "8px 0 0", fontSize: 12, color: "#6B7280" }}>
-            Physically read the tag to confirm it encoded correctly, then click Confirm below.
+          <p style={{ margin: "0 0 10px", fontSize: 12, color: "#6B7280", lineHeight: 1.5 }}>
+            Read the physical tag with a <strong>UHF EPC Gen2 reader</strong> (e.g. AZH-P1). Enter the observed EPC below to verify it matches.
+            If no reader is available yet, leave the tag in this state — do not confirm without reading.
           </p>
+          {isManager && (
+            <div>
+              <input
+                value={epcInput}
+                onChange={e => { setEpcInput(e.target.value); setEpcError(""); }}
+                placeholder="Enter 24-char EPC from UHF reader…"
+                maxLength={32}
+                style={{
+                  width: "100%", boxSizing: "border-box" as const,
+                  padding: "8px 10px", borderRadius: 8, fontSize: 12, fontFamily: "monospace",
+                  border: epcError ? "1px solid #FCA5A5" : "1px solid #D1D5DB",
+                  outline: "none", marginBottom: epcError ? 4 : 0,
+                }}
+              />
+              {epcError && <p style={{ margin: "0 0 6px", fontSize: 11, color: "#DC2626" }}>{epcError}</p>}
+            </div>
+          )}
         </div>
       )}
 
@@ -351,11 +388,21 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
             </button>
           )}
 
-          {/* Confirm: available once tag is printed (unverified) */}
+          {/* Confirm: available once printed and 24-char EPC entered */}
           {printedTag && !activeJob && (
-            <button onClick={handleConfirm} disabled={confirming}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "none", background: confirming ? "#D1FAE5" : "#10B981", color: "#fff", fontSize: 13, cursor: confirming ? "not-allowed" : "pointer", fontWeight: 500 }}>
-              {confirming ? "Confirming…" : "Confirm Tag Encoded"}
+            <button
+              onClick={handleConfirm}
+              disabled={confirming || !/^[0-9a-f]{24}$/i.test(epcInput.trim())}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "8px 14px", borderRadius: 8, border: "none",
+                background: !/^[0-9a-f]{24}$/i.test(epcInput.trim()) ? "#E5E7EB" : confirming ? "#D1FAE5" : "#10B981",
+                color: !/^[0-9a-f]{24}$/i.test(epcInput.trim()) ? "#9CA3AF" : "#fff",
+                fontSize: 13,
+                cursor: (confirming || !/^[0-9a-f]{24}$/i.test(epcInput.trim())) ? "not-allowed" : "pointer",
+                fontWeight: 500,
+              }}>
+              {confirming ? "Verifying…" : "Verify EPC Match"}
             </button>
           )}
 

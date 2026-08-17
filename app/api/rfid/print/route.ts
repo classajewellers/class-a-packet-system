@@ -136,6 +136,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   });
 
   // ── Create RFID tag record ─────────────────────────────────────────────────
+  // The database enforces at most one unresolved (pending/printed) tag per piece
+  // via inventory_rfid_tags_one_unresolved_per_piece partial unique index.
+  // If a concurrent request slips through the SELECT guards above, the INSERT
+  // will fail with a unique constraint violation — we return 409 for that case.
   const { data: tag, error: tagErr } = await supabase
     .from("inventory_rfid_tags")
     .insert({
@@ -149,15 +153,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .single();
 
   if (tagErr || !tag) {
-    return NextResponse.json({ error: tagErr?.message ?? "Failed to create RFID tag record" }, { status: 500 });
+    const isConflict = tagErr?.code === "23505"; // PostgreSQL unique_violation
+    return NextResponse.json(
+      { error: isConflict ? "A print job is already in progress for this piece." : (tagErr?.message ?? "Failed to create RFID tag record") },
+      { status: isConflict ? 409 : 500 }
+    );
   }
 
   // ── Create print job ───────────────────────────────────────────────────────
-  // Idempotency key is scoped to the tag ID so that retries on the same tag
-  // (e.g. page refresh mid-request) don't create duplicate jobs.
-  // A second click that somehow passes the inflight check above would create a
-  // second tag (different ID → different key) — prevented by the inflightTag
-  // guard above which is checked before tag creation.
+  // The database also enforces at most one in-flight job per piece via
+  // print_jobs_one_inflight_per_piece partial unique index.
   const idempotencyKey = `rfid-tag-${tag.id}`;
 
   const { data: job, error: jobErr } = await supabase
@@ -185,9 +190,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .single();
 
   if (jobErr || !job) {
-    // Roll back tag record
+    // Roll back tag record before returning
     await supabase.from("inventory_rfid_tags").delete().eq("id", tag.id);
-    return NextResponse.json({ error: jobErr?.message ?? "Failed to create print job" }, { status: 500 });
+    const isConflict = jobErr?.code === "23505";
+    return NextResponse.json(
+      { error: isConflict ? "A print job is already in progress for this piece." : (jobErr?.message ?? "Failed to create print job") },
+      { status: isConflict ? 409 : 500 }
+    );
   }
 
   // Link tag → job

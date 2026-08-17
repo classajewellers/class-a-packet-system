@@ -1,40 +1,73 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 // POST /api/rfid/pieces/[id]/verify
 //
-// Confirms that a printed tag has been physically read and the EPC is correct.
-// This is the ONLY place tags move to "active".
+// Verifies a printed RFID tag by confirming the EPC read from the physical tag
+// matches what Vault encoded. Uses vault_verify_rfid_tag() — a PostgreSQL stored
+// procedure — to atomically:
+//   1. Confirm the printed tag exists and the EPC matches exactly
+//   2. Retire any existing active tag (replacement case)
+//   3. Activate the verified tag with full audit fields
 //
-// For the first test, this is a manual admin action (manager clicks
-// "Confirm Tag Encoded" in the UI after physically reading the tag).
-// Future: the AZH-P1 handheld will call this endpoint automatically.
+// confirmed_epc is REQUIRED. There is no "click to confirm without reading"
+// path. If the AZH-P1 (or other UHF EPC Gen2 reader) is not yet available,
+// leave the tag in 'printed' state. Do not fake verification.
 //
-// Atomically:
-//   1. Find the "printed" tag for this piece
-//   2. Retire any existing "active" tag (replacement case)
-//   3. Promote the "printed" tag to "active"
-//
-// Body: { confirmed_epc?: string } — optional: supply the EPC you physically
-// read to verify it matches what Vault expected.
+// Body: {
+//   confirmed_epc:       string  — the 24-hex-char EPC read from the physical tag
+//   verification_method: string  — e.g. "uhf_reader_manual", "azh_p1"
+//   device_id?:          string  — device serial/identifier when available
+// }
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
-  const supabase = await createTenantSupabaseClient(tenantId);
 
   const body = await req.json().catch(() => ({}));
-  const { confirmed_epc } = body;
+  const {
+    confirmed_epc,
+    verification_method = "uhf_reader_manual",
+    device_id = null,
+  } = body;
 
-  // Find the printed (unverified) tag for this piece
+  // confirmed_epc is not optional
+  if (!confirmed_epc || typeof confirmed_epc !== "string") {
+    return NextResponse.json(
+      {
+        error: "confirmed_epc is required. Read the physical tag with a UHF EPC Gen2 reader and provide the observed EPC.",
+        code: "epc_required",
+      },
+      { status: 400 }
+    );
+  }
+
+  const normalised = confirmed_epc.trim().toLowerCase();
+  if (!/^[0-9a-f]{24}$/.test(normalised)) {
+    return NextResponse.json(
+      {
+        error: `Invalid EPC format. Expected 24 lowercase hex characters, got: "${confirmed_epc}"`,
+        code: "epc_format_invalid",
+      },
+      { status: 400 }
+    );
+  }
+
+  // The piece_id is the URL param — find the printed tag for it
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
   const { data: printedTag, error: findErr } = await supabase
     .from("inventory_rfid_tags")
-    .select("id, epc, status")
+    .select("id")
     .eq("inventory_piece_id", params.id)
+    .eq("tenant_id", tenantId)
     .eq("status", "printed")
     .maybeSingle();
 
@@ -43,72 +76,32 @@ export async function POST(
   }
   if (!printedTag) {
     return NextResponse.json(
-      { error: "No tag in 'printed' state found for this piece. Nothing to verify." },
+      { error: "No tag in 'printed' state found for this piece.", code: "not_found" },
       { status: 404 }
     );
   }
 
-  // If the caller supplied a confirmed EPC, verify it matches
-  if (confirmed_epc) {
-    if (confirmed_epc.toLowerCase() !== printedTag.epc.toLowerCase()) {
-      return NextResponse.json(
-        {
-          error: "EPC mismatch: the tag you read does not match the EPC Vault assigned.",
-          expected_epc: printedTag.epc,
-          confirmed_epc: confirmed_epc.toLowerCase(),
-        },
-        { status: 422 }
-      );
-    }
+  // Call the atomic PostgreSQL function. This uses SELECT FOR UPDATE internally
+  // so concurrent verification attempts on the same tag are serialised by the DB.
+  const { data: result, error: rpcErr } = await supabase.rpc("vault_verify_rfid_tag", {
+    p_tenant_id:           tenantId,
+    p_tag_id:              printedTag.id,
+    p_confirmed_epc:       normalised,
+    p_verified_by:         null,      // user_id not wired yet — add when auth context available
+    p_verification_method: verification_method,
+    p_device_id:           device_id,
+  });
+
+  if (rpcErr) {
+    return NextResponse.json({ error: rpcErr.message }, { status: 500 });
   }
 
-  const now = new Date().toISOString();
+  const res = result as { ok: boolean; error?: string; code?: string; [k: string]: unknown };
 
-  // Retire any existing active tag for this piece (replacement scenario)
-  // This is safe: done before activating the new tag, but the unique index
-  // (WHERE status='active') means only one active tag can exist — so retiring
-  // the old one first leaves a window with zero active tags, then we immediately
-  // fill it with the verified tag.
-  const { data: existingActive } = await supabase
-    .from("inventory_rfid_tags")
-    .select("id")
-    .eq("inventory_piece_id", params.id)
-    .eq("status", "active")
-    .maybeSingle();
-
-  if (existingActive) {
-    const { error: retireErr } = await supabase
-      .from("inventory_rfid_tags")
-      .update({
-        status:            "replaced",
-        retired_at:        now,
-        retirement_reason: "replaced_by_verified_tag",
-      })
-      .eq("id", existingActive.id);
-
-    if (retireErr) {
-      return NextResponse.json({ error: `Failed to retire existing tag: ${retireErr.message}` }, { status: 500 });
-    }
+  if (!res.ok) {
+    const httpStatus = res.code === "epc_mismatch" ? 422 : 404;
+    return NextResponse.json(res, { status: httpStatus });
   }
 
-  // Activate the verified tag
-  const { data: activatedTag, error: activateErr } = await supabase
-    .from("inventory_rfid_tags")
-    .update({
-      status:       "active",
-      activated_at: now,
-    })
-    .eq("id", printedTag.id)
-    .eq("status", "printed")  // guard against race: only update if still printed
-    .select("id, epc, status, activated_at")
-    .single();
-
-  if (activateErr || !activatedTag) {
-    return NextResponse.json(
-      { error: activateErr?.message ?? "Failed to activate tag — may have already changed state" },
-      { status: 500 }
-    );
-  }
-
-  return NextResponse.json({ tag: activatedTag, verified: true });
+  return NextResponse.json(res);
 }
