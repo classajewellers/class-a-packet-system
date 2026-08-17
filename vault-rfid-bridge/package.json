@@ -1,0 +1,19 @@
+{
+  "name": "vault-rfid-bridge",
+  "version": "1.0.0",
+  "description": "Local bridge: polls Vault API and sends ZPL to Zebra RFID printer via TCP",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}

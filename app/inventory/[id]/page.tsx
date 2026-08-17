@@ -10,6 +10,7 @@ import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
 import {
   ArrowLeft, Edit2, Save, X, ArrowRight,
   Lock, AlertTriangle, TrendingDown, Package, MapPin, Clock, DollarSign, Bookmark, BookmarkX,
+  Wifi, WifiOff, Printer, RefreshCw,
 } from "lucide-react";
 
 const PAYMENT_METHODS = ["Cash", "EFTPOS", "Credit Card", "Bank Transfer", "Layby", "Finance", "Other"];
@@ -184,6 +185,166 @@ function Timeline({ piece, movements }: { piece: any; movements: any[] }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ── RFID Panel ───────────────────────────────────────────────────────────────
+
+function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId: string; isManager: boolean }) {
+  const [rfidState, setRfidState]   = useState<{ active_tag: any; active_job: any; recent_job: any } | null>(null);
+  const [printing, setPrinting]     = useState(false);
+  const [printError, setPrintError] = useState("");
+  const [pollTimer, setPollTimer]   = useState<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchRfid = useCallback(async () => {
+    if (!tenantId) return;
+    const res = await fetch(`/api/rfid/pieces/${pieceId}`, {
+      headers: { "x-tenant-id": tenantId },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setRfidState(data);
+      return data;
+    }
+  }, [pieceId, tenantId]);
+
+  useEffect(() => {
+    fetchRfid();
+  }, [fetchRfid]);
+
+  // Poll while a job is in-flight
+  useEffect(() => {
+    if (rfidState?.active_job) {
+      if (!pollTimer) {
+        const t = setInterval(async () => {
+          const data = await fetchRfid();
+          if (!data?.active_job) {
+            clearInterval(t);
+            setPollTimer(null);
+            setPrinting(false);
+          }
+        }, 2500);
+        setPollTimer(t);
+      }
+    } else {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        setPollTimer(null);
+      }
+    }
+    return () => { if (pollTimer) clearInterval(pollTimer); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rfidState?.active_job]);
+
+  const handlePrint = async (replace = false) => {
+    setPrinting(true);
+    setPrintError("");
+    try {
+      const res = await fetch("/api/rfid/print", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-tenant-id": tenantId },
+        body: JSON.stringify({ piece_id: pieceId, replace }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPrintError(data.error ?? "Print request failed");
+        setPrinting(false);
+        return;
+      }
+      // Job queued — fetchRfid will pick it up and polling starts
+      await fetchRfid();
+    } catch {
+      setPrintError("Network error — is your bridge running?");
+      setPrinting(false);
+    }
+  };
+
+  const activeTag  = rfidState?.active_tag;
+  const activeJob  = rfidState?.active_job;
+  const recentJob  = rfidState?.recent_job;
+  const lastFailed = !activeTag && recentJob?.status === "failed";
+
+  return (
+    <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+        {activeTag
+          ? <Wifi size={13} style={{ color: "#10B981" }} />
+          : <WifiOff size={13} style={{ color: "#9CA3AF" }} />}
+        <h3 style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>
+          RFID Tag
+        </h3>
+        {activeJob && (
+          <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#F59E0B" }}>
+            <RefreshCw size={10} style={{ animation: "spin 1s linear infinite" }} />
+            {activeJob.status === "queued" ? "Waiting for bridge…" : activeJob.status === "claimed" ? "Bridge claimed…" : "Printing…"}
+          </span>
+        )}
+      </div>
+
+      {activeTag ? (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 99, background: "#D1FAE5", color: "#065F46", fontSize: 11, fontWeight: 600 }}>
+              <Wifi size={9} /> Active
+            </span>
+          </div>
+          <div style={{ fontFamily: "monospace", fontSize: 12, color: "#374151", letterSpacing: "0.04em", wordBreak: "break-all" as const }}>
+            EPC: {activeTag.epc}
+          </div>
+          {activeTag.activated_at && (
+            <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 3 }}>
+              Encoded {fmtDate(activeTag.activated_at)}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{ marginBottom: 12 }}>
+          <p style={{ margin: 0, fontSize: 13, color: "#9CA3AF" }}>
+            {activeJob ? "Printing in progress…" : lastFailed ? "Last print job failed." : "No RFID tag encoded for this piece."}
+          </p>
+          {lastFailed && recentJob?.last_error && (
+            <p style={{ margin: "4px 0 0", fontSize: 12, color: "#DC2626" }}>{recentJob.last_error}</p>
+          )}
+        </div>
+      )}
+
+      {printError && (
+        <p style={{ margin: "0 0 10px", fontSize: 12, color: "#DC2626" }}>{printError}</p>
+      )}
+
+      {isManager && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
+          {!activeTag && !activeJob && (
+            <button
+              onClick={() => handlePrint(false)}
+              disabled={printing}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #D1D5DB", background: printing ? "#F3F4F6" : "#fff", color: printing ? "#9CA3AF" : "#111827", fontSize: 13, cursor: printing ? "not-allowed" : "pointer", fontWeight: 500 }}>
+              <Printer size={13} />
+              {printing ? "Sending…" : "Print RFID Tag"}
+            </button>
+          )}
+          {activeTag && !activeJob && (
+            <button
+              onClick={() => handlePrint(true)}
+              disabled={printing}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", fontSize: 13, cursor: printing ? "not-allowed" : "pointer" }}>
+              <Printer size={13} />
+              Replace Tag
+            </button>
+          )}
+          {(lastFailed || (!activeTag && !activeJob)) && (
+            <button
+              onClick={fetchRfid}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#F9FAFB", color: "#6B7280", fontSize: 13, cursor: "pointer" }}>
+              <RefreshCw size={12} />
+              Refresh
+            </button>
+          )}
+        </div>
+      )}
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
@@ -932,6 +1093,11 @@ export default function InventoryItemPage({ params }: Params) {
               entityId={params.id}
               readOnly={!isManager}
             />
+          )}
+
+          {/* RFID Tag */}
+          {!editing && (
+            <RfidPanel pieceId={params.id} tenantId={tenantId} isManager={isManager} />
           )}
 
           {/* Delete */}

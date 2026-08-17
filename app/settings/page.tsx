@@ -299,6 +299,17 @@ export default function SettingsPage() {
               }}
             >{s.label}</button>
           ))}
+          <button
+            onClick={() => router.push('/settings/rfid')}
+            style={{
+              display: 'block', width: '100%', textAlign: 'left',
+              padding: '9px 14px', marginBottom: 2,
+              borderRadius: 8, border: 'none', cursor: 'pointer',
+              fontSize: 14, fontWeight: 400,
+              background: 'transparent', color: '#374151',
+              transition: 'background .12s, color .12s',
+            }}
+          >RFID</button>
         </nav>
 
         {/* Main content */}
