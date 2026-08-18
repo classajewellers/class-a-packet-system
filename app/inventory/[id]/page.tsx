@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, createContext, useContext } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
@@ -428,6 +428,53 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
   );
 }
 
+// ── Edit-field context ────────────────────────────────────────────────────────
+// EF must live outside the page component so React sees a stable identity across
+// re-renders. Defining it inside causes remount on every keystroke (focus lost).
+
+interface EditCtx {
+  editing: boolean;
+  piece: InventoryPiece | null;
+  form: Partial<InventoryPiece>;
+  setForm: React.Dispatch<React.SetStateAction<Partial<InventoryPiece>>>;
+}
+const EditContext = createContext<EditCtx>({
+  editing: false, piece: null, form: {}, setForm: () => {},
+});
+
+function EF({ label, field, type = "text", opts }: {
+  label: string;
+  field: keyof InventoryPiece;
+  type?: string;
+  opts?: { value: string; label: string }[];
+}) {
+  const { editing, piece, form, setForm } = useContext(EditContext);
+  const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 3, display: "block" };
+  const inputStyle: React.CSSProperties = { width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 };
+  const value = editing ? (form[field] ?? "") : (piece?.[field] ?? "");
+  const onChange = (val: string) => setForm(f => ({ ...f, [field]: val === "" ? null : val }));
+
+  if (!editing) return <FieldView label={label} value={piece?.[field] as any} />;
+  if (opts) {
+    return (
+      <div>
+        <div style={labelStyle}>{label}</div>
+        <select value={String(value)} onChange={e => onChange(e.target.value)}
+          style={{ ...inputStyle, background: "#fff" }}>
+          <option value="">—</option>
+          {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div style={labelStyle}>{label}</div>
+      <input type={type} value={String(value)} onChange={e => onChange(e.target.value)} style={inputStyle} />
+    </div>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function InventoryItemPage({ params }: Params) {
@@ -750,44 +797,6 @@ export default function InventoryItemPage({ params }: Params) {
     fetchAll();
   }
 
-  function fv(key: keyof InventoryPiece): any {
-    return editing ? (form[key] ?? "") : (piece?.[key] ?? "");
-  }
-  function setFv(key: keyof InventoryPiece, val: any) {
-    setForm(f => ({ ...f, [key]: val === "" ? null : val }));
-  }
-
-  // EF must be declared as a function (not a component) to avoid hook rule violations
-  function EF({ label, field, type = "text", opts }: {
-    label: string;
-    field: keyof InventoryPiece;
-    type?: string;
-    opts?: { value: string; label: string }[];
-  }) {
-    const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 3, display: "block" };
-    const inputStyle: React.CSSProperties = { width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 };
-
-    if (!editing) return <FieldView label={label} value={piece?.[field] as any} />;
-    if (opts) {
-      return (
-        <div>
-          <div style={labelStyle}>{label}</div>
-          <select value={String(fv(field))} onChange={e => setFv(field, e.target.value)}
-            style={{ ...inputStyle, background: "#fff" }}>
-            <option value="">—</option>
-            {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-      );
-    }
-    return (
-      <div>
-        <div style={labelStyle}>{label}</div>
-        <input type={type} value={String(fv(field))} onChange={e => setFv(field, e.target.value)} style={inputStyle} />
-      </div>
-    );
-  }
-
   // ── Guard ─────────────────────────────────────────────────────────────────
 
   if (!hydrated || loading) {
@@ -819,6 +828,7 @@ export default function InventoryItemPage({ params }: Params) {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
+    <EditContext.Provider value={{ editing, piece, form, setForm }}>
     <div style={{ padding: "32px 32px 64px", maxWidth: 1100, margin: "0 auto" }}>
 
       {/* Back */}
@@ -1158,7 +1168,7 @@ export default function InventoryItemPage({ params }: Params) {
           <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20, marginBottom: 16 }}>
             <h3 style={{ margin: "0 0 10px", fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>Notes</h3>
             {editing ? (
-              <textarea value={String(fv("notes"))} onChange={e => setFv("notes", e.target.value)} rows={4}
+              <textarea value={String(form.notes ?? "")} onChange={e => setForm(f => ({ ...f, notes: e.target.value || null }))} rows={4}
                 style={{ width: "100%", boxSizing: "border-box" as const, padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, resize: "vertical" as const }} />
             ) : (
               <p style={{ margin: 0, fontSize: 14, color: piece.notes ? "#374151" : "#D1D5DB", lineHeight: 1.6 }}>{piece.notes ?? "—"}</p>
@@ -1553,5 +1563,6 @@ export default function InventoryItemPage({ params }: Params) {
         </div>
       )}
     </div>
+    </EditContext.Provider>
   );
 }
