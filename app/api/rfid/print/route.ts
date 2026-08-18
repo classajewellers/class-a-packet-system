@@ -99,13 +99,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // ── Fetch piece ────────────────────────────────────────────────────────────
+  // ── Fetch piece (with design name for label title) ─────────────────────────
   const { data: piece, error: pErr } = await supabase
     .from("inventory_pieces")
     .select(`
-      id, sku, title, notes, barcode,
-      metal:inventory_metals(id, name),
-      stone:inventory_stones(id, name)
+      id, sku, notes, barcode,
+      metal_karat, metal_colour,
+      diamond_carat, diamond_colour, diamond_type,
+      design:inventory_designs(id, name)
     `)
     .eq("id", piece_id)
     .single();
@@ -123,15 +124,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // ── Build ZPL ──────────────────────────────────────────────────────────────
   // Label dimensions use defaults until Sean confirms actual label spec.
   // widthDots / lengthDots should come from printer config once confirmed.
-  const metalName  = (piece as any).metal?.name ?? null;
-  const stoneName  = (piece as any).stone?.name ?? null;
+  const p = piece as any;
+  const designName = p.design?.name ?? null;
+  const metalName  = [p.metal_karat, p.metal_colour].filter(Boolean).join(" ") || null;
+  const stoneName  = p.diamond_type && p.diamond_type !== "None"
+    ? [p.diamond_carat ? `${p.diamond_carat}ct` : null, p.diamond_colour, p.diamond_type]
+        .filter(Boolean).join(" ")
+    : null;
+
   const zplPayload = generateJewelleryZpl({
     epc,
     sku:       piece.sku,
-    title:     (piece as any).title ?? piece.sku,
+    title:     designName ?? piece.sku,
     metal:     metalName,
     stone:     stoneName,
-    barcode:   (piece as any).barcode ?? piece.sku,
+    barcode:   p.barcode ?? piece.sku,
     // widthDots / lengthDots: not configured yet — using defaults pending label spec
   });
 
@@ -177,10 +184,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       label_data: {
         epc,
         sku:     piece.sku,
-        title:   (piece as any).title,
+        title:   designName ?? piece.sku,
         metal:   metalName,
         stone:   stoneName,
-        barcode: (piece as any).barcode ?? piece.sku,
+        barcode: p.barcode ?? piece.sku,
       },
       label_template:  "jewellery_v1",
       idempotency_key: idempotencyKey,

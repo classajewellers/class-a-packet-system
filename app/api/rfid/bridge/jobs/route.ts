@@ -27,7 +27,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     .eq("id", identity.installationId);
 
   // Fetch queued jobs for this tenant's printer
-  const query = supabase
+  let query = supabase
     .from("print_jobs")
     .select("id, piece_id, printer_id, rfid_tag_id, zpl_payload, label_data, label_template, status, requested_at")
     .eq("tenant_id", identity.tenantId)
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   // If the bridge has an associated printer, scope to that printer only
   if (identity.printerId) {
-    query.eq("printer_id", identity.printerId);
+    query = query.eq("printer_id", identity.printerId);
   }
 
   const { data: jobs, error } = await query;
