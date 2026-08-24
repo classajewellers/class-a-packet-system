@@ -3,6 +3,7 @@ import { PacketType } from "./types";
 
 // CA-YYYYMMDD-XXXX (standard packets) or ON-YYYYMMDD-XXXX (online orders)
 export async function generateReferenceNumber(
+  tenantId: string,
   date?: Date,
   packetType?: PacketType | ""
 ): Promise<string> {
@@ -14,7 +15,7 @@ export async function generateReferenceNumber(
 
   const { data, error } = await supabase.rpc(
     isOnline ? "increment_online_order_counter" : "increment_packet_counter",
-    { input_date: isoDate }
+    { input_date: isoDate, input_tenant_id: tenantId }
   );
 
   if (error) throw new Error(`Failed to generate reference number: ${error.message}`);
@@ -34,7 +35,7 @@ export function generateRepairTrackerNumber(referenceNumber: string): string {
 
 // QT-YYYYMMDD-XXXX (quotes)
 // Falls back to a timestamp-based suffix if the RPC doesn't exist yet.
-export async function generateQuoteReferenceNumber(date?: Date): Promise<string> {
+export async function generateQuoteReferenceNumber(tenantId: string, date?: Date): Promise<string> {
   const d = date ?? new Date();
   const isoDate = d.toISOString().split("T")[0];
   const dateCompact = isoDate.replace(/-/g, "");
@@ -43,6 +44,7 @@ export async function generateQuoteReferenceNumber(date?: Date): Promise<string>
 
   const { data, error } = await supabase.rpc("increment_quote_counter", {
     input_date: isoDate,
+    input_tenant_id: tenantId,
   });
 
   if (error) {

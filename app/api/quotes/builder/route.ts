@@ -16,13 +16,12 @@ export async function POST(req: NextRequest) {
       aiDescription, fingerSize, stockSku,
     } = body
 
-    const referenceNumber = await generateQuoteReferenceNumber()
+    const tenantId = req.headers.get('x-tenant-id') ?? ''
+    const referenceNumber = await generateQuoteReferenceNumber(tenantId)
     const now = new Date().toISOString()
     const todayDate = new Date()
     const addDays = (d: Date, n: number) => { const r = new Date(d); r.setDate(r.getDate() + n); return r.toISOString().split('T')[0]; };
     const addMonths = (d: Date, n: number) => { const r = new Date(d); r.setMonth(r.getMonth() + n); return r.toISOString().split('T')[0]; };
-
-    const tenantId = req.headers.get('x-tenant-id') ?? ''
 
     const supabase = await createTenantSupabaseClient(tenantId)
     const { data, error } = await supabase

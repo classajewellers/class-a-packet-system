@@ -26,10 +26,12 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
   const { formData } = body;
   console.log("[submit] Packet type:", formData.packet_type, "| Customer:", formData.customer_email);
 
+  const tenantId = req.headers.get('x-tenant-id') ?? '';
+
   // ── 2. Generate reference number ───────────────────────────────────────────
   let referenceNumber: string;
   try {
-    referenceNumber = await generateReferenceNumber(undefined, formData.packet_type);
+    referenceNumber = await generateReferenceNumber(tenantId, undefined, formData.packet_type);
     console.log("[submit] Generated reference:", referenceNumber);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
@@ -135,7 +137,6 @@ export async function POST(req: NextRequest): Promise<NextResponse<SubmitRespons
 
   // ── 4. Resolve tenant + customer BEFORE inserting packet ─────────────────
   console.log("[submit] Resolving tenant and customer...");
-  const tenantId = req.headers.get('x-tenant-id') ?? '';
   insertData.tenant_id = tenantId;
   const supabase = await createTenantSupabaseClient(tenantId);
 

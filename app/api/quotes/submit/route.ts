@@ -28,11 +28,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   console.log("Quote body:", JSON.stringify(body));
 
   const { formData } = body;
+  const tenantId = req.headers.get('x-tenant-id') ?? '';
 
   // ── 3. Generate QT- reference number (with timestamp fallback) ─────────────
   let referenceNumber: string;
   try {
-    referenceNumber = await generateQuoteReferenceNumber();
+    referenceNumber = await generateQuoteReferenceNumber(tenantId);
     console.log("[quotes/submit] Generated reference:", referenceNumber);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
@@ -65,7 +66,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     status_changed_at:   now,
   };
 
-  const tenantId = req.headers.get('x-tenant-id') ?? ''
   // @ts-expect-error tenant_id added dynamically
   insertData.tenant_id = tenantId;
   console.log("[quotes/submit] Insert payload:", JSON.stringify(insertData));

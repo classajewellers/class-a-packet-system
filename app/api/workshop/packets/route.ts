@@ -98,7 +98,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const body = await req.json();
     const supabase = await createTenantSupabaseClient(tenantId);
 
-    const referenceNumber = await generateReferenceNumber(undefined, "repair");
+    const referenceNumber = await generateReferenceNumber(tenantId, undefined, "repair");
 
     const jobType = deriveJobType(body.job_type, body.packet_type);
 

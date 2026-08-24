@@ -37,6 +37,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     // Generate certificate number: VC-YYYYMMDD-XXXX
     const { data: countData, error: countErr } = await supabase.rpc("increment_valuation_counter", {
       input_date: new Date().toISOString().split("T")[0],
+      input_tenant_id: tenantId,
     });
     if (countErr) {
       console.warn("[valuation] Counter increment failed:", countErr.message);

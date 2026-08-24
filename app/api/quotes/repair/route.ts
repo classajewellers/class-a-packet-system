@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { customer, items, vipTierId, discountAmount, tierOverride } = body;
 
-    const referenceNumber = await generateQuoteReferenceNumber();
+    const referenceNumber = await generateQuoteReferenceNumber(tenantId);
 
     const { data: quote, error: quoteError } = await supabase
       .from('quotes')

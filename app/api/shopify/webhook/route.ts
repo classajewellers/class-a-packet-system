@@ -468,7 +468,7 @@ async function processOrder(rawBody: Record<string, unknown>, tenantId: string):
   // ── A. Generate reference number ──────────────────────────────────────────
   let referenceNumber: string;
   try {
-    referenceNumber = await generateReferenceNumber(new Date(), "online_order");
+    referenceNumber = await generateReferenceNumber(tenantId, new Date(), "online_order");
     console.log("[shopify/webhook] Reference:", referenceNumber);
   } catch (err) {
     console.error("[shopify/webhook] Reference generation failed:", err instanceof Error ? err.message : err);
