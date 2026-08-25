@@ -251,18 +251,22 @@ async function runSearch(token: string, body: Record<string, unknown>, tenantId?
     depthPercentage: item.diamond?.certificate?.depthPercentage ?? null,
   }));
 
-  // Fetch margin brackets server-side so the modal can calculate retail prices
-  let marginBrackets: unknown[] = [];
+  // Fetch component rules so the modal can calculate real retail prices
+  let componentRules: unknown[] = [];
   try {
     const supabase = await createTenantSupabaseClient(tenantId ?? null);
-    const { data } = await supabase.from("pricing_margin_brackets").select("*").order("cost_min", { ascending: true });
-    marginBrackets = data ?? [];
+    const { data } = await supabase
+      .from("pricing_component_rules")
+      .select("component_type, carat_min, carat_max, multiplier")
+      .order("component_type")
+      .order("carat_min");
+    componentRules = data ?? [];
   } catch {
-    // fail silently — retail price display is non-critical
+    // fail silently — retail price display degrades gracefully
   }
 
   console.log(`[nivoda/search] Returning ${results.length} of ${raw.total_count ?? 0} total`);
-  return NextResponse.json({ results, total_count: raw.total_count ?? 0, marginBrackets });
+  return NextResponse.json({ results, total_count: raw.total_count ?? 0, componentRules });
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {

@@ -977,6 +977,9 @@ function QuoteBuilderPageInner() {
   // ── Nivoda stone selection ─────────────────────────────────────────────────
 
   const handleSelectNivodaStone = useCallback((stone: NivodaStone) => {
+    // Write the real Nivoda wholesale price (AUD) so the quote uses the actual cost,
+    // not the formula-based fallback that fires when cost is blank.
+    const wholesaleAud = stone.price > 0 ? (stone.price / 100).toFixed(2) : "";
     const formatted: StoneEntry = {
       id: uid(),
       caratWeight: String(stone.carats),
@@ -984,7 +987,7 @@ function QuoteBuilderPageInner() {
       colour: stone.color,
       clarity: stone.clarity,
       origin: stone.labgrown ? "Lab Grown" : "Natural",
-      cost: "",
+      cost: wholesaleAud,
       nivodaId: stone.id,
     };
     const targetId    = nivodaTargetItemId.current;
