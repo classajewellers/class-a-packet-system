@@ -126,10 +126,19 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
           })),
         }),
       });
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("[retail] estimate-stone-retail HTTP", res.status, text);
+        return;
+      }
       const json = await res.json();
-      if (json.retail) setRetailPrices(prev => ({ ...prev, ...json.retail }));
-    } catch {
-      // non-critical — retail display degrades to hidden
+      if (json.retail && Object.keys(json.retail).length > 0) {
+        setRetailPrices(prev => ({ ...prev, ...json.retail }));
+      } else {
+        console.error("[retail] response missing retail prices:", json);
+      }
+    } catch (err) {
+      console.error("[retail] fetch failed:", err);
     } finally {
       fetchingRetail.current = false;
     }
