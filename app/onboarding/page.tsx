@@ -26,6 +26,17 @@ interface PricingForm {
   gst_registered: boolean;
 }
 
+// Multipliers for the pricing engine (component_rules)
+interface MarginsForm {
+  metal: string;          // 1.40
+  labour: string;         // 1.80
+  melee: string;          // 3.50
+  lab_stone: string;      // 11.0
+  stone_tier0_mult: string; // natural <1ct  → 2.50
+  stone_tier1_mult: string; // natural 1-2ct → 2.00
+  stone_tier2_mult: string; // natural >2ct  → 1.25
+}
+
 interface InviteRow {
   name: string;
   email: string;
@@ -178,6 +189,8 @@ function StepDots({ current, total }: { current: number; total: number }) {
   );
 }
 
+// ── Step 1: Store Details ──────────────────────────────────────────────────
+
 function Step1({
   form,
   onChange,
@@ -246,6 +259,8 @@ function Step1({
   );
 }
 
+// ── Step 2: Spot Prices ────────────────────────────────────────────────────
+
 function Step2({
   form,
   onChange,
@@ -278,7 +293,7 @@ function Step2({
   return (
     <>
       <div style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 700, color: "#1A1A2E", margin: "0 0 6px" }}>Pricing Defaults</h2>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: "#1A1A2E", margin: "0 0 6px" }}>Metal Spot Prices</h2>
         <p style={{ fontSize: 14, color: "#6B7280", margin: 0 }}>
           Set your metal spot prices (per gram) for the quote builder. You can update these anytime in Settings → Pricing.
         </p>
@@ -319,7 +334,104 @@ function Step2({
   );
 }
 
-function Step3({
+// ── Step 3: Pricing Margins (NEW) ──────────────────────────────────────────
+
+function Step3Margins({
+  form,
+  onChange,
+  onNext,
+  onBack,
+  saving,
+}: {
+  form: MarginsForm;
+  onChange: (k: keyof MarginsForm, v: string) => void;
+  onNext: () => void;
+  onBack: () => void;
+  saving: boolean;
+}) {
+  const multField = (label: string, key: keyof MarginsForm, hint: string) => (
+    <div style={{ flex: "0 0 calc(50% - 8px)" }}>
+      <label style={labelStyle}>{label}</label>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <input
+          type="number"
+          min="1"
+          step="0.01"
+          value={form[key]}
+          onChange={e => onChange(key, e.target.value)}
+          style={{ ...inputStyle, textAlign: "right" as const }}
+        />
+        <span style={{ fontSize: 13, color: "#9CA3AF", whiteSpace: "nowrap" as const }}>×</span>
+      </div>
+      <p style={{ fontSize: 11, color: "#9CA3AF", margin: "4px 0 0" }}>{hint}</p>
+    </div>
+  );
+
+  return (
+    <>
+      <div style={{ marginBottom: 24 }}>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: "#1A1A2E", margin: "0 0 6px" }}>Pricing Margins</h2>
+        <p style={{ fontSize: 14, color: "#6B7280", margin: 0 }}>
+          Set your markup multipliers for the Ring Builder pricing engine.
+          Retail price = wholesale cost × multiplier. You can adjust these anytime in Settings → Pricing.
+        </p>
+      </div>
+
+      <div style={cardStyle}>
+        <p style={sectionLabel}>Flat multipliers</p>
+        <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 16 }}>
+          {multField("Metal markup", "metal", "Applied to gram weight × gold spot price")}
+          {multField("Labour & setting markup", "labour", "Applied to all labour and setting costs")}
+          {multField("Melee markup", "melee", "Applied to melee stone wholesale cost")}
+          {multField("Lab stone markup", "lab_stone", "Flat multiplier, all carat weights")}
+        </div>
+      </div>
+
+      <div style={{ ...cardStyle, marginTop: 16 }}>
+        <p style={sectionLabel}>Natural stone tiers <span style={{ fontWeight: 400, textTransform: "none" as const }}>— by carat weight</span></p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {[
+            { label: "Under 1ct", key: "stone_tier0_mult" as keyof MarginsForm, range: "0 – 1.00ct" },
+            { label: "1ct – 2ct",  key: "stone_tier1_mult" as keyof MarginsForm, range: "1.00 – 2.00ct" },
+            { label: "Over 2ct",  key: "stone_tier2_mult" as keyof MarginsForm, range: "2.00ct +" },
+          ].map(tier => (
+            <div key={tier.key} style={{ display: "flex", alignItems: "center", gap: 16, padding: "12px 16px", background: "#F9FAFB", borderRadius: 8 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#1A1A2E" }}>{tier.label}</div>
+                <div style={{ fontSize: 12, color: "#9CA3AF" }}>{tier.range}</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  value={form[tier.key]}
+                  onChange={e => onChange(tier.key, e.target.value)}
+                  style={{ ...inputStyle, width: 100, textAlign: "right" as const }}
+                />
+                <span style={{ fontSize: 13, color: "#9CA3AF" }}>×</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <p style={{ fontSize: 12, color: "#9CA3AF", margin: "12px 0 0" }}>
+          You can add or remove tiers after setup in Settings → Pricing → Pricing Engine.
+        </p>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 24 }}>
+        <button onClick={onBack} style={btnSecondary}>← Back</button>
+        <button onClick={onNext} style={btnPrimary} disabled={saving}>
+          {saving ? "Saving…" : "Next →"}
+        </button>
+      </div>
+    </>
+  );
+}
+
+// ── Step 4: VIP Tiers ──────────────────────────────────────────────────────
+
+function Step4VipTiers({
   tiers,
   loading,
   onNext,
@@ -383,7 +495,9 @@ function Step3({
   );
 }
 
-function Step4({
+// ── Step 5: Invite Team ────────────────────────────────────────────────────
+
+function Step5InviteTeam({
   invites,
   onChangeInvite,
   onAddInvite,
@@ -472,7 +586,9 @@ function Step4({
   );
 }
 
-function Step5({
+// ── Step 6: All Set ────────────────────────────────────────────────────────
+
+function Step6AllSet({
   storeName,
   onComplete,
   saving,
@@ -482,10 +598,11 @@ function Step5({
   saving: boolean;
 }) {
   const items = [
-    { icon: "🏪", label: "Store details",   sub: "Name, contact info, and payment details" },
-    { icon: "💰", label: "Metal prices",    sub: "Gold, silver, and platinum per-gram rates" },
-    { icon: "⭐", label: "VIP tiers",       sub: "Loyalty tiers ready for your customers" },
-    { icon: "👥", label: "Team invited",    sub: "Staff invites sent to join Vault" },
+    { icon: "🏪", label: "Store details",      sub: "Name, contact info, and payment details" },
+    { icon: "💰", label: "Metal spot prices",   sub: "Gold, silver, and platinum per-gram rates" },
+    { icon: "💎", label: "Pricing margins",     sub: "Engine multipliers for all jewellery components" },
+    { icon: "⭐", label: "VIP tiers",          sub: "Loyalty tiers ready for your customers" },
+    { icon: "👥", label: "Team invited",       sub: "Staff invites sent to join Vault" },
   ];
 
   return (
@@ -527,6 +644,8 @@ function Step5({
   );
 }
 
+// ── Main wizard ────────────────────────────────────────────────────────────
+
 export default function OnboardingPage() {
   const { user, hydrated } = useUser();
   const router = useRouter();
@@ -546,6 +665,16 @@ export default function OnboardingPage() {
   const [pricing, setPricing] = useState<PricingForm>({
     gold_9ct: "42.00", gold_18ct: "85.00", silver: "1.00", platinum: "120.00",
     gst_registered: true,
+  });
+
+  const [margins, setMargins] = useState<MarginsForm>({
+    metal: "1.40",
+    labour: "1.80",
+    melee: "3.50",
+    lab_stone: "11.00",
+    stone_tier0_mult: "2.50",
+    stone_tier1_mult: "2.00",
+    stone_tier2_mult: "1.25",
   });
 
   const [vipTiers, setVipTiers]         = useState<VipTier[]>([]);
@@ -569,15 +698,16 @@ export default function OnboardingPage() {
           return;
         }
         if (data.onboarding_step > 0) {
-          setStep(Math.min(data.onboarding_step + 1, 5));
+          setStep(Math.min(data.onboarding_step + 1, 6));
         }
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }, [hydrated, user, router, tid]);
 
+  // Load VIP tiers when reaching step 4
   useEffect(() => {
-    if (step !== 3 || !user || tiersLoading || vipTiers.length > 0) return;
+    if (step !== 4 || !user || tiersLoading || vipTiers.length > 0) return;
     setTiersLoading(true);
     fetch("/api/onboarding/vip-tiers", {
       method: "POST",
@@ -588,6 +718,8 @@ export default function OnboardingPage() {
       .catch(() => {})
       .finally(() => setTiersLoading(false));
   }, [step, user, tiersLoading, vipTiers.length, tid]);
+
+  // ── Step handlers ────────────────────────────────────────────────────────
 
   async function handleStep1Next() {
     if (!store.store_name.trim()) { setError("Store name is required."); return; }
@@ -626,18 +758,26 @@ export default function OnboardingPage() {
     }
   }
 
-  async function handleStep4Next() {
+  async function handleStep3MarginsNext() {
     setError(null);
-    const toInvite = invites.filter(i => i.name.trim() && i.email.trim());
-    if (toInvite.length === 0) { await handleStep4Skip(); return; }
     setSaving(true);
     try {
-      await fetch("/api/onboarding/invite", {
+      const rules = [
+        { component_type: "metal",         carat_min: 0, carat_max: null, multiplier: parseFloat(margins.metal) },
+        { component_type: "labour",        carat_min: 0, carat_max: null, multiplier: parseFloat(margins.labour) },
+        { component_type: "melee",         carat_min: 0, carat_max: null, multiplier: parseFloat(margins.melee) },
+        { component_type: "lab_stone",     carat_min: 0, carat_max: null, multiplier: parseFloat(margins.lab_stone) },
+        { component_type: "natural_stone", carat_min: 0,    carat_max: 1.00, multiplier: parseFloat(margins.stone_tier0_mult) },
+        { component_type: "natural_stone", carat_min: 1.00, carat_max: 2.00, multiplier: parseFloat(margins.stone_tier1_mult) },
+        { component_type: "natural_stone", carat_min: 2.00, carat_max: null, multiplier: parseFloat(margins.stone_tier2_mult) },
+      ];
+      const res = await fetch("/api/onboarding/pricing-margins", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-tenant-id": tid },
-        body: JSON.stringify({ invites: toInvite }),
+        body: JSON.stringify({ rules }),
       });
-      setStep(5);
+      if (!res.ok) { setError("Failed to save pricing margins."); return; }
+      setStep(4);
     } catch {
       setError("Network error — please try again.");
     } finally {
@@ -645,13 +785,32 @@ export default function OnboardingPage() {
     }
   }
 
-  async function handleStep4Skip() {
+  async function handleStep5Next() {
+    setError(null);
+    const toInvite = invites.filter(i => i.name.trim() && i.email.trim());
+    if (toInvite.length === 0) { await handleStep5Skip(); return; }
+    setSaving(true);
+    try {
+      await fetch("/api/onboarding/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-tenant-id": tid },
+        body: JSON.stringify({ invites: toInvite }),
+      });
+      setStep(6);
+    } catch {
+      setError("Network error — please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleStep5Skip() {
     await fetch("/api/onboarding/invite", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-tenant-id": tid },
       body: JSON.stringify({ invites: [] }),
     }).catch(() => {});
-    setStep(5);
+    setStep(6);
   }
 
   async function handleComplete() {
@@ -694,11 +853,11 @@ export default function OnboardingPage() {
 
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.04em", color: PRIMARY }}>◆ Vault</div>
-          <div style={{ fontSize: 13, color: "#9CA3AF", marginTop: 4 }}>Store setup · Step {step} of 5</div>
+          <div style={{ fontSize: 13, color: "#9CA3AF", marginTop: 4 }}>Store setup · Step {step} of 6</div>
         </div>
 
         <div style={{ marginBottom: 40 }}>
-          <StepDots current={step} total={5} />
+          <StepDots current={step} total={6} />
         </div>
 
         {error && (
@@ -725,15 +884,24 @@ export default function OnboardingPage() {
           />
         )}
         {step === 3 && (
-          <Step3
-            tiers={vipTiers}
-            loading={tiersLoading}
-            onNext={() => { setError(null); setStep(4); }}
+          <Step3Margins
+            form={margins}
+            onChange={(k, v) => setMargins(m => ({ ...m, [k]: v }))}
+            onNext={handleStep3MarginsNext}
             onBack={() => { setError(null); setStep(2); }}
+            saving={saving}
           />
         )}
         {step === 4 && (
-          <Step4
+          <Step4VipTiers
+            tiers={vipTiers}
+            loading={tiersLoading}
+            onNext={() => { setError(null); setStep(5); }}
+            onBack={() => { setError(null); setStep(3); }}
+          />
+        )}
+        {step === 5 && (
+          <Step5InviteTeam
             invites={invites}
             onChangeInvite={(i, k, v) =>
               setInvites(prev => {
@@ -743,14 +911,14 @@ export default function OnboardingPage() {
               })
             }
             onAddInvite={() => setInvites(prev => [...prev, { name: "", email: "", role: "staff" }])}
-            onNext={handleStep4Next}
-            onBack={() => { setError(null); setStep(3); }}
-            onSkip={handleStep4Skip}
+            onNext={handleStep5Next}
+            onBack={() => { setError(null); setStep(4); }}
+            onSkip={handleStep5Skip}
             saving={saving}
           />
         )}
-        {step === 5 && (
-          <Step5
+        {step === 6 && (
+          <Step6AllSet
             storeName={store.store_name}
             onComplete={handleComplete}
             saving={saving}
