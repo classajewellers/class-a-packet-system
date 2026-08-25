@@ -132,6 +132,8 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
         return;
       }
       const json = await res.json();
+      console.log("[retail] response:", JSON.stringify(json).slice(0, 300));
+      console.log("[retail] stone IDs sent:", stones.map(s => s.id).join(", ").slice(0, 200));
       if (json.retail && Object.keys(json.retail).length > 0) {
         setRetailPrices(prev => ({ ...prev, ...json.retail }));
       } else {
