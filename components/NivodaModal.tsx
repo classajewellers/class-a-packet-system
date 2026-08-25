@@ -111,6 +111,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
   const PAGE_SIZE = 20;
 
   async function fetchRetailPrices(stones: NivodaStone[]) {
+    console.log("[retail] called, stones:", stones.length, "fetching:", fetchingRetail.current);
     if (!stones.length || fetchingRetail.current) return;
     fetchingRetail.current = true;
     try {
