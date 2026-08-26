@@ -9,27 +9,34 @@ export async function GET(req: NextRequest) {
     const tenantId = req.headers.get("x-tenant-id") ?? "";
     const supabase = await createTenantSupabaseClient(tenantId);
 
-    const { data, error } = await supabase
+    const { searchParams } = new URL(req.url);
+    const search  = searchParams.get("search")   ?? "";
+    const perPage = Math.min(100, parseInt(searchParams.get("per_page") ?? "50", 10));
+
+    let query = supabase
       .from("inventory_products")
       .select(`
-        id, name, collection, category_id, design, style, created_at,
-        category:inventory_categories(id, name),
+        id, name, collection, category, category_id, design, style, created_at,
         _pieces:inventory_pieces(id)
       `)
       .eq("tenant_id", tenantId)
-      .order("name");
+      .order("name")
+      .limit(perPage);
 
+    if (search) query = query.ilike("name", `%${search}%`);
+
+    const { data, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     const products = (data ?? []).map((p: any) => ({
-      id: p.id,
-      name: p.name,
-      collection: p.collection,
+      id:          p.id,
+      name:        p.name,
+      collection:  p.collection,
+      category:    p.category,
       category_id: p.category_id,
-      design: p.design,
-      style: p.style,
-      created_at: p.created_at,
-      category: p.category,
+      design:      p.design,
+      style:       p.style,
+      created_at:  p.created_at,
       piece_count: (p._pieces as any[])?.length ?? 0,
     }));
 
@@ -54,8 +61,12 @@ export async function POST(req: NextRequest) {
       .insert({
         tenant_id:             tenantId,
         name:                  body.name.trim(),
+        category:              body.category              || null,
         category_id:           body.category_id           || null,
         collection:            body.collection            || null,
+        labour_cost:           body.labour_cost  != null ? Number(body.labour_cost)  : null,
+        setting_cost:          body.setting_cost != null ? Number(body.setting_cost) : null,
+        melee_included:        body.melee_included === true,
         design:                body.design                || null,
         style:                 body.style                 || null,
         setting_type:          body.setting_type          || null,

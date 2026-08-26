@@ -121,8 +121,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     insertData.location_id = toUUID(insertData.location_id);
     insertData.supplier_id = toUUID(insertData.supplier_id);
     insertData.assigned_to = toUUID(insertData.assigned_to);
+    insertData.product_id  = toUUID(insertData.product_id);
+    insertData.variant_id  = toUUID(insertData.variant_id);
 
-    // Look up category name to determine SKU prefix (graceful on null/missing)
+    // Derive SKU prefix from category: piece's category_id first, then fall back
+    // to the linked product's category text field (three-layer model path).
     let categoryName: string | null = null;
     if (insertData.category_id) {
       try {
@@ -134,6 +137,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         categoryName = cat?.name ?? null;
       } catch (catErr) {
         console.error("[POST /api/inventory/pieces] category lookup failed:", catErr);
+      }
+    } else if (insertData.product_id) {
+      // No direct category on piece — use the design's category text shorthand
+      try {
+        const { data: prod } = await supabase
+          .from("inventory_products")
+          .select("category")
+          .eq("id", insertData.product_id)
+          .single();
+        categoryName = (prod as any)?.category ?? null;
+      } catch (prodErr) {
+        console.error("[POST /api/inventory/pieces] product category lookup failed:", prodErr);
       }
     }
 

@@ -269,10 +269,10 @@ export default function InventoryPage() {
           )}
           {isManager && (
             <button
-              onClick={openAdd}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 14, fontWeight: 500, background: "#111827", color: "#fff", border: "none", cursor: "pointer" }}
+              onClick={() => router.push("/inventory/pieces/new")}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 14, fontWeight: 500, background: "#635BFF", color: "#fff", border: "none", cursor: "pointer" }}
             >
-              <Plus size={15} /> Add Item
+              <Plus size={15} /> Add Piece
             </button>
           )}
         </div>
