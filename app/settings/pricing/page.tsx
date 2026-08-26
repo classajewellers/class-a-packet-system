@@ -134,6 +134,10 @@ export default function PricingMarginsPage() {
   const [newTier, setNewTier] = useState({ carat_min: "", carat_max: "", multiplier: "" });
   const [addTierSaving, setAddTierSaving] = useState(false);
 
+  const [showAddLabTier, setShowAddLabTier] = useState(false);
+  const [newLabTier, setNewLabTier] = useState({ carat_min: "", carat_max: "", multiplier: "" });
+  const [addLabTierSaving, setAddLabTierSaving] = useState(false);
+
   const [showAddBs, setShowAddBs] = useState(false);
   const [newBs, setNewBs] = useState({ month_number: "1", stone_name: "", price_per_stone: "", fitting_fee: "0" });
   const [addBsSaving, setAddBsSaving] = useState(false);
@@ -242,6 +246,25 @@ export default function PricingMarginsPage() {
     loadEngine();
   }
 
+  async function addLabTier() {
+    if (!newLabTier.carat_min || !newLabTier.multiplier) return;
+    setAddLabTierSaving(true);
+    await fetch("/api/pricing-hub/component-rules", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-tenant-id": tid },
+      body: JSON.stringify({
+        component_type: "lab_stone",
+        carat_min: parseFloat(newLabTier.carat_min),
+        carat_max: newLabTier.carat_max ? parseFloat(newLabTier.carat_max) : null,
+        multiplier: parseFloat(newLabTier.multiplier),
+      }),
+    });
+    setAddLabTierSaving(false);
+    setShowAddLabTier(false);
+    setNewLabTier({ carat_min: "", carat_max: "", multiplier: "" });
+    loadEngine();
+  }
+
   async function addNaturalTier() {
     if (!newTier.carat_min || !newTier.multiplier) return;
     setAddTierSaving(true);
@@ -344,7 +367,8 @@ export default function PricingMarginsPage() {
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
-  const flatRules = rules.filter(r => r.component_type !== "natural_stone");
+  const flatRules  = rules.filter(r => r.component_type !== "natural_stone" && r.component_type !== "lab_stone");
+  const labTiers   = rules.filter(r => r.component_type === "lab_stone").sort((a, b) => a.carat_min - b.carat_min);
   const stoneTiers = rules.filter(r => r.component_type === "natural_stone").sort((a, b) => a.carat_min - b.carat_min);
 
   const FLAT_LABELS: Record<string, string> = {
@@ -508,6 +532,119 @@ export default function PricingMarginsPage() {
                               </div>
                             ) : (
                               <IconBtn onClick={() => { setEditingRule(rule.id); setRuleBuf({ multiplier: String(rule.multiplier), carat_min: "", carat_max: "" }); }} icon="✎" />
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Lab stone tiers */}
+              <div style={card}>
+                <div style={{ padding: "14px 20px", borderBottom: "1px solid #E8E8F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <h2 style={{ fontSize: 15, fontWeight: 700, color: "#1A1A2E", margin: 0 }}>Lab Stone Tiers</h2>
+                    <p style={{ fontSize: 13, color: "#6B7280", marginTop: 3, marginBottom: 0 }}>
+                      Tiered markup by carat weight. Ranges are {">"}= min and {"<"} max.
+                    </p>
+                  </div>
+                  <button onClick={() => setShowAddLabTier(v => !v)} style={{
+                    background: showAddLabTier ? "#F3F4F6" : PRIMARY, color: showAddLabTier ? "#6B7280" : "#fff",
+                    border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 13, fontWeight: 600,
+                    cursor: "pointer", fontFamily: "inherit",
+                  }}>
+                    {showAddLabTier ? "Cancel" : "+ Add Tier"}
+                  </button>
+                </div>
+
+                {showAddLabTier && (
+                  <div style={{ padding: "14px 20px", background: "#F9FAFB", borderBottom: "1px solid #E8E8F0", display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" as const }}>
+                    <div>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Min ct (incl.)</label>
+                      <input type="number" min="0" step="0.01" placeholder="0.00" value={newLabTier.carat_min}
+                        onChange={e => setNewLabTier(t => ({ ...t, carat_min: e.target.value }))}
+                        style={{ ...inp, width: 90 }} />
+                    </div>
+                    <div>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Max ct (excl.) — blank = no limit</label>
+                      <input type="number" min="0" step="0.01" placeholder="none" value={newLabTier.carat_max}
+                        onChange={e => setNewLabTier(t => ({ ...t, carat_max: e.target.value }))}
+                        style={{ ...inp, width: 90 }} />
+                    </div>
+                    <div>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Multiplier</label>
+                      <input type="number" min="1" step="0.01" placeholder="10.50" value={newLabTier.multiplier}
+                        onChange={e => setNewLabTier(t => ({ ...t, multiplier: e.target.value }))}
+                        style={{ ...inp, width: 90 }} />
+                    </div>
+                    <button onClick={addLabTier} disabled={addLabTierSaving} style={{
+                      background: PRIMARY, color: "#fff", border: "none", borderRadius: 8,
+                      padding: "7px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+                    }}>
+                      {addLabTierSaving ? "Adding…" : "Add"}
+                    </button>
+                  </div>
+                )}
+
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      <th style={th}>Carat range</th>
+                      <th style={{ ...th, textAlign: "center" }}>Multiplier</th>
+                      <th style={{ ...th, width: 80 }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {labTiers.length === 0 && (
+                      <tr><td colSpan={3} style={{ ...td, color: "#9CA3AF", textAlign: "center" }}>No tiers configured.</td></tr>
+                    )}
+                    {labTiers.map(tier => {
+                      const isEditing = editingRule === tier.id;
+                      const rangeLabel = tier.carat_max != null
+                        ? `${tier.carat_min}ct – ${tier.carat_max}ct`
+                        : `${tier.carat_min}ct+`;
+                      return (
+                        <tr key={tier.id}>
+                          <td style={td}>
+                            {isEditing ? (
+                              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" as const }}>
+                                <input type="number" min="0" step="0.01" placeholder="min" value={ruleBuf.carat_min}
+                                  onChange={e => setRuleBuf(b => ({ ...b, carat_min: e.target.value }))}
+                                  style={{ ...inpFocus, width: 70 }} />
+                                <span style={{ color: "#9CA3AF" }}>–</span>
+                                <input type="number" min="0" step="0.01" placeholder="max" value={ruleBuf.carat_max}
+                                  onChange={e => setRuleBuf(b => ({ ...b, carat_max: e.target.value }))}
+                                  style={{ ...inpFocus, width: 70 }} />
+                                <span style={{ fontSize: 12, color: "#9CA3AF" }}>ct (blank = ∞)</span>
+                              </div>
+                            ) : (
+                              <span style={{ fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{rangeLabel}</span>
+                            )}
+                          </td>
+                          <td style={{ ...td, textAlign: "center" }}>
+                            {isEditing ? (
+                              <input type="number" min="1" step="0.01"
+                                value={ruleBuf.multiplier}
+                                onChange={e => setRuleBuf(b => ({ ...b, multiplier: e.target.value }))}
+                                style={{ ...inpFocus, width: 80, textAlign: "center" }}
+                              />
+                            ) : (
+                              <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 500 }}>{tier.multiplier.toFixed(2)}×</span>
+                            )}
+                          </td>
+                          <td style={{ ...td, textAlign: "right" }}>
+                            {isEditing ? (
+                              <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
+                                <SaveBtn onClick={() => saveRule(tier.id)} saving={ruleSaving} saved={ruleSaved === tier.id} />
+                                <button onClick={() => setEditingRule(null)} style={{ padding: "4px 8px", background: "transparent", color: "#6B7280", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>✕</button>
+                              </div>
+                            ) : (
+                              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                                <IconBtn onClick={() => { setEditingRule(tier.id); setRuleBuf({ multiplier: String(tier.multiplier), carat_min: String(tier.carat_min), carat_max: tier.carat_max != null ? String(tier.carat_max) : "" }); }} icon="✎" />
+                                <IconBtn onClick={() => deleteRule(tier.id)} icon="✕" danger />
+                              </div>
                             )}
                           </td>
                         </tr>
