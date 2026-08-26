@@ -33,6 +33,10 @@ interface StoneEntry {
   id: string; caratWeight: string; shape: string; colour: string;
   clarity: string; origin: "Lab Grown" | "Natural"; cost: string;
   nivodaId?: string;
+  // "estimated" = converted from the Browse Stones exchange-rate estimate (or still
+  // pending the exact lookup); "exact" = confirmed via get_diamond_by_id at selection
+  // time. Cleared to undefined the moment a manager types over the cost manually.
+  costSource?: "estimated" | "exact";
 }
 interface MeleeRow {
   id: string; stoneType: string; quality: string; shape: string;
@@ -553,13 +557,25 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                         </div>
                         {isManager && (
                           <div style={{ marginTop: 4 }}>
-                            <label style={{ ...labelStyle, color: "#635BFF" }}>Cost Price ($)</label>
+                            <label style={{ ...labelStyle, color: "#635BFF", display: "flex", alignItems: "center", gap: 6 }}>
+                              Cost Price ($)
+                              {stone.costSource === "estimated" && (
+                                <span title="Converted from Nivoda's USD price via exchange rate — exact AUD price could not be confirmed. Verify before finalizing." style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: "#FEF9C3", color: "#92400E", border: "1px solid #FDE68A" }}>
+                                  ~ ESTIMATE
+                                </span>
+                              )}
+                              {stone.costSource === "exact" && (
+                                <span title="Exact AUD price confirmed from Nivoda" style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: "#DCFCE7", color: "#16A34A", border: "1px solid #BBF7D0" }}>
+                                  ✓ CONFIRMED
+                                </span>
+                              )}
+                            </label>
                             {(() => {
                               const autoCalc = stone.cost.trim() === "" ? calcStoneBaseCost(stone, stonePricing, ndData) : 0;
                               const isNd = stone.origin === "Natural" && autoCalc > 0 && ndData && ndData.prices.length > 0 && calcNdCost(stone, ndData) > 0;
                               const ph = autoCalc > 0 ? `$${autoCalc.toFixed(2)} ${isNd ? '(Rap avg)' : '(auto)'}` : "$0.00";
                               return (
-                                <input style={{ ...inputStyle, width: 130, borderColor: "#C4BFFE" }} type="number" min="0" step="0.01" value={stone.cost} onChange={e => set("stoneOptions", item.stoneOptions.map(o => o.id === opt.id ? { ...o, stones: o.stones.map(s => s.id === stone.id ? { ...s, cost: e.target.value } : s) } : o))} onFocus={onFocus} onBlur={onBlurField} placeholder={ph} />
+                                <input style={{ ...inputStyle, width: 130, borderColor: "#C4BFFE" }} type="number" min="0" step="0.01" value={stone.cost} onChange={e => set("stoneOptions", item.stoneOptions.map(o => o.id === opt.id ? { ...o, stones: o.stones.map(s => s.id === stone.id ? { ...s, cost: e.target.value, costSource: undefined } : s) } : o))} onFocus={onFocus} onBlur={onBlurField} placeholder={ph} />
                               );
                             })()}
                           </div>
@@ -976,12 +992,32 @@ function QuoteBuilderPageInner() {
 
   // ── Nivoda stone selection ─────────────────────────────────────────────────
 
+  // Writes an updated cost/costSource onto one specific stone entry, wherever it now
+  // lives — the item/option it was placed in can't move, but re-finding by id keeps
+  // this safe if other edits happen while the exact-price lookup is in flight.
+  function patchStoneEntry(stoneEntryId: string, patch: Partial<StoneEntry>) {
+    setItems(prev => prev.map(it => ({
+      ...it,
+      stoneOptions: it.stoneOptions.map(opt => ({
+        ...opt,
+        stones: opt.stones.map(s => s.id === stoneEntryId ? { ...s, ...patch } : s),
+      })),
+    })));
+  }
+
   const handleSelectNivodaStone = useCallback((stone: NivodaStone) => {
-    // Write the real Nivoda wholesale price (AUD) so the quote uses the actual cost,
-    // not the formula-based fallback that fires when cost is blank.
-    const wholesaleAud = stone.price > 0 ? (stone.price / 100).toFixed(2) : "";
+    // Write the estimated Nivoda wholesale price (AUD, converted from USD via the cached
+    // exchange rate in /api/nivoda/search) immediately so the quote uses a real cost,
+    // not the formula-based fallback that fires when cost is blank. Then confirm the
+    // exact price via get_diamond_by_id + preferred_currency in the background — this
+    // number becomes the real wholesale cost basis for the quote, so it's worth the extra
+    // round trip. If the exact lookup fails or looks unreliable, the estimate stays and
+    // stays flagged as such — never silently swapped for a number we're not confident in.
+    const estimatedPriceAud = stone.price > 0 ? stone.price : 0;
+    const wholesaleAud = estimatedPriceAud > 0 ? (estimatedPriceAud / 100).toFixed(2) : "";
+    const stoneEntryId = uid();
     const formatted: StoneEntry = {
-      id: uid(),
+      id: stoneEntryId,
       caratWeight: String(stone.carats),
       shape: stone.shape ? stone.shape.charAt(0) + stone.shape.slice(1).toLowerCase() : "",
       colour: stone.color,
@@ -989,6 +1025,7 @@ function QuoteBuilderPageInner() {
       origin: stone.labgrown ? "Lab Grown" : "Natural",
       cost: wholesaleAud,
       nivodaId: stone.id,
+      costSource: "estimated",
     };
     const targetId    = nivodaTargetItemId.current;
     const targetOptId = nivodaTargetOptId.current;
@@ -999,6 +1036,23 @@ function QuoteBuilderPageInner() {
         opt.id !== targetOptId ? opt : { ...opt, stones: [formatted] }
       ),
     }));
+
+    if (estimatedPriceAud > 0) {
+      fetch("/api/nivoda/stone-price", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ diamond_id: stone.id, estimated_price_aud: estimatedPriceAud }),
+      })
+        .then(r => r.json())
+        .then((json: { price?: number; confident?: boolean; error?: string }) => {
+          if (json.price != null && json.confident) {
+            patchStoneEntry(stoneEntryId, { cost: (json.price / 100).toFixed(2), costSource: "exact" });
+          } else {
+            console.warn("[nivoda] Exact price unavailable or unreliable, keeping estimate:", json.error ?? "confidence check failed");
+          }
+        })
+        .catch(err => console.warn("[nivoda] Exact price lookup failed, keeping estimate:", err));
+    }
   }, []);
 
   // ── Save ──────────────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getNivodaToken, clearNivodaTokenCache, getNivodaEndpoint } from "@/lib/nivoda-auth";
+import { getNivodaAudRate } from "@/lib/nivoda-exchange-rate";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
@@ -230,9 +231,23 @@ async function runSearch(token: string, body: Record<string, unknown>, tenantId?
     };
   };
 
+  // Nivoda's price field is permanently USD ("The delivered price ... in cents in USD" —
+  // confirmed in their schema, no currency argument exists on diamonds_by_query). Convert
+  // to AUD here, once, at the source — every downstream consumer (Browse Stones grid,
+  // detail view, the retail estimate) already assumes `price` is AUD cents and needs no
+  // changes. If the rate can't be fetched, do NOT fall back to the raw USD number — that
+  // would silently reproduce the exact USD-labelled-as-AUD bug this replaces. Zero out
+  // price instead so the UI shows "POA" (its existing behaviour for price <= 0).
+  let audRate: number | null = null;
+  try {
+    audRate = await getNivodaAudRate();
+  } catch (err) {
+    console.error("[nivoda/search] Exchange rate fetch failed — prices will show as POA:", err);
+  }
+
   const results: NivodaResult[] = (rawItems as RawItem[]).map(item => ({
     id:            item.id,
-    price:         item.price,
+    price:         audRate != null ? Math.round(item.price * audRate) : 0,
     carats:        item.diamond?.certificate?.carats       ?? 0,
     shape:         item.diamond?.certificate?.shape        ?? shapesArr[0],
     color:         item.diamond?.certificate?.color        ?? "",
@@ -265,8 +280,13 @@ async function runSearch(token: string, body: Record<string, unknown>, tenantId?
     // fail silently — retail price display degrades gracefully
   }
 
-  console.log(`[nivoda/search] Returning ${results.length} of ${raw.total_count ?? 0} total`);
-  return NextResponse.json({ results, total_count: raw.total_count ?? 0, componentRules });
+  console.log(`[nivoda/search] Returning ${results.length} of ${raw.total_count ?? 0} total, AUD rate applied: ${audRate != null}`);
+  return NextResponse.json({
+    results,
+    total_count: raw.total_count ?? 0,
+    componentRules,
+    currencyConversionFailed: audRate == null,
+  });
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {

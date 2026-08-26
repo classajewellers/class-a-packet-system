@@ -100,6 +100,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
   const [loading, setLoading]               = useState(false);
   const [error, setError]                   = useState<string | null>(null);
   const [searched, setSearched]             = useState(false);
+  const [priceUnavailable, setPriceUnavailable] = useState(false);
 
   // Detail view
   const [selectedStone, setSelectedStone]   = useState<NivodaStone | null>(null);
@@ -181,6 +182,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
         return;
       }
       const incoming: NivodaStone[] = json.results ?? [];
+      setPriceUnavailable(Boolean(json.currencyConversionFailed));
       if (offset === 0) {
         setResults(incoming);
         const ids: Record<string, string> = {};
@@ -419,6 +421,11 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
                     <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 14 }}>
                       Showing {results.length} of {totalCount.toLocaleString()} stones
                     </div>
+                    {priceUnavailable && (
+                      <div style={{ marginBottom: 14, padding: "8px 12px", borderRadius: 8, background: "#FEF9C3", border: "1px solid #FDE68A", fontSize: 12, color: "#92400E" }}>
+                        Couldn&apos;t confirm AUD pricing from Nivoda right now — prices are showing as POA. Try again shortly.
+                      </div>
+                    )}
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
                       {results.map(stone => (
                         <StoneCard
