@@ -264,6 +264,18 @@ export default function NewPiecePage() {
 
   // ── Piece save ───────────────────────────────────────────────────────────────
 
+  function buildTitle(): string {
+    const metal = `${variant!.metal_karat} ${variant!.metal_colour}`;
+    if (!piece.diamond_type || piece.diamond_type === "None") {
+      return `${design!.name} – ${metal}`;
+    }
+    const parts: string[] = [];
+    if (piece.diamond_carat) parts.push(`${piece.diamond_carat}ct`);
+    if (piece.stone_shape)   parts.push(piece.stone_shape);
+    parts.push(piece.diamond_type);
+    return `${design!.name} – ${metal} – ${parts.join(" ")}`;
+  }
+
   async function handleSave() {
     if (!design) { setError("Select or create a design first"); return; }
     if (!variant) { setError("Select or create a variant first"); return; }
@@ -273,6 +285,7 @@ export default function NewPiecePage() {
     const payload: Record<string, any> = {
       product_id:         design.id,
       variant_id:         variant.id,
+      title:              buildTitle(),
       // Metal — use variant values as defaults, override with actual weighed weight
       metal_karat:        variant.metal_karat,
       metal_colour:       variant.metal_colour,
