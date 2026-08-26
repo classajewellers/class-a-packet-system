@@ -598,9 +598,19 @@ export default function InventoryItemPage({ params }: Params) {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  function roundUpToNine(n: number): number {
+    // Always round UP to the next number ending in 9 (e.g. $6,434.50 → $6,439)
+    return Math.ceil((n - 9) / 10) * 10 + 9;
+  }
+
   function startEdit() {
     if (!piece) return;
-    setForm({ ...piece });
+    const base = { ...piece };
+    // Auto-suggest retail price when the field is blank and a calc is available
+    if (base.retail_price == null && priceCalc?.total_retail != null) {
+      base.retail_price = roundUpToNine(priceCalc.total_retail) as any;
+    }
+    setForm(base);
     setEditing(true);
     setError("");
   }
