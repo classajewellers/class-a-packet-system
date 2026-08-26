@@ -933,7 +933,10 @@ export default function InventoryItemPage({ params }: Params) {
           <SectionCard title="Identity">
             <EF label="SKU" field="sku" />
             <EF label="Title" field="title" />
-            <EF label="Category" field="category_id" opts={ref?.categories.map(c => ({ value: c.id, label: c.name })) ?? []} />
+            {editing
+              ? <EF label="Category" field="category_id" opts={ref?.categories.map(c => ({ value: c.id, label: c.name })) ?? []} />
+              : <FieldView label="Category" value={(piece as any).category?.name ?? null} />
+            }
             <EF label="Collection" field="collection" />
           </SectionCard>
 
@@ -998,9 +1001,10 @@ export default function InventoryItemPage({ params }: Params) {
           <SectionCard title="Stone">
             <EF label="Diamond Type" field="diamond_type" />
             <EF label="Carat" field="diamond_carat" type="number" />
+            <EF label="Shape" field={"stone_shape" as keyof InventoryPiece} />
             <EF label="Colour" field="diamond_colour" />
             <EF label="Clarity" field="diamond_clarity" />
-            <EF label="Certificate" field="diamond_certificate" />
+            <EF label="Certificate #" field={"certificate_number" as keyof InventoryPiece} />
           </SectionCard>
 
           {/* Dimensions */}
