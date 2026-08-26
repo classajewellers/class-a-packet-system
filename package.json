@@ -29,7 +29,8 @@
     "react-markdown": "^10.1.0",
     "recharts": "^3.8.1",
     "stripe": "^22.2.1",
-    "tailwind-merge": "^3.5.0"
+    "tailwind-merge": "^3.5.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@shopify/app": "^3.58.2",
