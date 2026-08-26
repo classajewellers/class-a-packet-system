@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
 import { InventoryPiece, InventoryReferenceData } from "@/lib/types";
-import { calculateLivePricing, GoldRate, MarginBracket } from "@/lib/inventoryPricing";
+// calculateLivePricing removed — pricing now uses calculate_price() RPC via /api/inventory/pieces/[id]/price
 import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
 import {
   ArrowLeft, Edit2, Save, X, ArrowRight,
@@ -491,8 +491,8 @@ export default function InventoryItemPage({ params }: Params) {
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState("");
 
-  const [goldRates, setGoldRates]           = useState<GoldRate[]>([]);
-  const [marginBrackets, setMarginBrackets] = useState<MarginBracket[]>([]);
+  const [priceCalc, setPriceCalc]           = useState<any>(null);
+  const [priceCalcError, setPriceCalcError] = useState<string>("");
 
   const [showMove, setShowMove]     = useState(false);
   const [moveForm, setMoveForm]     = useState({ to_location_id: "", to_status_id: "", notes: "" });
@@ -559,11 +559,11 @@ export default function InventoryItemPage({ params }: Params) {
   const fetchAll = useCallback(async () => {
     if (!tenantId) return;
     setLoading(true);
-    const [pieceRes, refRes, movRes, pricingRes, prodRes, staffRes, resRes] = await Promise.all([
+    const [pieceRes, refRes, movRes, calcRes, prodRes, staffRes, resRes] = await Promise.all([
       fetch(`/api/inventory/pieces/${params.id}`, { headers }),
       fetch("/api/inventory/reference", { headers }),
       fetch(`/api/inventory/movements?piece_id=${params.id}&limit=50`, { headers }),
-      fetch("/api/pricing", { headers }),
+      fetch(`/api/inventory/pieces/${params.id}/price`, { headers }),
       fetch("/api/inventory/products", { headers }),
       fetch("/api/settings/users/list", { headers }),
       fetch(`/api/inventory/reservations?piece_id=${params.id}`, { headers }),
@@ -575,10 +575,15 @@ export default function InventoryItemPage({ params }: Params) {
     setPiece(pieceJson.piece);
     setRef(refJson);
     setMovements(movJson.movements ?? []);
-    if (pricingRes.ok) {
-      const pj = await pricingRes.json();
-      setGoldRates(pj.metalRates ?? []);
-      setMarginBrackets(pj.marginBrackets ?? []);
+    if (calcRes.ok) {
+      const cj = await calcRes.json();
+      if (cj.calc?.error) {
+        setPriceCalcError(cj.calc.error);
+        setPriceCalc(null);
+      } else {
+        setPriceCalc(cj.calc ?? null);
+        setPriceCalcError("");
+      }
     }
     if (prodRes.ok) setProducts((await prodRes.json()).products ?? []);
     if (staffRes.ok) setStaffList((await staffRes.json()).users ?? []);
@@ -815,8 +820,12 @@ export default function InventoryItemPage({ params }: Params) {
   }
 
   const statusColour = piece.status?.colour ?? "#9CA3AF";
-  const lp = isManager ? calculateLivePricing(piece, goldRates, marginBrackets) : null;
-  const underpriced = lp?.liveRetail != null && piece.retail_price != null && piece.retail_price < lp.liveRetail * 0.9;
+  const lockedGP = piece.retail_price != null && piece.locked_cost != null
+    ? Number(piece.retail_price) - Number(piece.locked_cost) : null;
+  const lockedGPPct = lockedGP != null && piece.retail_price != null && Number(piece.retail_price) > 0
+    ? (lockedGP / Number(piece.retail_price)) * 100 : null;
+  const underpriced = priceCalc?.total_retail != null && piece.retail_price != null
+    && Number(piece.retail_price) < priceCalc.total_retail * 0.9;
   const linkedProduct = products.find((p: any) => p.id === piece.product_id);
   const meleeQty = (piece as any).melee_quantity;
 
@@ -1074,54 +1083,101 @@ export default function InventoryItemPage({ params }: Params) {
                       <>
                         <div style={{ fontFamily: "monospace", fontSize: 20, fontWeight: 700, color: "#111827" }}>{fmtMoney(piece.locked_cost)}</div>
                         <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2, marginBottom: 10 }}>Recorded at entry — never changes</div>
-                        {lp?.lockedGrossProfit != null && (
+                        {lockedGP != null && (
                           <div>
                             <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>Locked GP</div>
-                            <GpChip gp={lp.lockedGrossProfit} pct={lp.lockedGrossProfitPct} />
+                            <GpChip gp={lockedGP} pct={lockedGPPct} />
                           </div>
                         )}
                       </>
                     )}
                   </div>
 
-                  {/* Live Pricing */}
+                  {/* Live Pricing — driven by calculate_price() RPC */}
                   <div style={{ background: "#FAFAFA", border: "1px solid #E5E7EB", borderRadius: 10, padding: 16 }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 12 }}>Live Pricing</div>
-                    {lp?.liveCost == null ? (
-                      <div style={{ fontSize: 12, color: "#9CA3AF" }}>Set metal weight, stone or labour cost to see live pricing.</div>
+                    {priceCalcError ? (
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: 6, padding: "8px 10px", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 6 }}>
+                        <AlertTriangle size={12} style={{ color: "#DC2626", marginTop: 1, flexShrink: 0 }} />
+                        <div>
+                          <div style={{ fontSize: 12, color: "#DC2626", fontWeight: 500 }}>
+                            {priceCalcError === "no_metal_rate"
+                              ? "No metal rate found"
+                              : priceCalcError === "piece_not_found"
+                              ? "Piece not found in pricing engine"
+                              : `Pricing error: ${priceCalcError}`}
+                          </div>
+                          {priceCalcError === "no_metal_rate" && (
+                            <div style={{ fontSize: 11, color: "#92400E", marginTop: 2 }}>Add a rate in Settings → Pricing → Metal Prices</div>
+                          )}
+                        </div>
+                      </div>
+                    ) : priceCalc == null ? (
+                      <div style={{ fontSize: 12, color: "#9CA3AF" }}>No pricing data — set metal weight to calculate.</div>
                     ) : (
                       <>
                         <div style={{ borderBottom: "1px solid #E5E7EB", paddingBottom: 8, marginBottom: 8 }}>
-                          <PricingLineItem label="Metal" value={fmtMoney(lp.liveCostBreakdown?.metalCost)} />
-                          <PricingLineItem label="Stones" value={fmtMoney(lp.liveCostBreakdown?.stoneCost)} />
-                          <PricingLineItem label="Labour" value={fmtMoney(lp.liveCostBreakdown?.labourCost)} />
+                          <PricingLineItem label="Metal" value={fmtMoney(priceCalc.metal_retail)} />
+                          {(priceCalc.stone_retail ?? 0) > 0 && (
+                            <PricingLineItem label="Stone" value={fmtMoney(priceCalc.stone_retail)} />
+                          )}
+                          <PricingLineItem label="Labour" value={fmtMoney(priceCalc.labour_retail)} />
+                          {(priceCalc.melee_retail ?? 0) > 0 && (
+                            <PricingLineItem label="Melee" value={fmtMoney(priceCalc.melee_retail)} />
+                          )}
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10, fontSize: 12, fontWeight: 700 }}>
-                          <span style={{ color: "#374151" }}>Live cost</span>
-                          <span style={{ fontFamily: "monospace", fontSize: 14, color: "#111827" }}>{fmtMoney(lp.liveCost)}</span>
+                          <span style={{ color: "#374151" }}>Suggested retail</span>
+                          <span style={{ fontFamily: "monospace", fontSize: 14, color: "#111827" }}>{fmtMoney(priceCalc.total_retail)}</span>
                         </div>
-                        {lp.liveRetail != null && (
-                          <>
-                            <PricingLineItem label="Suggested retail" value={fmtMoney(lp.liveRetail)} />
-                            <PricingLineItem label="Actual retail" value={fmtMoney(piece.retail_price)} />
-                            {underpriced && (
-                              <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 6, padding: "5px 8px", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 6 }}>
-                                <TrendingDown size={12} style={{ color: "#DC2626" }} />
-                                <span style={{ fontSize: 11, color: "#DC2626", fontWeight: 500 }}>Retail may be underpriced</span>
-                              </div>
-                            )}
-                            {lp.liveGrossProfit != null && (
-                              <div style={{ marginTop: 8, borderTop: "1px solid #E5E7EB", paddingTop: 8 }}>
-                                <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>Live GP</div>
-                                <GpChip gp={lp.liveGrossProfit} pct={lp.liveGrossProfitPct} />
-                              </div>
-                            )}
-                          </>
+                        <PricingLineItem label="Actual retail" value={fmtMoney(piece.retail_price)} />
+                        {underpriced && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 6, padding: "5px 8px", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 6 }}>
+                            <TrendingDown size={12} style={{ color: "#DC2626" }} />
+                            <span style={{ fontSize: 11, color: "#DC2626", fontWeight: 500 }}>Retail may be underpriced</span>
+                          </div>
+                        )}
+                        {(() => {
+                          const liveGP = piece.retail_price != null
+                            ? Number(piece.retail_price) - priceCalc.total_retail : null;
+                          const liveGPPct = liveGP != null && piece.retail_price != null && Number(piece.retail_price) > 0
+                            ? (liveGP / Number(piece.retail_price)) * 100 : null;
+                          return liveGP != null ? (
+                            <div style={{ marginTop: 8, borderTop: "1px solid #E5E7EB", paddingTop: 8 }}>
+                              <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>Live GP</div>
+                              <GpChip gp={liveGP} pct={liveGPPct} />
+                            </div>
+                          ) : null;
+                        })()}
+                        {priceCalc.inputs && (
+                          <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #F3F4F6" }}>
+                            <div style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 4 }}>Inputs used</div>
+                            <div style={{ fontSize: 11, color: "#6B7280", lineHeight: 1.7 }}>
+                              {priceCalc.inputs.metal_type_key && (
+                                <div>{priceCalc.inputs.metal_type_key} · {fmtMoney(priceCalc.inputs.gold_price_per_gram)}/g · {priceCalc.inputs.gram_weight}g</div>
+                              )}
+                              {priceCalc.inputs.metal_multiplier != null && (
+                                <div>Metal ×{priceCalc.inputs.metal_multiplier} · Labour ×{priceCalc.inputs.labour_multiplier}</div>
+                              )}
+                              {priceCalc.inputs.stone_multiplier != null && (
+                                <div>Stone ×{priceCalc.inputs.stone_multiplier} ({priceCalc.inputs.stone_origin})</div>
+                              )}
+                            </div>
+                          </div>
                         )}
                       </>
                     )}
                   </div>
                 </div>
+
+                {/* Stored cost inputs — visible in view mode without editing */}
+                {(piece.labour_cost != null || piece.stone_cost != null || (piece as any).actual_cost != null) && (
+                  <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #E5E7EB", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px 20px" }}>
+                    {piece.labour_cost != null && <FieldView label="Stored Labour Cost" value={fmtMoney(piece.labour_cost)} />}
+                    {piece.stone_cost != null && <FieldView label="Stone Cost" value={fmtMoney(piece.stone_cost)} />}
+                    {(piece as any).actual_cost != null && <FieldView label="Actual Cost Paid" value={fmtMoney((piece as any).actual_cost)} />}
+                  </div>
+                )}
 
                 {(piece.valuation_number || piece.valuation_amount) && (
                   <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #E5E7EB", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 20px" }}>
