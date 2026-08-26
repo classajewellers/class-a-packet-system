@@ -603,11 +603,21 @@ export default function InventoryItemPage({ params }: Params) {
     return Math.ceil((n - 9) / 10) * 10 + 9;
   }
 
+  function priceCalcIsComplete(): boolean {
+    // A calc is only usable for auto-fill when both metal and labour are non-zero.
+    // Zero metal_retail means gram_weight was never entered; zero labour_retail means
+    // labour_cost is missing. Either produces a dangerously incomplete suggested price.
+    if (!priceCalc) return false;
+    if (!(priceCalc.inputs?.gram_weight > 0)) return false;
+    if (!(priceCalc.metal_retail > 0)) return false;
+    return true;
+  }
+
   function startEdit() {
     if (!piece) return;
     const base = { ...piece };
-    // Auto-suggest retail price when the field is blank and a calc is available
-    if (base.retail_price == null && priceCalc?.total_retail != null) {
+    // Auto-suggest retail price only when the calc is complete (metal + labour both present)
+    if (base.retail_price == null && priceCalcIsComplete()) {
       base.retail_price = roundUpToNine(priceCalc.total_retail) as any;
     }
     setForm(base);
@@ -1069,6 +1079,11 @@ export default function InventoryItemPage({ params }: Params) {
                 <EF label="Stone cost" field="stone_cost" type="number" />
                 <EF label="Labour cost" field="labour_cost" type="number" />
                 <EF label="Retail Price" field="retail_price" type="number" />
+                {editing && form.retail_price == null && priceCalc != null && !priceCalcIsComplete() && (
+                  <p style={{ margin: "4px 0 0", fontSize: 12, color: "#B45309" }}>
+                    ⚠ Enter metal weight{!(priceCalc.inputs?.gram_weight > 0) ? " (gram weight missing)" : ""} for an accurate suggested price — auto-fill skipped.
+                  </p>
+                )}
                 <EF label="Cost Price" field="cost_price" type="number" />
                 <EF label="Certificate Number" field="valuation_number" />
                 <EF label="Certificate Amount" field="valuation_amount" type="number" />
