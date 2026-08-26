@@ -493,6 +493,7 @@ export default function InventoryItemPage({ params }: Params) {
 
   const [priceCalc, setPriceCalc]           = useState<any>(null);
   const [priceCalcError, setPriceCalcError] = useState<string>("");
+  const [updatingSuggested, setUpdatingSuggested] = useState(false);
 
   const [showMove, setShowMove]     = useState(false);
   const [moveForm, setMoveForm]     = useState({ to_location_id: "", to_status_id: "", notes: "" });
@@ -623,6 +624,20 @@ export default function InventoryItemPage({ params }: Params) {
     setForm(base);
     setEditing(true);
     setError("");
+  }
+
+  async function applyRoundedSuggested() {
+    if (!piece || !priceCalc?.total_retail) return;
+    const rounded = roundUpToNine(priceCalc.total_retail);
+    setUpdatingSuggested(true);
+    const res = await fetch(`/api/inventory/pieces/${piece.id}`, {
+      method: "PATCH",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ retail_price: rounded }),
+    });
+    const json = await res.json();
+    setUpdatingSuggested(false);
+    if (res.ok) setPiece(json.piece);
   }
 
   async function handleSave() {
@@ -1157,9 +1172,20 @@ export default function InventoryItemPage({ params }: Params) {
                         </div>
                         <PricingLineItem label="Actual retail" value={fmtMoney(piece.retail_price)} />
                         {underpriced && (
-                          <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 6, padding: "5px 8px", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 6 }}>
-                            <TrendingDown size={12} style={{ color: "#DC2626" }} />
-                            <span style={{ fontSize: 11, color: "#DC2626", fontWeight: 500 }}>Retail may be underpriced</span>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 6, padding: "5px 8px", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 6 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                              <TrendingDown size={12} style={{ color: "#DC2626" }} />
+                              <span style={{ fontSize: 11, color: "#DC2626", fontWeight: 500 }}>Retail may be underpriced</span>
+                            </div>
+                            {!editing && isManager && (
+                              <button
+                                onClick={applyRoundedSuggested}
+                                disabled={updatingSuggested}
+                                style={{ fontSize: 11, fontWeight: 600, color: "#DC2626", background: "none", border: "1px solid #FECACA", borderRadius: 5, padding: "2px 8px", cursor: updatingSuggested ? "not-allowed" : "pointer", opacity: updatingSuggested ? 0.6 : 1, whiteSpace: "nowrap" }}
+                              >
+                                {updatingSuggested ? "Saving…" : `Update to ${fmtMoney(roundUpToNine(priceCalc.total_retail))}`}
+                              </button>
+                            )}
                           </div>
                         )}
                         {(() => {
