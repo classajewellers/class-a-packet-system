@@ -25,6 +25,7 @@ const BLANK_PIECE = {
   metal_weight_grams: "",
   diamond_type: "Natural" as string,
   diamond_carat: "",
+  stone_cost: "",
   diamond_colour: "",
   diamond_clarity: "",
   stone_shape: "",
@@ -293,6 +294,7 @@ export default function NewPiecePage() {
       // Stone
       diamond_type:       piece.diamond_type === "None" ? null : piece.diamond_type,
       diamond_carat:      piece.diamond_carat     ? Number(piece.diamond_carat)     : null,
+      stone_cost:         piece.stone_cost        ? Number(piece.stone_cost)        : null,
       diamond_colour:     piece.diamond_colour    || null,
       diamond_clarity:    piece.diamond_clarity   || null,
       stone_shape:        piece.stone_shape        || null,
@@ -561,6 +563,9 @@ export default function NewPiecePage() {
               {piece.diamond_type !== "None" && <>
                 <Field label="Carat weight">
                   <input type="number" min="0" step="0.01" value={piece.diamond_carat} onChange={e => setPiece(p => ({ ...p, diamond_carat: e.target.value }))} style={S.input} placeholder="0.00" />
+                </Field>
+                <Field label="Stone wholesale cost ($)">
+                  <input type="number" min="0" step="0.01" value={piece.stone_cost} onChange={e => setPiece(p => ({ ...p, stone_cost: e.target.value }))} style={S.input} placeholder="0.00" />
                 </Field>
                 <Field label="Shape">
                   <div style={{ position: "relative" }}>
