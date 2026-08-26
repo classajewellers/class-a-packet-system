@@ -12,14 +12,20 @@ function createAdminClient() {
   );
 }
 
-// GET /api/admin/users — list all users with their profiles
-export async function GET(): Promise<NextResponse> {
+// GET /api/admin/users — list users with their profiles, scoped to the caller's tenant
+export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
+    const tenantId = req.headers.get("x-tenant-id") ?? "";
+    if (!tenantId) {
+      return NextResponse.json({ error: "x-tenant-id header required" }, { status: 400 });
+    }
+
     const supabase = createAdminClient();
 
     const { data, error } = await supabase
       .from("profiles")
       .select("id, full_name, role, created_at")
+      .eq("tenant_id", tenantId)
       .order("created_at", { ascending: true });
 
     if (error) {
@@ -68,11 +74,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "Invalid role" }, { status: 400 });
     }
 
+    const tenantId = req.headers.get("x-tenant-id") ?? "";
+    if (!tenantId) {
+      return NextResponse.json({ error: "x-tenant-id header required" }, { status: 400 });
+    }
+
     const supabase = createAdminClient();
 
     // Invite user — Supabase sends them a magic link to set their password
     const { data, error } = await supabase.auth.admin.inviteUserByEmail(email, {
-      data: { full_name, role },
+      data: { full_name, role, tenant_id: tenantId },
       redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/login`,
     });
 
@@ -86,6 +97,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         id: data.user.id,
         full_name: full_name ?? "",
         role,
+        tenant_id: tenantId,
       });
     }
 

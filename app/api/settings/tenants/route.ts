@@ -3,13 +3,19 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 
-// GET — list all tenants (manager only, not tenant-scoped)
-export async function GET(_req: NextRequest): Promise<NextResponse> {
+// GET — return the caller's own tenant only
+export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
+    const tenantId = req.headers.get("x-tenant-id") ?? "";
+    if (!tenantId) {
+      return NextResponse.json({ tenants: [], error: "x-tenant-id header required" }, { status: 400 });
+    }
+
     const supabase = createServerSupabaseClient();
     const { data, error } = await supabase
       .from("tenants")
       .select("id, name, slug, subscription_status, created_at")
+      .eq("id", tenantId)
       .order("name", { ascending: true });
 
     if (error) {
@@ -63,15 +69,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 }
 
-// PATCH — update a tenant's subscription_status or name
+// PATCH — update the caller's own tenant's subscription_status or name
 export async function PATCH(req: NextRequest): Promise<NextResponse> {
   try {
-    const body = await req.json();
-    const { id, ...updates } = body as { id: string; name?: string; subscription_status?: string };
-
-    if (!id) {
-      return NextResponse.json({ error: "Tenant id is required" }, { status: 400 });
+    const tenantId = req.headers.get("x-tenant-id") ?? "";
+    if (!tenantId) {
+      return NextResponse.json({ error: "x-tenant-id header required" }, { status: 400 });
     }
+
+    const body = await req.json();
+    const updates = body as { name?: string; subscription_status?: string };
 
     const allowedFields: Record<string, unknown> = {};
     if (updates.name) allowedFields.name = updates.name.trim();
@@ -81,7 +88,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     const { data, error } = await supabase
       .from("tenants")
       .update(allowedFields)
-      .eq("id", id)
+      .eq("id", tenantId)
       .select()
       .single();
 
