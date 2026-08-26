@@ -45,7 +45,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .order("component_type")
     .order("carat_min");
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error(`[estimate-stone-retail] pricing_component_rules query failed: ${error.message}`);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   const componentRules = (rules ?? []) as ComponentRule[];
 
@@ -70,6 +73,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
     retail[stone.id] = Math.round(stone.wholesale_aud * mult);
   }
+
+  // One consolidated line — shows exactly what ids came in, what wholesale figure each
+  // one carried, and what key/value went out, so an id-format mismatch between request
+  // and response (e.g. a DIAMOND/ prefix present on one side and not the other) is
+  // directly visible rather than inferred.
+  console.log(`[estimate-stone-retail] in=${JSON.stringify(stones.map(s => ({ id: s.id, wholesale_aud: s.wholesale_aud })))} out=${JSON.stringify(retail)}`);
 
   return NextResponse.json({ retail });
 }

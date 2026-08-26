@@ -69,7 +69,17 @@ async function fetchFreshAudRate(): Promise<number> {
   }
 
   // to_USD converts AUD -> USD (1 AUD = to_USD USD); we need the inverse, USD -> AUD.
-  return 1 / audRow.to_USD;
+  const computedRate = 1 / audRow.to_USD;
+
+  // Single consolidated line, deliberately — Vercel's log capture has been truncating
+  // most console output from this request path down to one line per invocation, so
+  // spreading this across multiple console.log calls (like the rest of this codebase
+  // does) loses the data we actually need. Everything required to verify this end to
+  // end lives in this one line: the raw row, the computed rate, and what it does to a
+  // real reference price (410.21 AUD / 294.38 USD, the known-good stone from today).
+  console.log(`[nivoda/exchange-rate] audRow=${JSON.stringify(audRow)} computedRate=${computedRate} sampleUsdCents=29438 -> convertedAudCents=${Math.round(29438 * computedRate)} (expect ~41021)`);
+
+  return computedRate;
 }
 
 /**
