@@ -52,7 +52,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const componentRules = (rules ?? []) as ComponentRule[];
 
-  const labMult = componentRules.find(r => r.component_type === "lab_stone")?.multiplier ?? 11;
+  const labTiers = componentRules
+    .filter(r => r.component_type === "lab_stone")
+    .sort((a, b) => b.carat_min - a.carat_min);
 
   const naturalTiers = componentRules
     .filter(r => r.component_type === "natural_stone")
@@ -64,7 +66,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (stone.wholesale_aud <= 0) continue;
     let mult: number;
     if (stone.labgrown) {
-      mult = labMult;
+      const tier = labTiers.find(
+        r => stone.carats >= r.carat_min && (r.carat_max == null || stone.carats < r.carat_max)
+      );
+      mult = tier?.multiplier ?? labTiers[labTiers.length - 1]?.multiplier ?? 10.5;
     } else {
       const tier = naturalTiers.find(
         r => stone.carats >= r.carat_min && (r.carat_max == null || stone.carats < r.carat_max)

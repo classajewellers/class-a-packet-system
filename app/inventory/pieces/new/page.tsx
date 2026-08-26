@@ -33,7 +33,7 @@ const BLANK_PIECE = {
   finger_size: "",
   actual_cost: "",
   retail_price: "",
-  status: "in_stock",
+  status_id: "",
   location_id: "",
   notes: "",
 };
@@ -166,8 +166,9 @@ export default function NewPiecePage() {
   const headers   = { "x-tenant-id": tenantId };
 
   // Reference data
-  const [locations, setLocations] = useState<any[]>([]);
+  const [locations, setLocations]   = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
+  const [statuses, setStatuses]     = useState<any[]>([]);
 
   // Design selection / creation
   const [design, setDesign]           = useState<any | null>(null);
@@ -197,8 +198,9 @@ export default function NewPiecePage() {
     fetch("/api/inventory/reference", { headers }).then(async r => {
       if (!r.ok) return;
       const json = await r.json();
-      setLocations(json.locations ?? []);
+      setLocations(json.locations   ?? []);
       setCategories(json.categories ?? []);
+      setStatuses(json.statuses     ?? []);
     });
   }, [tenantId]);
 
@@ -283,10 +285,18 @@ export default function NewPiecePage() {
     setSaving(true);
     setError("");
 
+    // Derive category_id from the design's category text (case-insensitive name match)
+    const matchedCategory = categories.find(
+      c => c.name?.toLowerCase() === design.category?.toLowerCase()
+    ) ?? categories.find(
+      c => design.category && c.name?.toLowerCase().includes(design.category.toLowerCase())
+    );
+
     const payload: Record<string, any> = {
       product_id:         design.id,
       variant_id:         variant.id,
       title:              buildTitle(),
+      category_id:        matchedCategory?.id ?? null,
       // Metal — use variant values as defaults, override with actual weighed weight
       metal_karat:        variant.metal_karat,
       metal_colour:       variant.metal_colour,
@@ -302,7 +312,7 @@ export default function NewPiecePage() {
       // Physical
       finger_size:        piece.finger_size    || null,
       location_id:        piece.location_id    || null,
-      status:             piece.status,
+      status_id:          piece.status_id      || null,
       notes:              piece.notes          || null,
       // Costs (sent regardless of role — the API doesn't filter; display is role-gated)
       actual_cost:        piece.actual_cost    ? Number(piece.actual_cost)    : null,
@@ -610,8 +620,9 @@ export default function NewPiecePage() {
               </Field>
               <Field label="Status">
                 <div style={{ position: "relative" }}>
-                  <select value={piece.status} onChange={e => setPiece(p => ({ ...p, status: e.target.value }))} style={S.select}>
-                    {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  <select value={piece.status_id} onChange={e => setPiece(p => ({ ...p, status_id: e.target.value }))} style={S.select}>
+                    <option value="">— Select status —</option>
+                    {statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                   <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
                 </div>
