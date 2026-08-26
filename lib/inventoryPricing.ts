@@ -1,3 +1,23 @@
+/**
+ * Translates inventory_pieces.diamond_type (display/storage format) into the
+ * p_stone_origin value that calculate_price() expects.
+ *
+ * calculate_price() checks: LOWER(COALESCE(p_stone_origin, 'natural')) = 'lab'
+ * so the only meaningful distinction is 'lab' vs anything-else-treated-as-natural.
+ *
+ * Returns null when diamond_type is 'None' or absent — caller should omit
+ * p_stone_origin from the calculate_price() call in that case (the function
+ * defaults to treating no stone as natural-path, which is harmless when
+ * stone_wholesale_cost is also null/zero).
+ */
+export function mapDiamondTypeToStoneOrigin(
+  diamondType: string | null | undefined
+): "lab" | "natural" | null {
+  if (!diamondType || diamondType === "None") return null;
+  if (diamondType.toLowerCase().includes("lab")) return "lab";
+  return "natural";
+}
+
 export interface GoldRate {
   id: string;
   metal_type: string;
