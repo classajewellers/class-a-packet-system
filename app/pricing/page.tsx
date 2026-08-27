@@ -11,6 +11,19 @@ interface MetalRate { id: string; metal_type: string; price_per_gram: number; up
 interface FixedCost { id: string; key: string; label: string; amount: number; updated_at: string; }
 interface MarginBracket { id: string; cost_min: number; cost_max: number | null; multiplier: number; stone_type: string | null; }
 interface MeleeStone { id: string; size_label: string; stone_type: string; price_per_stone: number; updated_at: string; }
+interface Supplier { id: string; name: string; }
+interface ExtractedMeleeRow {
+  shape: string;
+  size_type: 'carat_range' | 'pieces_per_carat';
+  size_label: string;
+  size_from: number | null;
+  size_to: number | null;
+  quality: string;
+  price_per_carat: number;
+  flagged: boolean;
+  flag_reason?: string;
+}
+type ImportStep = 'upload' | 'extracting' | 'review' | 'confirming' | 'done';
 
 interface StoneBaseRow    { stone_type: string; base_price_per_carat: number; margin_percent: number; }
 interface StoneColourRow  { stone_type: string; colour_grade: string;  adjustment_percent: number; sort_order: number; }
@@ -50,6 +63,19 @@ export default function PricingPage() {
   const [marginBrackets, setMarginBrackets] = useState<MarginBracket[]>([]);
   const [meleeStones, setMeleeStones] = useState<MeleeStone[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Melee import wizard
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [importStep, setImportStep] = useState<ImportStep>('upload');
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importSupplierId, setImportSupplierId] = useState('');
+  const [importOrigin, setImportOrigin] = useState<'natural' | 'lab'>('natural');
+  const [importOriginConfidence, setImportOriginConfidence] = useState<string>('');
+  const [importOriginNote, setImportOriginNote] = useState<string>('');
+  const [importSupplierName, setImportSupplierName] = useState('');
+  const [importRows, setImportRows] = useState<ExtractedMeleeRow[]>([]);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<{ imported: number; supplier_name: string; imported_at: string } | null>(null);
 
   // Stone pricing (lab + gem)
   const [stoneBasePrices, setStoneBasePrices]   = useState<StoneBaseRow[]>([]);
@@ -97,6 +123,15 @@ export default function PricingPage() {
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [user?.tenantId]);
+
+  // Load suppliers when melee tab opens
+  useEffect(() => {
+    if (tab !== 'melee' || suppliers.length > 0 || !user?.tenantId) return;
+    fetch('/api/inventory/suppliers', { headers: { 'x-tenant-id': user.tenantId } })
+      .then(r => r.json())
+      .then(json => setSuppliers(json.suppliers ?? []))
+      .catch(() => {});
+  }, [tab, suppliers.length, user?.tenantId]);
 
   useEffect(() => {
     if ((tab !== 'lab_diamonds' && tab !== 'gem_stones' && tab !== 'calculator') || stonesLoaded) return;
@@ -342,6 +377,66 @@ export default function PricingPage() {
     );
   }
 
+  async function handleMeleeExtract() {
+    if (!importFile || !importSupplierId) return;
+    setImportStep('extracting');
+    setImportError(null);
+    const selectedSupplier = suppliers.find(s => s.id === importSupplierId);
+    const originDefault = selectedSupplier?.name?.toLowerCase().includes('grown') ? 'lab' : 'natural';
+    const fd = new FormData();
+    fd.append('file', importFile);
+    fd.append('supplier_id', importSupplierId);
+    fd.append('supplier_origin_default', originDefault);
+    try {
+      const res = await fetch('/api/pricing/melee-import/extract', {
+        method: 'POST',
+        headers: { 'x-tenant-id': user?.tenantId ?? '' },
+        body: fd,
+      });
+      const json = await res.json();
+      if (!res.ok) { setImportError(json.error ?? 'Extraction failed'); setImportStep('upload'); return; }
+      setImportRows(json.rows ?? []);
+      setImportOrigin(json.suggested_origin ?? originDefault);
+      setImportOriginConfidence(json.origin_confidence ?? '');
+      setImportOriginNote(json.origin_conflict_note ?? '');
+      setImportSupplierName(json.supplier?.name ?? '');
+      setImportStep('review');
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : 'Extraction failed');
+      setImportStep('upload');
+    }
+  }
+
+  async function handleMeleeConfirm() {
+    setImportStep('confirming');
+    setImportError(null);
+    try {
+      const res = await fetch('/api/pricing/melee-import/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-tenant-id': user?.tenantId ?? '' },
+        body: JSON.stringify({ supplier_id: importSupplierId, origin: importOrigin, rows: importRows }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setImportError(json.error ?? 'Import failed'); setImportStep('review'); return; }
+      setImportResult(json);
+      setImportStep('done');
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : 'Import failed');
+      setImportStep('review');
+    }
+  }
+
+  function resetImport() {
+    setImportStep('upload');
+    setImportFile(null);
+    setImportSupplierId('');
+    setImportRows([]);
+    setImportError(null);
+    setImportResult(null);
+    setImportOriginNote('');
+    setImportOriginConfidence('');
+  }
+
   const formatDateAU = (iso: string) => {
     if (!iso) return '—';
     const d = new Date(iso);
@@ -481,62 +576,257 @@ export default function PricingPage() {
 
           {/* Tab: Melee Stones */}
           {tab === 'melee' && (
-            <div style={card}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    <th style={thStyle}>Size</th>
-                    {STONE_TYPES.map(st => (
-                      <th key={st} style={thStyle}>{st}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {CARAT_SIZES.map(size => (
-                    <tr key={size}>
-                      <td style={{ ...tdStyle, fontWeight: 500 }}>{size}</td>
-                      {STONE_TYPES.map(stoneType => {
-                        const row = meleeStones.find(s => s.size_label === size && s.stone_type === stoneType);
-                        if (!row) return <td key={stoneType} style={tdStyle}>—</td>;
-                        const isEditing = editingId === row.id;
-                        return (
-                          <td key={stoneType} style={tdStyle}>
-                            {isEditing ? (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div>
+              {/* Import wizard */}
+              <div style={{ ...card, marginBottom: 24 }}>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E', marginTop: 0, marginBottom: 4 }}>Import Price List</h3>
+                <p style={{ fontSize: 13, color: '#6B7280', marginTop: 0, marginBottom: 20 }}>
+                  Upload a supplier PDF or image — AI extracts the rows, you review before anything saves.
+                </p>
+
+                {importError && (
+                  <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 8, background: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', fontSize: 13 }}>
+                    {importError}
+                  </div>
+                )}
+
+                {/* Step: upload */}
+                {importStep === 'upload' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 560 }}>
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>Supplier</label>
+                      <select
+                        value={importSupplierId}
+                        onChange={e => setImportSupplierId(e.target.value)}
+                        style={{ ...inputStyle, width: '100%' }}
+                      >
+                        <option value="">Select supplier…</option>
+                        {suppliers.map(s => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>Price list file (PDF or image)</label>
+                      <input
+                        type="file"
+                        accept=".pdf,image/jpeg,image/png,image/webp,image/gif"
+                        onChange={e => setImportFile(e.target.files?.[0] ?? null)}
+                        style={{ fontSize: 13, color: '#374151' }}
+                      />
+                      {importFile && (
+                        <p style={{ fontSize: 12, color: '#6B7280', marginTop: 6, marginBottom: 0 }}>
+                          {importFile.name} ({(importFile.size / 1024).toFixed(0)} KB)
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <button
+                        onClick={handleMeleeExtract}
+                        disabled={!importFile || !importSupplierId}
+                        style={{
+                          background: (!importFile || !importSupplierId) ? '#E5E7EB' : '#635BFF',
+                          color: (!importFile || !importSupplierId) ? '#9CA3AF' : '#fff',
+                          border: 'none', borderRadius: 8, padding: '10px 20px',
+                          fontSize: 13, fontWeight: 600, cursor: (!importFile || !importSupplierId) ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        Extract with AI
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step: extracting */}
+                {importStep === 'extracting' && (
+                  <div style={{ padding: '24px 0', color: '#6B7280', fontSize: 14 }}>
+                    Sending to Claude for extraction — this takes 10–30 seconds for a multi-page PDF…
+                  </div>
+                )}
+
+                {/* Step: review */}
+                {importStep === 'review' && (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+                      <div>
+                        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>
+                          {importRows.length} rows extracted from {importSupplierName}
+                        </p>
+                        <p style={{ margin: '4px 0 0', fontSize: 12, color: '#6B7280' }}>
+                          This will overwrite all existing {importSupplierName} melee rows. Other suppliers are untouched.
+                        </p>
+                      </div>
+                      <button onClick={resetImport} style={{ background: 'none', border: '1px solid #D1D5DB', borderRadius: 6, padding: '6px 12px', fontSize: 12, color: '#6B7280', cursor: 'pointer' }}>
+                        Start over
+                      </button>
+                    </div>
+
+                    {/* Origin banner */}
+                    <div style={{
+                      marginBottom: 16, padding: '10px 14px', borderRadius: 8,
+                      background: importOriginConfidence === 'ambiguous' ? '#FFFBEB' : '#F0FDF4',
+                      border: `1px solid ${importOriginConfidence === 'ambiguous' ? '#FDE68A' : '#BBF7D0'}`,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 13, color: '#374151' }}>
+                          <strong>Origin:</strong>&nbsp;
+                          <select
+                            value={importOrigin}
+                            onChange={e => setImportOrigin(e.target.value as 'natural' | 'lab')}
+                            style={{ fontSize: 13, borderRadius: 4, border: '1px solid #D1D5DB', padding: '2px 6px' }}
+                          >
+                            <option value="natural">Natural</option>
+                            <option value="lab">Lab-grown</option>
+                          </select>
+                          &nbsp;
+                          <span style={{ color: '#6B7280' }}>
+                            ({importOriginConfidence === 'certain' ? 'stated in document' : importOriginConfidence === 'ambiguous' ? '⚠ conflicting signals in document' : 'inferred from supplier'})
+                          </span>
+                        </span>
+                      </div>
+                      {importOriginNote && (
+                        <p style={{ margin: '6px 0 0', fontSize: 12, color: '#92400E' }}>{importOriginNote}</p>
+                      )}
+                    </div>
+
+                    {/* Flagged rows warning */}
+                    {importRows.some(r => r.flagged) && (
+                      <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 8, background: '#FFFBEB', border: '1px solid #FDE68A', fontSize: 13, color: '#92400E' }}>
+                        <strong>{importRows.filter(r => r.flagged).length} rows are flagged for review</strong> — check the highlighted rows below before confirming.
+                      </div>
+                    )}
+
+                    {/* Review table */}
+                    <div style={{ overflowX: 'auto', marginBottom: 20 }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                        <thead>
+                          <tr>
+                            <th style={thStyle}>Shape</th>
+                            <th style={thStyle}>Size label</th>
+                            <th style={thStyle}>Type</th>
+                            <th style={thStyle}>From</th>
+                            <th style={thStyle}>To</th>
+                            <th style={thStyle}>Quality</th>
+                            <th style={{ ...thStyle, textAlign: 'right' }}>$/ct (AUD)</th>
+                            <th style={thStyle}>Flag</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importRows.map((row, i) => (
+                            <tr key={i} style={{ background: row.flagged ? '#FFFBEB' : undefined }}>
+                              <td style={tdStyle}>
                                 <input
-                                  autoFocus
-                                  type="number"
-                                  step="0.0001"
-                                  min="0"
-                                  style={{ ...inputStyle, width: 90 }}
-                                  value={editValue}
-                                  onChange={e => setEditValue(e.target.value)}
-                                  onKeyDown={e => {
-                                    if (e.key === 'Enter') save('pricing_melee_stones', row.id, 'price_per_stone', parseFloat(editValue));
-                                    if (e.key === 'Escape') setEditingId(null);
-                                  }}
+                                  value={row.shape}
+                                  onChange={e => setImportRows(prev => prev.map((r, j) => j === i ? { ...r, shape: e.target.value } : r))}
+                                  style={{ ...inputStyle, width: 110, padding: '2px 6px', fontSize: 12 }}
                                 />
-                                <button onClick={() => save('pricing_melee_stones', row.id, 'price_per_stone', parseFloat(editValue))} style={{ background: '#635BFF', color: '#fff', border: 'none', borderRadius: 6, padding: '3px 8px', fontSize: 12, cursor: 'pointer' }}>✓</button>
-                                <button onClick={() => setEditingId(null)} style={{ background: 'transparent', color: '#9CA3AF', border: 'none', borderRadius: 6, padding: '3px 6px', fontSize: 12, cursor: 'pointer' }}>✕</button>
-                              </div>
-                            ) : (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <button
-                                  onClick={() => { setEditingId(row.id); setEditValue(String(row.price_per_stone)); }}
-                                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: '#1A1A2E', padding: 0, textDecoration: 'underline', textDecorationStyle: 'dotted' }}
+                              </td>
+                              <td style={tdStyle}>
+                                <input
+                                  value={row.size_label}
+                                  onChange={e => setImportRows(prev => prev.map((r, j) => j === i ? { ...r, size_label: e.target.value } : r))}
+                                  style={{ ...inputStyle, width: 110, padding: '2px 6px', fontSize: 12 }}
+                                />
+                              </td>
+                              <td style={tdStyle}>
+                                <select
+                                  value={row.size_type}
+                                  onChange={e => setImportRows(prev => prev.map((r, j) => j === i ? { ...r, size_type: e.target.value as 'carat_range' | 'pieces_per_carat' } : r))}
+                                  style={{ fontSize: 12, borderRadius: 4, border: '1px solid #D1D5DB', padding: '2px 4px' }}
                                 >
-                                  ${Number(row.price_per_stone).toFixed(4)}
-                                </button>
-                                <SaveBadge id={row.id} />
-                              </div>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                                  <option value="carat_range">carat</option>
+                                  <option value="pieces_per_carat">pcs/ct</option>
+                                </select>
+                              </td>
+                              <td style={{ ...tdStyle, textAlign: 'right' }}>
+                                <input
+                                  type="number"
+                                  value={row.size_from ?? ''}
+                                  onChange={e => setImportRows(prev => prev.map((r, j) => j === i ? { ...r, size_from: e.target.value === '' ? null : Number(e.target.value) } : r))}
+                                  style={{ ...inputStyle, width: 70, padding: '2px 6px', fontSize: 12, textAlign: 'right' }}
+                                />
+                              </td>
+                              <td style={{ ...tdStyle, textAlign: 'right' }}>
+                                <input
+                                  type="number"
+                                  value={row.size_to ?? ''}
+                                  onChange={e => setImportRows(prev => prev.map((r, j) => j === i ? { ...r, size_to: e.target.value === '' ? null : Number(e.target.value) } : r))}
+                                  style={{ ...inputStyle, width: 70, padding: '2px 6px', fontSize: 12, textAlign: 'right' }}
+                                />
+                              </td>
+                              <td style={tdStyle}>
+                                <input
+                                  value={row.quality}
+                                  onChange={e => setImportRows(prev => prev.map((r, j) => j === i ? { ...r, quality: e.target.value } : r))}
+                                  style={{ ...inputStyle, width: 90, padding: '2px 6px', fontSize: 12 }}
+                                />
+                              </td>
+                              <td style={{ ...tdStyle, textAlign: 'right' }}>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={row.price_per_carat}
+                                  onChange={e => setImportRows(prev => prev.map((r, j) => j === i ? { ...r, price_per_carat: Number(e.target.value) } : r))}
+                                  style={{ ...inputStyle, width: 80, padding: '2px 6px', fontSize: 12, textAlign: 'right' }}
+                                />
+                              </td>
+                              <td style={{ ...tdStyle, fontSize: 11, color: row.flagged ? '#92400E' : '#9CA3AF' }}>
+                                {row.flagged ? (
+                                  <span title={row.flag_reason}>⚠ {row.flag_reason ?? 'Review'}</span>
+                                ) : (
+                                  <button
+                                    onClick={() => setImportRows(prev => prev.filter((_, j) => j !== i))}
+                                    style={{ background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 13 }}
+                                    title="Remove row"
+                                  >✕</button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 12 }}>
+                      <button
+                        onClick={handleMeleeConfirm}
+                        style={{ background: '#635BFF', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        Confirm and save {importRows.length} rows
+                      </button>
+                      <button onClick={resetImport} style={{ background: 'none', border: '1px solid #D1D5DB', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: '#6B7280', cursor: 'pointer' }}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step: confirming */}
+                {importStep === 'confirming' && (
+                  <div style={{ padding: '24px 0', color: '#6B7280', fontSize: 14 }}>
+                    Saving {importRows.length} rows…
+                  </div>
+                )}
+
+                {/* Step: done */}
+                {importStep === 'done' && importResult && (
+                  <div style={{ padding: '16px 20px', borderRadius: 8, background: '#F0FDF4', border: '1px solid #BBF7D0' }}>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#16A34A' }}>
+                      Import complete — {importResult.imported} rows saved for {importResult.supplier_name}
+                    </p>
+                    <p style={{ margin: '4px 0 0', fontSize: 12, color: '#6B7280' }}>
+                      {new Date(importResult.imported_at).toLocaleString('en-AU')}
+                    </p>
+                    <button
+                      onClick={resetImport}
+                      style={{ marginTop: 12, background: 'none', border: '1px solid #D1D5DB', borderRadius: 6, padding: '6px 14px', fontSize: 12, color: '#374151', cursor: 'pointer' }}
+                    >
+                      Import another list
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
