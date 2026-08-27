@@ -132,10 +132,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       totalImported += inserts.length;
     }
 
+    // Debug: first row received — remove after size_from/size_to confirmed non-null in DB
+    const firstGroup = groups[0];
+    const firstRow = firstGroup?.rows?.[0];
+    const debugFirstRow = firstRow ? {
+      size_from_received: firstRow.size_from,
+      size_to_received:   firstRow.size_to,
+      size_from_type:     typeof firstRow.size_from,
+      size_to_type:       typeof firstRow.size_to,
+      flagged:            firstRow.flagged,
+      size_label:         firstRow.size_label,
+    } : null;
+
     return NextResponse.json({
       total_imported: totalImported,
       groups: groupResults,
       imported_at: new Date().toISOString(),
+      _debug_first_row: debugFirstRow,
     });
   } catch (err) {
     console.error("[melee-import/confirm]", err);
