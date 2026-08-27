@@ -161,7 +161,8 @@ CRITICAL EXTRACTION RULES:
 2. Every row must have a shape. If a table has a header shape covering multiple rows, apply it to each row.
 3. price_per_carat is always in AUD per carat.
 4. Flag any row you are not fully confident about rather than guessing silently.
-5. If the document contains conflicting origin signals, set origin_confidence to 'ambiguous' and describe in origin_conflict_note.`;
+5. If the document contains conflicting origin signals, set origin_confidence to 'ambiguous' and describe in origin_conflict_note.
+6. POA cells (Price on Application): set price_per_carat to 0, flagged to true, flag_reason to "POA — price on application, no numeric value". NEVER save a POA cell as a real price. This applies even if only one quality column in a row is POA — flag that entire row.`;
 }
 
 interface FileExtractionResult {

@@ -91,7 +91,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         );
       }
 
-      const inserts = rows.map((r) => ({
+      const priceableRows = rows.filter((r) => !r.flagged);
+      const excludedCount = rows.length - priceableRows.length;
+
+      const inserts = priceableRows.map((r) => ({
         tenant_id: tenantId,
         supplier_id,
         origin,
@@ -121,6 +124,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
       groupResults.push({
         imported: inserts.length,
+        excluded_flagged: excludedCount,
         supplier_name: supplier.name,
         supplier_id,
         origin,

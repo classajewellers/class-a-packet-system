@@ -753,7 +753,7 @@ export default function PricingPage() {
 
                         {group.rows.some(r => r.flagged) && (
                           <div style={{ padding: '7px 16px', background: '#FFFBEB', borderBottom: '1px solid #FDE68A', fontSize: 12, color: '#92400E' }}>
-                            <strong>{group.rows.filter(r => r.flagged).length} rows flagged</strong> — check highlighted rows below.
+                            <strong>{group.rows.filter(r => r.flagged).length} rows flagged</strong> — shown for reference only, <strong>will NOT be saved</strong>. Review or remove manually before confirming.
                           </div>
                         )}
 
@@ -832,16 +832,29 @@ export default function PricingPage() {
                     ))}
 
                     {/* Confirm summary */}
-                    <div style={{ background: '#F9FAFB', border: '1px solid #E8E8F0', borderRadius: 8, padding: '12px 16px', marginBottom: 16, fontSize: 13, color: '#374151' }}>
-                      This will replace all rows for:{' '}
-                      {importGroups.map(g => `${g.supplierName || '(unselected)'} (${g.rows.length} rows)`).join(', ')}.
-                      Other suppliers are untouched.
-                    </div>
+                    {(() => {
+                      const totalFlagged = importGroups.reduce((n, g) => n + g.rows.filter(r => r.flagged).length, 0);
+                      const totalSaveable = importGroups.reduce((n, g) => n + g.rows.filter(r => !r.flagged).length, 0);
+                      return (
+                        <div style={{ background: '#F9FAFB', border: '1px solid #E8E8F0', borderRadius: 8, padding: '12px 16px', marginBottom: 16, fontSize: 13, color: '#374151' }}>
+                          This will replace all rows for:{' '}
+                          {importGroups.map(g => {
+                            const saveable = g.rows.filter(r => !r.flagged).length;
+                            const flagged = g.rows.filter(r => r.flagged).length;
+                            return `${g.supplierName || '(unselected)'} (${saveable} saved${flagged > 0 ? `, ${flagged} excluded` : ''})`;
+                          }).join(', ')}.
+                          {totalFlagged > 0 && (
+                            <span style={{ color: '#92400E' }}> {totalFlagged} flagged row{totalFlagged !== 1 ? 's' : ''} will be excluded — fix prices manually after import if needed.</span>
+                          )}
+                          {' '}Other suppliers are untouched.
+                        </div>
+                      );
+                    })()}
 
                     <div style={{ display: 'flex', gap: 12 }}>
                       {(() => {
-                        const disabled = importGroups.some(g => !g.supplierId) || importGroups.every(g => g.rows.length === 0);
-                        const total = importGroups.reduce((n, g) => n + g.rows.length, 0);
+                        const disabled = importGroups.some(g => !g.supplierId) || importGroups.every(g => g.rows.filter(r => !r.flagged).length === 0);
+                        const total = importGroups.reduce((n, g) => n + g.rows.filter(r => !r.flagged).length, 0);
                         return (
                           <button
                             onClick={handleMeleeConfirm}
