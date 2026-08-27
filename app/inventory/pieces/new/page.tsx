@@ -26,6 +26,7 @@ const BLANK_PIECE = {
   diamond_type: "Natural" as string,
   diamond_carat: "",
   stone_cost: "",
+  stone_species: "",
   diamond_colour: "",
   diamond_clarity: "",
   stone_shape: "",
@@ -305,6 +306,7 @@ export default function NewPiecePage() {
       diamond_type:       piece.diamond_type === "None" ? null : piece.diamond_type,
       diamond_carat:      piece.diamond_carat     ? Number(piece.diamond_carat)     : null,
       stone_cost:         piece.stone_cost        ? Number(piece.stone_cost)        : null,
+      stone_species:      piece.stone_species     || null,
       diamond_colour:     piece.diamond_colour    || null,
       diamond_clarity:    piece.diamond_clarity   || null,
       stone_shape:        piece.stone_shape        || null,
@@ -571,6 +573,25 @@ export default function NewPiecePage() {
               </Field>
 
               {piece.diamond_type !== "None" && <>
+                <Field label="Species">
+                  <input
+                    value={piece.stone_species}
+                    onChange={e => {
+                      const next = e.target.value;
+                      // Switching from a coloured-stone species back to blank (diamond mode)
+                      // resets the free-text colour/clarity so diamond grades aren't pre-filled
+                      // with values like "Cornflower Blue".
+                      const clearGrades = piece.stone_species !== "" && next === "";
+                      setPiece(p => ({
+                        ...p,
+                        stone_species:   next,
+                        ...(clearGrades ? { diamond_colour: "", diamond_clarity: "" } : {}),
+                      }));
+                    }}
+                    style={S.input}
+                    placeholder="e.g. Sapphire, Ruby, Emerald"
+                  />
+                </Field>
                 <Field label="Carat weight">
                   <input type="number" min="0" step="0.01" value={piece.diamond_carat} onChange={e => setPiece(p => ({ ...p, diamond_carat: e.target.value }))} style={S.input} placeholder="0.00" />
                 </Field>
@@ -586,24 +607,37 @@ export default function NewPiecePage() {
                     <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
                   </div>
                 </Field>
-                <Field label="Colour">
-                  <div style={{ position: "relative" }}>
-                    <select value={piece.diamond_colour} onChange={e => setPiece(p => ({ ...p, diamond_colour: e.target.value }))} style={S.select}>
-                      <option value="">—</option>
-                      {COLOUR_GRADES.map(c => <option key={c}>{c}</option>)}
-                    </select>
-                    <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
-                  </div>
-                </Field>
-                <Field label="Clarity">
-                  <div style={{ position: "relative" }}>
-                    <select value={piece.diamond_clarity} onChange={e => setPiece(p => ({ ...p, diamond_clarity: e.target.value }))} style={S.select}>
-                      <option value="">—</option>
-                      {CLARITY_GRADES.map(c => <option key={c}>{c}</option>)}
-                    </select>
-                    <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
-                  </div>
-                </Field>
+                {piece.stone_species ? (
+                  <>
+                    <Field label="Colour">
+                      <input value={piece.diamond_colour} onChange={e => setPiece(p => ({ ...p, diamond_colour: e.target.value }))} style={S.input} placeholder="e.g. Cornflower Blue, Royal Blue" />
+                    </Field>
+                    <Field label="Clarity">
+                      <input value={piece.diamond_clarity} onChange={e => setPiece(p => ({ ...p, diamond_clarity: e.target.value }))} style={S.input} placeholder="e.g. Eye Clean, Slightly Included" />
+                    </Field>
+                  </>
+                ) : (
+                  <>
+                    <Field label="Colour">
+                      <div style={{ position: "relative" }}>
+                        <select value={piece.diamond_colour} onChange={e => setPiece(p => ({ ...p, diamond_colour: e.target.value }))} style={S.select}>
+                          <option value="">—</option>
+                          {COLOUR_GRADES.map(c => <option key={c}>{c}</option>)}
+                        </select>
+                        <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
+                      </div>
+                    </Field>
+                    <Field label="Clarity">
+                      <div style={{ position: "relative" }}>
+                        <select value={piece.diamond_clarity} onChange={e => setPiece(p => ({ ...p, diamond_clarity: e.target.value }))} style={S.select}>
+                          <option value="">—</option>
+                          {CLARITY_GRADES.map(c => <option key={c}>{c}</option>)}
+                        </select>
+                        <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
+                      </div>
+                    </Field>
+                  </>
+                )}
                 <Field label="Certificate #">
                   <input value={piece.certificate_number} onChange={e => setPiece(p => ({ ...p, certificate_number: e.target.value }))} style={S.input} placeholder="e.g. GIA 1234567890" />
                 </Field>
