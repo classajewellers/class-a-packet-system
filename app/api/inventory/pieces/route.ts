@@ -82,12 +82,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     .range(from, to);
 
   const unassigned = searchParams.get("unassigned") === "true";
+  const pairedTo   = searchParams.get("paired_to")  ?? "";
 
-  if (search)      query = query.or(`sku.ilike.%${search}%,title.ilike.%${search}%`);
-  if (categoryId)  query = query.eq("category_id", categoryId);
-  if (statusId)    query = query.eq("status_id",   statusId);
-  if (locationId)  query = query.eq("location_id", locationId);
-  if (unassigned)  query = query.is("product_id", null);
+  if (search)    query = query.or(`sku.ilike.%${search}%,title.ilike.%${search}%`);
+  if (categoryId) query = query.eq("category_id", categoryId);
+  if (statusId)   query = query.eq("status_id",   statusId);
+  if (locationId) query = query.eq("location_id", locationId);
+  if (unassigned) query = query.is("product_id", null);
+  if (pairedTo)   query = query.eq("paired_piece_id", pairedTo);
 
   const { data, error, count } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

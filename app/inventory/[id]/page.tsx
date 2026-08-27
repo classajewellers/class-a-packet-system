@@ -508,6 +508,16 @@ export default function InventoryItemPage({ params }: Params) {
   const [linkSaving, setLinkSaving]       = useState(false);
   const [linkError, setLinkError]         = useState("");
 
+  // ── Paired piece ──────────────────────────────────────────────────────────────
+  const [pairedPiece, setPairedPiece]       = useState<{ id: string; sku: string; title: string | null } | null>(null);
+  const [pairEditing, setPairEditing]       = useState(false);
+  const [pairSearch, setPairSearch]         = useState("");
+  const [pairResults, setPairResults]       = useState<{ id: string; sku: string; title: string | null }[]>([]);
+  const [pairDropdown, setPairDropdown]     = useState(false);
+  const [pairSelected, setPairSelected]     = useState<{ id: string; sku: string; title: string | null } | null>(null);
+  const [pairSaving, setPairSaving]         = useState(false);
+  const [pairError, setPairError]           = useState("");
+
   // ── Staff list for Mark as Sold modal ────────────────────────────────────────
   const [staffList, setStaffList] = useState<{ id: string; full_name: string }[]>([]);
 
@@ -699,6 +709,67 @@ export default function InventoryItemPage({ params }: Params) {
     if (!res.ok) { setLinkError(json.error ?? "Save failed"); return; }
     setPiece(json.piece);
     setLinkEditing(false);
+  }
+
+  // ── Paired piece: load on piece change ───────────────────────────────────────
+  useEffect(() => {
+    if (!piece || !tenantId) return;
+    const ownId: string | null = (piece as any).paired_piece_id ?? null;
+    if (ownId) {
+      fetch(`/api/inventory/pieces/${ownId}`, { headers })
+        .then(r => r.ok ? r.json() : null)
+        .then(json => { if (json?.piece) setPairedPiece({ id: json.piece.id, sku: json.piece.sku, title: json.piece.title }); })
+        .catch(() => {});
+    } else {
+      // Check back-reference: another piece pointing at this one
+      fetch(`/api/inventory/pieces?paired_to=${params.id}`, { headers })
+        .then(r => r.ok ? r.json() : null)
+        .then(json => {
+          const match = (json?.pieces ?? [])[0] ?? null;
+          setPairedPiece(match ? { id: match.id, sku: match.sku, title: match.title } : null);
+        })
+        .catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [piece?.id, tenantId]);
+
+  // ── Paired piece: type-ahead SKU search ──────────────────────────────────────
+  useEffect(() => {
+    if (pairSearch.length < 2) { setPairResults([]); setPairDropdown(false); return; }
+    const t = setTimeout(() => {
+      fetch(`/api/inventory/pieces?search=${encodeURIComponent(pairSearch)}&per_page=20`, { headers })
+        .then(r => r.json())
+        .then(json => {
+          const results = (json.pieces ?? [])
+            .filter((p: any) => p.id !== params.id)
+            .map((p: any) => ({ id: p.id, sku: p.sku, title: p.title }));
+          setPairResults(results);
+          setPairDropdown(results.length > 0);
+        })
+        .catch(() => setPairResults([]));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [pairSearch, tenantId]);
+
+  async function handleSavePair() {
+    if (!piece) return;
+    setPairSaving(true);
+    setPairError("");
+    const newPairId = pairSelected?.id ?? null;
+    const res = await fetch(`/api/inventory/pieces/${piece.id}`, {
+      method: "PATCH",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ paired_piece_id: newPairId }),
+    });
+    const json = await res.json();
+    setPairSaving(false);
+    if (!res.ok) { setPairError(json.error ?? "Save failed"); return; }
+    setPiece(json.piece);
+    setPairedPiece(pairSelected);
+    setPairEditing(false);
+    setPairSearch("");
+    setPairSelected(null);
+    setPairDropdown(false);
   }
 
   // ── Customer search for sell modal ──────────────────────────────────────────
@@ -1028,6 +1099,100 @@ export default function InventoryItemPage({ params }: Params) {
                     style={{ padding: "7px 16px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 13, fontWeight: 500, cursor: linkSaving ? "not-allowed" : "pointer", opacity: linkSaving ? 0.7 : 1 }}>
                     {linkSaving ? "Saving…" : "Save"}
                   </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Paired piece */}
+          <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <h3 style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>Paired Piece</h3>
+              {isManager && !pairEditing && (
+                <button
+                  onClick={() => { setPairSelected(pairedPiece); setPairSearch(""); setPairError(""); setPairEditing(true); }}
+                  style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E5E7EB", background: "#fff", fontSize: 12, cursor: "pointer", color: "#374151" }}>
+                  {pairedPiece ? "Change" : "Link"}
+                </button>
+              )}
+            </div>
+            {!pairEditing ? (
+              pairedPiece ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 13, color: "#9CA3AF" }}>Paired with</span>
+                  <button onClick={() => router.push(`/inventory/${pairedPiece.id}`)}
+                    style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 600, color: "#635BFF", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                    {pairedPiece.sku}
+                  </button>
+                  {pairedPiece.title && (
+                    <span style={{ fontSize: 13, color: "#9CA3AF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{pairedPiece.title}</span>
+                  )}
+                </div>
+              ) : (
+                <p style={{ margin: 0, fontSize: 13, color: "#9CA3AF" }}>Not paired</p>
+              )
+            ) : (
+              <div>
+                {pairError && <div style={{ padding: "8px 12px", background: "#FEF2F2", color: "#DC2626", borderRadius: 6, fontSize: 12, marginBottom: 10 }}>{pairError}</div>}
+                <div style={{ position: "relative" as const, marginBottom: 10 }}>
+                  <input
+                    value={pairSearch}
+                    onChange={e => { setPairSearch(e.target.value); setPairSelected(null); }}
+                    placeholder={pairSelected ? pairSelected.sku : "Type SKU to search…"}
+                    style={{ width: "100%", boxSizing: "border-box" as const, padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }}
+                  />
+                  {pairDropdown && (
+                    <div style={{ position: "absolute" as const, top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.1)", zIndex: 20, maxHeight: 200, overflowY: "auto" as const }}>
+                      {pairResults.map(p => (
+                        <button key={p.id}
+                          onClick={() => { setPairSelected(p); setPairSearch(""); setPairDropdown(false); }}
+                          style={{ width: "100%", padding: "9px 12px", background: "none", border: "none", cursor: "pointer", textAlign: "left" as const, fontSize: 13, display: "flex", gap: 10, alignItems: "baseline" }}>
+                          <span style={{ fontFamily: "monospace", fontWeight: 600, color: "#111827" }}>{p.sku}</span>
+                          {p.title && <span style={{ color: "#9CA3AF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{p.title}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {pairSelected && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: "#F0FDF4", border: "1px solid #86EFAC", borderRadius: 6, fontSize: 13, marginBottom: 10 }}>
+                    <span style={{ fontFamily: "monospace", fontWeight: 600, color: "#15803D" }}>{pairSelected.sku}</span>
+                    <button onClick={() => setPairSelected(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", padding: 0 }}>✕</button>
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <button onClick={() => { setPairEditing(false); setPairSearch(""); setPairSelected(null); setPairDropdown(false); }}
+                    style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 13, cursor: "pointer" }}>
+                    Cancel
+                  </button>
+                  <button onClick={handleSavePair} disabled={pairSaving || !pairSelected}
+                    style={{ padding: "7px 16px", borderRadius: 8, border: "none", background: pairSelected ? "#111827" : "#E5E7EB", color: pairSelected ? "#fff" : "#9CA3AF", fontSize: 13, fontWeight: 500, cursor: (pairSaving || !pairSelected) ? "not-allowed" : "pointer", opacity: pairSaving ? 0.7 : 1 }}>
+                    {pairSaving ? "Saving…" : "Save"}
+                  </button>
+                  {pairedPiece && (
+                    <button
+                      disabled={pairSaving}
+                      onClick={async () => {
+                        setPairSaving(true);
+                        setPairError("");
+                        const res = await fetch(`/api/inventory/pieces/${piece.id}`, {
+                          method: "PATCH",
+                          headers: { ...headers, "Content-Type": "application/json" },
+                          body: JSON.stringify({ paired_piece_id: null }),
+                        });
+                        const json = await res.json();
+                        setPairSaving(false);
+                        if (!res.ok) { setPairError(json.error ?? "Save failed"); return; }
+                        setPiece(json.piece);
+                        setPairedPiece(null);
+                        setPairEditing(false);
+                        setPairSearch("");
+                        setPairSelected(null);
+                      }}
+                      style={{ marginLeft: "auto", padding: "7px 12px", borderRadius: 8, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", fontSize: 13, cursor: pairSaving ? "not-allowed" : "pointer" }}>
+                      Remove pairing
+                    </button>
+                  )}
                 </div>
               </div>
             )}
