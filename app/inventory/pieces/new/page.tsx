@@ -563,7 +563,7 @@ export default function NewPiecePage() {
           <div style={{ marginBottom: 20 }}>
             <p style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 12px" }}>Stone</p>
             <div style={S.grid3}>
-              <Field label="Stone type">
+              <Field label="Origin">
                 <div style={{ position: "relative" }}>
                   <select value={piece.diamond_type} onChange={e => setPiece(p => ({ ...p, diamond_type: e.target.value }))} style={S.select}>
                     {STONE_TYPES.map(t => <option key={t}>{t}</option>)}
@@ -573,7 +573,7 @@ export default function NewPiecePage() {
               </Field>
 
               {piece.diamond_type !== "None" && <>
-                <Field label="Species">
+                <Field label="Stone Type">
                   <input
                     value={piece.stone_species}
                     onChange={e => {
