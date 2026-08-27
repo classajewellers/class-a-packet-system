@@ -509,14 +509,15 @@ export default function InventoryItemPage({ params }: Params) {
   const [linkError, setLinkError]         = useState("");
 
   // ── Paired piece ──────────────────────────────────────────────────────────────
-  const [pairedPiece, setPairedPiece]       = useState<{ id: string; sku: string; title: string | null } | null>(null);
+  const [pairedPiece, setPairedPiece]       = useState<{ id: string; sku: string; title: string | null; retail_price: number | null; is_sold: boolean } | null>(null);
   const [pairEditing, setPairEditing]       = useState(false);
   const [pairSearch, setPairSearch]         = useState("");
   const [pairResults, setPairResults]       = useState<{ id: string; sku: string; title: string | null }[]>([]);
   const [pairDropdown, setPairDropdown]     = useState(false);
-  const [pairSelected, setPairSelected]     = useState<{ id: string; sku: string; title: string | null } | null>(null);
+  const [pairSelected, setPairSelected]     = useState<{ id: string; sku: string; title: string | null; retail_price?: number | null; is_sold?: boolean } | null>(null);
   const [pairSaving, setPairSaving]         = useState(false);
   const [pairError, setPairError]           = useState("");
+  const [sellAsPair, setSellAsPair]         = useState(false);
 
   // ── Staff list for Mark as Sold modal ────────────────────────────────────────
   const [staffList, setStaffList] = useState<{ id: string; full_name: string }[]>([]);
@@ -533,7 +534,7 @@ export default function InventoryItemPage({ params }: Params) {
   });
   const [sellSaving, setSellSaving]   = useState(false);
   const [sellError, setSellError]     = useState("");
-  const [sellSuccess, setSellSuccess] = useState<{ id: string; gross_profit: number | null; note: string | null } | null>(null);
+  const [sellSuccess, setSellSuccess] = useState<{ id: string; gross_profit: number | null; note: string | null; paired_sku?: string | null } | null>(null);
   // Customer search state
   const [custSearch, setCustSearch]           = useState("");
   const [custResults, setCustResults]         = useState<{ id: string; first_name: string | null; last_name: string | null; email: string | null }[]>([]);
@@ -715,10 +716,17 @@ export default function InventoryItemPage({ params }: Params) {
   useEffect(() => {
     if (!piece || !tenantId) return;
     const ownId: string | null = (piece as any).paired_piece_id ?? null;
+    const toPairedPiece = (p: any) => ({
+      id: p.id,
+      sku: p.sku,
+      title: p.title,
+      retail_price: p.retail_price != null ? Number(p.retail_price) : null,
+      is_sold: (p.status?.name ?? "").toLowerCase().includes("sold"),
+    });
     if (ownId) {
       fetch(`/api/inventory/pieces/${ownId}`, { headers })
         .then(r => r.ok ? r.json() : null)
-        .then(json => { if (json?.piece) setPairedPiece({ id: json.piece.id, sku: json.piece.sku, title: json.piece.title }); })
+        .then(json => { if (json?.piece) setPairedPiece(toPairedPiece(json.piece)); })
         .catch(() => {});
     } else {
       // Check back-reference: another piece pointing at this one
@@ -726,7 +734,7 @@ export default function InventoryItemPage({ params }: Params) {
         .then(r => r.ok ? r.json() : null)
         .then(json => {
           const match = (json?.pieces ?? [])[0] ?? null;
-          setPairedPiece(match ? { id: match.id, sku: match.sku, title: match.title } : null);
+          setPairedPiece(match ? toPairedPiece(match) : null);
         })
         .catch(() => {});
     }
@@ -765,7 +773,15 @@ export default function InventoryItemPage({ params }: Params) {
     setPairSaving(false);
     if (!res.ok) { setPairError(json.error ?? "Save failed"); return; }
     setPiece(json.piece);
-    setPairedPiece(pairSelected);
+    // Re-fetch the paired piece to get full data including retail_price and status
+    if (pairSelected?.id) {
+      fetch(`/api/inventory/pieces/${pairSelected.id}`, { headers })
+        .then(r => r.ok ? r.json() : null)
+        .then(json => { if (json?.piece) setPairedPiece({ id: json.piece.id, sku: json.piece.sku, title: json.piece.title, retail_price: json.piece.retail_price != null ? Number(json.piece.retail_price) : null, is_sold: (json.piece.status?.name ?? "").toLowerCase().includes("sold") }); })
+        .catch(() => {});
+    } else {
+      setPairedPiece(null);
+    }
     setPairEditing(false);
     setPairSearch("");
     setPairSelected(null);
@@ -796,39 +812,85 @@ export default function InventoryItemPage({ params }: Params) {
 
   async function handleSell() {
     if (!piece) return;
-    const price = parseFloat(sellForm.sold_price);
-    if (!sellForm.sold_price || isNaN(price) || price <= 0) {
+    const totalPrice = parseFloat(sellForm.sold_price);
+    if (!sellForm.sold_price || isNaN(totalPrice) || totalPrice <= 0) {
       setSellError("Sold price is required and must be greater than zero");
       return;
     }
     setSellSaving(true);
     setSellError("");
-    const res = await fetch("/api/inventory/sales", {
-      method: "POST",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        piece_id:        piece.id,
-        sold_price:      price,
-        discount_amount: parseFloat(sellForm.discount_amount || "0") || 0,
-        staff_id:        sellForm.staff_id   || null,
-        customer_id:     sellForm.customer_id || null,
-        payment_method:  sellForm.payment_method || null,
-        notes:           sellForm.notes      || null,
-        moved_by:        user?.name          || null,
-      }),
-    });
-    const json = await res.json();
-    setSellSaving(false);
-    if (!res.ok) { setSellError(json.error ?? "Failed to record sale"); return; }
-    setSellSuccess({
-      id: json.sale?.id ?? "",
-      gross_profit: json.gross_profit,
-      note: json.gross_profit_note ?? null,
-    });
+
+    const commonPayload = {
+      discount_amount: parseFloat(sellForm.discount_amount || "0") || 0,
+      staff_id:        sellForm.staff_id   || null,
+      customer_id:     sellForm.customer_id || null,
+      payment_method:  sellForm.payment_method || null,
+      notes:           sellForm.notes      || null,
+      moved_by:        user?.name          || null,
+    };
+
+    if (sellAsPair && pairedPiece && !pairedPiece.is_sold) {
+      // Split the total price proportionally by each piece's retail price.
+      // If either retail is unknown, split 50/50.
+      const r1 = Number(piece.retail_price ?? 0);
+      const r2 = Number(pairedPiece.retail_price ?? 0);
+      const combined = r1 + r2;
+      const price1 = combined > 0
+        ? Math.round((totalPrice * (r1 / combined)) * 100) / 100
+        : Math.round((totalPrice / 2) * 100) / 100;
+      const price2 = Math.round((totalPrice - price1) * 100) / 100;
+
+      const [res1, res2] = await Promise.all([
+        fetch("/api/inventory/sales", {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({ piece_id: piece.id, sold_price: price1, ...commonPayload }),
+        }),
+        fetch("/api/inventory/sales", {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({ piece_id: pairedPiece.id, sold_price: price2, ...commonPayload }),
+        }),
+      ]);
+
+      const [json1, json2] = await Promise.all([res1.json(), res2.json()]);
+      setSellSaving(false);
+
+      if (!res1.ok) { setSellError(json1.error ?? "Failed to record sale for this piece"); return; }
+      if (!res2.ok) { setSellError(`${piece.sku} sold but failed for ${pairedPiece.sku}: ${json2.error ?? "unknown error"}`); fetchAll(); return; }
+
+      const combinedGP = (json1.gross_profit != null && json2.gross_profit != null)
+        ? json1.gross_profit + json2.gross_profit
+        : (json1.gross_profit ?? json2.gross_profit ?? null);
+
+      setSellSuccess({
+        id: json1.sale?.id ?? "",
+        gross_profit: combinedGP,
+        note: (json1.gross_profit == null || json2.gross_profit == null)
+          ? "Gross profit partial — one or both pieces missing cost data"
+          : null,
+        paired_sku: pairedPiece.sku,
+      });
+    } else {
+      const res = await fetch("/api/inventory/sales", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ piece_id: piece.id, sold_price: totalPrice, ...commonPayload }),
+      });
+      const json = await res.json();
+      setSellSaving(false);
+      if (!res.ok) { setSellError(json.error ?? "Failed to record sale"); return; }
+      setSellSuccess({
+        id: json.sale?.id ?? "",
+        gross_profit: json.gross_profit,
+        note: json.gross_profit_note ?? null,
+      });
+    }
     fetchAll();
   }
 
   function openSellModal() {
+    setSellAsPair(false);
     setSellForm({
       sold_price: piece?.retail_price != null ? String(piece.retail_price) : "",
       discount_amount: "",
@@ -1553,7 +1615,11 @@ export default function InventoryItemPage({ params }: Params) {
                   <DollarSign size={24} style={{ color: "#10B981" }} />
                 </div>
                 <h2 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 700, color: "#111827" }}>Sale Recorded</h2>
-                <p style={{ margin: "0 0 16px", fontSize: 14, color: "#6B7280" }}>{piece.sku} has been marked as sold.</p>
+                <p style={{ margin: "0 0 16px", fontSize: 14, color: "#6B7280" }}>
+                  {sellSuccess?.paired_sku
+                    ? <><strong style={{ fontFamily: "monospace" }}>{piece.sku}</strong> + <strong style={{ fontFamily: "monospace" }}>{sellSuccess.paired_sku}</strong> have been marked as sold.</>
+                    : <>{piece.sku} has been marked as sold.</>}
+                </p>
                 {sellSuccess.gross_profit != null && (
                   <div style={{ background: "#F0FDF4", border: "1px solid #86EFAC", borderRadius: 8, padding: "10px 16px", marginBottom: 12 }}>
                     <div style={{ fontSize: 12, color: "#166534", fontWeight: 600 }}>Gross Profit</div>
@@ -1580,6 +1646,50 @@ export default function InventoryItemPage({ params }: Params) {
                   </div>
                   <button onClick={() => setShowSell(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><X size={20} /></button>
                 </div>
+
+                {/* Pair toggle — shown only when a non-sold paired piece exists */}
+                {pairedPiece && !pairedPiece.is_sold && (
+                  <div style={{ marginBottom: 16, padding: "10px 14px", background: "#F5F3FF", border: "1px solid #C4B5FD", borderRadius: 10, display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 13, color: "#5B21B6", flex: 1 }}>
+                      Paired with <strong style={{ fontFamily: "monospace" }}>{pairedPiece.sku}</strong>
+                    </span>
+                    <div style={{ display: "flex", borderRadius: 7, overflow: "hidden", border: "1px solid #C4B5FD" }}>
+                      <button
+                        onClick={() => {
+                          setSellAsPair(false);
+                          setSellForm(f => ({ ...f, sold_price: piece.retail_price != null ? String(piece.retail_price) : "" }));
+                        }}
+                        style={{ padding: "5px 12px", fontSize: 12, fontWeight: 500, border: "none", cursor: "pointer", background: !sellAsPair ? "#635BFF" : "#EDE9FE", color: !sellAsPair ? "#fff" : "#5B21B6" }}>
+                        Individually
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSellAsPair(true);
+                          const r1 = Number(piece.retail_price ?? 0);
+                          const r2 = Number(pairedPiece.retail_price ?? 0);
+                          const combined = r1 + r2;
+                          setSellForm(f => ({ ...f, sold_price: combined > 0 ? String(combined) : f.sold_price }));
+                        }}
+                        style={{ padding: "5px 12px", fontSize: 12, fontWeight: 500, border: "none", cursor: "pointer", background: sellAsPair ? "#635BFF" : "#EDE9FE", color: sellAsPair ? "#fff" : "#5B21B6" }}>
+                        Sell as pair
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {sellAsPair && pairedPiece && !pairedPiece.is_sold && (
+                  <div style={{ marginBottom: 16, padding: "8px 12px", background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, color: "#6B7280" }}>
+                    <div style={{ marginBottom: 4, fontWeight: 500, color: "#374151" }}>Both pieces will be marked as sold</div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ fontFamily: "monospace" }}>{piece.sku}</span>
+                      <span>{piece.retail_price != null ? fmtMoney(piece.retail_price) : "no price set"}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ fontFamily: "monospace" }}>{pairedPiece.sku}</span>
+                      <span>{pairedPiece.retail_price != null ? fmtMoney(pairedPiece.retail_price) : "no price set"}</span>
+                    </div>
+                  </div>
+                )}
 
                 {sellError && (
                   <div style={{ padding: "10px 14px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, fontSize: 13, marginBottom: 16 }}>{sellError}</div>
