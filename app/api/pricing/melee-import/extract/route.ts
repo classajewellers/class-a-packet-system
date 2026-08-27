@@ -4,8 +4,15 @@ import { createTenantSupabaseClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 
-// Maximum file size: 20 MB
 const MAX_BYTES = 20 * 1024 * 1024;
+const ALLOWED_MIMES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+];
 
 const EXTRACTION_TOOL: Anthropic.Tool = {
   name: "extract_melee_price_rows",
@@ -13,21 +20,43 @@ const EXTRACTION_TOOL: Anthropic.Tool = {
     "Extract structured melee/small-stone price rows from a supplier price list document.",
   input_schema: {
     type: "object" as const,
-    required: ["rows", "origin_confidence", "suggested_origin"],
+    required: [
+      "rows",
+      "suggested_supplier_name",
+      "supplier_confidence",
+      "suggested_origin",
+      "origin_confidence",
+    ],
     properties: {
+      suggested_supplier_name: {
+        type: "string",
+        description:
+          "Supplier name as found in the document header, letterhead, or footer. " +
+          "If the name matches one of the known suppliers exactly, use that exact known name. " +
+          "If a supplier name is visible but doesn't match any known supplier, report it anyway. " +
+          "If no supplier name is visible anywhere in the document, return empty string.",
+      },
+      supplier_confidence: {
+        type: "string",
+        enum: ["certain", "ambiguous"],
+        description:
+          "'certain' = clear supplier name found in the document. " +
+          "'ambiguous' = no supplier name visible, or the name is unclear.",
+      },
       suggested_origin: {
         type: "string",
         enum: ["natural", "lab"],
         description:
-          "Origin inferred from the document itself (text, header, branding). " +
-          "If the document gives no signal, default to the supplier_default passed in the prompt.",
+          "Origin inferred from the document itself (text, header, branding, or detected supplier name). " +
+          "Use the supplier's apparent origin when the document has no explicit signal " +
+          "(e.g. 'Grown Diamonds' or 'lab' in the name → lab, 'Sapphire Export' or 'Natural' → natural).",
       },
       origin_confidence: {
         type: "string",
         enum: ["certain", "inferred_from_supplier", "ambiguous"],
         description:
           "'certain' = document explicitly states natural/lab. " +
-          "'inferred_from_supplier' = no document signal, using supplied default. " +
+          "'inferred_from_supplier' = no document signal, inferred from supplier name/branding. " +
           "'ambiguous' = document contains conflicting signals.",
       },
       origin_conflict_note: {
@@ -60,13 +89,13 @@ const EXTRACTION_TOOL: Anthropic.Tool = {
               enum: ["carat_range", "pieces_per_carat"],
               description:
                 "'carat_range' when the row is expressed as a carat band (e.g. 0.025-0.03ct). " +
-                "'pieces_per_carat' when the row is expressed as pieces-per-carat (e.g. 200pc-150pc). " +
+                "'pieces_per_carat' when expressed as pieces-per-carat (e.g. 200pc-150pc). " +
                 "NEVER silently convert between conventions.",
             },
             size_label: {
               type: "string",
               description:
-                "Size exactly as it appears in the document (e.g. '200pc-150pc', '0.025-0.03ct', '3/4 to 1ct').",
+                "Size exactly as it appears in the document (e.g. '200pc-150pc', '0.025-0.03ct').",
             },
             size_from: {
               type: "number",
@@ -83,8 +112,8 @@ const EXTRACTION_TOOL: Anthropic.Tool = {
             quality: {
               type: "string",
               description:
-                "Quality grade as stated in the document (e.g. 'DEF/VS', 'EF SI', 'FG VVS', " +
-                "'SI1', 'VS2'). Use 'unspecified' if the document lists no quality for this row.",
+                "Quality grade as stated in the document (e.g. 'DEF/VS', 'EF SI', 'FG VVS'). " +
+                "Use 'unspecified' if the document lists no quality for this row.",
             },
             price_per_carat: {
               type: "number",
@@ -94,8 +123,7 @@ const EXTRACTION_TOOL: Anthropic.Tool = {
               type: "boolean",
               description:
                 "true if this row is ambiguous or uncertain — e.g. a merged/spanning cell, " +
-                "unclear size convention, shape not clearly identifiable, or the price seems " +
-                "implausible. Flag for human review rather than silently guessing.",
+                "unclear size convention, shape not clearly identifiable, or implausible price.",
             },
             flag_reason: {
               type: "string",
@@ -108,133 +136,165 @@ const EXTRACTION_TOOL: Anthropic.Tool = {
   },
 };
 
+function buildSystemPrompt(knownSupplierNames: string[]): string {
+  const supplierList =
+    knownSupplierNames.length > 0
+      ? knownSupplierNames.map((n) => `- ${n}`).join("\n")
+      : "(none provided)";
+
+  return `You are extracting melee/small-stone diamond price data from a supplier price list for Class A Jewellers.
+
+Known suppliers:
+${supplierList}
+
+SUPPLIER DETECTION: Check the document's header, letterhead, or footer. If the name matches one of the known suppliers above, use that exact known name in suggested_supplier_name. If a supplier name is visible but doesn't match, still report it. If no supplier name is visible, return empty string and set supplier_confidence to 'ambiguous'.
+
+ORIGIN DETECTION:
+- If the document explicitly states "natural", "mined", "lab", "lab-grown", "CVD", "HPHT" etc.: origin_confidence = 'certain'.
+- If the supplier name strongly implies an origin (e.g. "Grown Diamonds" or "lab" in the name → lab; "Sapphire Export", "Natural Diamonds" → natural): origin_confidence = 'inferred_from_supplier'.
+- If neither signal is present or they conflict: origin_confidence = 'ambiguous'.
+
+CRITICAL EXTRACTION RULES:
+1. Preserve the exact size convention — 'pieces_per_carat' for rows like "200pc-150pc", 'carat_range' for rows like "0.025-0.03ct". NEVER convert between conventions.
+2. Every row must have a shape. If a table has a header shape covering multiple rows, apply it to each row.
+3. price_per_carat is always in AUD per carat.
+4. Flag any row you are not fully confident about rather than guessing silently.
+5. If the document contains conflicting origin signals, set origin_confidence to 'ambiguous' and describe in origin_conflict_note.`;
+}
+
+interface FileExtractionResult {
+  file_name: string;
+  rows: unknown[];
+  suggested_supplier_name: string;
+  supplier_confidence: string;
+  suggested_origin: string;
+  origin_confidence: string;
+  origin_conflict_note: string | null;
+}
+
+async function extractSingleFile(
+  file: File,
+  client: Anthropic,
+  systemPrompt: string
+): Promise<FileExtractionResult> {
+  const bytes = await file.arrayBuffer();
+  const base64 = Buffer.from(bytes).toString("base64");
+  const isPdf = file.type === "application/pdf";
+
+  const fileContent: Anthropic.MessageParam["content"][number] = isPdf
+    ? {
+        type: "document",
+        source: { type: "base64", media_type: "application/pdf", data: base64 },
+      }
+    : {
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: file.type as "image/jpeg" | "image/png" | "image/webp" | "image/gif",
+          data: base64,
+        },
+      };
+
+  const response = await client.messages.create({
+    model: "claude-sonnet-5",
+    max_tokens: 8192,
+    system: systemPrompt,
+    tools: [EXTRACTION_TOOL],
+    tool_choice: { type: "tool", name: "extract_melee_price_rows" },
+    messages: [
+      {
+        role: "user",
+        content: [
+          fileContent,
+          {
+            type: "text",
+            text: "Extract all melee stone price rows from this price list. Call extract_melee_price_rows with the complete structured data.",
+          },
+        ],
+      },
+    ],
+  });
+
+  const toolUse = response.content.find((b) => b.type === "tool_use");
+  if (!toolUse || toolUse.type !== "tool_use") {
+    return {
+      file_name: file.name,
+      rows: [],
+      suggested_supplier_name: "",
+      supplier_confidence: "ambiguous",
+      suggested_origin: "natural",
+      origin_confidence: "ambiguous",
+      origin_conflict_note: `AI extraction did not return structured data for "${file.name}".`,
+    };
+  }
+
+  const extracted = toolUse.input as {
+    rows: unknown[];
+    suggested_supplier_name: string;
+    supplier_confidence: string;
+    suggested_origin: string;
+    origin_confidence: string;
+    origin_conflict_note?: string;
+  };
+
+  return {
+    file_name: file.name,
+    rows: extracted.rows ?? [],
+    suggested_supplier_name: extracted.suggested_supplier_name ?? "",
+    supplier_confidence: extracted.supplier_confidence ?? "ambiguous",
+    suggested_origin: extracted.suggested_origin ?? "natural",
+    origin_confidence: extracted.origin_confidence ?? "ambiguous",
+    origin_conflict_note: extracted.origin_conflict_note ?? null,
+  };
+}
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const tenantId = req.headers.get("x-tenant-id") ?? "";
-    const supabase = await createTenantSupabaseClient(tenantId);
+    await createTenantSupabaseClient(tenantId);
 
     const formData = await req.formData();
-    const file = formData.get("file") as File | null;
-    const supplierId = formData.get("supplier_id") as string | null;
-    const supplierDefault = (formData.get("supplier_origin_default") as string) ?? "natural";
+    const rawFiles = formData.getAll("file");
+    const files = rawFiles.filter((f): f is File => f instanceof File && f.size > 0);
+    const knownSupplierNames: string[] = JSON.parse(
+      (formData.get("known_supplier_names") as string | null) ?? "[]"
+    );
 
-    if (!file) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+    if (files.length === 0) {
+      return NextResponse.json({ error: "No files uploaded" }, { status: 400 });
     }
-    if (!supplierId) {
-      return NextResponse.json({ error: "supplier_id is required" }, { status: 400 });
-    }
-
-    // Validate file type
-    const mime = file.type;
-    const allowed = [
-      "application/pdf",
-      "image/jpeg",
-      "image/jpg",
-      "image/png",
-      "image/webp",
-      "image/gif",
-    ];
-    if (!allowed.includes(mime)) {
+    if (files.length > 10) {
       return NextResponse.json(
-        { error: `Unsupported file type: ${mime}. Upload a PDF or image.` },
+        { error: "Maximum 10 files per upload" },
         { status: 400 }
       );
     }
 
-    const bytes = await file.arrayBuffer();
-    if (bytes.byteLength > MAX_BYTES) {
-      return NextResponse.json(
-        { error: "File exceeds 20 MB limit" },
-        { status: 400 }
-      );
+    for (const file of files) {
+      if (!ALLOWED_MIMES.includes(file.type)) {
+        return NextResponse.json(
+          {
+            error: `Unsupported file type for "${file.name}": ${file.type}. Upload PDFs or images.`,
+          },
+          { status: 400 }
+        );
+      }
+      if (file.size > MAX_BYTES) {
+        return NextResponse.json(
+          { error: `"${file.name}" exceeds 20 MB limit` },
+          { status: 400 }
+        );
+      }
     }
-
-    // Fetch supplier name for the prompt
-    const { data: supplier, error: supplierErr } = await supabase
-      .from("inventory_suppliers")
-      .select("id, name")
-      .eq("id", supplierId)
-      .single();
-
-    if (supplierErr || !supplier) {
-      return NextResponse.json({ error: "Supplier not found" }, { status: 404 });
-    }
-
-    const base64 = Buffer.from(bytes).toString("base64");
-    const isPdf = mime === "application/pdf";
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const systemPrompt = buildSystemPrompt(knownSupplierNames);
 
-    const fileContent: Anthropic.MessageParam["content"][number] = isPdf
-      ? {
-          type: "document",
-          source: { type: "base64", media_type: "application/pdf", data: base64 },
-        }
-      : {
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: mime as "image/jpeg" | "image/png" | "image/webp" | "image/gif",
-            data: base64,
-          },
-        };
+    const results = await Promise.all(
+      files.map((file) => extractSingleFile(file, client, systemPrompt))
+    );
 
-    const systemPrompt = `You are extracting melee/small-stone diamond price data from a supplier price list for Class A Jewellers.
-
-Supplier: ${supplier.name}
-Supplier origin default: ${supplierDefault} (use this if the document itself gives no explicit natural/lab signal)
-
-CRITICAL RULES:
-1. Preserve the exact size convention used in each row — 'pieces_per_carat' for rows like "200pc-150pc", 'carat_range' for rows like "0.025-0.03ct". Never convert one to the other.
-2. Every row must have a shape. If a table has a header shape that applies to multiple rows, apply it to each row.
-3. price_per_carat is always in AUD per carat.
-4. Flag any row you are not fully confident about rather than guessing silently.
-5. If the document contains any text that contradicts the supplier origin default (e.g. the document says "Lab" but the supplier default is "natural"), set origin_confidence to 'ambiguous' and describe it in origin_conflict_note.`;
-
-    const response = await client.messages.create({
-      model: "claude-sonnet-5",
-      max_tokens: 8192,
-      system: systemPrompt,
-      tools: [EXTRACTION_TOOL],
-      tool_choice: { type: "tool", name: "extract_melee_price_rows" },
-      messages: [
-        {
-          role: "user",
-          content: [
-            fileContent,
-            {
-              type: "text",
-              text: "Extract all melee stone price rows from this price list. Call extract_melee_price_rows with the complete structured data.",
-            },
-          ],
-        },
-      ],
-    });
-
-    const toolUse = response.content.find((b) => b.type === "tool_use");
-    if (!toolUse || toolUse.type !== "tool_use") {
-      return NextResponse.json(
-        { error: "AI extraction did not return structured data" },
-        { status: 500 }
-      );
-    }
-
-    const extracted = toolUse.input as {
-      rows: unknown[];
-      suggested_origin: string;
-      origin_confidence: string;
-      origin_conflict_note?: string;
-    };
-
-    return NextResponse.json({
-      rows: extracted.rows,
-      suggested_origin: extracted.suggested_origin,
-      origin_confidence: extracted.origin_confidence,
-      origin_conflict_note: extracted.origin_conflict_note ?? null,
-      supplier: { id: supplier.id, name: supplier.name },
-      file_name: file.name,
-    });
+    return NextResponse.json({ results });
   } catch (err) {
     console.error("[melee-import/extract]", err);
     return NextResponse.json(
