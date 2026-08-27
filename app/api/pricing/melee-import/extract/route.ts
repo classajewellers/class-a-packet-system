@@ -72,6 +72,8 @@ const EXTRACTION_TOOL: Anthropic.Tool = {
             "shape",
             "size_type",
             "size_label",
+            "size_from",
+            "size_to",
             "quality",
             "price_per_carat",
             "flagged",
