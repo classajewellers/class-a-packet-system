@@ -173,8 +173,6 @@ interface FileExtractionResult {
   suggested_origin: string;
   origin_confidence: string;
   origin_conflict_note: string | null;
-  // Debug: raw tool_use input from Claude — remove once size_from/size_to are confirmed non-null
-  _raw_tool_input?: unknown;
 }
 
 async function extractSingleFile(
@@ -250,7 +248,6 @@ async function extractSingleFile(
     suggested_origin: extracted.suggested_origin ?? "natural",
     origin_confidence: extracted.origin_confidence ?? "ambiguous",
     origin_conflict_note: extracted.origin_conflict_note ?? null,
-    _raw_tool_input: toolUse.input,
   };
 }
 
