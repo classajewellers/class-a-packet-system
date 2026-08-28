@@ -111,9 +111,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         updated_at: new Date().toISOString(),
       }));
 
-      const { error: insertErr } = await supabase
+      // DEBUG — remove after size_from/size_to confirmed non-null in DB
+      if (inserts[0]) {
+        console.log("[melee-confirm] PRE-INSERT first row size_from:", inserts[0].size_from, typeof inserts[0].size_from, "size_to:", inserts[0].size_to, typeof inserts[0].size_to, "label:", inserts[0].size_label);
+      }
+
+      const { data: insertedRows, error: insertErr } = await supabase
         .from("pricing_melee_stones")
-        .insert(inserts);
+        .insert(inserts)
+        .select("id, size_label, size_from, size_to");
+
+      // DEBUG — remove after confirmed
+      if (insertedRows?.[0]) {
+        console.log("[melee-confirm] POST-INSERT first row back:", JSON.stringify(insertedRows[0]));
+      } else {
+        console.log("[melee-confirm] POST-INSERT returned no rows (insertedRows:", JSON.stringify(insertedRows), ")");
+      }
 
       if (insertErr) {
         return NextResponse.json(
