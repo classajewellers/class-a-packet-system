@@ -181,18 +181,6 @@ export default function CharmBuilderSettingsPage() {
     setBaseConfigs(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
   }
 
-  async function updateAftermarket(id: string, field: string, value: unknown) {
-    await patch("aftermarket_rate", id, { [field]: value });
-    // Recalculate total_price if charm_price or soldering_fee changes
-    setAftermarket(prev => prev.map(r => {
-      if (r.id !== id) return r;
-      const updated = { ...r, [field]: value };
-      if (field === "charm_price" || field === "soldering_fee") {
-        updated.total_price = Number(updated.charm_price) + Number(updated.soldering_fee);
-      }
-      return updated;
-    }));
-  }
 
   if (loading) return <div style={{ padding: 40, color: "#6B7280", fontSize: 14 }}>Loading…</div>;
   if (error)   return <div style={{ padding: 40, color: "#DC2626", fontSize: 14 }}>Error: {error}</div>;
@@ -334,9 +322,10 @@ export default function CharmBuilderSettingsPage() {
                   <PriceField
                     value={Number(rate.charm_price)}
                     onSave={async v => {
-                      const newTotal = v + Number(rate.soldering_fee);
-                      await patch("aftermarket_rate", rate.id, { charm_price: v, total_price: newTotal });
-                      setAftermarket(prev => prev.map(r => r.id === rate.id ? { ...r, charm_price: v, total_price: newTotal } : r));
+                      await patch("aftermarket_rate", rate.id, { charm_price: v });
+                      setAftermarket(prev => prev.map(r => r.id === rate.id
+                        ? { ...r, charm_price: v, total_price: v + Number(r.soldering_fee) }
+                        : r));
                     }}
                   />
                 </td>
@@ -344,9 +333,10 @@ export default function CharmBuilderSettingsPage() {
                   <PriceField
                     value={Number(rate.soldering_fee)}
                     onSave={async v => {
-                      const newTotal = Number(rate.charm_price) + v;
-                      await patch("aftermarket_rate", rate.id, { soldering_fee: v, total_price: newTotal });
-                      setAftermarket(prev => prev.map(r => r.id === rate.id ? { ...r, soldering_fee: v, total_price: newTotal } : r));
+                      await patch("aftermarket_rate", rate.id, { soldering_fee: v });
+                      setAftermarket(prev => prev.map(r => r.id === rate.id
+                        ? { ...r, soldering_fee: v, total_price: Number(r.charm_price) + v }
+                        : r));
                     }}
                   />
                 </td>

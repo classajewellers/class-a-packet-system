@@ -81,13 +81,15 @@ CREATE INDEX IF NOT EXISTS charm_builder_configs_quote_idx
 -- ── 4. Mode 2: add-a-charm-to-existing-piece flat rates ──────────────────────
 
 CREATE TABLE IF NOT EXISTS charm_aftermarket_rates (
-  id           uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id    uuid          NOT NULL,
-  charm_type   text          NOT NULL,
+  id            uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id     uuid          NOT NULL,
+  charm_type    text          NOT NULL,
   -- initial | birthstone | april_diamond | love_story | diamond_030ct
-  metal_colour text          NOT NULL,   -- yellow | white
-  total_price  numeric(10,2) NOT NULL,
-  active       boolean       NOT NULL DEFAULT true,
+  metal_colour  text          NOT NULL,   -- yellow | white
+  charm_price   numeric(10,2) NOT NULL,
+  soldering_fee numeric(10,2) NOT NULL DEFAULT 40,
+  total_price   numeric(10,2) GENERATED ALWAYS AS (charm_price + soldering_fee) STORED,
+  active        boolean       NOT NULL DEFAULT true,
   UNIQUE (tenant_id, charm_type, metal_colour)
 );
 ALTER TABLE charm_aftermarket_rates DISABLE ROW LEVEL SECURITY;
@@ -174,16 +176,17 @@ INSERT INTO charm_catalog_items (tenant_id, category, name, price, applies_to, s
   ('00000000-0000-0000-0000-000000000001', 'diamond_shape', 'Pear',            740, 'necklace', 6)
 ON CONFLICT (tenant_id, category, name) DO NOTHING;
 
--- ── Aftermarket rates (Mode 2: add charm to existing piece, incl. $40 solder) ─
-INSERT INTO charm_aftermarket_rates (tenant_id, charm_type, metal_colour, total_price) VALUES
-  ('00000000-0000-0000-0000-000000000001', 'initial',       'yellow', 130),
-  ('00000000-0000-0000-0000-000000000001', 'birthstone',    'yellow', 130),
-  ('00000000-0000-0000-0000-000000000001', 'april_diamond', 'yellow', 210),
-  ('00000000-0000-0000-0000-000000000001', 'love_story',    'yellow', 100),
-  ('00000000-0000-0000-0000-000000000001', 'diamond_030ct', 'yellow', 790),
-  ('00000000-0000-0000-0000-000000000001', 'initial',       'white',  135),
-  ('00000000-0000-0000-0000-000000000001', 'birthstone',    'white',  135),
-  ('00000000-0000-0000-0000-000000000001', 'april_diamond', 'white',  215),
-  ('00000000-0000-0000-0000-000000000001', 'love_story',    'white',  105),
-  ('00000000-0000-0000-0000-000000000001', 'diamond_030ct', 'white',  795)
+-- ── Aftermarket rates (Mode 2: add charm to existing piece) ──────────────────
+-- soldering_fee is $40 flat for every row; total_price is generated (charm_price + soldering_fee)
+INSERT INTO charm_aftermarket_rates (tenant_id, charm_type, metal_colour, charm_price, soldering_fee) VALUES
+  ('00000000-0000-0000-0000-000000000001', 'initial',       'yellow',  90, 40),
+  ('00000000-0000-0000-0000-000000000001', 'birthstone',    'yellow',  90, 40),
+  ('00000000-0000-0000-0000-000000000001', 'april_diamond', 'yellow', 170, 40),
+  ('00000000-0000-0000-0000-000000000001', 'love_story',    'yellow',  60, 40),
+  ('00000000-0000-0000-0000-000000000001', 'diamond_030ct', 'yellow', 750, 40),
+  ('00000000-0000-0000-0000-000000000001', 'initial',       'white',   95, 40),
+  ('00000000-0000-0000-0000-000000000001', 'birthstone',    'white',   95, 40),
+  ('00000000-0000-0000-0000-000000000001', 'april_diamond', 'white',  175, 40),
+  ('00000000-0000-0000-0000-000000000001', 'love_story',    'white',   65, 40),
+  ('00000000-0000-0000-0000-000000000001', 'diamond_030ct', 'white',  755, 40)
 ON CONFLICT (tenant_id, charm_type, metal_colour) DO NOTHING;
