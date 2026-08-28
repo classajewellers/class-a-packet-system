@@ -346,7 +346,10 @@ export default function CharmBuilderSettingsPage() {
                 <td style={{ textAlign: "center", padding: "7px 0" }}>
                   <span
                     style={{ ...badge(rate.active), cursor: "pointer" }}
-                    onClick={() => updateAftermarket(rate.id, "active", !rate.active)}
+                    onClick={async () => {
+                      await patch("aftermarket_rate", rate.id, { active: !rate.active });
+                      setAftermarket(prev => prev.map(r => r.id === rate.id ? { ...r, active: !r.active } : r));
+                    }}
                     title="Click to toggle"
                   >
                     {rate.active ? "Active" : "Inactive"}
