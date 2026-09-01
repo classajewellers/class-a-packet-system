@@ -4,20 +4,6 @@ import { createTenantSupabaseClient } from "@/lib/supabase-server";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const PO_DETAIL_SELECT = `
-  *,
-  supplier:inventory_suppliers(id,name),
-  lines:inventory_po_lines(
-    *,
-    pieces:inventory_pieces(id,sku,quantity),
-    packet:packets(id,reference_number,customer_first_name,customer_last_name,packet_type)
-  )
-`.trim();
-// Note: category_id is returned as a plain column via *.
-// The category:inventory_categories join is omitted because inventory_po_lines.category_id
-// has no FK constraint — PostgREST would error. Category names are resolved client-side
-// from the reference data already loaded by the page.
-
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -25,14 +11,80 @@ export async function GET(
   const tenantId = req.headers.get("x-tenant-id") ?? "";
   const supabase = await createTenantSupabaseClient(tenantId);
 
-  const { data, error } = await supabase
+  // Fetch PO header — no embedded joins to avoid PostgREST FK dependency
+  const { data: po, error: poErr } = await supabase
     .from("inventory_purchase_orders")
-    .select(PO_DETAIL_SELECT)
+    .select("*")
     .eq("id", params.id)
     .single();
 
-  if (error || !data) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json({ purchase_order: data });
+  if (poErr || !po) {
+    console.error("[po-detail] PO query error:", poErr?.message, poErr?.code, "id:", params.id);
+    return NextResponse.json({ error: poErr?.message ?? "Not found" }, { status: 404 });
+  }
+
+  // Supplier name (separate query, FK-independent)
+  let supplier: { id: string; name: string } | null = null;
+  if (po.supplier_id) {
+    const { data: sup } = await supabase
+      .from("inventory_suppliers")
+      .select("id, name")
+      .eq("id", po.supplier_id)
+      .single();
+    supplier = sup ?? null;
+  }
+
+  // PO lines — plain columns only, no nested joins
+  const { data: lines, error: linesErr } = await supabase
+    .from("inventory_po_lines")
+    .select("*")
+    .eq("po_id", params.id)
+    .order("created_at", { ascending: true });
+
+  if (linesErr) {
+    console.error("[po-detail] lines query error:", linesErr.message, linesErr.code);
+    return NextResponse.json({ error: linesErr.message }, { status: 500 });
+  }
+
+  const lineRows = lines ?? [];
+  const lineIds   = lineRows.map((l: any) => l.id);
+  const packetIds = lineRows.map((l: any) => l.packet_id).filter(Boolean);
+
+  // Pieces for these lines (separate query)
+  const piecesByLineId: Record<string, { id: string; sku: string; quantity: number }[]> = {};
+  if (lineIds.length > 0) {
+    const { data: pieces } = await supabase
+      .from("inventory_pieces")
+      .select("id, sku, quantity, po_line_id")
+      .in("po_line_id", lineIds);
+    for (const p of pieces ?? []) {
+      if (!piecesByLineId[p.po_line_id]) piecesByLineId[p.po_line_id] = [];
+      piecesByLineId[p.po_line_id].push({ id: p.id, sku: p.sku, quantity: p.quantity });
+    }
+  }
+
+  // Packets linked to these lines (separate query)
+  const packetById: Record<string, any> = {};
+  if (packetIds.length > 0) {
+    const { data: packets } = await supabase
+      .from("packets")
+      .select("id, reference_number, customer_first_name, customer_last_name, packet_type")
+      .in("id", packetIds);
+    for (const pkt of packets ?? []) packetById[pkt.id] = pkt;
+  }
+
+  // Assemble the response in the shape the page expects
+  const purchase_order = {
+    ...po,
+    supplier,
+    lines: lineRows.map((l: any) => ({
+      ...l,
+      pieces: piecesByLineId[l.id] ?? [],
+      packet: l.packet_id ? (packetById[l.packet_id] ?? null) : null,
+    })),
+  };
+
+  return NextResponse.json({ purchase_order });
 }
 
 export async function PATCH(
@@ -49,7 +101,7 @@ export async function PATCH(
     .from("inventory_purchase_orders")
     .update({ ...updateData, updated_at: new Date().toISOString() })
     .eq("id", params.id)
-    .select(PO_DETAIL_SELECT)
+    .select("*")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
