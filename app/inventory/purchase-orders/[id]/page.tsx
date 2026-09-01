@@ -1136,7 +1136,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                     <tr key={line.id} style={{ borderTop: i > 0 ? "1px solid #F3F4F6" : "none" }}>
                       <td style={{ padding: "10px 16px", color: "#374151", maxWidth: 240 }}>
                         <div>{line.title ?? <span style={{ color: "#D1D5DB" }}>—</span>}</div>
-                        {line.category?.name && <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>{line.category.name}</div>}
+                        {(() => { const catName = categories.find(c => c.id === line.category_id)?.name; return catName ? <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>{catName}</div> : null; })()}
                         {line.supplier_design_no && (
                           <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2, fontFamily: "monospace" }}>
                             Ref: {line.supplier_design_no}

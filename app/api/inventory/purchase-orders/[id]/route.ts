@@ -9,11 +9,14 @@ const PO_DETAIL_SELECT = `
   supplier:inventory_suppliers(id,name),
   lines:inventory_po_lines(
     *,
-    category:inventory_categories(id,name),
     pieces:inventory_pieces(id,sku,quantity),
     packet:packets(id,reference_number,customer_first_name,customer_last_name,packet_type)
   )
 `.trim();
+// Note: category_id is returned as a plain column via *.
+// The category:inventory_categories join is omitted because inventory_po_lines.category_id
+// has no FK constraint — PostgREST would error. Category names are resolved client-side
+// from the reference data already loaded by the page.
 
 export async function GET(
   req: NextRequest,
