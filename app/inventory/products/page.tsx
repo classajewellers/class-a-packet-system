@@ -72,7 +72,7 @@ export default function ProductsPage() {
         {isManager && (
           <div style={{ display: "flex", gap: 8 }}>
             <button
-              onClick={() => router.push("/inventory/import")}
+              onClick={() => router.push("/inventory/products-import")}
               style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 14, fontWeight: 500, background: "#F9FAFB", color: "#374151", border: "1px solid #E5E7EB", cursor: "pointer" }}
             >
               <Upload size={15} /> Import CSV
