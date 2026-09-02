@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS attachments (
   uploaded_by UUID REFERENCES profiles(id),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
-DISABLE ROW LEVEL SECURITY ON attachments;
+ALTER TABLE attachments DISABLE ROW LEVEL SECURITY;
 
 -- Valuation photo stored directly on the packet
 ALTER TABLE packets ADD COLUMN IF NOT EXISTS valuation_photo_url TEXT;
