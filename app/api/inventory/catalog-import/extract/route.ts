@@ -9,6 +9,11 @@ export const dynamic = "force-dynamic";
 interface MetalCode { karat: string; colour: string; }
 interface CatalogImportConfig {
   version: number;
+  // Optional: how many leading rows to scan when locating the real header row.
+  // Some supplier files prepend title/date/blank rows before the header.
+  // Defaults to 15 if unset. A file whose headers are in row 0 matches on the
+  // first iteration, so this is backward-compatible with configs that omit it.
+  header_scan_rows?: number;
   sku_parse: {
     segment_separator: string;
     metal_codes: Record<string, MetalCode>;
@@ -51,26 +56,57 @@ export interface CatalogExtractRow {
 
 // ── xlsx helpers ─────────────────────────────────────────────────────────────
 
-function parseXlsx(buffer: ArrayBuffer): Record<string, string>[] {
+// Trim whitespace from object keys so column_map lookups (authored clean in
+// the config) still match headers that carry stray leading/trailing spaces.
+function trimKeys(rows: Record<string, string>[]): Record<string, string>[] {
+  return rows.map(r => {
+    const out: Record<string, string> = {};
+    for (const k of Object.keys(r)) out[k.trim()] = r[k];
+    return out;
+  });
+}
+
+// True if every required column name appears among the (trimmed) cell values
+// of this row — i.e. this row is the header row for that source.
+function rowMatches(cells: unknown[], required: string[]): boolean {
+  const present = new Set(cells.map(c => String(c ?? "").trim()));
+  return required.length > 0 && required.every(c => present.has(c));
+}
+
+// Locate the real header row within the first N rows and identify the source.
+// Supplier files may prepend title/date/blank rows before the header, so we
+// scan rather than assuming row 0. Returns the parsed data rows (headers taken
+// from the matched row, preamble skipped) plus which source the file is.
+function parseAndDetect(
+  buffer: ArrayBuffer,
+  config: CatalogImportConfig
+): { source: "price_file" | "design_list"; rows: Record<string, string>[] } | null {
   const wb = XLSX.read(buffer, { type: "array" });
   const ws = wb.Sheets[wb.SheetNames[0]];
-  return XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: "" });
-}
 
-function headersOf(rows: Record<string, string>[]): Set<string> {
-  if (rows.length === 0) return new Set();
-  return new Set(Object.keys(rows[0]));
-}
+  // Array-of-arrays view so we can inspect raw cell values by row index.
+  const aoa = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "", blankrows: true });
 
-function detectSource(
-  rows: Record<string, string>[],
-  config: CatalogImportConfig
-): "price_file" | "design_list" | null {
-  const hdrs = headersOf(rows);
-  const priceMatch = config.sources.price_file.identify_by_columns.every(c => hdrs.has(c));
-  if (priceMatch) return "price_file";
-  const designMatch = config.sources.design_list.identify_by_columns.every(c => hdrs.has(c));
-  if (designMatch) return "design_list";
+  const scanRows = Math.max(1, config.header_scan_rows ?? 15);
+  const limit    = Math.min(scanRows, aoa.length);
+
+  const priceCols  = config.sources.price_file.identify_by_columns;
+  const designCols = config.sources.design_list.identify_by_columns;
+
+  for (let i = 0; i < limit; i++) {
+    const cells = aoa[i] ?? [];
+    const source =
+      rowMatches(cells, priceCols)  ? "price_file"  as const :
+      rowMatches(cells, designCols) ? "design_list" as const :
+      null;
+    if (!source) continue;
+
+    // Re-parse with the header taken from row i (numeric range starts there),
+    // which cleanly drops the preamble rows above it.
+    const rows = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { range: i, defval: "" });
+    return { source, rows: trimKeys(rows) };
+  }
+
   return null;
 }
 
@@ -244,10 +280,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     for (const file of files) {
       const buffer = await file.arrayBuffer();
-      const rows = parseXlsx(buffer);
-      const sourceType = detectSource(rows, config);
-      if (sourceType === "price_file")  priceRows  = rows;
-      if (sourceType === "design_list") designRows = rows;
+      const detected = parseAndDetect(buffer, config);
+      if (!detected) continue;
+      if (detected.source === "price_file")  priceRows  = detected.rows;
+      if (detected.source === "design_list") designRows = detected.rows;
     }
 
     if (!priceRows)  return NextResponse.json({ error: "Could not identify a price file — check column headers match config" }, { status: 422 });
