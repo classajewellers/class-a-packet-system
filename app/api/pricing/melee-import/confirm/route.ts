@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 interface MeleeRow {
   shape: string;
-  size_type: "carat_range" | "pieces_per_carat" | "points";
+  size_type: "carat_range" | "pieces_per_carat" | "points" | "mm_range";
   size_label: string;
   size_from: number | null;
   size_to: number | null;

@@ -88,33 +88,39 @@ const EXTRACTION_TOOL: Anthropic.Tool = {
             },
             size_type: {
               type: "string",
-              enum: ["carat_range", "pieces_per_carat", "points"],
+              enum: ["carat_range", "pieces_per_carat", "points", "mm_range"],
               description:
-                "'carat_range' when the row is expressed as a carat band (e.g. 0.025-0.03ct, 0.10-0.14ct). " +
-                "'pieces_per_carat' when expressed as pieces-per-carat (e.g. 200pc-150pc) — this is an INVERSE relationship: more pieces per carat = smaller stones. " +
-                "'points' when the label uses jewellery points (e.g. '20 pts', '25pt', '30 pts') — 1 point = 0.01 carat. This is a DIRECT unit, completely different from pieces_per_carat. " +
-                "NEVER confuse points with pieces_per_carat. NEVER silently convert between conventions.",
+                "The size convention used for this row — exactly one of four options:\n" +
+                "'carat_range': a carat band expressed directly (e.g. '0.025-0.03ct', '0.10-0.14ct').\n" +
+                "'pieces_per_carat': how many stones fit in one carat (e.g. '200pc-150pc') — INVERSE: more pieces = smaller stones.\n" +
+                "'points': jewellery points, where 1 point = 0.01 carat (e.g. '20pt', '20 pts', '20pt-24pt'). A DIRECT unit — unrelated to pieces_per_carat.\n" +
+                "'mm_range': millimetre diameter range (e.g. '0.90-1.20mm', '1.70-2.0mm'). NOT converted to carats — mm-to-carat depends on shape and cut.\n" +
+                "A document may mix multiple conventions. Classify each row by what its own label shows, independently. NEVER default to one convention for the whole document.",
             },
             size_label: {
               type: "string",
               description:
-                "Size exactly as it appears in the document (e.g. '200pc-150pc', '0.025-0.03ct', '20 pts').",
+                "Size exactly as it appears in the document (e.g. '200pc-150pc', '0.025-0.03ct', '20 pts', '0.90-1.20mm').",
             },
             size_from: {
               type: "number",
               description:
                 "Numeric lower bound in the convention's NATIVE unit — do NOT convert. " +
-                "For carat_range: lower carat value (e.g. 0.025). " +
-                "For pieces_per_carat: the smaller pcs/ct number (fewer pieces = larger stones). " +
-                "For points: the lower point value as printed (e.g. 20 for '20 pts'). The confirm route converts points to carats; you output the raw number.",
+                "carat_range: lower carat (e.g. 0.025). " +
+                "pieces_per_carat: smaller pcs/ct number (fewer pieces = larger stones). " +
+                "points: lower point value as printed (e.g. 20 for '20pt'). " +
+                "mm_range: lower mm value as printed (e.g. 0.90 for '0.90-1.20mm'). " +
+                "For single-value labels with no range, set size_from and size_to to the same value.",
             },
             size_to: {
               type: "number",
               description:
                 "Numeric upper bound in the convention's NATIVE unit — do NOT convert. " +
-                "For carat_range: upper carat value. " +
-                "For pieces_per_carat: the larger pcs/ct number. " +
-                "For points: the upper point value as printed. For a single point label (e.g. '20 pts' with no range), set size_from and size_to to the same value.",
+                "carat_range: upper carat. " +
+                "pieces_per_carat: larger pcs/ct number. " +
+                "points: upper point value as printed (e.g. 24 for '20pt-24pt'). " +
+                "mm_range: upper mm value as printed (e.g. 1.20 for '0.90-1.20mm'). " +
+                "For single-value labels with no range, set size_from and size_to to the same value.",
             },
             quality: {
               type: "string",
@@ -165,7 +171,7 @@ ORIGIN DETECTION:
 - If neither signal is present or they conflict: origin_confidence = 'ambiguous'.
 
 CRITICAL EXTRACTION RULES:
-1. Preserve the exact size convention — 'pieces_per_carat' for rows like "200pc-150pc" (inverse relationship, MORE pieces = SMALLER stones), 'carat_range' for rows like "0.025-0.03ct", 'points' for rows like "20 pts" or "25pt" (1 point = 0.01ct, a direct unit). NEVER confuse points with pieces_per_carat — they are unrelated conventions. For points, output the raw point number in size_from/size_to (e.g. 20 for "20 pts"); conversion to carats happens server-side.
+1. Four size conventions exist — classify each row by its own label independently; a document may use several:\n   - 'carat_range': direct carat band, e.g. "0.025-0.03ct"\n   - 'pieces_per_carat': inverse stones-per-carat, e.g. "200pc-150pc" (MORE pieces = SMALLER stones)\n   - 'points': direct jewellery-point unit, e.g. "20 pts", "20pt", "20pt-24pt" (1 point = 0.01ct). NEVER confuse with pieces_per_carat — they are completely unrelated.\n   - 'mm_range': millimetre diameter, e.g. "0.90-1.20mm". Do NOT convert mm to carats.\n   Always output size_from/size_to in the convention's own native unit (raw points, raw mm, raw carats, raw pcs/ct). Conversion happens server-side.
 2. Every row must have a shape. If a table has a header shape covering multiple rows, apply it to each row.
 3. price_per_carat is always in AUD per carat.
 4. Flag any row you are not fully confident about rather than guessing silently. If a cell is illegible or a value is not clearly readable, flag the row — do not fill it from memory.
