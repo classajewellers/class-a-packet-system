@@ -77,20 +77,20 @@ function detectSource(
 // ── SKU parsing (fully config-driven) ────────────────────────────────────────
 
 interface SkuParseOk {
+  ok:           true;
   base_code:    string;
   metal_karat:  string;
   metal_colour: string;
   grade_code:   string;
   stone_origin: string | null;
-  error?:       never;
 }
-interface SkuParseErr { error: string; }
+interface SkuParseErr { ok: false; error: string; }
 type SkuParseResult = SkuParseOk | SkuParseErr;
 
 function parseSku(sku: string, config: CatalogImportConfig): SkuParseResult {
   const sep = config.sku_parse.segment_separator;
   const segments = sku.split(sep);
-  if (segments.length < 3) return { error: `SKU "${sku}" has fewer than 3 dash-separated segments` };
+  if (segments.length < 3) return { ok: false, error: `SKU "${sku}" has fewer than 3 dash-separated segments` };
 
   const gradeDigit = segments[segments.length - 1];
 
@@ -113,7 +113,7 @@ function parseSku(sku: string, config: CatalogImportConfig): SkuParseResult {
     }
   }
 
-  if (metalSegIdx === -1) return { error: `No known metal code in SKU "${sku}"` };
+  if (metalSegIdx === -1) return { ok: false, error: `No known metal code in SKU "${sku}"` };
 
   const baseCode   = segments.slice(0, metalSegIdx).join(sep);
   const gradeCode  = gradePrefix + gradeDigit;
@@ -121,6 +121,7 @@ function parseSku(sku: string, config: CatalogImportConfig): SkuParseResult {
   const stoneOrigin = config.sku_parse.origin_from_grade[gradeCode] ?? null;
 
   return {
+    ok:           true,
     base_code:    baseCode,
     metal_karat:  metalInfo.karat,
     metal_colour: metalInfo.colour,
@@ -292,7 +293,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       let gradeCode:   string|null = null;
       let stoneOrigin: string|null = null;
 
-      if ("error" in sku) {
+      if (!sku.ok) {
         flagReasons.push(sku.error);
       } else {
         baseCode    = sku.base_code;
