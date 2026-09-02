@@ -211,28 +211,78 @@ function parseDescriptionField(
   return { design_name: name || null, stone_shape, stone_carat, stone_quantity };
 }
 
-// ── Design fuzzy matching ────────────────────────────────────────────────────
+// ── Design matching ──────────────────────────────────────────────────────────
 
-function fuzzyMatch(
-  name: string,
+const normName = (s: string) =>
+  s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+
+interface DesignMatch {
+  design_id:   string | null;
+  design_name: string | null;
+  confidence:  "exact" | "fuzzy" | "none";
+  ambiguous:   boolean;
+}
+
+// Match a design against inventory_products. `candidates` are input strings to
+// try, richest first. An EXACT normalised match on ANY candidate always beats a
+// fuzzy one — so two products that differ only by a carat parenthetical
+// ("… Pear (1.00ct)" vs "… Pear (0.50ct)") are distinguished precisely when the
+// reference carries the carat. Crucially, the fuzzy fallback refuses to guess:
+// if more than one design satisfies the loose test it returns `ambiguous`
+// rather than silently picking the first (the bug that attached every 1.00ct
+// row to the 0.50ct design).
+function matchDesign(
+  candidates: string[],
   designs: { id: string; name: string }[]
-): { design_id: string | null; design_name: string | null; confidence: "exact" | "fuzzy" | "none" } {
-  if (!name) return { design_id: null, design_name: null, confidence: "none" };
+): DesignMatch {
+  const normed = candidates.map(normName).filter(Boolean);
+  if (normed.length === 0) return { design_id: null, design_name: null, confidence: "none", ambiguous: false };
 
-  const norm = (s: string) =>
-    s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
-  const ns = norm(name);
+  const designN = designs.map(d => ({ id: d.id, name: d.name, n: normName(d.name) }));
 
-  const exact = designs.find(d => norm(d.name) === ns);
-  if (exact) return { design_id: exact.id, design_name: exact.name, confidence: "exact" };
+  // 1. Exact on any candidate form.
+  for (const cn of normed) {
+    const exact = designN.find(d => d.n === cn);
+    if (exact) return { design_id: exact.id, design_name: exact.name, confidence: "exact", ambiguous: false };
+  }
 
-  const fuzzy = designs.find(d => {
-    const nd = norm(d.name);
-    return nd.length >= 4 && ns.length >= 4 && (nd.includes(ns) || ns.includes(nd));
-  });
-  if (fuzzy) return { design_id: fuzzy.id, design_name: fuzzy.name, confidence: "fuzzy" };
+  // 2. Fuzzy on the richest candidate — accepted only when exactly ONE design
+  //    qualifies. Two or more qualifiers is ambiguous; do not guess.
+  const primary = normed[0];
+  if (primary.length >= 4) {
+    const qualifying = designN.filter(d => d.n.length >= 4 && (d.n.includes(primary) || primary.includes(d.n)));
+    if (qualifying.length === 1) {
+      return { design_id: qualifying[0].id, design_name: qualifying[0].name, confidence: "fuzzy", ambiguous: false };
+    }
+    if (qualifying.length > 1) {
+      return { design_id: null, design_name: null, confidence: "none", ambiguous: true };
+    }
+  }
 
-  return { design_id: null, design_name: null, confidence: "none" };
+  return { design_id: null, design_name: null, confidence: "none", ambiguous: false };
+}
+
+// Build match-input candidates from the design-list reference, richest first.
+// Generic mechanism — the carat-total bridge is gated on the supplier's config
+// notation, so no supplier-specific format is hardcoded in shared logic.
+function buildMatchCandidates(
+  ref: string | null,
+  parse: CatalogImportConfig["description_parse"]
+): string[] {
+  if (!ref || !ref.trim()) return [];
+  const out: string[] = [];
+  const push = (s: string) => { const t = s.trim(); if (t && !out.includes(t)) out.push(t); };
+
+  push(ref);                                          // full reference, carat retained
+  const firstDash = ref.indexOf(" - ");
+  if (firstDash >= 0) push(ref.slice(firstDash + 3)); // drop a leading "CODE - " prefix if present
+
+  // Bridge "N=T.TTct" (count=total) to the total "T.TTct" so it lines up with
+  // the product-name carat format when the supplier uses that notation.
+  if (parse.stone_carat_notation === "count=total_ct") {
+    for (const c of [...out]) push(c.replace(/\d+\s*=\s*(\d+(?:\.\d+)?)\s*ct/gi, "$1ct"));
+  }
+  return out;
 }
 
 // ── Route handler ─────────────────────────────────────────────────────────────
@@ -350,12 +400,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
       if (!designData) flagReasons.push(`No design list entry for base code "${baseCode}"`);
 
-      // Fuzzy match to inventory_products
-      const match = designNameRaw
-        ? fuzzyMatch(designNameRaw, designList)
-        : { design_id: null, design_name: null, confidence: "none" as const };
+      // Match to inventory_products. Match on the FULL Class A Reference (carat
+      // retained) rather than the carat-stripped design name, so carat variants
+      // are distinguished and an exact match wins over a fuzzy one.
+      const match = matchDesign(
+        buildMatchCandidates(classARef, config.description_parse),
+        designList
+      );
 
-      if (match.confidence === "none") flagReasons.push("No matching design found — assign manually");
+      if (match.confidence === "none") {
+        flagReasons.push(match.ambiguous
+          ? "Multiple designs match (differ only by carat/size) — assign manually"
+          : "No matching design found — assign manually");
+      }
       if (match.confidence === "fuzzy") flagReasons.push("Fuzzy design match — verify before confirming");
 
       result.push({
