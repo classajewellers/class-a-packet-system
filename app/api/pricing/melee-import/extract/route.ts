@@ -171,7 +171,12 @@ ORIGIN DETECTION:
 - If neither signal is present or they conflict: origin_confidence = 'ambiguous'.
 
 CRITICAL EXTRACTION RULES:
-1. Four size conventions exist — classify each row by its own label independently; a document may use several:\n   - 'carat_range': direct carat band, e.g. "0.025-0.03ct"\n   - 'pieces_per_carat': inverse stones-per-carat, e.g. "200pc-150pc" (MORE pieces = SMALLER stones)\n   - 'points': direct jewellery-point unit, e.g. "20 pts", "20pt", "20pt-24pt" (1 point = 0.01ct). NEVER confuse with pieces_per_carat — they are completely unrelated.\n   - 'mm_range': millimetre diameter, e.g. "0.90-1.20mm". Do NOT convert mm to carats.\n   Always output size_from/size_to in the convention's own native unit (raw points, raw mm, raw carats, raw pcs/ct). Conversion happens server-side.
+1. Four size conventions exist — classify each row by its own label suffix/unit, independently per row:
+   - 'carat_range': label ends in "ct" or "carat", e.g. "0.025-0.03ct", "0.10-0.14ct". Output size_from/size_to as the carat numbers exactly as printed.
+   - 'pieces_per_carat': label ends in "pc" or "pcs", e.g. "200pc-150pc". An INVERSE relationship — more pieces per carat = smaller stones. Output the raw piece counts.
+   - 'points': label ends in "pt" or "pts", e.g. "20pt", "20 pts", "20pt-24pt", "50pt-59pt". CRITICAL: "pt" means POINTS, not carats. "pt" ≠ "ct". Do NOT convert to carats and do NOT classify as 'carat_range'. Output the raw point numbers (e.g. size_from=20, size_to=24 for "20pt-24pt"). The server converts to carats.
+   - 'mm_range': label ends in "mm", e.g. "0.90-1.20mm". Output the raw millimetre values. Do NOT convert to carats.
+   A document may use multiple conventions simultaneously. Classify each row by its own label only — never infer from neighbouring rows.
 2. Every row must have a shape. If a table has a header shape covering multiple rows, apply it to each row.
 3. price_per_carat is always in AUD per carat.
 4. Flag any row you are not fully confident about rather than guessing silently. If a cell is illegible or a value is not clearly readable, flag the row — do not fill it from memory.
