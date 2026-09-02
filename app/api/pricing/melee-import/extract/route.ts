@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { parseSizeLabel } from "@/lib/melee-size-parse";
 
 export const dynamic = "force-dynamic";
 
@@ -268,7 +269,16 @@ async function extractSingleFile(
     origin_conflict_note?: string;
   };
 
-  const rows = extracted.rows ?? [];
+  const rawRows = extracted.rows ?? [];
+
+  // Post-process: override size_type/size_from/size_to using deterministic label parsing.
+  // The AI's classification is unreliable for pt/mm labels; parseSizeLabel() is the
+  // authoritative classifier. Running it here ensures review screen = confirm input = DB values.
+  const rows = rawRows.map((row: any) => {
+    if (!row.size_label) return row;
+    const parsed = parseSizeLabel(String(row.size_label));
+    return { ...row, size_type: parsed.size_type, size_from: parsed.size_from, size_to: parsed.size_to };
+  });
 
   // Diagnostic — log row count and first/last rows to identify repetition loops or blank-row floods.
   // DO NOT remove until root cause confirmed.

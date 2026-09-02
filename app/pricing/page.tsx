@@ -14,7 +14,7 @@ interface MeleeStone { id: string; size_label: string; stone_type: string; price
 interface Supplier { id: string; name: string; }
 interface ExtractedMeleeRow {
   shape: string;
-  size_type: 'carat_range' | 'pieces_per_carat';
+  size_type: 'carat_range' | 'pieces_per_carat' | 'mm_range';
   size_label: string;
   size_from: number | null;
   size_to: number | null;
@@ -835,10 +835,11 @@ export default function PricingPage() {
                                   </td>
                                   <td style={tdStyle}>
                                     <select value={row.size_type}
-                                      onChange={e => setImportGroups(prev => prev.map((g, gi) => gi !== gIdx ? g : { ...g, rows: g.rows.map((r, ri) => ri !== rIdx ? r : { ...r, size_type: e.target.value as 'carat_range' | 'pieces_per_carat' }) }))}
+                                      onChange={e => setImportGroups(prev => prev.map((g, gi) => gi !== gIdx ? g : { ...g, rows: g.rows.map((r, ri) => ri !== rIdx ? r : { ...r, size_type: e.target.value as 'carat_range' | 'pieces_per_carat' | 'mm_range' }) }))}
                                       style={{ fontSize: 12, borderRadius: 4, border: '1px solid #D1D5DB', padding: '2px 4px' }}>
                                       <option value="carat_range">carat</option>
                                       <option value="pieces_per_carat">pcs/ct</option>
+                                      <option value="mm_range">mm</option>
                                     </select>
                                   </td>
                                   <td style={{ ...tdStyle, textAlign: 'right' as const }}>
