@@ -425,7 +425,12 @@ export default function PricingPage() {
       // Group by matched supplier — files resolving to the same supplier are merged
       const groupMap = new Map<string, ImportGroup>();
       for (const result of results) {
-        const matched = matchSupplier(result.suggested_supplier_name, suppliers);
+        // Only auto-assign a supplier when the AI was certain it found a name in the document.
+        // Any other confidence level (ambiguous, inferred) requires manual selection — we never
+        // auto-select based on a guess, because a wrong auto-selection wipes the target supplier's data.
+        const matched = result.supplier_confidence === 'certain'
+          ? matchSupplier(result.suggested_supplier_name, suppliers)
+          : null;
         const supplierId = matched?.id ?? '';
         const supplierName = matched?.name ?? result.suggested_supplier_name;
         const originDefault: 'natural' | 'lab' =

@@ -149,18 +149,21 @@ function buildSystemPrompt(knownSupplierNames: string[]): string {
 Known suppliers:
 ${supplierList}
 
-SUPPLIER DETECTION: Check the document's header, letterhead, or footer. If the name matches one of the known suppliers above, use that exact known name in suggested_supplier_name. If a supplier name is visible but doesn't match, still report it. If no supplier name is visible, return empty string and set supplier_confidence to 'ambiguous'.
+TRANSCRIPTION-ONLY RULE (most important rule — read this first):
+You are a transcription tool, not a knowledge tool. Every value you output — every price, shape, size, quality grade, and supplier name — must be something you can literally see and read in the uploaded document right now. You must NOT recall, complete, supplement, or fill in values from your training data, prior knowledge of supplier price lists, or recognition of a document's style. If a cell is partially visible, illegible, cut off, or a table does not fully render in the image, flag that row as unreadable — do not fill it in from memory. Even if you recognise the document's format or think you know what a missing value should be, that knowledge must not appear in your output. Only what you can read.
+
+SUPPLIER DETECTION: Look only for a company name that is explicitly visible as text in the document — in a header, letterhead, title, footer, or printed label. If you can read a company name that matches one of the known suppliers above, use that exact known name. If a name is visible but does not match any known supplier, report it as-is. You must NOT infer or guess the supplier from pricing conventions, quality-grade styles, table structure, price levels, or any content-based signal — those are not reliable identifiers and using them has caused real data errors. If no company name is explicitly readable in the document, return empty string and set supplier_confidence to 'ambiguous'.
 
 ORIGIN DETECTION:
 - If the document explicitly states "natural", "mined", "lab", "lab-grown", "CVD", "HPHT" etc.: origin_confidence = 'certain'.
-- If the supplier name strongly implies an origin (e.g. "Grown Diamonds" or "lab" in the name → lab; "Sapphire Export", "Natural Diamonds" → natural): origin_confidence = 'inferred_from_supplier'.
+- If the supplier name (as read from the document, not inferred) strongly implies an origin (e.g. "Grown Diamonds" or "lab" in the name → lab; "Sapphire Export", "Natural Diamonds" → natural): origin_confidence = 'inferred_from_supplier'.
 - If neither signal is present or they conflict: origin_confidence = 'ambiguous'.
 
 CRITICAL EXTRACTION RULES:
 1. Preserve the exact size convention — 'pieces_per_carat' for rows like "200pc-150pc", 'carat_range' for rows like "0.025-0.03ct". NEVER convert between conventions.
 2. Every row must have a shape. If a table has a header shape covering multiple rows, apply it to each row.
 3. price_per_carat is always in AUD per carat.
-4. Flag any row you are not fully confident about rather than guessing silently.
+4. Flag any row you are not fully confident about rather than guessing silently. If a cell is illegible or a value is not clearly readable, flag the row — do not fill it from memory.
 5. If the document contains conflicting origin signals, set origin_confidence to 'ambiguous' and describe in origin_conflict_note.
 6. POA cells (Price on Application): set price_per_carat to 0, flagged to true, flag_reason to "POA — price on application, no numeric value". NEVER save a POA cell as a real price. This applies even if only one quality column in a row is POA — flag that entire row.`;
 }
