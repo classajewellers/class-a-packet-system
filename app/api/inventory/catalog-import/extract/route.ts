@@ -358,12 +358,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const unitCostCol = config.sources.price_file.column_map["unit_cost"];
 
     const result: CatalogExtractRow[] = [];
+    // Dedupe by SKU — the source price file can contain identical duplicate rows.
+    // Each SKU appears once on the review screen. A duplicate carrying a DIFFERENT
+    // unit cost flags the kept row rather than being silently dropped.
+    const seenByItemCode = new Map<string, CatalogExtractRow>();
 
     for (const row of priceRows) {
       const itemCode = String(row[itemCodeCol] ?? "").trim();
       const unitCostRaw = String(row[unitCostCol] ?? "").trim();
 
       if (!itemCode) continue; // skip blank rows
+
+      const priorRow = seenByItemCode.get(itemCode);
+      if (priorRow) {
+        const dupCost = parseFloat(unitCostRaw.replace(/[^0-9.-]/g, ""));
+        if (!isNaN(dupCost) && Math.abs(dupCost - priorRow.unit_cost) > 0.001 &&
+            !priorRow.flag_reasons.some(f => f.startsWith("Duplicate SKU"))) {
+          priorRow.flag_reasons.push(
+            `Duplicate SKU in the price file with a different unit cost ($${priorRow.unit_cost.toFixed(2)} vs $${dupCost.toFixed(2)}) — kept the first; check the source file`
+          );
+          priorRow.flagged = true;
+        }
+        continue; // identical (or reconciled) duplicate — do not add a second row
+      }
 
       const flagReasons: string[] = [];
 
@@ -415,7 +432,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
       if (match.confidence === "fuzzy") flagReasons.push("Fuzzy design match — verify before confirming");
 
-      result.push({
+      const extractRow: CatalogExtractRow = {
         item_code:           itemCode,
         unit_cost:           isNaN(unitCost) ? 0 : unitCost,
         base_code:           baseCode,
@@ -433,7 +450,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         match_confidence:    match.confidence,
         flagged:             flagReasons.length > 0,
         flag_reasons:        flagReasons,
-      });
+      };
+      result.push(extractRow);
+      seenByItemCode.set(itemCode, extractRow);
     }
 
     return NextResponse.json({
