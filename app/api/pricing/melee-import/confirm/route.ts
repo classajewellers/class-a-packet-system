@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 interface MeleeRow {
   shape: string;
-  size_type: "carat_range" | "pieces_per_carat";
+  size_type: "carat_range" | "pieces_per_carat" | "points";
   size_label: string;
   size_from: number | null;
   size_to: number | null;
@@ -94,22 +94,35 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       const priceableRows = rows.filter((r) => !r.flagged);
       const excludedCount = rows.length - priceableRows.length;
 
-      const inserts = priceableRows.map((r) => ({
-        tenant_id: tenantId,
-        supplier_id,
-        origin,
-        shape: r.shape.toLowerCase().trim(),
-        size_type: r.size_type,
-        size_label: r.size_label,
-        size_from: r.size_from ?? null,
-        size_to: r.size_to ?? null,
-        quality: r.quality && r.quality.trim() ? r.quality.trim() : "unspecified",
-        price_per_carat: Number(r.price_per_carat),
-        // Legacy columns — kept for backward compat with existing UI/calculate_price()
-        stone_type: origin === "lab" ? "Lab Grown" : "Natural",
-        price_per_stone: 0,
-        updated_at: new Date().toISOString(),
-      }));
+      const inserts = priceableRows.map((r) => {
+        // Points → carats conversion: 1 point = 0.01 carat. The AI outputs the
+        // raw point number; we convert here so size_from/size_to are always in
+        // carats in the DB (same unit as carat_range rows).
+        const isPoints = r.size_type === "points";
+        const sizeFrom = isPoints && r.size_from != null ? r.size_from / 100 : (r.size_from ?? null);
+        const sizeTo   = isPoints && r.size_to   != null ? r.size_to   / 100 : (r.size_to   ?? null);
+        // Store points rows as carat_range in the DB once converted — they are
+        // semantically the same (a direct carat value), just expressed differently
+        // in the source document.
+        const storedSizeType = isPoints ? "carat_range" : r.size_type;
+
+        return {
+          tenant_id: tenantId,
+          supplier_id,
+          origin,
+          shape: r.shape.toLowerCase().trim(),
+          size_type: storedSizeType,
+          size_label: r.size_label,
+          size_from: sizeFrom,
+          size_to: sizeTo,
+          quality: r.quality && r.quality.trim() ? r.quality.trim() : "unspecified",
+          price_per_carat: Number(r.price_per_carat),
+          // Legacy columns — kept for backward compat with existing UI/calculate_price()
+          stone_type: origin === "lab" ? "Lab Grown" : "Natural",
+          price_per_stone: 0,
+          updated_at: new Date().toISOString(),
+        };
+      });
 
       // DEBUG — remove after size_from/size_to confirmed non-null in DB
       if (inserts[0]) {

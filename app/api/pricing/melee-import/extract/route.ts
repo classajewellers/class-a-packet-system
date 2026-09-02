@@ -88,28 +88,33 @@ const EXTRACTION_TOOL: Anthropic.Tool = {
             },
             size_type: {
               type: "string",
-              enum: ["carat_range", "pieces_per_carat"],
+              enum: ["carat_range", "pieces_per_carat", "points"],
               description:
-                "'carat_range' when the row is expressed as a carat band (e.g. 0.025-0.03ct). " +
-                "'pieces_per_carat' when expressed as pieces-per-carat (e.g. 200pc-150pc). " +
-                "NEVER silently convert between conventions.",
+                "'carat_range' when the row is expressed as a carat band (e.g. 0.025-0.03ct, 0.10-0.14ct). " +
+                "'pieces_per_carat' when expressed as pieces-per-carat (e.g. 200pc-150pc) — this is an INVERSE relationship: more pieces per carat = smaller stones. " +
+                "'points' when the label uses jewellery points (e.g. '20 pts', '25pt', '30 pts') — 1 point = 0.01 carat. This is a DIRECT unit, completely different from pieces_per_carat. " +
+                "NEVER confuse points with pieces_per_carat. NEVER silently convert between conventions.",
             },
             size_label: {
               type: "string",
               description:
-                "Size exactly as it appears in the document (e.g. '200pc-150pc', '0.025-0.03ct').",
+                "Size exactly as it appears in the document (e.g. '200pc-150pc', '0.025-0.03ct', '20 pts').",
             },
             size_from: {
               type: "number",
               description:
-                "Numeric lower bound. For carat_range: lower carat value. " +
-                "For pieces_per_carat: the smaller pcs/ct number (fewer pieces = larger stones).",
+                "Numeric lower bound in the convention's NATIVE unit — do NOT convert. " +
+                "For carat_range: lower carat value (e.g. 0.025). " +
+                "For pieces_per_carat: the smaller pcs/ct number (fewer pieces = larger stones). " +
+                "For points: the lower point value as printed (e.g. 20 for '20 pts'). The confirm route converts points to carats; you output the raw number.",
             },
             size_to: {
               type: "number",
               description:
-                "Numeric upper bound. For carat_range: upper carat value. " +
-                "For pieces_per_carat: the larger pcs/ct number.",
+                "Numeric upper bound in the convention's NATIVE unit — do NOT convert. " +
+                "For carat_range: upper carat value. " +
+                "For pieces_per_carat: the larger pcs/ct number. " +
+                "For points: the upper point value as printed. For a single point label (e.g. '20 pts' with no range), set size_from and size_to to the same value.",
             },
             quality: {
               type: "string",
@@ -160,7 +165,7 @@ ORIGIN DETECTION:
 - If neither signal is present or they conflict: origin_confidence = 'ambiguous'.
 
 CRITICAL EXTRACTION RULES:
-1. Preserve the exact size convention — 'pieces_per_carat' for rows like "200pc-150pc", 'carat_range' for rows like "0.025-0.03ct". NEVER convert between conventions.
+1. Preserve the exact size convention — 'pieces_per_carat' for rows like "200pc-150pc" (inverse relationship, MORE pieces = SMALLER stones), 'carat_range' for rows like "0.025-0.03ct", 'points' for rows like "20 pts" or "25pt" (1 point = 0.01ct, a direct unit). NEVER confuse points with pieces_per_carat — they are unrelated conventions. For points, output the raw point number in size_from/size_to (e.g. 20 for "20 pts"); conversion to carats happens server-side.
 2. Every row must have a shape. If a table has a header shape covering multiple rows, apply it to each row.
 3. price_per_carat is always in AUD per carat.
 4. Flag any row you are not fully confident about rather than guessing silently. If a cell is illegible or a value is not clearly readable, flag the row — do not fill it from memory.
@@ -203,7 +208,7 @@ async function extractSingleFile(
 
   const response = await client.messages.create({
     model: "claude-sonnet-5",
-    max_tokens: 8192,
+    max_tokens: 16000,
     system: systemPrompt,
     tools: [EXTRACTION_TOOL],
     tool_choice: { type: "tool", name: "extract_melee_price_rows" },
@@ -220,6 +225,23 @@ async function extractSingleFile(
       },
     ],
   });
+
+  // Diagnostic — always log so we can see stop_reason, token usage, and row count in Vercel logs.
+  // DO NOT remove until the 13,998-row explosion root cause is confirmed and fixed.
+  console.log(
+    `[melee-extract] file="${file.name}" stop_reason=${response.stop_reason}` +
+    ` input_tokens=${response.usage.input_tokens} output_tokens=${response.usage.output_tokens}`
+  );
+
+  // Problem A fix: if the response was truncated (max_tokens), the tool input is
+  // incomplete or malformed — do NOT silently accept it.
+  if (response.stop_reason === "max_tokens") {
+    console.error(`[melee-extract] TRUNCATED: output_tokens=${response.usage.output_tokens} for file="${file.name}"`);
+    throw new Error(
+      `Extraction was cut off mid-response for "${file.name}" — the output exceeded the length limit. ` +
+      `Try splitting the file into smaller sections, or contact support.`
+    );
+  }
 
   const toolUse = response.content.find((b) => b.type === "tool_use");
   if (!toolUse || toolUse.type !== "tool_use") {
@@ -243,9 +265,26 @@ async function extractSingleFile(
     origin_conflict_note?: string;
   };
 
+  const rows = extracted.rows ?? [];
+
+  // Diagnostic — log row count and first/last rows to identify repetition loops or blank-row floods.
+  // DO NOT remove until root cause confirmed.
+  console.log(`[melee-extract] file="${file.name}" row_count=${rows.length}`);
+  if (rows.length > 0) {
+    console.log(`[melee-extract] first_row=${JSON.stringify(rows[0])}`);
+    console.log(`[melee-extract] last_row=${JSON.stringify(rows[rows.length - 1])}`);
+    if (rows.length > 1) {
+      // Check for repetition: are rows 0 and 1 identical?
+      console.log(`[melee-extract] second_row=${JSON.stringify(rows[1])}`);
+      const row0str = JSON.stringify(rows[0]);
+      const repeating = rows.slice(0, Math.min(10, rows.length)).every(r => JSON.stringify(r) === row0str);
+      console.log(`[melee-extract] first_10_all_identical=${repeating}`);
+    }
+  }
+
   return {
     file_name: file.name,
-    rows: extracted.rows ?? [],
+    rows,
     suggested_supplier_name: extracted.suggested_supplier_name ?? "",
     supplier_confidence: extracted.supplier_confidence ?? "ambiguous",
     suggested_origin: extracted.suggested_origin ?? "natural",
