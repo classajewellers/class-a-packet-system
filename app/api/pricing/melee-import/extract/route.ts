@@ -70,7 +70,6 @@ const EXTRACTION_TOOL: Anthropic.Tool = {
           type: "object",
           required: [
             "shape",
-            "size_type",
             "size_label",
             "size_from",
             "size_to",
@@ -90,37 +89,29 @@ const EXTRACTION_TOOL: Anthropic.Tool = {
               type: "string",
               enum: ["carat_range", "pieces_per_carat", "points", "mm_range"],
               description:
-                "The size convention used for this row — exactly one of four options:\n" +
-                "'carat_range': a carat band expressed directly (e.g. '0.025-0.03ct', '0.10-0.14ct').\n" +
-                "'pieces_per_carat': how many stones fit in one carat (e.g. '200pc-150pc') — INVERSE: more pieces = smaller stones.\n" +
-                "'points': jewellery points, where 1 point = 0.01 carat (e.g. '20pt', '20 pts', '20pt-24pt'). A DIRECT unit — unrelated to pieces_per_carat.\n" +
-                "'mm_range': millimetre diameter range (e.g. '0.90-1.20mm', '1.70-2.0mm'). NOT converted to carats — mm-to-carat depends on shape and cut.\n" +
-                "A document may mix multiple conventions. Classify each row by what its own label shows, independently. NEVER default to one convention for the whole document.",
+                "Optional hint — the server derives size_type from size_label and ignores this field. " +
+                "You may omit it. If you include it, your best guess is fine.",
             },
             size_label: {
               type: "string",
               description:
-                "Size exactly as it appears in the document (e.g. '200pc-150pc', '0.025-0.03ct', '20 pts', '0.90-1.20mm').",
+                "Size exactly as it appears in the document, including the unit suffix " +
+                "(e.g. '200pc-150pc', '0.025-0.03ct', '20pt-24pt', '0.90-1.20mm'). " +
+                "Transcribe verbatim — do not interpret or convert the label.",
             },
             size_from: {
               type: "number",
               description:
-                "Numeric lower bound in the convention's NATIVE unit — do NOT convert. " +
-                "carat_range: lower carat (e.g. 0.025). " +
-                "pieces_per_carat: smaller pcs/ct number (fewer pieces = larger stones). " +
-                "points: lower point value as printed (e.g. 20 for '20pt'). " +
-                "mm_range: lower mm value as printed (e.g. 0.90 for '0.90-1.20mm'). " +
-                "For single-value labels with no range, set size_from and size_to to the same value.",
+                "The first (lower) number from the size label, exactly as printed — no conversion. " +
+                "Examples: '20pt-24pt' → 20. '0.90-1.20mm' → 0.90. '200pc-150pc' → 200. '0.025-0.03ct' → 0.025. " +
+                "For a single-value label, set size_from and size_to to the same value.",
             },
             size_to: {
               type: "number",
               description:
-                "Numeric upper bound in the convention's NATIVE unit — do NOT convert. " +
-                "carat_range: upper carat. " +
-                "pieces_per_carat: larger pcs/ct number. " +
-                "points: upper point value as printed (e.g. 24 for '20pt-24pt'). " +
-                "mm_range: upper mm value as printed (e.g. 1.20 for '0.90-1.20mm'). " +
-                "For single-value labels with no range, set size_from and size_to to the same value.",
+                "The second (upper) number from the size label, exactly as printed — no conversion. " +
+                "Examples: '20pt-24pt' → 24. '0.90-1.20mm' → 1.20. '200pc-150pc' → 150. '0.025-0.03ct' → 0.03. " +
+                "For a single-value label, set size_from and size_to to the same value.",
             },
             quality: {
               type: "string",
@@ -171,12 +162,13 @@ ORIGIN DETECTION:
 - If neither signal is present or they conflict: origin_confidence = 'ambiguous'.
 
 CRITICAL EXTRACTION RULES:
-1. Four size conventions exist — classify each row by its own label suffix/unit, independently per row:
-   - 'carat_range': label ends in "ct" or "carat", e.g. "0.025-0.03ct", "0.10-0.14ct". Output size_from/size_to as the carat numbers exactly as printed.
-   - 'pieces_per_carat': label ends in "pc" or "pcs", e.g. "200pc-150pc". An INVERSE relationship — more pieces per carat = smaller stones. Output the raw piece counts.
-   - 'points': label ends in "pt" or "pts", e.g. "20pt", "20 pts", "20pt-24pt", "50pt-59pt". CRITICAL: "pt" means POINTS, not carats. "pt" ≠ "ct". Do NOT convert to carats and do NOT classify as 'carat_range'. Output the raw point numbers (e.g. size_from=20, size_to=24 for "20pt-24pt"). The server converts to carats.
-   - 'mm_range': label ends in "mm", e.g. "0.90-1.20mm". Output the raw millimetre values. Do NOT convert to carats.
-   A document may use multiple conventions simultaneously. Classify each row by its own label only — never infer from neighbouring rows.
+1. SIZE FIELDS — transcribe only, no conversion:
+   Output size_label verbatim as it appears in the document (e.g. "20pt-24pt", "0.90-1.20mm", "200pc-150pc", "0.025-0.03ct").
+   Output size_from as the first number in the label, exactly as printed.
+   Output size_to as the second number in the label, exactly as printed.
+   For single-value labels, set size_from and size_to to the same number.
+   Do NOT convert any units. Do NOT interpret what the numbers mean. The server handles classification and conversion.
+   Examples: "20pt-24pt" → size_from=20, size_to=24. "0.90-1.20mm" → size_from=0.90, size_to=1.20. "200pc-150pc" → size_from=200, size_to=150.
 2. Every row must have a shape. If a table has a header shape covering multiple rows, apply it to each row.
 3. price_per_carat is always in AUD per carat.
 4. Flag any row you are not fully confident about rather than guessing silently. If a cell is illegible or a value is not clearly readable, flag the row — do not fill it from memory.

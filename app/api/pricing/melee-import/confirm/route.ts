@@ -3,9 +3,47 @@ import { createTenantSupabaseClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 
+// UNIT NOTE: size_from/size_to in pricing_melee_stones are NOT a single uniform unit.
+//   carat_range rows → carats       (e.g. 0.025–0.03)
+//   mm_range rows    → millimetres  (e.g. 0.90–1.20)
+//   pieces_per_carat → piece count  (e.g. 200–150, inverse: more pieces = smaller stone)
+// Points labels ('pt'/'pts') are converted ÷100 to carats and stored as carat_range.
+// Any size-based lookup — calculate_price(), Stage 3 band pricing, or any future
+// "find the matching row" query — MUST branch on size_type before comparing values.
+// Never assume all rows are directly comparable as carats.
+function parseSizeLabel(label: string): {
+  size_type: "carat_range" | "pieces_per_carat" | "mm_range";
+  size_from: number | null;
+  size_to: number | null;
+} {
+  const s = label.trim().toLowerCase();
+  const nums = (s.match(/\d+(?:\.\d+)?/g) ?? []).map(Number);
+  const rawFrom = nums[0] ?? null;
+  const rawTo = nums.length > 1 ? nums[nums.length - 1] : rawFrom;
+
+  if (/\d\s*pts?\b/.test(s)) {
+    // Points: 1pt = 0.01 carat. Convert to carats and store as carat_range.
+    return {
+      size_type: "carat_range",
+      size_from: rawFrom != null ? rawFrom / 100 : null,
+      size_to:   rawTo   != null ? rawTo   / 100 : null,
+    };
+  }
+  if (/\d\s*mm\b/.test(s)) {
+    // Millimetres — stored as raw mm values (NOT converted to carats).
+    return { size_type: "mm_range", size_from: rawFrom, size_to: rawTo };
+  }
+  if (/\d\s*pcs?\b/.test(s)) {
+    // Pieces per carat — stored as raw piece counts (inverse: more = smaller stone).
+    return { size_type: "pieces_per_carat", size_from: rawFrom, size_to: rawTo };
+  }
+  // Default: carat range (label ends in "ct"/"carat", or no unit).
+  return { size_type: "carat_range", size_from: rawFrom, size_to: rawTo };
+}
+
 interface MeleeRow {
   shape: string;
-  size_type: "carat_range" | "pieces_per_carat" | "points" | "mm_range";
+  size_type?: string; // AI hint — classification is overridden by parseSizeLabel()
   size_label: string;
   size_from: number | null;
   size_to: number | null;
@@ -95,26 +133,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       const excludedCount = rows.length - priceableRows.length;
 
       const inserts = priceableRows.map((r) => {
-        // Points → carats conversion: 1 point = 0.01 carat. The AI outputs the
-        // raw point number; we convert here so size_from/size_to are always in
-        // carats in the DB (same unit as carat_range rows).
-        const isPoints = r.size_type === "points";
-        const sizeFrom = isPoints && r.size_from != null ? r.size_from / 100 : (r.size_from ?? null);
-        const sizeTo   = isPoints && r.size_to   != null ? r.size_to   / 100 : (r.size_to   ?? null);
-        // Store points rows as carat_range in the DB once converted — they are
-        // semantically the same (a direct carat value), just expressed differently
-        // in the source document.
-        const storedSizeType = isPoints ? "carat_range" : r.size_type;
+        // Classify and convert using the label text — AI's size_type is ignored.
+        const parsed = parseSizeLabel(r.size_label);
 
         return {
           tenant_id: tenantId,
           supplier_id,
           origin,
           shape: r.shape.toLowerCase().trim(),
-          size_type: storedSizeType,
+          size_type: parsed.size_type,
           size_label: r.size_label,
-          size_from: sizeFrom,
-          size_to: sizeTo,
+          size_from: parsed.size_from,
+          size_to: parsed.size_to,
           quality: r.quality && r.quality.trim() ? r.quality.trim() : "unspecified",
           price_per_carat: Number(r.price_per_carat),
           // Legacy columns — kept for backward compat with existing UI/calculate_price()
@@ -124,9 +154,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         };
       });
 
-      // DEBUG — remove after size_from/size_to confirmed non-null in DB
+      // DEBUG — remove after parseSizeLabel classification confirmed correct
       if (inserts[0]) {
-        console.log("[melee-confirm] PRE-INSERT first row size_from:", inserts[0].size_from, typeof inserts[0].size_from, "size_to:", inserts[0].size_to, typeof inserts[0].size_to, "label:", inserts[0].size_label);
+        console.log("[melee-confirm] PRE-INSERT first row:", JSON.stringify({
+          size_label: inserts[0].size_label,
+          size_type: inserts[0].size_type,
+          size_from: inserts[0].size_from,
+          size_to: inserts[0].size_to,
+        }));
       }
 
       const { data: insertedRows, error: insertErr } = await supabase
