@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { hasPermission } from "@/lib/userTypes";
@@ -82,6 +82,8 @@ export default function PricingPage() {
   const [importGroups, setImportGroups] = useState<ImportGroup[]>([]);
   const [importError, setImportError] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<{ total_imported: number; groups: Array<{ imported: number; supplier_name: string; origin: string }> } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Stone pricing (lab + gem)
   const [stoneBasePrices, setStoneBasePrices]   = useState<StoneBaseRow[]>([]);
@@ -654,19 +656,61 @@ export default function PricingPage() {
                       <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>
                         Price list files (PDF or image, multiple allowed)
                       </label>
+                      {/* Hidden file input — triggered by click on drop zone or browse button */}
                       <input
+                        ref={fileInputRef}
                         type="file"
                         accept=".pdf,image/jpeg,image/png,image/webp,image/gif"
                         multiple
                         onChange={e => setImportFiles(Array.from(e.target.files ?? []))}
-                        style={{ fontSize: 13, color: '#374151' }}
+                        style={{ display: 'none' }}
                       />
-                      {importFiles.length > 0 && (
-                        <p style={{ fontSize: 12, color: '#6B7280', marginTop: 6, marginBottom: 0 }}>
-                          {importFiles.length} file{importFiles.length !== 1 ? 's' : ''} selected:{' '}
-                          {importFiles.map(f => f.name).join(', ')}
-                        </p>
-                      )}
+                      {/* Drop zone */}
+                      <div
+                        onClick={() => fileInputRef.current?.click()}
+                        onDragEnter={e => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); }}
+                        onDragOver={e => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); }}
+                        onDragLeave={e => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); }}
+                        onDrop={e => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setIsDragging(false);
+                          const dropped = Array.from(e.dataTransfer.files);
+                          if (dropped.length > 0) setImportFiles(dropped);
+                        }}
+                        style={{
+                          border: `2px dashed ${isDragging ? '#635BFF' : '#D1D5DB'}`,
+                          borderRadius: 10,
+                          padding: '28px 24px',
+                          textAlign: 'center',
+                          cursor: 'pointer',
+                          background: isDragging ? '#F5F3FF' : '#FAFAFA',
+                          transition: 'border-color 0.15s, background 0.15s',
+                          userSelect: 'none',
+                        }}
+                      >
+                        {importFiles.length > 0 ? (
+                          <>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 4 }}>
+                              {importFiles.length} file{importFiles.length !== 1 ? 's' : ''} selected
+                            </div>
+                            <div style={{ fontSize: 12, color: '#6B7280' }}>
+                              {importFiles.map(f => f.name).join(', ')}
+                            </div>
+                            <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 8 }}>
+                              Drop more files or click to replace
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 4 }}>
+                              Drag files here, or{' '}
+                              <span style={{ color: '#635BFF', fontWeight: 600 }}>browse</span>
+                            </div>
+                            <div style={{ fontSize: 12, color: '#9CA3AF' }}>PDF or image · multiple files allowed</div>
+                          </>
+                        )}
+                      </div>
                     </div>
                     <div>
                       <button
