@@ -14,11 +14,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "entity_type and entity_id are required" }, { status: 400 });
   }
 
+  // Tenant scope is mandatory — without it this route returned any tenant's
+  // attachments for a known entity_id (cross-tenant read). An empty tenant is
+  // rejected rather than silently matching tenant_id = ''.
+  if (!tenantId) {
+    return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
+  }
+
   const supabase = await createTenantSupabaseClient(tenantId);
 
   const { data, error } = await supabase
     .from("attachments")
     .select("*")
+    .eq("tenant_id", tenantId)
     .eq("entity_type", entityType)
     .eq("entity_id", entityId)
     .order("created_at", { ascending: true });
