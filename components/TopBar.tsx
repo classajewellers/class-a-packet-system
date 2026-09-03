@@ -50,7 +50,7 @@ export default function TopBar({ onOpenSidebar }: Props) {
           </svg>
         </button>
 
-        <div style={{ fontSize: 18, fontWeight: 600, letterSpacing: '-0.01em', color: color.ink }}>
+        <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', color: color.ink }}>
           {title}
         </div>
       </div>

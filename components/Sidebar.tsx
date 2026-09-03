@@ -27,9 +27,12 @@ interface Props {
   onClose: () => void;
 }
 
-const ACTIVE_BG      = color.railActiveBg;
-const DEFAULT_COLOR  = color.railText;
-const ACTIVE_COLOR   = color.railActive;
+// Light rail: black is used ONLY on the active pill; hover is a soft grey fill.
+const ACTIVE_BG      = color.railActiveBg; // #0A0A0A — active pill
+const ACTIVE_COLOR   = color.railActive;   // white text on the active pill
+const DEFAULT_COLOR  = color.railText;     // grey nav text
+const HOVER_BG       = color.railHover;    // soft grey fill on hover
+const HOVER_COLOR    = color.ink;          // near-black text on hover
 
 export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
   const pathname = usePathname();
@@ -84,7 +87,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
           fontWeight: active ? 500 : 400, fontSize: 14,
           transition: "background .15s, color .15s",
         }}
-        onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = ACTIVE_BG; (e.currentTarget as HTMLAnchorElement).style.color = ACTIVE_COLOR; } }}
+        onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = HOVER_BG; (e.currentTarget as HTMLAnchorElement).style.color = HOVER_COLOR; } }}
         onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = "transparent"; (e.currentTarget as HTMLAnchorElement).style.color = DEFAULT_COLOR; } }}
       >
         <Icon size={20} strokeWidth={1.75} />
@@ -107,7 +110,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
           fontWeight: active ? 500 : 400, fontSize: 13,
           transition: "background .15s, color .15s",
         }}
-        onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = ACTIVE_BG; (e.currentTarget as HTMLAnchorElement).style.color = ACTIVE_COLOR; } }}
+        onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = HOVER_BG; (e.currentTarget as HTMLAnchorElement).style.color = HOVER_COLOR; } }}
         onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = "transparent"; (e.currentTarget as HTMLAnchorElement).style.color = DEFAULT_COLOR; } }}
       >
         {label}
@@ -130,7 +133,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
           transition: "background .15s, color .15s",
         }}
         onClick={onClick}
-        onMouseEnter={e => { if (!expanded) { (e.currentTarget as HTMLDivElement).style.background = ACTIVE_BG; (e.currentTarget as HTMLDivElement).style.color = ACTIVE_COLOR; } }}
+        onMouseEnter={e => { if (!expanded) { (e.currentTarget as HTMLDivElement).style.background = HOVER_BG; (e.currentTarget as HTMLDivElement).style.color = HOVER_COLOR; } }}
         onMouseLeave={e => { if (!expanded) { (e.currentTarget as HTMLDivElement).style.background = "transparent"; (e.currentTarget as HTMLDivElement).style.color = DEFAULT_COLOR; } }}
         onKeyDown={e => { if (e.key === "Enter") onClick(); }}
       >
@@ -163,6 +166,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
         ].join(" ")}
         style={{
           background: color.railBg,
+          borderRight: `1px solid ${color.railLine}`,
           width: 220, minWidth: 220,
           height: "100vh",
           display: "flex", flexDirection: "column",
@@ -171,21 +175,21 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
       >
         {/* Brand + mobile close */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "24px 20px 20px" }}>
-          <span style={{ width: 40, height: 40, borderRadius: 10, background: color.railActive, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color.ink} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <span style={{ width: 40, height: 40, borderRadius: 10, background: color.ink, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color.white} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M6 3h12l4 6-10 12L2 9z" />
               <path d="M2 9h20" />
               <path d="M6 3l4 6m4 0l4-6" />
             </svg>
           </span>
           <div style={{ fontFamily: font.mono, flex: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: "0.14em", color: "#FFFFFF", lineHeight: 1 }}>VAULT</div>
-            <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.08em", color: "rgba(255,255,255,0.5)", marginTop: 3, textTransform: "uppercase" as const }}>Jewellery Management</div>
+            <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: "0.14em", color: color.ink, lineHeight: 1 }}>VAULT</div>
+            <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.08em", color: color.textFaint, marginTop: 3, textTransform: "uppercase" as const }}>Jewellery Management</div>
           </div>
           <button
             onClick={onClose}
             className="md:hidden flex items-center justify-center rounded-lg"
-            style={{ background: "rgba(255,255,255,0.08)", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.6)", width: 32, height: 32, flexShrink: 0 }}
+            style={{ background: color.fill, border: "none", cursor: "pointer", color: color.textMuted, width: 32, height: 32, flexShrink: 0 }}
             aria-label="Close menu"
           >
             <X size={16} strokeWidth={2} />
@@ -283,7 +287,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
               textAlign: "left", width: "100%",
               transition: "background .15s, color .15s",
             }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = ACTIVE_BG; (e.currentTarget as HTMLButtonElement).style.color = ACTIVE_COLOR; }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = HOVER_BG; (e.currentTarget as HTMLButtonElement).style.color = HOVER_COLOR; }}
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; (e.currentTarget as HTMLButtonElement).style.color = DEFAULT_COLOR; }}
           >
             <Sparkles size={20} strokeWidth={1.75} />
@@ -292,28 +296,28 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
         </nav>
 
         {/* Footer */}
-        <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", padding: "12px 16px 16px" }}>
+        <div style={{ borderTop: `1px solid ${color.railLine}`, padding: "12px 16px 16px" }}>
           {user && (
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-              <span style={{ width: 34, height: 34, borderRadius: "50%", background: color.railActive, color: color.ink, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
+              <span style={{ width: 34, height: 34, borderRadius: "50%", background: color.ink, color: color.white, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
                 {initials(user.name)}
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: "#FFFFFF", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: color.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</div>
                 <div style={{ fontSize: 11, color: DEFAULT_COLOR, textTransform: "capitalize" }}>{user.role ?? "…"}</div>
               </div>
               <button
                 onClick={logout}
                 title="Sign out"
-                style={{ background: color.railActiveBg, border: "none", color: color.railActive, cursor: "pointer", padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 500, flexShrink: 0, transition: "background .15s" }}
-                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.18)")}
-                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = color.railActiveBg)}
+                style={{ background: color.fill, border: "none", color: color.textMuted, cursor: "pointer", padding: "5px 12px", borderRadius: 9999, fontSize: 11, fontWeight: 500, flexShrink: 0, transition: "background .15s" }}
+                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = color.line)}
+                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = color.fill)}
               >
                 Sign out
               </button>
             </div>
           )}
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", textAlign: "center", paddingTop: 4 }}>© 2026 Vault</div>
+          <div style={{ fontSize: 11, color: color.textFaint, textAlign: "center", paddingTop: 4 }}>© 2026 Vault</div>
         </div>
       </aside>
     </>

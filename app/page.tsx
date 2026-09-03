@@ -8,6 +8,8 @@ import Link from "next/link";
 import { Packet, InventoryMovement, InventoryMovementType } from "@/lib/types";
 import { useUser } from "@/context/UserContext";
 import { packetTypeLabel, formatDateAU, formatCurrency } from "@/lib/formatters";
+import { color, shadow } from "@/lib/theme";
+import StatusBadge, { StatusTone } from "@/components/StatusBadge";
 
 // ── Movement helpers ──────────────────────────────────────────────────────────
 const MOVEMENT_BADGE: Record<InventoryMovementType, { bg: string; fg: string; label: string }> = {
@@ -41,13 +43,20 @@ const TYPE_BADGE_STYLE: Record<string, React.CSSProperties> = {
   client_intake: { background: "#F5F5F5", color: "#2A2A2A" },
 };
 
+// Status tone (dot colour) for the dot+label pill badges.
+const MOVEMENT_TONE: Record<InventoryMovementType, StatusTone> = {
+  receive: "success", transfer: "info", sale: "success", return: "warning",
+  adjustment: "neutral", workshop_in: "info", workshop_out: "warning", stocktake: "neutral",
+};
+const TYPE_TONE: Record<string, StatusTone> = {
+  online_order: "success", repair: "info", repair_job: "info",
+  custom_order: "info", layby: "warning", client_intake: "neutral",
+};
+
+// Neutral pill (non-status), e.g. a count.
 const BADGE_BASE: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  padding: "2px 10px",
-  borderRadius: 999,
-  fontSize: 12,
-  fontWeight: 500,
+  display: "inline-flex", alignItems: "center", padding: "3px 10px",
+  borderRadius: 9999, fontSize: 12, fontWeight: 500,
 };
 
 // ── Stat card ────────────────────────────────────────────────────────────────
@@ -62,21 +71,22 @@ function StatCard({
   const inner = (
     <div
       style={{
-        background: "#fff",
-        border: "1px solid #EAEAEA",
-        borderRadius: 12,
-        padding: 20,
-        transition: "box-shadow .15s",
+        background: color.white,
+        border: `1px solid ${color.line}`,
+        borderRadius: 16,
+        boxShadow: shadow.card,
+        padding: 22,
+        transition: "box-shadow .15s, transform .15s",
         cursor: href ? "pointer" : "default",
       }}
-      onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 2px 8px rgba(0,0,0,0.06)"; }}
-      onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = "none"; }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = shadow.lg; (e.currentTarget as HTMLDivElement).style.transform = "translateY(-1px)"; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = shadow.card; (e.currentTarget as HTMLDivElement).style.transform = "none"; }}
     >
-      <div style={{ fontSize: 12, fontWeight: 500, color: "#595959", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 500, color: color.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 14 }}>
         {label}
       </div>
-      <div style={{ fontSize: 32, fontWeight: 700, color: "#0A0A0A", lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ marginTop: 6, fontSize: 12, color: "#8A8A8A" }}>{sub}</div>}
+      <div style={{ fontSize: 46, fontWeight: 700, color: color.ink, lineHeight: 1, letterSpacing: "-0.03em" }}>{value}</div>
+      {sub && <div style={{ marginTop: 8, fontSize: 12, color: color.textFaint }}>{sub}</div>}
     </div>
   );
   if (href) return <Link href={href} style={{ textDecoration: "none" }}>{inner}</Link>;
@@ -167,9 +177,10 @@ export default function DashboardPage() {
 
   // ── Shared styles ──────────────────────────────────────────────────────────
   const card: React.CSSProperties = {
-    background: "#fff",
-    border: "1px solid #EAEAEA",
-    borderRadius: 12,
+    background: color.white,
+    border: `1px solid ${color.line}`,
+    borderRadius: 16,
+    boxShadow: shadow.card,
     overflow: "hidden",
   };
 
@@ -199,13 +210,13 @@ export default function DashboardPage() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, marginBottom: 20 }}>
         <Link
           href="/quotes/builder"
-          style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "#111111", color: "#fff", height: 38, padding: "0 18px", borderRadius: 8, fontWeight: 500, fontSize: 14 }}
+          style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "#111111", color: "#fff", height: 38, padding: "0 18px", borderRadius: 9999, fontWeight: 500, fontSize: 14 }}
         >
           New Quote
         </Link>
         <Link
           href="/orders/new"
-          style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "#fff", color: "#0A0A0A", height: 38, padding: "0 18px", borderRadius: 8, fontWeight: 500, fontSize: 14, border: "1px solid #EAEAEA" }}
+          style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "#fff", color: "#0A0A0A", height: 38, padding: "0 18px", borderRadius: 9999, fontWeight: 500, fontSize: 14, border: "1px solid #EAEAEA" }}
         >
           New Order
         </Link>
@@ -268,7 +279,7 @@ export default function DashboardPage() {
                         <div>
                           <div style={{ fontWeight: 500, color: "#0A0A0A", fontSize: 14 }}>{customerName}</div>
                           <div className="flex items-center gap-2 mt-1">
-                            <span style={badgeStyle}>{packetTypeLabel(p.packet_type)}</span>
+                            <StatusBadge tone={TYPE_TONE[p.packet_type] ?? "neutral"} label={packetTypeLabel(p.packet_type)} />
                             <span style={{ fontFamily: "monospace", fontSize: 11, color: "#8A8A8A" }}>{p.reference_number}</span>
                           </div>
                         </div>
@@ -306,7 +317,7 @@ export default function DashboardPage() {
                       >
                         <td style={{ ...tdStyle, fontFamily: "monospace", fontSize: 12, color: "#595959" }}>{p.reference_number}</td>
                         <td style={tdStyle}>
-                          <span style={badgeStyle}>{packetTypeLabel(p.packet_type)}</span>
+                          <StatusBadge tone={TYPE_TONE[p.packet_type] ?? "neutral"} label={packetTypeLabel(p.packet_type)} />
                         </td>
                         <td style={{ ...tdStyle, fontWeight: 500 }}>{customerName}</td>
                         <td style={{ ...tdStyle, color: "#595959" }}>{formatDateAU(p.due_date) || "—"}</td>
@@ -369,9 +380,7 @@ export default function DashboardPage() {
                   const cfg = (m.movement_type ? MOVEMENT_BADGE[m.movement_type] : null) ?? { bg: "#F5F5F5", fg: "#2A2A2A", label: m.movement_type ?? "move" };
                   return (
                     <li key={m.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: "1px solid #EAEAEA" }}>
-                      <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: cfg.bg, color: cfg.fg, whiteSpace: "nowrap" }}>
-                        {cfg.label}
-                      </span>
+                      <StatusBadge tone={m.movement_type ? (MOVEMENT_TONE[m.movement_type] ?? "neutral") : "neutral"} label={cfg.label} />
                       <span style={{ flex: 1, fontSize: 13, color: "#0A0A0A", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {m.item?.name ?? "—"}
                       </span>
@@ -396,13 +405,13 @@ export default function DashboardPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <Link
                 href="/orders/new"
-                style={{ textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center", background: "#111111", color: "#fff", height: 36, borderRadius: 8, fontWeight: 500, fontSize: 14 }}
+                style={{ textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center", background: "#111111", color: "#fff", height: 36, borderRadius: 9999, fontWeight: 500, fontSize: 14 }}
               >
                 New Order
               </Link>
               <Link
                 href="/quote"
-                style={{ textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center", background: "#F2F2F2", color: "#111111", height: 36, borderRadius: 8, fontWeight: 500, fontSize: 14 }}
+                style={{ textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center", background: "#F2F2F2", color: "#111111", height: 36, borderRadius: 9999, fontWeight: 500, fontSize: 14 }}
               >
                 New Quote
               </Link>

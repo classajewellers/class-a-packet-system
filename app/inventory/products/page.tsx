@@ -88,7 +88,7 @@ export default function ProductsPage() {
       </div>
 
       {/* List */}
-      <div style={{ background: "#fff", border: "1px solid #E5E5E5", borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ background: "#fff", border: "1px solid #ececec", borderRadius: 16, boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.05)", overflow: "hidden" }}>
         {loading ? (
           <div style={{ padding: 40, textAlign: "center", color: "#8A8A8A" }}>Loading…</div>
         ) : products.length === 0 ? (

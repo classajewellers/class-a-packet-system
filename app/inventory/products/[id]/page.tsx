@@ -174,7 +174,7 @@ export default function ProductDetailPage({ params }: Params) {
       </button>
 
       {/* Product header / edit card */}
-      <div style={{ background: "#fff", border: "1px solid #E5E5E5", borderRadius: 12, padding: 24, marginBottom: 16 }}>
+      <div style={{ background: "#fff", border: "1px solid #ececec", borderRadius: 16, boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.05)", padding: 24, marginBottom: 16 }}>
         {!editing ? (
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -307,7 +307,7 @@ export default function ProductDetailPage({ params }: Params) {
         )}
       </div>
 
-      <div style={{ background: "#fff", border: "1px solid #E5E5E5", borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ background: "#fff", border: "1px solid #ececec", borderRadius: 16, boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.05)", overflow: "hidden" }}>
         {pieces.length === 0 ? (
           <div style={{ padding: 40, textAlign: "center", color: "#8A8A8A", fontSize: 14 }}>
             No pieces linked to this product yet.
