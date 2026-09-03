@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requireManager } from "@/lib/require-auth";
-import { mapDiamondTypeToStoneOrigin } from "@/lib/inventoryPricing";
-import { ORIGIN_SUPPLIER_NAME, resolveSupplierIdForOrigin } from "@/lib/melee-pricing";
+import { ORIGIN_SUPPLIER_NAME, resolveSupplierIdForOrigin, resolveMeleeOrigin } from "@/lib/melee-pricing";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +13,7 @@ export const dynamic = "force-dynamic";
 //   none             → the piece has no melee stones
 //   incomplete       → melee present but missing shape / colour / clarity / carat
 //   no_origin        → diamond_type is None/absent, so no origin → no supplier
+//   origin_unrecognized → diamond_type is set but not a known value (e.g. a typo)
 //   supplier_missing → the origin's supplier record wasn't found
 //   unmapped         → (colour_group, clarity) has no confirmed quality mapping yet
 //   no_price         → mapping exists but no exact price-list row matches
@@ -46,8 +46,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 
   // Origin → supplier (see lib/melee-pricing.ts for the current-state assumption).
-  const origin = mapDiamondTypeToStoneOrigin(piece.diamond_type);
-  if (origin == null) return NextResponse.json({ status: "no_origin" });
+  // Strict: an unrecognised diamond_type (e.g. a typo) is flagged, never guessed.
+  const originRes = resolveMeleeOrigin(piece.diamond_type);
+  if (originRes.origin == null) {
+    return NextResponse.json({
+      status: originRes.reason === "unrecognized" ? "origin_unrecognized" : "no_origin",
+      diamond_type: piece.diamond_type ?? null,
+    });
+  }
+  const origin = originRes.origin;
 
   const { data: suppliers } = await supabase
     .from("inventory_suppliers").select("id, name").eq("tenant_id", tenantId);

@@ -24,6 +24,7 @@ interface Group {
 export default function MeleeQualityMapPage() {
   const { user } = useUser();
   const [groups, setGroups] = useState<Group[]>([]);
+  const [unrecognized, setUnrecognized] = useState<{ diamond_type: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -36,8 +37,8 @@ export default function MeleeQualityMapPage() {
     try {
       const res = await fetch("/api/pricing/melee-quality-map");
       const json = await res.json();
-      if (!res.ok) { setError(json.error ?? "Failed to load"); setGroups([]); }
-      else { setGroups(json.groups ?? []); setError(null); }
+      if (!res.ok) { setError(json.error ?? "Failed to load"); setGroups([]); setUnrecognized([]); }
+      else { setGroups(json.groups ?? []); setUnrecognized(json.unrecognized ?? []); setError(null); }
     } catch { setError("Network error"); }
     setLoading(false);
   }, []);
@@ -76,6 +77,18 @@ export default function MeleeQualityMapPage() {
       </p>
 
       {error && <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, padding: "10px 14px", marginBottom: 16, color: "#B91C1C", fontSize: 13 }}>{error}</div>}
+
+      {unrecognized.length > 0 && (
+        <div style={{ background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 8, padding: "12px 14px", marginBottom: 20, color: "#92400E", fontSize: 13 }}>
+          <strong>Unrecognised Diamond Type on melee pieces</strong> — these can’t be priced until fixed on the piece
+          (Diamond Type must be exactly Natural, Lab Grown, or None):
+          <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+            {unrecognized.map(u => (
+              <li key={u.diamond_type}>“{u.diamond_type}” — {u.count} piece{u.count !== 1 ? "s" : ""}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {loading ? <div style={{ color: "#6B7280" }}>Loading…</div> : groups.map(g => (
         <div key={g.origin} style={{ marginBottom: 28, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 10, overflow: "hidden" }}>
           <div style={{ padding: "12px 16px", borderBottom: "1px solid #E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
@@ -108,14 +121,17 @@ export default function MeleeQualityMapPage() {
                           <option value="">{g.available_qualities.length ? "— select confirmed quality —" : "— no price-list rows imported —"}</option>
                           {g.available_qualities.map(q => <option key={q} value={q}>{q}</option>)}
                         </select>
-                        {!c.mapped_quality && <span style={{ marginLeft: 8, fontSize: 11, color: "#92400E" }}>unmapped</span>}
                       </td>
                       <td style={td}>
-                        {dirty && val && (
+                        {dirty && val ? (
                           <button disabled={savingKey === k} onClick={() => save(g, c)}
                             style={{ fontSize: 12, fontWeight: 600, color: "#fff", background: "#111827", border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer" }}>
-                            {savingKey === k ? "Saving…" : "Confirm"}
+                            {savingKey === k ? "Saving…" : (c.mapped_quality ? "Update" : "Confirm")}
                           </button>
+                        ) : c.mapped_quality ? (
+                          <span style={{ fontSize: 12, fontWeight: 600, color: "#166534" }}>✓ Confirmed</span>
+                        ) : (
+                          <span style={{ fontSize: 11, fontWeight: 600, color: "#92400E", background: "#FEF3C7", borderRadius: 999, padding: "3px 10px" }}>Unmapped</span>
                         )}
                       </td>
                     </tr>

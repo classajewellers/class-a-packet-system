@@ -1342,6 +1342,10 @@ export default function InventoryItemPage({ params }: Params) {
                       <div style={{ fontSize: 13, color: "#9CA3AF" }}>Add shape, colour, clarity and carat to price these stones.</div>
                     ) : meleePrice.status === "supplier_missing" ? (
                       <div style={{ fontSize: 13, color: "#B45309" }}>Supplier “{meleePrice.supplier_name}” is not set up for this tenant.</div>
+                    ) : meleePrice.status === "origin_unrecognized" ? (
+                      <div style={{ fontSize: 13, color: "#B45309" }}>
+                        Diamond Type “{meleePrice.diamond_type}” isn’t a recognised value — fix it (Natural / Lab Grown / None) to price melee.
+                      </div>
                     ) : meleePrice.status === "no_origin" ? (
                       <div style={{ fontSize: 13, color: "#9CA3AF" }}>Set the stone type (Natural / Lab) to price melee.</div>
                     ) : null}

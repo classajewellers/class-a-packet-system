@@ -17,6 +17,35 @@
 
 export type MeleeOrigin = "lab" | "natural";
 
+/**
+ * Strict origin resolution for melee pricing. Unlike mapDiamondTypeToStoneOrigin
+ * (which defaults ANY unrecognised value to "natural" for the centre-stone
+ * calculate_price path), this recognises ONLY the known diamond_type values and
+ * FLAGS anything else as "unrecognized" — so a typo like "Natual" surfaces as a
+ * data error to fix on the piece, rather than being silently priced as natural.
+ * This is deliberate: never guess an origin.
+ */
+export type MeleeOriginResult =
+  | { origin: MeleeOrigin }
+  | { origin: null; reason: "none" | "unrecognized" };
+
+const KNOWN_DIAMOND_TYPE: Record<string, MeleeOrigin | "none"> = {
+  "natural":   "natural",
+  "lab grown": "lab",
+  "lab-grown": "lab",
+  "lab":       "lab",
+  "none":      "none",
+};
+
+export function resolveMeleeOrigin(diamondType: string | null | undefined): MeleeOriginResult {
+  const raw = (diamondType ?? "").trim();
+  if (!raw) return { origin: null, reason: "none" };
+  const known = KNOWN_DIAMOND_TYPE[raw.toLowerCase()];
+  if (known === "none") return { origin: null, reason: "none" };
+  if (known === "lab" || known === "natural") return { origin: known };
+  return { origin: null, reason: "unrecognized" };
+}
+
 export const ORIGIN_SUPPLIER_NAME: Record<MeleeOrigin, string> = {
   lab:     "Grown Diamonds",
   natural: "Sapphire Export",

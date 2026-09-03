@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requireManager } from "@/lib/require-auth";
-import { mapDiamondTypeToStoneOrigin } from "@/lib/inventoryPricing";
-import { ORIGIN_SUPPLIER_NAME, resolveSupplierIdForOrigin, MeleeOrigin } from "@/lib/melee-pricing";
+import { ORIGIN_SUPPLIER_NAME, resolveSupplierIdForOrigin, resolveMeleeOrigin, MeleeOrigin } from "@/lib/melee-pricing";
 
 export const dynamic = "force-dynamic";
 
@@ -45,9 +44,20 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     natural: { supplier_id: resolveSupplierIdForOrigin("natural", supplierList), supplier_name: ORIGIN_SUPPLIER_NAME.natural, combos: new Map() },
   };
 
+  // Melee pieces whose diamond_type is a set-but-unrecognised value (e.g. a typo)
+  // can't be grouped under an origin — surface them for a data fix, don't drop them.
+  const unrecognized = new Map<string, number>();
+
   for (const p of pieces ?? []) {
-    const origin = mapDiamondTypeToStoneOrigin(p.diamond_type);
-    if (origin == null) continue;
+    const originRes = resolveMeleeOrigin(p.diamond_type);
+    if (originRes.origin == null) {
+      if (originRes.reason === "unrecognized") {
+        const dt = (p.diamond_type ?? "").trim() || "(blank)";
+        unrecognized.set(dt, (unrecognized.get(dt) ?? 0) + 1);
+      }
+      continue;
+    }
+    const origin = originRes.origin;
     const colour = (p.melee_colour_group ?? "").trim();
     const clar   = (p.melee_clarity ?? "").trim();
     if (!colour || !clar) continue;
@@ -75,7 +85,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     };
   });
 
-  return NextResponse.json({ groups: result });
+  const unrecognizedList = Array.from(unrecognized.entries())
+    .map(([diamond_type, count]) => ({ diamond_type, count }))
+    .sort((a, b) => b.count - a.count);
+
+  return NextResponse.json({ groups: result, unrecognized: unrecognizedList });
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
