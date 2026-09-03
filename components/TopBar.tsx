@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useUser } from "@/context/UserContext";
+import { color } from "@/lib/theme";
 
 interface Props {
   onOpenSidebar: () => void;
@@ -33,7 +34,7 @@ export default function TopBar({ onOpenSidebar }: Props) {
   const title = getPageTitle(pathname);
 
   return (
-    <header style={{ height: 64, borderBottom: '1px solid #E8E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', background: '#FFFFFF', flexShrink: 0 }}>
+    <header style={{ height: 64, borderBottom: `1px solid ${color.line}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', background: color.white, flexShrink: 0 }}>
       <div className="flex items-center gap-3">
         {/* Hamburger — mobile only */}
         <button
@@ -49,7 +50,7 @@ export default function TopBar({ onOpenSidebar }: Props) {
           </svg>
         </button>
 
-        <div style={{ fontSize: 18, fontWeight: 600, color: '#1A1A2E' }}>
+        <div style={{ fontSize: 18, fontWeight: 600, letterSpacing: '-0.01em', color: color.ink }}>
           {title}
         </div>
       </div>
@@ -57,8 +58,8 @@ export default function TopBar({ onOpenSidebar }: Props) {
       <div className="flex items-center gap-3">
         {user && (
           <div className="flex items-center gap-2">
-            <span style={{ width: 32, height: 32, borderRadius: '50%', background: '#635BFF', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600 }} title={user.name}>{user.initials}</span>
-            <span style={{ fontSize: 13, color: '#1A1A2E', fontWeight: 500 }} className="hidden sm:block">
+            <span style={{ width: 32, height: 32, borderRadius: '50%', background: color.ink, color: color.white, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600 }} title={user.name}>{user.initials}</span>
+            <span style={{ fontSize: 13, color: color.ink, fontWeight: 500 }} className="hidden sm:block">
               {user.name}
             </span>
           </div>

@@ -5,16 +5,19 @@
 @tailwind utilities;
 
 :root {
-  --primary: #111111;
-  --accent: #000000;
-  --red: #CC0000;
-  --bg: #FFFFFF;
+  --primary: #0A0A0A;
+  --accent: #0A0A0A;
+  --red: #C0362C;
+  --bg: #fafafa;
 }
 
-* { font-family: 'Inter', sans-serif; }
-/* Minimal high-contrast frame: white ground, near-black ink, crisper type. */
+/* Geist Sans everywhere (variable set on <html> in layout.tsx); Inter is the
+   fallback while the font loads. */
+* { font-family: var(--font-geist-sans), 'Inter', system-ui, sans-serif; }
+
+/* Minimal high-contrast frame: near-white ground, near-black ink, crisp type. */
 body {
-  background: #FFFFFF;
+  background: #fafafa;
   color: #0A0A0A;
   font-size: 14px;
   letter-spacing: -0.011em;

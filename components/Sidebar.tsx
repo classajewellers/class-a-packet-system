@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { canManage, hasPermission } from "@/lib/userTypes";
+import { color, font } from "@/lib/theme";
 
 interface Props {
   onOpenAI: () => void;
@@ -26,9 +27,9 @@ interface Props {
   onClose: () => void;
 }
 
-const ACTIVE_BG      = "rgba(99, 91, 255, 0.15)";
-const DEFAULT_COLOR  = "#8B8FC8";
-const ACTIVE_COLOR   = "#FFFFFF";
+const ACTIVE_BG      = color.railActiveBg;
+const DEFAULT_COLOR  = color.railText;
+const ACTIVE_COLOR   = color.railActive;
 
 export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
   const pathname = usePathname();
@@ -161,7 +162,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
           "md:static md:translate-x-0 md:transition-none",
         ].join(" ")}
         style={{
-          background: "#1A1760",
+          background: color.railBg,
           width: 220, minWidth: 220,
           height: "100vh",
           display: "flex", flexDirection: "column",
@@ -170,15 +171,15 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
       >
         {/* Brand + mobile close */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "24px 20px 20px" }}>
-          <span style={{ width: 40, height: 40, borderRadius: 10, background: "#635BFF", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <span style={{ width: 40, height: 40, borderRadius: 10, background: color.railActive, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color.ink} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M6 3h12l4 6-10 12L2 9z" />
               <path d="M2 9h20" />
               <path d="M6 3l4 6m4 0l4-6" />
             </svg>
           </span>
-          <div style={{ fontFamily: "Inter, sans-serif", flex: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: "0.1em", color: "#FFFFFF", lineHeight: 1 }}>VAULT</div>
+          <div style={{ fontFamily: font.mono, flex: 1 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: "0.14em", color: "#FFFFFF", lineHeight: 1 }}>VAULT</div>
             <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.08em", color: "rgba(255,255,255,0.5)", marginTop: 3, textTransform: "uppercase" as const }}>Jewellery Management</div>
           </div>
           <button
@@ -294,7 +295,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
         <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", padding: "12px 16px 16px" }}>
           {user && (
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-              <span style={{ width: 34, height: 34, borderRadius: "50%", background: "#635BFF", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
+              <span style={{ width: 34, height: 34, borderRadius: "50%", background: color.railActive, color: color.ink, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
                 {initials(user.name)}
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -304,15 +305,15 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
               <button
                 onClick={logout}
                 title="Sign out"
-                style={{ background: "rgba(99,91,255,0.2)", border: "none", color: "#A5B4FC", cursor: "pointer", padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 500, flexShrink: 0, transition: "background .15s" }}
-                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = "rgba(99,91,255,0.35)")}
-                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = "rgba(99,91,255,0.2)")}
+                style={{ background: color.railActiveBg, border: "none", color: color.railActive, cursor: "pointer", padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 500, flexShrink: 0, transition: "background .15s" }}
+                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.18)")}
+                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = color.railActiveBg)}
               >
                 Sign out
               </button>
             </div>
           )}
-          <div style={{ fontSize: 11, color: "#4A4A8A", textAlign: "center", paddingTop: 4 }}>© 2026 Vault</div>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", textAlign: "center", paddingTop: 4 }}>© 2026 Vault</div>
         </div>
       </aside>
     </>
