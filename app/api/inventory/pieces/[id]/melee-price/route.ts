@@ -4,6 +4,8 @@ import { requireManager } from "@/lib/require-auth";
 import { ORIGIN_SUPPLIER_NAME, resolveSupplierIdForOrigin, resolveMeleeOrigin } from "@/lib/melee-pricing";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0; // never serve a cached response — always read fresh
+                             // melee fields (matches the sibling piece routes)
 
 // Looks up the confirmed melee price for a piece's set melee stones.
 // Every step is exact-match-or-flag — no interpolation, no inferred quality.
