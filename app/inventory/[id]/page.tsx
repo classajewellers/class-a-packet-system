@@ -666,6 +666,11 @@ export default function InventoryItemPage({ params }: Params) {
     setPiece(json.piece);
     setEditing(false);
     setSaving(false);
+    // Refetch so the Live Pricing panel recalculates with the saved values
+    // (e.g. a newly-entered metal weight). Without this the /price result is
+    // stale — the field shows the new weight but pricing keeps the old figure
+    // until a manual page refresh. Mirrors handleMove()/sell which already refetch.
+    fetchAll();
   }
 
   async function handleMove() {
