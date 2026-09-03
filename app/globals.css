@@ -5,14 +5,22 @@
 @tailwind utilities;
 
 :root {
-  --primary: #635BFF;
+  --primary: #111111;
   --accent: #000000;
   --red: #CC0000;
-  --bg: #F9FAFB;
+  --bg: #FFFFFF;
 }
 
 * { font-family: 'Inter', sans-serif; }
-body { background: #F9FAFB; color: #1A1A2E; font-size: 14px; }
+/* Minimal high-contrast frame: white ground, near-black ink, crisper type. */
+body {
+  background: #FFFFFF;
+  color: #0A0A0A;
+  font-size: 14px;
+  letter-spacing: -0.011em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
 
 /* Touch targets */
 button, input, select, textarea {
