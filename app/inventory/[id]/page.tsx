@@ -454,7 +454,16 @@ function EF({ label, field, type = "text", opts }: {
   const value = editing ? (form[field] ?? "") : (piece?.[field] ?? "");
   const onChange = (val: string) => setForm(f => ({ ...f, [field]: val === "" ? null : val }));
 
-  if (!editing) return <FieldView label={label} value={piece?.[field] as any} />;
+  if (!editing) {
+    // When opts are provided (e.g. status_id / location_id / supplier_id), resolve
+    // the stored value to its human label so display mode shows "In stock" / "Safe"
+    // instead of the raw UUID. No-op for enum fields where value === label.
+    const raw = piece?.[field];
+    const display = opts && opts.length
+      ? (opts.find(o => o.value === String(raw ?? ""))?.label ?? raw)
+      : raw;
+    return <FieldView label={label} value={display as any} />;
+  }
   if (opts) {
     return (
       <div>
