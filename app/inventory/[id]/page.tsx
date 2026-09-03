@@ -493,6 +493,7 @@ export default function InventoryItemPage({ params }: Params) {
 
   const [priceCalc, setPriceCalc]           = useState<any>(null);
   const [priceCalcError, setPriceCalcError] = useState<string>("");
+  const [meleePrice, setMeleePrice]         = useState<any>(null);
   const [updatingSuggested, setUpdatingSuggested] = useState(false);
 
   const [showMove, setShowMove]     = useState(false);
@@ -571,7 +572,7 @@ export default function InventoryItemPage({ params }: Params) {
   const fetchAll = useCallback(async () => {
     if (!tenantId) return;
     setLoading(true);
-    const [pieceRes, refRes, movRes, calcRes, prodRes, staffRes, resRes] = await Promise.all([
+    const [pieceRes, refRes, movRes, calcRes, prodRes, staffRes, resRes, meleeRes] = await Promise.all([
       fetch(`/api/inventory/pieces/${params.id}`, { headers }),
       fetch("/api/inventory/reference", { headers }),
       fetch(`/api/inventory/movements?piece_id=${params.id}&limit=50`, { headers }),
@@ -579,6 +580,7 @@ export default function InventoryItemPage({ params }: Params) {
       fetch("/api/inventory/products", { headers }),
       fetch("/api/settings/users/list", { headers }),
       fetch(`/api/inventory/reservations?piece_id=${params.id}`, { headers }),
+      fetch(`/api/inventory/pieces/${params.id}/melee-price`, { headers }),
     ]);
     if (!pieceRes.ok) { setLoading(false); return; }
     const [pieceJson, refJson, movJson] = await Promise.all([
@@ -605,6 +607,7 @@ export default function InventoryItemPage({ params }: Params) {
       setReservations(all);
       setActiveRes(all.find(r => r.status === "active") ?? null);
     }
+    setMeleePrice(meleeRes.ok ? await meleeRes.json() : null);
     setLoading(false);
   }, [tenantId, params.id]);
 
@@ -1303,6 +1306,8 @@ export default function InventoryItemPage({ params }: Params) {
                   opts={editing ? ["D-F","G-H","I-J","K-L","M-N"].map(g => ({ value: g, label: g })) : undefined} />
                 <EF label="Clarity" field={"melee_clarity" as keyof InventoryPiece}
                   opts={editing ? ["VVS","VS","SI1","SI2","SI3","I1","I2","I3"].map(c => ({ value: c, label: c })) : undefined} />
+                <EF label="Shape" field={"melee_shape" as keyof InventoryPiece}
+                  opts={editing ? ["Round","Oval","Cushion","Princess","Pear","Marquise","Emerald","Baguette","Trillion"].map(s => ({ value: s, label: s })) : undefined} />
                 {!editing && meleeQty != null && (piece as any).melee_carat_weight != null && (
                   <div style={{ gridColumn: "1 / -1" }}>
                     <div style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 3 }}>Total Melee</div>
@@ -1312,6 +1317,34 @@ export default function InventoryItemPage({ params }: Params) {
                         ({meleeQty} × {(piece as any).melee_carat_weight}ct)
                       </span>
                     </div>
+                  </div>
+                )}
+                {!editing && isManager && meleePrice && meleePrice.status !== "none" && (
+                  <div style={{ gridColumn: "1 / -1", borderTop: "1px solid #F3F4F6", paddingTop: 12, marginTop: 2 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 4 }}>Melee Price</div>
+                    {meleePrice.status === "ok" ? (
+                      <div style={{ fontSize: 14, color: "#111827" }}>
+                        {meleePrice.quantity} × {fmtMoney(meleePrice.per_stone)} = <strong>{fmtMoney(meleePrice.total)}</strong>
+                        <span style={{ color: "#9CA3AF", marginLeft: 8, fontSize: 12 }}>
+                          {meleePrice.shape} · {meleePrice.quality} · {meleePrice.supplier_name}
+                        </span>
+                      </div>
+                    ) : meleePrice.status === "unmapped" ? (
+                      <div style={{ fontSize: 13, color: "#B45309" }}>
+                        Quality not mapped for {meleePrice.colour_group} / {meleePrice.clarity} ({meleePrice.supplier_name}).{" "}
+                        <a href="/pricing/melee-quality-map" style={{ color: "#635BFF", fontWeight: 500 }}>Confirm mapping →</a>
+                      </div>
+                    ) : meleePrice.status === "no_price" ? (
+                      <div style={{ fontSize: 13, color: "#B45309" }}>
+                        No exact price-list match ({meleePrice.shape}, {meleePrice.quality}, {meleePrice.carat}ct) in {meleePrice.supplier_name}’s list.
+                      </div>
+                    ) : meleePrice.status === "incomplete" ? (
+                      <div style={{ fontSize: 13, color: "#9CA3AF" }}>Add shape, colour, clarity and carat to price these stones.</div>
+                    ) : meleePrice.status === "supplier_missing" ? (
+                      <div style={{ fontSize: 13, color: "#B45309" }}>Supplier “{meleePrice.supplier_name}” is not set up for this tenant.</div>
+                    ) : meleePrice.status === "no_origin" ? (
+                      <div style={{ fontSize: 13, color: "#9CA3AF" }}>Set the stone type (Natural / Lab) to price melee.</div>
+                    ) : null}
                   </div>
                 )}
               </div>
