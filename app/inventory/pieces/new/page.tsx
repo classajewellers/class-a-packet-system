@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
+import { color, radius, shadow } from "@/lib/theme";
 import { ArrowLeft, Check, Plus, ChevronDown, Search, Loader } from "lucide-react";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -42,11 +43,11 @@ const BLANK_PIECE = {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const S = {
-  label:   { fontSize: 12, fontWeight: 600 as const, color: "#6B7280", display: "block" as const, marginBottom: 4, textTransform: "uppercase" as const, letterSpacing: "0.04em" },
-  input:   { width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, color: "#111827", background: "#fff", outline: "none" },
-  select:  { width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, color: "#111827", background: "#fff", outline: "none", appearance: "none" as const },
-  section: { background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: "20px 24px", marginBottom: 16 },
-  h2:      { fontSize: 11, fontWeight: 700 as const, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.07em", margin: "0 0 16px" },
+  label:   { fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 500 as const, color: color.textMuted, display: "block" as const, marginBottom: 4, textTransform: "uppercase" as const, letterSpacing: "0.06em" },
+  input:   { width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14, color: color.ink, background: color.white, outline: "none" },
+  select:  { width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14, color: color.ink, background: color.white, outline: "none", appearance: "none" as const },
+  section: { background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, boxShadow: shadow.card, padding: "20px 24px", marginBottom: 16 },
+  h2:      { fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 500 as const, color: color.textMuted, textTransform: "uppercase" as const, letterSpacing: "0.07em", margin: "0 0 16px" },
   grid2:   { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 20px" },
   grid3:   { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "14px 20px" },
 };
@@ -100,11 +101,11 @@ function DesignSearch({
 
   if (value) {
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 8, border: "1px solid #C7D2FE", background: "#EEF2FF" }}>
-        <span style={{ fontSize: 14, fontWeight: 600, color: "#3730A3", flex: 1 }}>{value.name}</span>
-        {value.category && <span style={{ fontSize: 11, color: "#6366F1", background: "#E0E7FF", padding: "2px 8px", borderRadius: 999 }}>{value.category}</span>}
-        {value.collection && <span style={{ fontSize: 11, color: "#6B7280" }}>{value.collection}</span>}
-        <button onClick={() => { onChange(null); setQuery(""); }} style={{ fontSize: 12, color: "#6366F1", background: "none", border: "none", cursor: "pointer", padding: "2px 6px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: radius.md, border: `1px solid ${color.line}`, background: color.paper }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: color.ink, flex: 1 }}>{value.name}</span>
+        {value.category && <span style={{ fontSize: 11, color: color.ink, background: color.fill, padding: "3px 10px", borderRadius: radius.pill }}>{value.category}</span>}
+        {value.collection && <span style={{ fontSize: 11, color: color.textMuted }}>{value.collection}</span>}
+        <button onClick={() => { onChange(null); setQuery(""); }} style={{ fontSize: 12, color: color.ink, background: "none", border: "none", cursor: "pointer", padding: "2px 6px" }}>
           Change
         </button>
       </div>
@@ -114,7 +115,7 @@ function DesignSearch({
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <div style={{ position: "relative" }}>
-        <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} />
+        <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: color.textFaint }} />
         <input
           value={query}
           onChange={e => { setQuery(e.target.value); setOpen(true); }}
@@ -123,30 +124,30 @@ function DesignSearch({
           style={{ ...S.input, paddingLeft: 32 }}
           autoFocus
         />
-        {loading && <Loader size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", animation: "spin 1s linear infinite" }} />}
+        {loading && <Loader size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: color.textFaint, animation: "spin 1s linear infinite" }} />}
       </div>
       {open && (query.length > 0) && (
-        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, boxShadow: "0 4px 16px #0001", zIndex: 50, maxHeight: 280, overflowY: "auto", marginTop: 4 }}>
+        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.md, boxShadow: shadow.lg, zIndex: 50, maxHeight: 280, overflowY: "auto", marginTop: 4 }}>
           {results.length === 0 && !loading && (
-            <div style={{ padding: "10px 14px", fontSize: 13, color: "#6B7280" }}>
+            <div style={{ padding: "10px 14px", fontSize: 13, color: color.textMuted }}>
               No designs found for "{query}"
             </div>
           )}
           {results.map(d => (
             <button key={d.id} onClick={() => { onChange(d); setOpen(false); setQuery(""); }}
-              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", border: "none", background: "none", cursor: "pointer", textAlign: "left", borderBottom: "1px solid #F3F4F6" }}
-              onMouseEnter={e => (e.currentTarget.style.background = "#F9FAFB")}
+              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", border: "none", background: "none", cursor: "pointer", textAlign: "left", borderBottom: `1px solid ${color.line}` }}
+              onMouseEnter={e => (e.currentTarget.style.background = color.hover)}
               onMouseLeave={e => (e.currentTarget.style.background = "none")}
             >
-              <span style={{ fontSize: 14, fontWeight: 500, color: "#111827", flex: 1 }}>{d.name}</span>
-              {d.category && <span style={{ fontSize: 11, color: "#6366F1", background: "#EEF2FF", padding: "2px 7px", borderRadius: 999 }}>{d.category}</span>}
-              {d.collection && <span style={{ fontSize: 11, color: "#9CA3AF" }}>{d.collection}</span>}
+              <span style={{ fontSize: 14, fontWeight: 500, color: color.ink, flex: 1 }}>{d.name}</span>
+              {d.category && <span style={{ fontSize: 11, color: color.ink, background: color.fill, padding: "3px 10px", borderRadius: radius.pill }}>{d.category}</span>}
+              {d.collection && <span style={{ fontSize: 11, color: color.textFaint }}>{d.collection}</span>}
             </button>
           ))}
           {query.trim() && (
             <button
               onClick={() => { onCreate(query.trim()); setOpen(false); }}
-              style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 14px", border: "none", borderTop: "1px solid #E5E7EB", background: "#F9FAFB", cursor: "pointer", fontSize: 13, color: "#635BFF", fontWeight: 600 }}
+              style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 14px", border: "none", borderTop: `1px solid ${color.line}`, background: color.paper, cursor: "pointer", fontSize: 13, color: color.ink, fontWeight: 600 }}
             >
               <Plus size={14} /> Create new design "{query.trim()}"
             </button>
@@ -341,12 +342,12 @@ export default function NewPiecePage() {
 
   const btnPrimary: React.CSSProperties = {
     display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 18px",
-    background: "#635BFF", color: "#fff", border: "none", borderRadius: 8,
-    fontSize: 14, fontWeight: 600, cursor: "pointer",
+    background: color.ink, color: color.white, border: "none", borderRadius: radius.pill,
+    fontSize: 14, fontWeight: 500, cursor: "pointer",
   };
   const btnGhost: React.CSSProperties = {
-    display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 14px",
-    background: "none", color: "#635BFF", border: "1px solid #C7D2FE", borderRadius: 8,
+    display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 18px",
+    background: color.white, color: color.ink, border: `1px solid ${color.line}`, borderRadius: radius.pill,
     fontSize: 14, fontWeight: 500, cursor: "pointer",
   };
 
@@ -358,12 +359,12 @@ export default function NewPiecePage() {
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 28 }}>
-        <button onClick={() => router.push("/inventory")} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280", padding: 4 }}>
+        <button onClick={() => router.push("/inventory")} style={{ background: "none", border: "none", cursor: "pointer", color: color.textMuted, padding: 4 }}>
           <ArrowLeft size={18} />
         </button>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: 0 }}>Add Piece</h1>
-          <p style={{ fontSize: 13, color: "#9CA3AF", margin: "2px 0 0" }}>
+          <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: "-0.03em", color: color.ink, margin: 0 }}>Add Piece</h1>
+          <p style={{ fontSize: 13, color: color.textFaint, margin: "2px 0 0" }}>
             Select a design, configure the variant, then enter the physical piece details.
           </p>
         </div>
@@ -371,14 +372,14 @@ export default function NewPiecePage() {
 
       {/* Last saved confirmation */}
       {lastSaved && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: "#ECFDF5", border: "1px solid #6EE7B7", borderRadius: 10, marginBottom: 20 }}>
-          <Check size={16} color="#10B981" />
-          <span style={{ fontSize: 14, color: "#065F46" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, boxShadow: shadow.card, marginBottom: 20 }}>
+          <Check size={16} color={color.dotSuccess} />
+          <span style={{ fontSize: 14, color: color.text }}>
             <strong>{lastSaved.sku}</strong> saved — {lastSaved.name}. Ready for next piece.
           </span>
           <button
             onClick={() => router.push("/inventory")}
-            style={{ marginLeft: "auto", fontSize: 13, color: "#10B981", background: "none", border: "none", cursor: "pointer" }}
+            style={{ marginLeft: "auto", fontSize: 13, color: color.ink, background: "none", border: "none", cursor: "pointer" }}
           >
             Done
           </button>
@@ -402,7 +403,7 @@ export default function NewPiecePage() {
           />
         ) : (
           <div>
-            <p style={{ fontSize: 13, color: "#6B7280", margin: "0 0 16px" }}>
+            <p style={{ fontSize: 13, color: color.textMuted, margin: "0 0 16px" }}>
               New design — fill in the details below, then save to continue.
             </p>
             <div style={S.grid2}>
@@ -423,7 +424,7 @@ export default function NewPiecePage() {
                     <option>Loose Stone</option>
                     <option>Other</option>
                   </select>
-                  <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
+                  <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: color.textFaint, pointerEvents: "none" }} />
                 </div>
               </Field>
               <Field label="Collection">
@@ -438,7 +439,7 @@ export default function NewPiecePage() {
                 </Field>
               </>}
             </div>
-            {designError && <p style={{ color: "#EF4444", fontSize: 13, margin: "12px 0 0" }}>{designError}</p>}
+            {designError && <p style={{ color: color.danger, fontSize: 13, margin: "12px 0 0" }}>{designError}</p>}
             <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
               <button onClick={handleCreateDesign} disabled={designSaving} style={btnPrimary}>
                 {designSaving ? <Loader size={14} /> : <Check size={14} />} Save design
@@ -455,7 +456,7 @@ export default function NewPiecePage() {
           <h2 style={S.h2}>2 · Variant</h2>
 
           {variantsLoading ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#9CA3AF", fontSize: 13 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, color: color.textFaint, fontSize: 13 }}>
               <Loader size={13} /> Loading variants…
             </div>
           ) : !creatingVariant ? (
@@ -465,10 +466,10 @@ export default function NewPiecePage() {
                   {variants.map(v => (
                     <button key={v.id} onClick={() => setVariant(v)}
                       style={{
-                        padding: "7px 14px", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer",
-                        border: variant?.id === v.id ? "2px solid #635BFF" : "1px solid #E5E7EB",
-                        background: variant?.id === v.id ? "#EEF2FF" : "#fff",
-                        color: variant?.id === v.id ? "#3730A3" : "#374151",
+                        padding: "7px 14px", borderRadius: radius.pill, fontSize: 13, fontWeight: 500, cursor: "pointer",
+                        border: variant?.id === v.id ? `1px solid ${color.ink}` : `1px solid ${color.line}`,
+                        background: variant?.id === v.id ? color.ink : color.white,
+                        color: variant?.id === v.id ? color.white : color.ink,
                       }}
                     >
                       {v.name ?? `${v.metal_karat} ${v.metal_colour}`}
@@ -484,7 +485,7 @@ export default function NewPiecePage() {
           ) : (
             <div>
               {variants.length > 0 && (
-                <p style={{ fontSize: 13, color: "#6B7280", margin: "0 0 14px" }}>
+                <p style={{ fontSize: 13, color: color.textMuted, margin: "0 0 14px" }}>
                   Adding a new metal option for this design.
                 </p>
               )}
@@ -494,7 +495,7 @@ export default function NewPiecePage() {
                     <select value={newVariant.metal_karat} onChange={e => setNewVariant(p => ({ ...p, metal_karat: e.target.value }))} style={S.select}>
                       {METAL_KARATS.map(k => <option key={k}>{k}</option>)}
                     </select>
-                    <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
+                    <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: color.textFaint, pointerEvents: "none" }} />
                   </div>
                 </Field>
                 <Field label="Metal colour *">
@@ -502,7 +503,7 @@ export default function NewPiecePage() {
                     <select value={newVariant.metal_colour} onChange={e => setNewVariant(p => ({ ...p, metal_colour: e.target.value }))} style={S.select}>
                       {METAL_COLOURS.map(c => <option key={c}>{c}</option>)}
                     </select>
-                    <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
+                    <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: color.textFaint, pointerEvents: "none" }} />
                   </div>
                 </Field>
                 <Field label="Band width (mm)">
@@ -515,7 +516,7 @@ export default function NewPiecePage() {
                   <input value={newVariant.name} onChange={e => setNewVariant(p => ({ ...p, name: e.target.value }))} style={S.input} placeholder="Auto-generated if blank — e.g. 18K Yellow Gold 2mm" />
                 </Field>
               </div>
-              {variantError && <p style={{ color: "#EF4444", fontSize: 13, margin: "12px 0 0" }}>{variantError}</p>}
+              {variantError && <p style={{ color: color.danger, fontSize: 13, margin: "12px 0 0" }}>{variantError}</p>}
               <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
                 <button onClick={handleCreateVariant} disabled={variantSaving} style={btnPrimary}>
                   {variantSaving ? <Loader size={14} /> : <Check size={14} />} Save variant
@@ -536,15 +537,15 @@ export default function NewPiecePage() {
 
           {/* Metal */}
           <div style={{ marginBottom: 20 }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 12px" }}>Metal</p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 500, color: color.textMuted, textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 12px" }}>Metal</p>
             <div style={S.grid3}>
               <Field label="Karat">
-                <div style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, color: "#6B7280", background: "#F9FAFB" }}>
+                <div style={{ padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14, color: color.textMuted, background: color.paper }}>
                   {variant.metal_karat}
                 </div>
               </Field>
               <Field label="Colour">
-                <div style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, color: "#6B7280", background: "#F9FAFB" }}>
+                <div style={{ padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14, color: color.textMuted, background: color.paper }}>
                   {variant.metal_colour}
                 </div>
               </Field>
@@ -561,14 +562,14 @@ export default function NewPiecePage() {
 
           {/* Stone */}
           <div style={{ marginBottom: 20 }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 12px" }}>Stone</p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 500, color: color.textMuted, textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 12px" }}>Stone</p>
             <div style={S.grid3}>
               <Field label="Origin">
                 <div style={{ position: "relative" }}>
                   <select value={piece.diamond_type} onChange={e => setPiece(p => ({ ...p, diamond_type: e.target.value }))} style={S.select}>
                     {STONE_TYPES.map(t => <option key={t}>{t}</option>)}
                   </select>
-                  <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
+                  <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: color.textFaint, pointerEvents: "none" }} />
                 </div>
               </Field>
 
@@ -604,7 +605,7 @@ export default function NewPiecePage() {
                       <option value="">— Shape —</option>
                       {STONE_SHAPES.map(s => <option key={s}>{s}</option>)}
                     </select>
-                    <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
+                    <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: color.textFaint, pointerEvents: "none" }} />
                   </div>
                 </Field>
                 {piece.stone_species ? (
@@ -624,7 +625,7 @@ export default function NewPiecePage() {
                           <option value="">—</option>
                           {COLOUR_GRADES.map(c => <option key={c}>{c}</option>)}
                         </select>
-                        <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
+                        <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: color.textFaint, pointerEvents: "none" }} />
                       </div>
                     </Field>
                     <Field label="Clarity">
@@ -633,7 +634,7 @@ export default function NewPiecePage() {
                           <option value="">—</option>
                           {CLARITY_GRADES.map(c => <option key={c}>{c}</option>)}
                         </select>
-                        <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
+                        <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: color.textFaint, pointerEvents: "none" }} />
                       </div>
                     </Field>
                   </>
@@ -647,7 +648,7 @@ export default function NewPiecePage() {
 
           {/* Physical details */}
           <div style={{ marginBottom: 20 }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 12px" }}>Physical Details</p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 500, color: color.textMuted, textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 12px" }}>Physical Details</p>
             <div style={S.grid3}>
               <Field label="Finger size">
                 <input value={piece.finger_size} onChange={e => setPiece(p => ({ ...p, finger_size: e.target.value }))} style={S.input} placeholder="e.g. N, 54, 7" />
@@ -658,7 +659,7 @@ export default function NewPiecePage() {
                     <option value="">— Select status —</option>
                     {statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
-                  <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
+                  <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: color.textFaint, pointerEvents: "none" }} />
                 </div>
               </Field>
               <Field label="Location">
@@ -667,7 +668,7 @@ export default function NewPiecePage() {
                     <option value="">— Location —</option>
                     {locations.map((l: any) => <option key={l.id} value={l.id}>{l.name}</option>)}
                   </select>
-                  <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
+                  <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: color.textFaint, pointerEvents: "none" }} />
                 </div>
               </Field>
             </div>
@@ -676,7 +677,7 @@ export default function NewPiecePage() {
           {/* Costs — manager only */}
           {isManager && (
             <div style={{ marginBottom: 20 }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 12px" }}>Costs</p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 500, color: color.textMuted, textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 12px" }}>Costs</p>
               <div style={S.grid2}>
                 <Field label="Actual cost (what we paid $)">
                   <input type="number" min="0" step="0.01" value={piece.actual_cost} onChange={e => setPiece(p => ({ ...p, actual_cost: e.target.value }))} style={S.input} placeholder="0.00" />
@@ -695,7 +696,7 @@ export default function NewPiecePage() {
             </Field>
           </div>
 
-          {error && <p style={{ color: "#EF4444", fontSize: 13, marginBottom: 12 }}>{error}</p>}
+          {error && <p style={{ color: color.danger, fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={handleSave} disabled={saving} style={{ ...btnPrimary, padding: "11px 24px" }}>

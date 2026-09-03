@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useUser } from "@/context/UserContext";
+import { color, radius, shadow } from "@/lib/theme";
+import StatusBadge from "@/components/StatusBadge";
 
 interface Supplier { id: string; name: string; }
 
@@ -165,17 +167,13 @@ export default function CatalogImportPage() {
   // ── Styles ────────────────────────────────────────────────────────────────
 
   const badge = (conf: ExtractRow["match_confidence"]) => {
-    const map = { exact: ["#D1FAE5", "#065F46", "Exact"], fuzzy: ["#FEF3C7", "#92400E", "Fuzzy"], none: ["#FEE2E2", "#991B1B", "No match"] } as const;
-    const [bg, color, label] = map[conf];
-    return (
-      <span style={{ background: bg, color, borderRadius: 4, padding: "2px 7px", fontSize: 11, fontWeight: 600 }}>
-        {label}
-      </span>
-    );
+    const map = { exact: ["success", "Exact"], fuzzy: ["warning", "Fuzzy"], none: ["danger", "No match"] } as const;
+    const [tone, label] = map[conf];
+    return <StatusBadge tone={tone} label={label} />;
   };
 
-  const th: React.CSSProperties = { padding: "8px 12px", fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", background: "#F9FAFB", textAlign: "left", borderBottom: "1px solid #E5E7EB", whiteSpace: "nowrap" };
-  const td: React.CSSProperties = { padding: "8px 12px", fontSize: 13, color: "#111827", borderBottom: "1px solid #F3F4F6", verticalAlign: "top" };
+  const th: React.CSSProperties = { padding: "10px 12px", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 500, color: color.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", background: color.white, textAlign: "left", borderBottom: `1px solid ${color.line}`, whiteSpace: "nowrap" };
+  const td: React.CSSProperties = { padding: "12px", fontSize: 13, color: color.ink, borderBottom: `1px solid ${color.line}`, verticalAlign: "top" };
 
   if (!user) return null;
 
@@ -183,29 +181,29 @@ export default function CatalogImportPage() {
 
   if (step === "upload") return (
     <div style={{ maxWidth: 640, margin: "40px auto", padding: "0 20px" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Supplier Catalog Import</h1>
-      <p style={{ color: "#6B7280", fontSize: 14, marginBottom: 28 }}>
+      <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: "-0.03em", color: color.ink, marginBottom: 4 }}>Supplier Catalog Import</h1>
+      <p style={{ color: color.textMuted, fontSize: 14, marginBottom: 28 }}>
         Upload a price file and design list (.xlsx) to import supplier variants and costs.
       </p>
 
       {extractError && (
-        <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, padding: "12px 16px", marginBottom: 20, color: "#B91C1C", fontSize: 14 }}>
+        <div style={{ background: color.dangerBg, border: `1px solid ${color.danger}`, borderRadius: radius.md, padding: "12px 16px", marginBottom: 20, color: color.danger, fontSize: 14 }}>
           {extractError}
         </div>
       )}
 
-      <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#374151", marginBottom: 6 }}>Supplier</label>
+      <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: color.text, marginBottom: 6 }}>Supplier</label>
       <select
         value={supplierId}
         onChange={e => setSupplierId(e.target.value)}
-        style={{ width: "100%", padding: "9px 12px", border: "1px solid #D1D5DB", borderRadius: 8, fontSize: 14, marginBottom: 24, color: "#111827" }}
+        style={{ width: "100%", padding: "9px 12px", border: `1px solid ${color.line}`, borderRadius: radius.md, fontSize: 14, marginBottom: 24, color: color.ink, background: color.white }}
       >
         <option value="">Select supplier…</option>
         {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
       </select>
 
-      <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#374151", marginBottom: 6 }}>
-        Files <span style={{ color: "#6B7280", fontWeight: 400 }}>— drop both .xlsx files or click to browse</span>
+      <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: color.text, marginBottom: 6 }}>
+        Files <span style={{ color: color.textMuted, fontWeight: 400 }}>— drop both .xlsx files or click to browse</span>
       </label>
 
       <div
@@ -215,12 +213,12 @@ export default function CatalogImportPage() {
         onDrop={e => { e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files); }}
         onClick={() => fileInputRef.current?.click()}
         style={{
-          border: `2px dashed ${isDragging ? "#635BFF" : "#D1D5DB"}`,
-          borderRadius: 10,
+          border: `2px dashed ${isDragging ? color.ink : color.line}`,
+          borderRadius: radius.lg,
           padding: "32px 20px",
           textAlign: "center",
           cursor: "pointer",
-          background: isDragging ? "#F5F3FF" : "#FAFAFA",
+          background: isDragging ? color.fill : color.paper,
           marginBottom: 16,
         }}
       >
@@ -232,13 +230,13 @@ export default function CatalogImportPage() {
           style={{ display: "none" }}
           onChange={e => { if (e.target.files) handleFiles(e.target.files); }}
         />
-        <div style={{ color: "#9CA3AF", fontSize: 14 }}>
+        <div style={{ color: color.textFaint, fontSize: 14 }}>
           {files.length === 0
             ? "Drop price file + design list here, or click to browse"
             : files.map(f => f.name).join(" · ")}
         </div>
         {files.length > 0 && files.length < 2 && (
-          <div style={{ color: "#D97706", fontSize: 12, marginTop: 6 }}>Add the second file</div>
+          <div style={{ color: color.dotWarning, fontSize: 12, marginTop: 6 }}>Add the second file</div>
         )}
       </div>
 
@@ -246,10 +244,10 @@ export default function CatalogImportPage() {
         <div style={{ marginBottom: 20 }}>
           {files.map(f => (
             <div key={f.name} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0" }}>
-              <span style={{ fontSize: 13, color: "#374151" }}>{f.name}</span>
+              <span style={{ fontSize: 13, color: color.text }}>{f.name}</span>
               <button
                 onClick={() => setFiles(prev => prev.filter(x => x.name !== f.name))}
-                style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "none", cursor: "pointer" }}
+                style={{ fontSize: 11, color: color.textFaint, background: "none", border: "none", cursor: "pointer" }}
               >✕</button>
             </div>
           ))}
@@ -259,7 +257,7 @@ export default function CatalogImportPage() {
       <button
         onClick={runExtract}
         disabled={!supplierId || files.length < 2}
-        style={{ background: supplierId && files.length >= 2 ? "#635BFF" : "#E5E7EB", color: supplierId && files.length >= 2 ? "#fff" : "#9CA3AF", border: "none", borderRadius: 8, padding: "11px 28px", fontSize: 14, fontWeight: 600, cursor: supplierId && files.length >= 2 ? "pointer" : "not-allowed" }}
+        style={{ background: supplierId && files.length >= 2 ? color.ink : color.fill, color: supplierId && files.length >= 2 ? color.white : color.textFaint, border: "none", borderRadius: radius.pill, padding: "11px 28px", fontSize: 14, fontWeight: 500, cursor: supplierId && files.length >= 2 ? "pointer" : "not-allowed" }}
       >
         Extract & Preview
       </button>
@@ -269,7 +267,7 @@ export default function CatalogImportPage() {
   // ── Extracting ───────────────────────────────────────────────────────────
 
   if (step === "extracting") return (
-    <div style={{ maxWidth: 640, margin: "80px auto", textAlign: "center", color: "#6B7280", fontSize: 15 }}>
+    <div style={{ maxWidth: 640, margin: "80px auto", textAlign: "center", color: color.textMuted, fontSize: 15 }}>
       Reading files and matching designs…
     </div>
   );
@@ -284,26 +282,26 @@ export default function CatalogImportPage() {
     return (
       <div style={{ padding: "32px 24px", maxWidth: 1400, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 6 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: "#111827", margin: 0 }}>
+          <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: "-0.03em", color: color.ink, margin: 0 }}>
             Review — {supplierName}
           </h1>
-          <span style={{ fontSize: 13, color: "#6B7280" }}>{rows.length} rows extracted</span>
+          <span style={{ fontSize: 13, color: color.textMuted }}>{rows.length} rows extracted</span>
         </div>
 
         <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 13, color: "#059669", fontWeight: 500 }}>{confirmable.length} ready to import</span>
-          {flaggedCount > 0 && <span style={{ fontSize: 13, color: "#D97706", fontWeight: 500 }}>{flaggedCount} flagged</span>}
-          {skippedCount > 0 && <span style={{ fontSize: 13, color: "#6B7280" }}>{skippedCount} will be skipped (no design assigned)</span>}
+          <span style={{ fontSize: 13, color: color.dotSuccess, fontWeight: 500 }}>{confirmable.length} ready to import</span>
+          {flaggedCount > 0 && <span style={{ fontSize: 13, color: color.dotWarning, fontWeight: 500 }}>{flaggedCount} flagged</span>}
+          {skippedCount > 0 && <span style={{ fontSize: 13, color: color.textMuted }}>{skippedCount} will be skipped (no design assigned)</span>}
         </div>
 
         {confirmError && (
-          <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, padding: "12px 16px", marginBottom: 16, color: "#B91C1C", fontSize: 14 }}>
+          <div style={{ background: color.dangerBg, border: `1px solid ${color.danger}`, borderRadius: radius.md, padding: "12px 16px", marginBottom: 16, color: color.danger, fontSize: 14 }}>
             {confirmError}
           </div>
         )}
 
         <div style={{ overflowX: "auto", marginBottom: 20 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg }}>
             <thead>
               <tr>
                 <th style={th}>SKU</th>
@@ -325,19 +323,19 @@ export default function CatalogImportPage() {
                   : row.matched_design_name;
 
                 return (
-                  <tr key={row.item_code} style={{ background: row.flagged ? "#FFFBEB" : "#fff" }}>
+                  <tr key={row.item_code} style={{ background: row.flagged ? color.fill : color.white }}>
                     <td style={td}>
                       <div style={{ fontFamily: "monospace", fontSize: 12 }}>{row.item_code}</div>
-                      <div style={{ color: "#9CA3AF", fontSize: 11 }}>{row.base_code}</div>
+                      <div style={{ color: color.textFaint, fontSize: 11 }}>{row.base_code}</div>
                     </td>
                     <td style={td}>
                       {row.metal_karat ?? "—"} {row.metal_colour ?? ""}
-                      {row.grade_code && <div style={{ color: "#9CA3AF", fontSize: 11 }}>{row.grade_code}</div>}
+                      {row.grade_code && <div style={{ color: color.textFaint, fontSize: 11 }}>{row.grade_code}</div>}
                     </td>
                     <td style={td}>
                       {row.stone_origin
-                        ? <span style={{ background: row.stone_origin === "lab" ? "#EDE9FE" : "#D1FAE5", color: row.stone_origin === "lab" ? "#5B21B6" : "#065F46", borderRadius: 4, padding: "2px 7px", fontSize: 12, fontWeight: 500 }}>{row.stone_origin}</span>
-                        : <span style={{ color: "#9CA3AF", fontSize: 12 }}>—</span>}
+                        ? <span style={{ background: color.fill, color: color.ink, borderRadius: radius.pill, padding: "3px 10px", fontSize: 12, fontWeight: 500 }}>{row.stone_origin}</span>
+                        : <span style={{ color: color.textFaint, fontSize: 12 }}>—</span>}
                     </td>
                     <td style={td}>{row.stone_shape ?? "—"}</td>
                     <td style={td}>
@@ -359,19 +357,19 @@ export default function CatalogImportPage() {
                             ...prev,
                             [row.item_code]: e.target.value || "",
                           }))}
-                          style={{ fontSize: 12, borderRadius: 4, border: "1px solid #D1D5DB", padding: "3px 6px", width: 180 }}
+                          style={{ fontSize: 12, borderRadius: radius.md, border: `1px solid ${color.line}`, padding: "3px 6px", width: 180 }}
                         >
                           <option value="">{resolvedName ?? "Select design…"}</option>
                           {designs.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                         </select>
                       )}
                       {row.match_confidence === "exact" && !override && (
-                        <div style={{ fontSize: 12, color: "#374151" }}>{resolvedName}</div>
+                        <div style={{ fontSize: 12, color: color.text }}>{resolvedName}</div>
                       )}
                     </td>
                     <td style={td}>
                       {row.flag_reasons.map((r, i) => (
-                        <div key={i} style={{ fontSize: 11, color: "#92400E", marginBottom: 2 }}>{r}</div>
+                        <div key={i} style={{ fontSize: 11, color: color.dotWarning, marginBottom: 2 }}>{r}</div>
                       ))}
                     </td>
                   </tr>
@@ -384,14 +382,14 @@ export default function CatalogImportPage() {
         <div style={{ display: "flex", gap: 12 }}>
           <button
             onClick={() => { setStep("upload"); setRows([]); }}
-            style={{ background: "#F3F4F6", color: "#374151", border: "none", borderRadius: 8, padding: "10px 22px", fontSize: 14, fontWeight: 500, cursor: "pointer" }}
+            style={{ background: color.white, color: color.ink, border: `1px solid ${color.line}`, borderRadius: radius.pill, padding: "10px 22px", fontSize: 14, fontWeight: 500, cursor: "pointer" }}
           >
             ← Back
           </button>
           <button
             onClick={runConfirm}
             disabled={confirmable.length === 0}
-            style={{ background: confirmable.length > 0 ? "#635BFF" : "#E5E7EB", color: confirmable.length > 0 ? "#fff" : "#9CA3AF", border: "none", borderRadius: 8, padding: "10px 28px", fontSize: 14, fontWeight: 600, cursor: confirmable.length > 0 ? "pointer" : "not-allowed" }}
+            style={{ background: confirmable.length > 0 ? color.ink : color.fill, color: confirmable.length > 0 ? color.white : color.textFaint, border: "none", borderRadius: radius.pill, padding: "10px 28px", fontSize: 14, fontWeight: 500, cursor: confirmable.length > 0 ? "pointer" : "not-allowed" }}
           >
             Import {confirmable.length} variants
           </button>
@@ -403,7 +401,7 @@ export default function CatalogImportPage() {
   // ── Confirming ───────────────────────────────────────────────────────────
 
   if (step === "confirming") return (
-    <div style={{ maxWidth: 640, margin: "80px auto", textAlign: "center", color: "#6B7280", fontSize: 15 }}>
+    <div style={{ maxWidth: 640, margin: "80px auto", textAlign: "center", color: color.textMuted, fontSize: 15 }}>
       Writing to database…
     </div>
   );
@@ -412,26 +410,26 @@ export default function CatalogImportPage() {
 
   if (step === "done" && confirmResult) return (
     <div style={{ maxWidth: 560, margin: "60px auto", padding: "0 20px" }}>
-      <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 12, padding: 28, marginBottom: 24 }}>
-        <div style={{ fontSize: 18, fontWeight: 700, color: "#065F46", marginBottom: 8 }}>Import complete</div>
-        <div style={{ fontSize: 14, color: "#374151", lineHeight: 1.7 }}>
+      <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, boxShadow: shadow.card, padding: 28, marginBottom: 24 }}>
+        <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em", color: color.ink, marginBottom: 8 }}>Import complete</div>
+        <div style={{ fontSize: 14, color: color.text, lineHeight: 1.7 }}>
           <div><strong>{confirmResult.updated}</strong> variants updated</div>
           <div><strong>{confirmResult.inserted}</strong> variants created</div>
           {confirmResult.skipped.length > 0 && (
-            <div style={{ marginTop: 8, color: "#92400E" }}><strong>{confirmResult.skipped.length}</strong> rows skipped</div>
+            <div style={{ marginTop: 8, color: color.dotWarning }}><strong>{confirmResult.skipped.length}</strong> rows skipped</div>
           )}
         </div>
       </div>
 
       {confirmResult.skipped.length > 0 && (
-        <div style={{ background: "#FFF", border: "1px solid #E5E7EB", borderRadius: 8, overflow: "hidden", marginBottom: 24 }}>
-          <div style={{ padding: "10px 16px", background: "#FEF3C7", fontSize: 13, fontWeight: 600, color: "#92400E" }}>
+        <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, overflow: "hidden", marginBottom: 24 }}>
+          <div style={{ padding: "10px 16px", background: color.fill, fontSize: 13, fontWeight: 600, color: color.text }}>
             Skipped rows
           </div>
           {confirmResult.skipped.map((s, i) => (
-            <div key={i} style={{ padding: "8px 16px", borderTop: "1px solid #F3F4F6", fontSize: 13 }}>
+            <div key={i} style={{ padding: "8px 16px", borderTop: `1px solid ${color.line}`, fontSize: 13 }}>
               <span style={{ fontFamily: "monospace", marginRight: 8 }}>{s.item_code}</span>
-              <span style={{ color: "#6B7280" }}>{s.reason}</span>
+              <span style={{ color: color.textMuted }}>{s.reason}</span>
             </div>
           ))}
         </div>
@@ -439,7 +437,7 @@ export default function CatalogImportPage() {
 
       <button
         onClick={() => { setStep("upload"); setFiles([]); setRows([]); setConfirmResult(null); setSupplierId(""); }}
-        style={{ background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
+        style={{ background: color.ink, color: color.white, border: "none", borderRadius: radius.pill, padding: "10px 24px", fontSize: 14, fontWeight: 500, cursor: "pointer" }}
       >
         Import another file
       </button>

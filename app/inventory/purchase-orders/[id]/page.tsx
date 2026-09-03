@@ -6,6 +6,8 @@ import { useUser } from "@/context/UserContext";
 import { canManage, canSeeCosts } from "@/lib/userTypes";
 import { ArrowLeft, Package, CheckCircle2, SkipForward, Sparkles, Loader, X, ChevronDown, DollarSign, Pencil, Ban, AlertTriangle, Plus, Trash2 } from "lucide-react";
 import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
+import { color, radius, shadow, type as typo } from "@/lib/theme";
+import SharedStatusBadge, { type StatusTone } from "@/components/StatusBadge";
 
 type POStatus = "draft" | "ordered" | "partially_received" | "received" | "cancelled";
 
@@ -78,32 +80,24 @@ interface PurchaseOrder {
   created_at: string;
 }
 
-const STATUS_CONFIG: Record<POStatus, { label: string; bg: string; fg: string; border: string }> = {
-  draft:              { label: "Draft",           bg: "#F3F4F6", fg: "#374151", border: "#E5E7EB" },
-  ordered:            { label: "Ordered",         bg: "#EFF6FF", fg: "#1D4ED8", border: "#BFDBFE" },
-  partially_received: { label: "Partly Received", bg: "#FFFBEB", fg: "#92400E", border: "#FDE68A" },
-  received:           { label: "Received",        bg: "#ECFDF5", fg: "#065F46", border: "#A7F3D0" },
-  cancelled:          { label: "Cancelled",       bg: "#F9FAFB", fg: "#6B7280", border: "#E5E7EB" },
+const STATUS_CONFIG: Record<POStatus, { label: string; tone: StatusTone }> = {
+  draft:              { label: "Draft",           tone: "neutral" },
+  ordered:            { label: "Ordered",         tone: "info" },
+  partially_received: { label: "Partly Received", tone: "warning" },
+  received:           { label: "Received",        tone: "success" },
+  cancelled:          { label: "Cancelled",       tone: "danger" },
 };
 
 function StatusBadge({ status }: { status: POStatus }) {
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.draft;
-  return (
-    <span style={{
-      display: "inline-block", padding: "3px 12px", borderRadius: 999,
-      fontSize: 13, fontWeight: 500,
-      background: cfg.bg, color: cfg.fg, border: `1px solid ${cfg.border}`,
-    }}>
-      {cfg.label}
-    </span>
-  );
+  return <SharedStatusBadge tone={cfg.tone} label={cfg.label} />;
 }
 
 function DetailItem({ label, value }: { label: string; value?: string | null }) {
   return (
     <div>
-      <div style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 2 }}>{label}</div>
-      <div style={{ fontSize: 14, color: value ? "#111827" : "#D1D5DB" }}>{value ?? "—"}</div>
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 500, color: color.textMuted, textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 14, color: value ? color.ink : color.textFaint }}>{value ?? "—"}</div>
     </div>
   );
 }
@@ -163,8 +157,8 @@ function ReceiveCard({
     ? products.filter((p: any) => p.name.toLowerCase().includes(productSearch.toLowerCase())).slice(0, 8)
     : [];
 
-  const IF = { width: "100%", boxSizing: "border-box" as const, padding: "7px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13 };
-  const LF = { fontSize: 12, fontWeight: 500 as const, color: "#374151", display: "block" as const, marginBottom: 2 };
+  const IF = { width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 13, color: color.ink };
+  const LF = { fontSize: 12, fontWeight: 500 as const, color: color.textMuted, display: "block" as const, marginBottom: 2 };
 
   async function parseWithAI() {
     if (!aiDesc.trim()) return;
@@ -280,17 +274,17 @@ function ReceiveCard({
   }
 
   return (
-    <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20 }}>
+    <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, boxShadow: shadow.card, padding: 20 }}>
       {/* Header — title + qty summary */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4, gap: 12 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>{line.title ?? "Untitled item"}</div>
-        <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#6B7280", flexShrink: 0 }}>
-          <span>Ordered: <strong style={{ color: "#374151" }}>{orderedQty}</strong></span>
-          {alreadyReceived > 0 && <span>Received: <strong style={{ color: "#059669" }}>{alreadyReceived}</strong></span>}
-          <span>Remaining: <strong style={{ color: "#374151" }}>{remaining}</strong></span>
+        <div style={{ fontSize: 14, fontWeight: 600, color: color.ink }}>{line.title ?? "Untitled item"}</div>
+        <div style={{ display: "flex", gap: 12, fontSize: 12, color: color.textMuted, flexShrink: 0 }}>
+          <span>Ordered: <strong style={{ color: color.ink }}>{orderedQty}</strong></span>
+          {alreadyReceived > 0 && <span>Received: <strong style={{ color: color.dotSuccess }}>{alreadyReceived}</strong></span>}
+          <span>Remaining: <strong style={{ color: color.ink }}>{remaining}</strong></span>
         </div>
       </div>
-      <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 16 }}>
+      <div style={{ fontSize: 12, color: color.textMuted, marginBottom: 16 }}>
         {[line.metal_karat, line.metal_colour, line.metal_type].filter(Boolean).join(" ")}
         {line.diamond_carat ? ` · ${line.diamond_carat}ct ${line.diamond_colour ?? ""} ${line.diamond_type ?? ""}`.trim() : ""}
         {line.finger_size ? ` · Size ${line.finger_size}` : ""}
@@ -298,7 +292,7 @@ function ReceiveCard({
       </div>
 
       {/* Quantity to receive + mode */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "10px 16px", marginBottom: 14, padding: "12px 14px", background: "#F9FAFB", borderRadius: 10, border: "1px solid #E5E7EB" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "10px 16px", marginBottom: 14, padding: "12px 14px", background: color.paper, borderRadius: radius.md, border: `1px solid ${color.line}` }}>
         <div>
           <label style={LF}>Receive quantity</label>
           <input
@@ -310,23 +304,23 @@ function ReceiveCard({
         </div>
         <div>
           <label style={LF}>Tracking mode</label>
-          <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: "1px solid #E5E7EB" }}>
+          <div style={{ display: "flex", borderRadius: radius.md, overflow: "hidden", border: `1px solid ${color.line}` }}>
             <button
               type="button"
               onClick={() => setReceiveMode("individual")}
-              style={{ flex: 1, padding: "7px 10px", background: receiveMode === "individual" ? "#111827" : "#fff", color: receiveMode === "individual" ? "#fff" : "#374151", border: "none", cursor: "pointer", fontSize: 12, fontWeight: receiveMode === "individual" ? 600 : 400 }}
+              style={{ flex: 1, padding: "7px 10px", background: receiveMode === "individual" ? color.ink : color.white, color: receiveMode === "individual" ? color.white : color.ink, border: "none", cursor: "pointer", fontSize: 12, fontWeight: receiveMode === "individual" ? 600 : 400 }}
             >
               Individual pieces
             </button>
             <button
               type="button"
               onClick={() => setReceiveMode("batch")}
-              style={{ flex: 1, padding: "7px 10px", background: receiveMode === "batch" ? "#111827" : "#fff", color: receiveMode === "batch" ? "#fff" : "#374151", border: "none", cursor: "pointer", fontSize: 12, fontWeight: receiveMode === "batch" ? 600 : 400 }}
+              style={{ flex: 1, padding: "7px 10px", background: receiveMode === "batch" ? color.ink : color.white, color: receiveMode === "batch" ? color.white : color.ink, border: "none", cursor: "pointer", fontSize: 12, fontWeight: receiveMode === "batch" ? 600 : 400 }}
             >
               Batch stock
             </button>
           </div>
-          <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>
+          <div style={{ fontSize: 11, color: color.textFaint, marginTop: 4 }}>
             {receiveMode === "individual"
               ? `Creates ${receiveQty} separately tracked piece${receiveQty !== 1 ? "s" : ""}, each with its own SKU`
               : `Creates 1 stock record with quantity ${receiveQty}`}
@@ -340,12 +334,12 @@ function ReceiveCard({
           value={aiDesc}
           onChange={e => setAiDesc(e.target.value)}
           placeholder="Optionally describe to refine with AI…"
-          style={{ flex: 1, padding: "7px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13 }}
+          style={{ flex: 1, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 13, color: color.ink }}
         />
         <button
           onClick={parseWithAI}
           disabled={aiLoading || !aiDesc.trim()}
-          style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 8, background: "#635BFF", color: "#fff", border: "none", fontSize: 13, cursor: aiLoading || !aiDesc.trim() ? "not-allowed" : "pointer", opacity: !aiDesc.trim() ? 0.5 : 1 }}
+          style={{ display: "flex", alignItems: "center", gap: 5, padding: "9px 16px", borderRadius: radius.pill, background: color.ink, color: color.white, border: "none", fontSize: 13, cursor: aiLoading || !aiDesc.trim() ? "not-allowed" : "pointer", opacity: !aiDesc.trim() ? 0.5 : 1 }}
         >
           {aiLoading ? <Loader size={13} style={{ animation: "spin 1s linear infinite" }} /> : <Sparkles size={13} />}
         </button>
@@ -439,7 +433,7 @@ function ReceiveCard({
             style={IF}
           />
           {productOpen && filteredProducts.length > 0 && (
-            <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, zIndex: 20, boxShadow: "0 4px 12px rgba(0,0,0,0.08)", maxHeight: 220, overflowY: "auto" }}>
+            <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.md, zIndex: 20, boxShadow: shadow.lg, maxHeight: 220, overflowY: "auto" }}>
               {filteredProducts.map((p: any) => (
                 <div
                   key={p.id}
@@ -448,8 +442,8 @@ function ReceiveCard({
                     setProductSearch("");
                     setProductOpen(false);
                   }}
-                  style={{ padding: "8px 12px", fontSize: 13, cursor: "pointer", borderBottom: "1px solid #F3F4F6" }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "#F9FAFB")}
+                  style={{ padding: "8px 12px", fontSize: 13, cursor: "pointer", borderBottom: `1px solid ${color.line}` }}
+                  onMouseEnter={e => (e.currentTarget.style.background = color.hover)}
                   onMouseLeave={e => (e.currentTarget.style.background = "")}
                 >
                   {p.name}
@@ -461,7 +455,7 @@ function ReceiveCard({
             <button
               type="button"
               onClick={() => { setSpecs(s => ({ ...s, product_id: "" })); setProductSearch(""); }}
-              style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", padding: 2 }}
+              style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: color.textFaint, padding: 2 }}
             >
               <X size={13} />
             </button>
@@ -473,14 +467,14 @@ function ReceiveCard({
         <button
           onClick={handleSkip}
           disabled={skipping || saving}
-          style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 13, cursor: "pointer", color: "#6B7280" }}
+          style={{ display: "flex", alignItems: "center", gap: 5, padding: "9px 18px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 13, fontWeight: 500, cursor: "pointer", color: color.textMuted }}
         >
           <SkipForward size={14} /> {skipping ? "Skipping…" : "Skip"}
         </button>
         <button
           onClick={handleConfirm}
           disabled={saving || skipping}
-          style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 16px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 13, fontWeight: 500, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1 }}
+          style={{ display: "flex", alignItems: "center", gap: 5, padding: "9px 18px", borderRadius: radius.pill, border: "none", background: color.ink, color: color.white, fontSize: 13, fontWeight: 500, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1 }}
         >
           <CheckCircle2 size={14} />
           {saving ? "Creating…" : receiveMode === "batch" ? `Confirm & Create Batch (qty ${receiveQty})` : receiveQty === 1 ? "Confirm & Create Piece" : `Confirm & Create ${receiveQty} Pieces`}
@@ -731,8 +725,8 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   if (loading) {
     return (
       <div style={{ padding: "32px 32px 64px", maxWidth: 900, margin: "0 auto" }}>
-        <div style={{ height: 20, width: 120, background: "#F3F4F6", borderRadius: 6, marginBottom: 24 }} />
-        <div style={{ height: 200, background: "#F3F4F6", borderRadius: 12 }} />
+        <div style={{ height: 20, width: 120, background: color.fill, borderRadius: 6, marginBottom: 24 }} />
+        <div style={{ height: 200, background: color.fill, borderRadius: radius.lg }} />
       </div>
     );
   }
@@ -740,8 +734,8 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   if (!po) {
     return (
       <div style={{ padding: 48, textAlign: "center" }}>
-        <p style={{ color: "#6B7280" }}>Purchase order not found.</p>
-        <button onClick={() => router.push("/inventory/purchase-orders")} style={{ marginTop: 12, padding: "8px 16px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", cursor: "pointer", fontSize: 14 }}>Back</button>
+        <p style={{ color: color.textMuted }}>Purchase order not found.</p>
+        <button onClick={() => router.push("/inventory/purchase-orders")} style={{ marginTop: 12, padding: "9px 18px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, cursor: "pointer", fontSize: 14, fontWeight: 500 }}>Back</button>
       </div>
     );
   }
@@ -753,31 +747,31 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
 
   // ── Edit mode ──────────────────────────────────────────────────────────────
   if (editMode) {
-    const IF = { width: "100%", boxSizing: "border-box" as const, padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13 };
-    const LF = { fontSize: 12, fontWeight: 600 as const, color: "#374151", display: "block" as const, marginBottom: 4 };
+    const IF = { width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 13, color: color.ink };
+    const LF = { fontSize: 12, fontWeight: 600 as const, color: color.textMuted, display: "block" as const, marginBottom: 4 };
 
     return (
       <div style={{ padding: "32px 32px 64px", maxWidth: 900, margin: "0 auto" }}>
         {/* Edit header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <button onClick={() => setEditMode(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280", padding: 0 }}>
+            <button onClick={() => setEditMode(false)} style={{ background: "none", border: "none", cursor: "pointer", color: color.textMuted, padding: 0 }}>
               <X size={20} />
             </button>
-            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "#111827" }}>Edit {po.po_number}</h1>
+            <h1 style={{ ...typo.h2, margin: 0 }}>Edit {po.po_number}</h1>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {editError && <span style={{ fontSize: 13, color: "#DC2626" }}>{editError}</span>}
+            {editError && <span style={{ fontSize: 13, color: color.danger }}>{editError}</span>}
             <button
               onClick={() => setEditMode(false)}
-              style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer" }}
+              style={{ padding: "9px 18px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, color: color.ink, fontSize: 14, fontWeight: 500, cursor: "pointer" }}
             >
               Discard
             </button>
             <button
               onClick={handleSaveEdit}
               disabled={editSaving}
-              style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 14, fontWeight: 500, cursor: editSaving ? "not-allowed" : "pointer", opacity: editSaving ? 0.7 : 1 }}
+              style={{ padding: "9px 20px", borderRadius: radius.pill, border: "none", background: color.ink, color: color.white, fontSize: 14, fontWeight: 500, cursor: editSaving ? "not-allowed" : "pointer", opacity: editSaving ? 0.7 : 1 }}
             >
               {editSaving ? "Saving…" : "Save Changes"}
             </button>
@@ -785,8 +779,8 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
         </div>
 
         {/* Order details */}
-        <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 24, marginBottom: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 16 }}>Order Details</div>
+        <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, boxShadow: shadow.card, padding: 24, marginBottom: 16 }}>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 500, color: color.textMuted, textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 16 }}>Order Details</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px 24px" }}>
             <div>
               <label style={LF}>Supplier</label>
@@ -830,12 +824,12 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
         </div>
 
         {/* Line items */}
-        <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
-          <div style={{ padding: "14px 20px", borderBottom: "1px solid #E5E7EB" }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>Line Items</span>
+        <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, boxShadow: shadow.card, overflow: "hidden" }}>
+          <div style={{ padding: "14px 20px", borderBottom: `1px solid ${color.line}` }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 500, color: color.textMuted, textTransform: "uppercase" as const, letterSpacing: "0.08em" }}>Line Items</span>
           </div>
           {editLines.length === 0 ? (
-            <div style={{ padding: 32, textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>No line items</div>
+            <div style={{ padding: 32, textAlign: "center", color: color.textFaint, fontSize: 14 }}>No line items</div>
           ) : (
             editLines.map((line, idx) => {
               const isInvoiced = line.actual_cost != null;
@@ -850,17 +844,17 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
               return (
                 <div
                   key={idx}
-                  style={{ padding: 20, borderTop: idx > 0 ? "1px solid #F3F4F6" : "none", background: isInvoiced ? "#FFFCF5" : "#fff" }}
+                  style={{ padding: 20, borderTop: idx > 0 ? `1px solid ${color.line}` : "none", background: isInvoiced ? "#FFFCF5" : color.white }}
                 >
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: "#9CA3AF" }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: color.textFaint }}>
                       {isNew ? "New line" : `Line ${idx + 1}`}
                     </span>
                     {!line.received && (
                       <button
                         type="button"
                         onClick={removeLine}
-                        style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 6, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", fontSize: 11, cursor: "pointer" }}
+                        style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.dangerBg, color: color.danger, fontSize: 11, fontWeight: 500, cursor: "pointer" }}
                       >
                         <Trash2 size={11} /> Remove
                       </button>
@@ -930,18 +924,18 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                   </div>
                   {/* Stock / Order toggle */}
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: "1px solid #E5E7EB", fontSize: 13 }}>
+                    <div style={{ display: "flex", borderRadius: radius.md, overflow: "hidden", border: `1px solid ${color.line}`, fontSize: 13 }}>
                       <button
                         type="button"
                         onClick={() => setLine({ forOrder: false, packet_id: "" })}
-                        style={{ padding: "6px 14px", background: !line.forOrder ? "#111827" : "#fff", color: !line.forOrder ? "#fff" : "#374151", border: "none", cursor: "pointer", fontWeight: !line.forOrder ? 600 : 400 }}
+                        style={{ padding: "6px 14px", background: !line.forOrder ? color.ink : color.white, color: !line.forOrder ? color.white : color.ink, border: "none", cursor: "pointer", fontWeight: !line.forOrder ? 600 : 400 }}
                       >
                         For Stock
                       </button>
                       <button
                         type="button"
                         onClick={() => setLine({ forOrder: true })}
-                        style={{ padding: "6px 14px", background: line.forOrder ? "#111827" : "#fff", color: line.forOrder ? "#fff" : "#374151", border: "none", cursor: "pointer", fontWeight: line.forOrder ? 600 : 400 }}
+                        style={{ padding: "6px 14px", background: line.forOrder ? color.ink : color.white, color: line.forOrder ? color.white : color.ink, border: "none", cursor: "pointer", fontWeight: line.forOrder ? 600 : 400 }}
                       >
                         Customer Order
                       </button>
@@ -950,7 +944,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                       <select
                         value={line.packet_id}
                         onChange={e => setLine({ packet_id: e.target.value })}
-                        style={{ flex: 1, padding: "7px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13, background: "#fff" }}
+                        style={{ flex: 1, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 13, background: color.white, color: color.ink }}
                       >
                         <option value="">— Select packet —</option>
                         {openPackets.map((p: any) => (
@@ -976,7 +970,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
             actual_cost: null, supplier_design_no: "", packet_id: "", notes: "",
             received: false, forOrder: false,
           }])}
-          style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, padding: "8px 16px", borderRadius: 8, border: "1px dashed #D1D5DB", background: "#fff", color: "#6B7280", fontSize: 13, cursor: "pointer", width: "100%" }}
+          style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, padding: "10px 16px", borderRadius: radius.md, border: `1px dashed ${color.line}`, background: color.white, color: color.textMuted, fontSize: 13, fontWeight: 500, cursor: "pointer", width: "100%", justifyContent: "center" }}
         >
           <Plus size={14} /> Add Line Item
         </button>
@@ -991,21 +985,21 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
     return (
       <div style={{ padding: "32px 32px 64px", maxWidth: 900, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
-          <button onClick={() => { fetchPo(); setShowReceive(false); setAllDone(false); setReceivedCount(0); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280", padding: 0 }}>
+          <button onClick={() => { fetchPo(); setShowReceive(false); setAllDone(false); setReceivedCount(0); }} style={{ background: "none", border: "none", cursor: "pointer", color: color.textMuted, padding: 0 }}>
             <X size={20} />
           </button>
           <div>
-            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "#111827" }}>Receive Stock — {po.po_number}</h1>
-            <p style={{ margin: "2px 0 0", fontSize: 13, color: "#6B7280" }}>{unreceived.length} item{unreceived.length !== 1 ? "s" : ""} to receive</p>
+            <h1 style={{ ...typo.h2, margin: 0 }}>Receive Stock — {po.po_number}</h1>
+            <p style={{ margin: "4px 0 0", fontSize: 13, color: color.textMuted }}>{unreceived.length} item{unreceived.length !== 1 ? "s" : ""} to receive</p>
           </div>
         </div>
 
         {allDone && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "#ECFDF5", color: "#065F46", borderRadius: 10, fontSize: 14, fontWeight: 500, marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "#ECFDF5", color: "#065F46", borderRadius: radius.md, fontSize: 14, fontWeight: 500, marginBottom: 16 }}>
             <span>All lines processed</span>
             <button
               onClick={handleFinish}
-              style={{ padding: "6px 16px", borderRadius: 8, border: "none", background: "#059669", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+              style={{ padding: "8px 18px", borderRadius: radius.pill, border: "none", background: color.dotSuccess, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
             >
               Finish
             </button>
@@ -1038,7 +1032,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
       {/* Back */}
       <button
         onClick={() => router.push("/inventory/purchase-orders")}
-        style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: "#6B7280", fontSize: 14, marginBottom: 20, padding: 0 }}
+        style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: color.textMuted, fontSize: 14, marginBottom: 20, padding: 0 }}
       >
         <ArrowLeft size={16} /> Purchase Orders
       </button>
@@ -1046,17 +1040,17 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
       {/* Title bar */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-            <span style={{ fontFamily: "monospace", fontSize: 22, fontWeight: 700, color: "#111827" }}>{po.po_number}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 28, fontWeight: 700, letterSpacing: "-0.02em", color: color.ink }}>{po.po_number}</span>
             <StatusBadge status={po.status} />
           </div>
-          <div style={{ fontSize: 14, color: "#6B7280" }}>{supplierName}</div>
+          <div style={{ fontSize: 14, color: color.textMuted }}>{supplierName}</div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {canEdit && (
             <button
               onClick={enterEditMode}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", color: "#374151", fontSize: 14, cursor: "pointer" }}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 18px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, color: color.ink, fontSize: 14, fontWeight: 500, cursor: "pointer" }}
             >
               <Pencil size={14} /> Edit PO
             </button>
@@ -1064,7 +1058,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
           {canCancel && (
             <button
               onClick={() => { setCancelError(""); setShowCancelModal(true); }}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", fontSize: 14, cursor: "pointer" }}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 18px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, color: color.danger, fontSize: 14, fontWeight: 500, cursor: "pointer" }}
             >
               <Ban size={14} /> Cancel PO
             </button>
@@ -1072,7 +1066,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
           {isManager && po.status === "draft" && (
             <button
               onClick={handleMarkOrdered}
-              style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #BFDBFE", background: "#EFF6FF", color: "#1D4ED8", fontSize: 14, cursor: "pointer" }}
+              style={{ padding: "9px 18px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, color: color.ink, fontSize: 14, fontWeight: 500, cursor: "pointer" }}
             >
               Mark as Ordered
             </button>
@@ -1080,7 +1074,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
           {canReceive && (
             <button
               onClick={() => { setReceivedCount(0); setShowReceive(true); }}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 14, fontWeight: 500, cursor: "pointer" }}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 18px", borderRadius: radius.pill, border: "none", background: color.ink, color: color.white, fontSize: 14, fontWeight: 500, cursor: "pointer" }}
             >
               <Package size={15} /> Receive Stock
             </button>
@@ -1089,7 +1083,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
       </div>
 
       {/* Summary card */}
-      <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 24, marginBottom: 16 }}>
+      <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, boxShadow: shadow.card, padding: 24, marginBottom: 16 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px 24px" }}>
           <DetailItem label="Supplier" value={supplierName} />
           <DetailItem label="Order Date" value={po.order_date ? new Date(po.order_date).toLocaleDateString("en-AU") : null} />
@@ -1102,9 +1096,9 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
       </div>
 
       {/* Lines table */}
-      <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
-        <div style={{ padding: "14px 20px", borderBottom: "1px solid #E5E7EB", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.06em" }}>Line Items</span>
+      <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, boxShadow: shadow.card, overflow: "hidden" }}>
+        <div style={{ padding: "14px 20px", borderBottom: `1px solid ${color.line}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 500, color: color.textMuted, textTransform: "uppercase", letterSpacing: "0.08em" }}>Line Items</span>
           {showCosts && po.lines.some(l => l.actual_cost == null) && (
             <span style={{ fontSize: 12, color: "#D97706", fontWeight: 500 }}>
               {po.lines.filter(l => l.actual_cost == null).length} line{po.lines.filter(l => l.actual_cost == null).length !== 1 ? "s" : ""} pending invoice
@@ -1112,14 +1106,14 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
           )}
         </div>
         {po.lines.length === 0 ? (
-          <div style={{ padding: 32, textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>No line items</div>
+          <div style={{ padding: 32, textAlign: "center", color: color.textFaint, fontSize: 14 }}>No line items</div>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
-                <tr style={{ background: "#F9FAFB" }}>
+                <tr style={{ background: color.white, borderBottom: `1px solid ${color.line}` }}>
                   {(["Title", "Metal", "Ordered", "Received", "Remaining", ...(showCosts ? ["Est. Cost", "Actual Cost", "Invoice"] : []), "Stock Pieces"] as string[]).map(h => (
-                    <th key={h} style={{ padding: "8px 16px", textAlign: "left", fontWeight: 600, color: "#6B7280", fontSize: 11, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em" }}>{h}</th>
+                    <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontFamily: "var(--font-mono)", fontWeight: 500, color: color.textMuted, fontSize: 11, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -1133,12 +1127,12 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                   const fullyRcvd   = receivedQty >= orderedQty;
                   const linePieces  = line.pieces ?? [];
                   return (
-                    <tr key={line.id} style={{ borderTop: i > 0 ? "1px solid #F3F4F6" : "none" }}>
-                      <td style={{ padding: "10px 16px", color: "#374151", maxWidth: 240 }}>
-                        <div>{line.title ?? <span style={{ color: "#D1D5DB" }}>—</span>}</div>
-                        {(() => { const catName = categories.find(c => c.id === line.category_id)?.name; return catName ? <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>{catName}</div> : null; })()}
+                    <tr key={line.id} style={{ borderTop: i > 0 ? `1px solid ${color.line}` : "none" }}>
+                      <td style={{ padding: "10px 16px", color: color.ink, maxWidth: 240 }}>
+                        <div>{line.title ?? <span style={{ color: color.textFaint }}>—</span>}</div>
+                        {(() => { const catName = categories.find(c => c.id === line.category_id)?.name; return catName ? <div style={{ fontSize: 11, color: color.textFaint, marginTop: 2 }}>{catName}</div> : null; })()}
                         {line.supplier_design_no && (
-                          <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2, fontFamily: "monospace" }}>
+                          <div style={{ fontSize: 11, color: color.textMuted, marginTop: 2, fontFamily: "var(--font-mono)" }}>
                             Ref: {line.supplier_design_no}
                           </div>
                         )}
@@ -1148,8 +1142,8 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                               href={`/workshop/board`}
                               style={{
                                 display: "inline-flex", alignItems: "center", gap: 3,
-                                padding: "2px 7px", borderRadius: 6, fontSize: 11, fontWeight: 600,
-                                background: "#EEF2FF", color: "#4338CA", border: "1px solid #C7D2FE",
+                                padding: "3px 10px", borderRadius: radius.pill, fontSize: 11, fontWeight: 600,
+                                background: color.fill, color: color.ink, border: `1px solid ${color.line}`,
                                 textDecoration: "none",
                               }}
                               title={[line.packet.customer_first_name, line.packet.customer_last_name].filter(Boolean).join(" ") || undefined}
@@ -1160,13 +1154,13 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                         ) : (
                           <div style={{ marginTop: 4 }}>
                             <span style={{
-                              display: "inline-block", padding: "2px 7px", borderRadius: 6, fontSize: 11,
-                              fontWeight: 500, background: "#F3F4F6", color: "#9CA3AF",
+                              display: "inline-block", padding: "3px 10px", borderRadius: radius.pill, fontSize: 11,
+                              fontWeight: 500, background: color.fill, color: color.textMuted,
                             }}>Stock</span>
                           </div>
                         )}
                       </td>
-                      <td style={{ padding: "10px 16px", color: "#6B7280", whiteSpace: "nowrap" }}>
+                      <td style={{ padding: "10px 16px", color: color.textMuted, whiteSpace: "nowrap" }}>
                         {[line.metal_karat, line.metal_colour, line.metal_type].filter(Boolean).join(" ") || "—"}
                         {line.diamond_carat && (
                           <div style={{ fontSize: 11, marginTop: 2 }}>
@@ -1174,22 +1168,22 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                           </div>
                         )}
                       </td>
-                      <td style={{ padding: "10px 16px", color: "#374151", textAlign: "center", fontWeight: 500 }}>{orderedQty}</td>
-                      <td style={{ padding: "10px 16px", textAlign: "center", color: receivedQty > 0 ? "#059669" : "#D1D5DB", fontWeight: receivedQty > 0 ? 600 : 400 }}>{receivedQty}</td>
-                      <td style={{ padding: "10px 16px", textAlign: "center", color: remaining > 0 ? "#92400E" : "#9CA3AF", fontWeight: remaining > 0 ? 500 : 400 }}>{remaining}</td>
+                      <td style={{ padding: "10px 16px", color: color.ink, textAlign: "center", fontWeight: 500 }}>{orderedQty}</td>
+                      <td style={{ padding: "10px 16px", textAlign: "center", color: receivedQty > 0 ? color.dotSuccess : color.textFaint, fontWeight: receivedQty > 0 ? 600 : 400 }}>{receivedQty}</td>
+                      <td style={{ padding: "10px 16px", textAlign: "center", color: remaining > 0 ? color.dotWarning : color.textFaint, fontWeight: remaining > 0 ? 500 : 400 }}>{remaining}</td>
                       {showCosts && (
-                        <td style={{ padding: "10px 16px", color: "#6B7280", fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                        <td style={{ padding: "10px 16px", color: color.textMuted, fontFamily: "var(--font-mono)", whiteSpace: "nowrap" }}>
                           {estCost != null ? `$${Number(estCost).toLocaleString("en-AU", { minimumFractionDigits: 2 })}` : "—"}
                         </td>
                       )}
                       {showCosts && (
-                        <td style={{ padding: "10px 16px", fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                        <td style={{ padding: "10px 16px", fontFamily: "var(--font-mono)", whiteSpace: "nowrap" }}>
                           {invoiced ? (
-                            <span style={{ color: "#111827", fontWeight: 500 }}>
+                            <span style={{ color: color.ink, fontWeight: 500 }}>
                               ${Number(line.actual_cost).toLocaleString("en-AU", { minimumFractionDigits: 2 })}
                             </span>
                           ) : (
-                            <span style={{ color: "#D1D5DB" }}>—</span>
+                            <span style={{ color: color.textFaint }}>—</span>
                           )}
                         </td>
                       )}
@@ -1197,11 +1191,11 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                         <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
                           {invoiced ? (
                             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: "#ECFDF5", color: "#065F46", border: "1px solid #A7F3D0" }}>Invoiced</span>
+                              <SharedStatusBadge tone="success" label="Invoiced" />
                               {isManager && (
                                 <button
                                   onClick={() => openConfirmModal(line)}
-                                  style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}
+                                  style={{ fontSize: 11, color: color.textFaint, background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}
                                 >
                                   Edit
                                 </button>
@@ -1209,11 +1203,11 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                             </div>
                           ) : (
                             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#FFFBEB", color: "#92400E", border: "1px solid #FDE68A" }}>Pending Invoice</span>
+                              <SharedStatusBadge tone="warning" label="Pending Invoice" />
                               {isManager && (
                                 <button
                                   onClick={() => openConfirmModal(line)}
-                                  style={{ display: "flex", alignItems: "center", gap: 3, padding: "3px 8px", borderRadius: 6, border: "1px solid #E5E7EB", background: "#fff", fontSize: 11, cursor: "pointer", color: "#374151", fontWeight: 500, whiteSpace: "nowrap" }}
+                                  style={{ display: "flex", alignItems: "center", gap: 3, padding: "4px 12px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 11, cursor: "pointer", color: color.ink, fontWeight: 500, whiteSpace: "nowrap" }}
                                 >
                                   <DollarSign size={11} /> Confirm
                                 </button>
@@ -1226,13 +1220,13 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                         {linePieces.length > 0 ? (
                           <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                             {fullyRcvd && (
-                              <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: "#ECFDF5", color: "#065F46", border: "1px solid #A7F3D0", marginBottom: 2, display: "inline-block" }}>Received</span>
+                              <span style={{ marginBottom: 2, display: "inline-flex" }}><SharedStatusBadge tone="success" label="Received" /></span>
                             )}
                             {linePieces.map(piece => (
                               <a
                                 key={piece.id}
                                 href={`/inventory/pieces/${piece.id}`}
-                                style={{ fontSize: 11, color: "#4338CA", fontFamily: "monospace", textDecoration: "none" }}
+                                style={{ fontSize: 11, color: color.ink, fontFamily: "var(--font-mono)", textDecoration: "underline" }}
                                 title={piece.quantity > 1 ? `Batch qty: ${piece.quantity}` : undefined}
                               >
                                 {piece.sku}{piece.quantity > 1 ? ` ×${piece.quantity}` : ""}
@@ -1240,9 +1234,9 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                             ))}
                           </div>
                         ) : remaining > 0 ? (
-                          <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#F3F4F6", color: "#6B7280" }}>Pending</span>
+                          <SharedStatusBadge tone="neutral" label="Pending" />
                         ) : (
-                          <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#FFFBEB", color: "#92400E" }}>Skipped</span>
+                          <SharedStatusBadge tone="warning" label="Skipped" />
                         )}
                       </td>
                     </tr>
@@ -1256,7 +1250,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
 
       {/* Invoice attachments — PO-level, independent of line receiving */}
       <div style={{ marginTop: 16 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 8, paddingLeft: 2 }}>
+        <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 500, color: color.textMuted, textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 8, paddingLeft: 2 }}>
           Invoice Documents
         </div>
         <InventoryAttachmentsPanel
@@ -1269,36 +1263,36 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
       {/* Confirm Actual Cost Modal */}
       {confirmLine && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 32, width: "100%", maxWidth: 400, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+          <div style={{ background: color.white, borderRadius: radius.lg, padding: 32, width: "100%", maxWidth: 400, boxShadow: shadow.lg }}>
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
               <div>
-                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>
+                <h2 style={{ ...typo.h2, margin: 0 }}>
                   {confirmLine.actual_cost != null ? "Update Actual Cost" : "Confirm Invoice Amount"}
                 </h2>
-                <p style={{ margin: "4px 0 0", fontSize: 13, color: "#6B7280" }}>
+                <p style={{ margin: "6px 0 0", fontSize: 13, color: color.textMuted }}>
                   {confirmLine.title ?? "Untitled item"}
                 </p>
               </div>
-              <button onClick={() => setConfirmLine(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280", padding: 0 }}>
+              <button onClick={() => setConfirmLine(null)} style={{ background: "none", border: "none", cursor: "pointer", color: color.textMuted, padding: 0 }}>
                 <X size={20} />
               </button>
             </div>
 
             {confirmLine.estimated_cost != null && (
-              <div style={{ padding: "10px 14px", background: "#F9FAFB", borderRadius: 8, fontSize: 13, color: "#6B7280", marginBottom: 16 }}>
-                Estimated: <strong style={{ fontFamily: "monospace", color: "#374151" }}>
+              <div style={{ padding: "10px 14px", background: color.paper, borderRadius: radius.md, fontSize: 13, color: color.textMuted, marginBottom: 16 }}>
+                Estimated: <strong style={{ fontFamily: "var(--font-mono)", color: color.ink }}>
                   ${Number(confirmLine.estimated_cost).toLocaleString("en-AU", { minimumFractionDigits: 2 })}
                 </strong>
               </div>
             )}
 
             {confirmError && (
-              <div style={{ padding: "8px 12px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, fontSize: 13, marginBottom: 14 }}>{confirmError}</div>
+              <div style={{ padding: "8px 12px", background: color.dangerBg, color: color.danger, borderRadius: radius.md, fontSize: 13, marginBottom: 14 }}>{confirmError}</div>
             )}
 
             <div style={{ marginBottom: 20 }}>
-              <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 6 }}>
-                Invoice Amount ($) <span style={{ color: "#EF4444" }}>*</span>
+              <label style={{ fontSize: 13, fontWeight: 500, color: color.textMuted, display: "block", marginBottom: 6 }}>
+                Invoice Amount ($) <span style={{ color: color.danger }}>*</span>
               </label>
               <input
                 type="number"
@@ -1308,10 +1302,10 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                 onChange={e => setConfirmCost(e.target.value)}
                 placeholder="0.00"
                 autoFocus
-                style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 15, fontFamily: "monospace" }}
+                style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 15, fontFamily: "var(--font-mono)", color: color.ink }}
                 onKeyDown={e => { if (e.key === "Enter") handleConfirmActualCost(); }}
               />
-              <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 6 }}>
+              <div style={{ fontSize: 12, color: color.textFaint, marginTop: 6 }}>
                 This records the actual amount on the supplier invoice.
               </div>
             </div>
@@ -1319,14 +1313,14 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
             <div style={{ display: "flex", gap: 8 }}>
               <button
                 onClick={() => setConfirmLine(null)}
-                style={{ flex: 1, padding: "10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer" }}
+                style={{ flex: 1, padding: "10px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, color: color.ink, fontSize: 14, fontWeight: 500, cursor: "pointer" }}
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmActualCost}
                 disabled={confirmSaving || !confirmCost}
-                style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 14, fontWeight: 500, cursor: confirmSaving || !confirmCost ? "not-allowed" : "pointer", opacity: confirmSaving || !confirmCost ? 0.7 : 1 }}
+                style={{ flex: 1, padding: "10px", borderRadius: radius.pill, border: "none", background: color.ink, color: color.white, fontSize: 14, fontWeight: 500, cursor: confirmSaving || !confirmCost ? "not-allowed" : "pointer", opacity: confirmSaving || !confirmCost ? 0.7 : 1 }}
               >
                 {confirmSaving ? "Saving…" : "Confirm Invoice"}
               </button>
@@ -1338,36 +1332,36 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
       {/* Cancel PO Modal */}
       {showCancelModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 32, width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+          <div style={{ background: color.white, borderRadius: radius.lg, padding: 32, width: "100%", maxWidth: 420, boxShadow: shadow.lg }}>
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
               <div>
-                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>Cancel Purchase Order</h2>
-                <p style={{ margin: "4px 0 0", fontSize: 13, color: "#6B7280" }}>{po.po_number}</p>
+                <h2 style={{ ...typo.h2, margin: 0 }}>Cancel Purchase Order</h2>
+                <p style={{ margin: "6px 0 0", fontSize: 13, color: color.textMuted }}>{po.po_number}</p>
               </div>
-              <button onClick={() => setShowCancelModal(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280", padding: 0 }}>
+              <button onClick={() => setShowCancelModal(false)} style={{ background: "none", border: "none", cursor: "pointer", color: color.textMuted, padding: 0 }}>
                 <X size={20} />
               </button>
             </div>
 
-            <div style={{ padding: "12px 16px", background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: 10, fontSize: 13, color: "#7F1D1D", marginBottom: 20, lineHeight: 1.5 }}>
+            <div style={{ padding: "12px 16px", background: color.dangerBg, border: `1px solid ${color.danger}`, borderRadius: radius.md, fontSize: 13, color: "#7F1D1D", marginBottom: 20, lineHeight: 1.5 }}>
               This will mark the PO as cancelled. All line items and cost data are preserved. The PO will be hidden from the main list by default.
             </div>
 
             {cancelError && (
-              <div style={{ padding: "8px 12px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, fontSize: 13, marginBottom: 14 }}>{cancelError}</div>
+              <div style={{ padding: "8px 12px", background: color.dangerBg, color: color.danger, borderRadius: radius.md, fontSize: 13, marginBottom: 14 }}>{cancelError}</div>
             )}
 
             <div style={{ display: "flex", gap: 8 }}>
               <button
                 onClick={() => setShowCancelModal(false)}
-                style={{ flex: 1, padding: "10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer" }}
+                style={{ flex: 1, padding: "10px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, color: color.ink, fontSize: 14, fontWeight: 500, cursor: "pointer" }}
               >
                 Keep PO
               </button>
               <button
                 onClick={handleCancelPO}
                 disabled={cancelling}
-                style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: "#DC2626", color: "#fff", fontSize: 14, fontWeight: 500, cursor: cancelling ? "not-allowed" : "pointer", opacity: cancelling ? 0.7 : 1 }}
+                style={{ flex: 1, padding: "10px", borderRadius: radius.pill, border: "none", background: color.danger, color: "#fff", fontSize: 14, fontWeight: 500, cursor: cancelling ? "not-allowed" : "pointer", opacity: cancelling ? 0.7 : 1 }}
               >
                 {cancelling ? "Cancelling…" : "Cancel PO"}
               </button>

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
+import { color, radius, shadow, font } from "@/lib/theme";
 
 interface Location { id: string; name: string; }
 interface Level { location_id: string; location_name: string; quantity: number; }
@@ -13,8 +14,6 @@ interface StockData {
   levels: Level[];
   total_on_hand: number;
 }
-
-const ACCENT = "#635BFF";
 
 function StockManager() {
   const { user } = useUser();
@@ -88,8 +87,8 @@ function StockManager() {
   }
 
   if (!user) return null;
-  if (!canManage(user.role)) return <div style={wrap}><p style={{ color: "#6B7280" }}>Stock management is available to managers only.</p></div>;
-  if (loading) return <div style={wrap}><p style={{ color: "#6B7280" }}>Loading…</p></div>;
+  if (!canManage(user.role)) return <div style={wrap}><p style={{ color: color.textMuted }}>Stock management is available to managers only.</p></div>;
+  if (loading) return <div style={wrap}><p style={{ color: color.textMuted }}>Loading…</p></div>;
   if (error && !data) return <div style={wrap}><div style={errBox}>{error}</div></div>;
   if (!data) return null;
 
@@ -98,36 +97,36 @@ function StockManager() {
 
   return (
     <div style={wrap}>
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: "#111827", margin: "0 0 2px" }}>
+      <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: "-0.03em", color: color.ink, margin: "0 0 4px" }}>
         Stock — {variant.name || `${variant.metal_karat} ${variant.metal_colour}`}
       </h1>
-      <p style={{ color: "#6B7280", fontSize: 13, margin: "0 0 20px" }}>{variant.metal_karat} · {variant.metal_colour}</p>
+      <p style={{ color: color.textMuted, fontSize: 13, margin: "0 0 20px" }}>{variant.metal_karat} · {variant.metal_colour}</p>
 
       {error && <div style={errBox}>{error}</div>}
 
       {/* Tracking mode */}
       <div style={card}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 10 }}>Tracking mode</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: color.text, marginBottom: 10 }}>Tracking mode</div>
         <div style={{ display: "flex", gap: 8 }}>
           {(["serialized", "quantity"] as const).map(mode => {
             const active = variant.tracking_mode === mode;
             return (
               <button key={mode} disabled={busy || active} onClick={() => setTrackingMode(mode)}
-                style={{ padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: active ? "default" : "pointer",
-                  border: `1px solid ${active ? ACCENT : "#D1D5DB"}`, background: active ? ACCENT : "#fff", color: active ? "#fff" : "#374151" }}>
+                style={{ padding: "9px 18px", borderRadius: radius.pill, fontSize: 13, fontWeight: 500, cursor: active ? "default" : "pointer",
+                  border: `1px solid ${active ? color.ink : color.line}`, background: active ? color.ink : color.white, color: active ? "#fff" : color.ink }}>
                 {mode === "serialized" ? "Serialized (one Piece per unit)" : "Quantity (count per location)"}
               </button>
             );
           })}
         </div>
-        <p style={{ fontSize: 12, color: "#9CA3AF", margin: "10px 0 0" }}>
+        <p style={{ fontSize: 12, color: color.textFaint, margin: "10px 0 0" }}>
           A deliberate choice — never inferred. Serialized variants use individual Piece records exactly as before.
         </p>
       </div>
 
       {variant.tracking_mode === "serialized" ? (
         <div style={card}>
-          <p style={{ fontSize: 14, color: "#374151", margin: 0 }}>
+          <p style={{ fontSize: 14, color: color.text, margin: 0 }}>
             This variant is <strong>serialized</strong> — stock is tracked as individual Piece records in the existing Pieces workflow. Switch to <strong>Quantity</strong> above to track it as a per-location count instead.
           </p>
         </div>
@@ -136,11 +135,11 @@ function StockManager() {
           {/* Grid */}
           <div style={card}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>On-hand by location</div>
-              <div style={{ fontSize: 13, color: "#374151" }}>Total: <strong>{data.total_on_hand}</strong></div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: color.text }}>On-hand by location</div>
+              <div style={{ fontSize: 13, color: color.text }}>Total: <strong>{data.total_on_hand}</strong></div>
             </div>
             {locations.length === 0 ? (
-              <p style={{ fontSize: 13, color: "#9CA3AF" }}>No active locations. Add a location first.</p>
+              <p style={{ fontSize: 13, color: color.textFaint }}>No active locations. Add a location first.</p>
             ) : (
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead><tr>
@@ -158,12 +157,12 @@ function StockManager() {
                           <input type="number" min={0} step={1}
                             value={draft ?? String(current)}
                             onChange={e => setDrafts(d => ({ ...d, [loc.id]: e.target.value }))}
-                            style={{ width: 110, padding: "6px 8px", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 13 }} />
+                            style={{ width: 110, padding: "6px 8px", border: `1px solid ${color.line}`, borderRadius: radius.md, fontSize: 13, color: color.ink }} />
                         </td>
                         <td style={td}>
                           {dirty && (
                             <button disabled={busy} onClick={() => saveLevel(loc.id)}
-                              style={{ fontSize: 12, fontWeight: 600, color: "#fff", background: ACCENT, border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer" }}>
+                              style={{ fontSize: 12, fontWeight: 500, color: "#fff", background: color.ink, border: "none", borderRadius: radius.pill, padding: "6px 14px", cursor: "pointer" }}>
                               Save
                             </button>
                           )}
@@ -174,12 +173,12 @@ function StockManager() {
                 </tbody>
               </table>
             )}
-            <p style={{ fontSize: 12, color: "#9CA3AF", margin: "10px 0 0" }}>Editing a quantity here is a stock-take correction — it does not record a cost. Use “Receive stock” to log stock that arrived with its real cost.</p>
+            <p style={{ fontSize: 12, color: color.textFaint, margin: "10px 0 0" }}>Editing a quantity here is a stock-take correction — it does not record a cost. Use “Receive stock” to log stock that arrived with its real cost.</p>
           </div>
 
           {/* Receive */}
           <div style={card}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 12 }}>Receive stock</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: color.text, marginBottom: 12 }}>Receive stock</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
               <Field label="Location"><select value={rcvLoc} onChange={e => setRcvLoc(e.target.value)} style={inp}>
                 <option value="">Select…</option>{locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -193,7 +192,7 @@ function StockManager() {
 
           {/* Move */}
           <div style={card}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 12 }}>Move stock between locations</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: color.text, marginBottom: 12 }}>Move stock between locations</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
               <Field label="From"><select value={movFrom} onChange={e => setMovFrom(e.target.value)} style={inp}>
                 <option value="">Select…</option>{locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -215,23 +214,23 @@ function StockManager() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <span style={{ fontSize: 11, fontWeight: 500, color: "#6B7280" }}>{label}</span>
+      <span style={{ fontSize: 11, fontWeight: 500, color: color.textMuted }}>{label}</span>
       {children}
     </div>
   );
 }
 
 const wrap:  React.CSSProperties = { maxWidth: 760, margin: "32px auto", padding: "0 20px" };
-const card:  React.CSSProperties = { background: "#fff", border: "1px solid #E5E7EB", borderRadius: 10, padding: 18, marginBottom: 16 };
-const errBox:React.CSSProperties = { background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, padding: "10px 14px", marginBottom: 16, color: "#B91C1C", fontSize: 13 };
-const th:    React.CSSProperties = { textAlign: "left", fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", padding: "6px 8px", borderBottom: "1px solid #E5E7EB" };
-const td:    React.CSSProperties = { padding: "8px 8px", fontSize: 13, color: "#111827", borderBottom: "1px solid #F3F4F6" };
-const inp:   React.CSSProperties = { padding: "7px 9px", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 13, color: "#111827" };
-const btn:   React.CSSProperties = { padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: ACCENT, color: "#fff", border: "none", cursor: "pointer" };
+const card:  React.CSSProperties = { background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, boxShadow: shadow.card, padding: 18, marginBottom: 16 };
+const errBox:React.CSSProperties = { background: color.dangerBg, border: `1px solid ${color.danger}44`, borderRadius: radius.md, padding: "10px 14px", marginBottom: 16, color: color.danger, fontSize: 13 };
+const th:    React.CSSProperties = { textAlign: "left", fontFamily: font.mono, fontSize: 11, fontWeight: 500, color: color.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", padding: "6px 8px", borderBottom: `1px solid ${color.line}` };
+const td:    React.CSSProperties = { padding: "8px 8px", fontSize: 13, color: color.ink, borderBottom: `1px solid ${color.line}` };
+const inp:   React.CSSProperties = { padding: "7px 9px", border: `1px solid ${color.line}`, borderRadius: radius.md, fontSize: 13, color: color.ink };
+const btn:   React.CSSProperties = { padding: "9px 18px", borderRadius: radius.pill, fontSize: 13, fontWeight: 500, background: color.ink, color: "#fff", border: "none", cursor: "pointer" };
 
 export default function StockPage() {
   return (
-    <Suspense fallback={<div style={wrap}><p style={{ color: "#6B7280" }}>Loading…</p></div>}>
+    <Suspense fallback={<div style={wrap}><p style={{ color: color.textMuted }}>Loading…</p></div>}>
       <StockManager />
     </Suspense>
   );

@@ -12,16 +12,19 @@ import {
   InventoryVariant,
 } from "@/lib/types";
 import { Search, Plus, X, Filter, Sparkles, Loader, ChevronDown, ChevronRight, Package, Upload } from "lucide-react";
+import { color, radius, shadow, font } from "@/lib/theme";
 
 const PAGE_SIZE = 50;
 
 function StatusBadge({ status }: { status?: InventoryStatus | null }) {
-  if (!status) return <span style={{ color: "#9CA3AF", fontSize: 12 }}>—</span>;
+  if (!status) return <span style={{ color: color.textFaint, fontSize: 12 }}>—</span>;
   return (
     <span style={{
-      display: "inline-block", padding: "2px 10px", borderRadius: 999, fontSize: 12, fontWeight: 500,
-      background: status.colour + "22", color: status.colour, border: `1px solid ${status.colour}44`,
+      display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap",
+      padding: "3px 10px 3px 8px", borderRadius: radius.pill, fontSize: 12, fontWeight: 500,
+      background: color.fill, color: color.text,
     }}>
+      <span style={{ width: 7, height: 7, borderRadius: "50%", background: status.colour, flexShrink: 0 }} />
       {status.name}
     </span>
   );
@@ -29,7 +32,7 @@ function StatusBadge({ status }: { status?: InventoryStatus | null }) {
 
 function Pill({ children }: { children: React.ReactNode }) {
   return (
-    <span style={{ display: "inline-block", padding: "1px 8px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#EEF2FF", color: "#635BFF", border: "1px solid #C7D2FE" }}>
+    <span style={{ display: "inline-block", padding: "1px 8px", borderRadius: radius.pill, fontSize: 11, fontWeight: 500, background: color.fill, color: color.text, border: `1px solid ${color.line}` }}>
       {children}
     </span>
   );
@@ -199,16 +202,16 @@ export default function InventoryPage() {
 
   if (!hydrated) return null;
 
-  const LF = { fontSize: 13, fontWeight: 500 as const, color: "#374151", display: "block" as const, marginBottom: 4 };
-  const IF = { width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 };
+  const LF = { fontSize: 13, fontWeight: 500 as const, color: color.text, display: "block" as const, marginBottom: 4 };
+  const IF = { width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14, color: color.ink, background: color.white };
 
   return (
     <div style={{ padding: "32px 32px 64px", maxWidth: 1200, margin: "0 auto" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: "#111827", margin: 0 }}>Stock Register</h1>
-          <p style={{ fontSize: 14, color: "#6B7280", margin: "4px 0 0" }}>
+          <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: "-0.03em", color: color.ink, margin: 0 }}>Stock Register</h1>
+          <p style={{ fontSize: 14, color: color.textMuted, margin: "6px 0 0" }}>
             {viewMode === "flat"
               ? (loading ? "Loading…" : `${total.toLocaleString()} piece${total !== 1 ? "s" : ""}`)
               : (loadingGrouped ? "Loading…" : `${products.length} product${products.length !== 1 ? "s" : ""}`)}
@@ -216,16 +219,16 @@ export default function InventoryPage() {
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {/* View toggle */}
-          <div style={{ display: "flex", background: "#F3F4F6", borderRadius: 8, padding: 2 }}>
+          <div style={{ display: "flex", background: color.fill, borderRadius: radius.pill, padding: 3 }}>
             {(["flat", "grouped"] as ViewMode[]).map(v => (
               <button
                 key={v}
                 onClick={() => setViewMode(v)}
                 style={{
-                  padding: "6px 14px", borderRadius: 6, border: "none", fontSize: 13, fontWeight: 500, cursor: "pointer",
-                  background: viewMode === v ? "#fff" : "transparent",
-                  color: viewMode === v ? "#111827" : "#6B7280",
-                  boxShadow: viewMode === v ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+                  padding: "6px 16px", borderRadius: radius.pill, border: "none", fontSize: 13, fontWeight: 500, cursor: "pointer",
+                  background: viewMode === v ? color.white : "transparent",
+                  color: viewMode === v ? color.ink : color.textMuted,
+                  boxShadow: viewMode === v ? shadow.sm : "none",
                   transition: "all .15s",
                 }}
               >
@@ -239,10 +242,10 @@ export default function InventoryPage() {
               onClick={() => setShowFilters(f => !f)}
               style={{
                 display: "flex", alignItems: "center", gap: 6,
-                padding: "8px 14px", borderRadius: 8, fontSize: 14, fontWeight: 500,
-                background: showFilters ? "#EEF2FF" : "#F9FAFB",
-                color: showFilters ? "#4F46E5" : "#374151",
-                border: "1px solid " + (showFilters ? "#C7D2FE" : "#E5E7EB"),
+                padding: "9px 18px", borderRadius: radius.pill, fontSize: 14, fontWeight: 500,
+                background: showFilters ? color.fill : color.white,
+                color: color.ink,
+                border: `1px solid ${color.line}`,
                 cursor: "pointer",
               }}
             >
@@ -253,7 +256,7 @@ export default function InventoryPage() {
           {viewMode === "grouped" && isManager && (
             <button
               onClick={() => router.push("/inventory/products")}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 14, fontWeight: 500, background: "#F9FAFB", color: "#374151", border: "1px solid #E5E7EB", cursor: "pointer" }}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 18px", borderRadius: radius.pill, fontSize: 14, fontWeight: 500, background: color.white, color: color.ink, border: `1px solid ${color.line}`, cursor: "pointer" }}
             >
               <Package size={15} /> Manage Products
             </button>
@@ -262,7 +265,7 @@ export default function InventoryPage() {
           {isManager && (
             <button
               onClick={() => router.push("/inventory/import")}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 14, fontWeight: 500, background: "#F9FAFB", color: "#374151", border: "1px solid #E5E7EB", cursor: "pointer" }}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 18px", borderRadius: radius.pill, fontSize: 14, fontWeight: 500, background: color.white, color: color.ink, border: `1px solid ${color.line}`, cursor: "pointer" }}
             >
               <Upload size={15} /> Import CSV
             </button>
@@ -270,7 +273,7 @@ export default function InventoryPage() {
           {isManager && (
             <button
               onClick={() => router.push("/inventory/pieces/new")}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 14, fontWeight: 500, background: "#635BFF", color: "#fff", border: "none", cursor: "pointer" }}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 18px", borderRadius: radius.pill, fontSize: 14, fontWeight: 500, background: color.ink, color: "#fff", border: "none", cursor: "pointer" }}
             >
               <Plus size={15} /> Add Piece
             </button>
@@ -284,75 +287,75 @@ export default function InventoryPage() {
           {/* Search + filter bar */}
           <div style={{ marginBottom: 16 }}>
             <div style={{ position: "relative", marginBottom: showFilters ? 12 : 0 }}>
-              <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
+              <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: color.textFaint, pointerEvents: "none" }} />
               <input
                 value={search}
                 onChange={e => { setSearch(e.target.value); setPage(1); }}
                 placeholder="Search SKU or title…"
-                style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px 10px 36px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, outline: "none", background: "#fff" }}
+                style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px 10px 36px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14, outline: "none", background: color.white, color: color.ink }}
               />
               {search && (
-                <button onClick={() => { setSearch(""); setPage(1); }} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#9CA3AF" }}>
+                <button onClick={() => { setSearch(""); setPage(1); }} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: color.textFaint }}>
                   <X size={14} />
                 </button>
               )}
             </div>
             {showFilters && (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                <select value={categoryId} onChange={e => { setCategoryId(e.target.value); setPage(1); }} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13, background: "#fff", color: "#374151" }}>
+                <select value={categoryId} onChange={e => { setCategoryId(e.target.value); setPage(1); }} style={{ padding: "8px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 13, background: color.white, color: color.text }}>
                   <option value="">All Categories</option>
                   {ref?.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
-                <select value={statusId} onChange={e => { setStatusId(e.target.value); setPage(1); }} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13, background: "#fff", color: "#374151" }}>
+                <select value={statusId} onChange={e => { setStatusId(e.target.value); setPage(1); }} style={{ padding: "8px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 13, background: color.white, color: color.text }}>
                   <option value="">All Statuses</option>
                   {ref?.statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
-                <select value={locationId} onChange={e => { setLocationId(e.target.value); setPage(1); }} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13, background: "#fff", color: "#374151" }}>
+                <select value={locationId} onChange={e => { setLocationId(e.target.value); setPage(1); }} style={{ padding: "8px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 13, background: color.white, color: color.text }}>
                   <option value="">All Locations</option>
                   {ref?.locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
                 {hasFilters && (
-                  <button onClick={clearFilters} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13, background: "#fff", color: "#EF4444", cursor: "pointer" }}>Clear all</button>
+                  <button onClick={clearFilters} style={{ padding: "8px 12px", borderRadius: radius.pill, border: `1px solid ${color.line}`, fontSize: 13, background: color.white, color: color.danger, cursor: "pointer" }}>Clear all</button>
                 )}
               </div>
             )}
           </div>
 
           {/* Table */}
-          <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
+          <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: 16, boxShadow: shadow.card, overflow: "hidden" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
               <thead>
-                <tr style={{ background: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
+                <tr style={{ background: color.white, borderBottom: `1px solid ${color.line}` }}>
                   {["SKU", "Title", "Category", "Status", "Location", "Metal", "Retail Price", ""].map(h => (
-                    <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontWeight: 600, color: "#374151", fontSize: 12, whiteSpace: "nowrap" }}>{h}</th>
+                    <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontFamily: font.mono, fontWeight: 500, color: color.textMuted, fontSize: 11, letterSpacing: "0.04em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={8} style={{ padding: 40, textAlign: "center", color: "#9CA3AF" }}>Loading…</td></tr>
+                  <tr><td colSpan={8} style={{ padding: 40, textAlign: "center", color: color.textFaint }}>Loading…</td></tr>
                 ) : pieces.length === 0 ? (
-                  <tr><td colSpan={8} style={{ padding: 40, textAlign: "center", color: "#9CA3AF" }}>No items found</td></tr>
+                  <tr><td colSpan={8} style={{ padding: 40, textAlign: "center", color: color.textFaint }}>No items found</td></tr>
                 ) : pieces.map((piece, i) => (
                   <tr
                     key={piece.id}
                     onClick={() => router.push(`/inventory/${piece.id}`)}
-                    style={{ borderBottom: i < pieces.length - 1 ? "1px solid #F3F4F6" : "none", cursor: "pointer" }}
-                    onMouseEnter={e => (e.currentTarget.style.background = "#F9FAFB")}
+                    style={{ borderBottom: i < pieces.length - 1 ? `1px solid ${color.line}` : "none", cursor: "pointer" }}
+                    onMouseEnter={e => (e.currentTarget.style.background = color.hover)}
                     onMouseLeave={e => (e.currentTarget.style.background = "")}
                   >
-                    <td style={{ padding: "12px 16px", fontFamily: "monospace", fontWeight: 600, color: "#111827" }}>{piece.sku}</td>
-                    <td style={{ padding: "12px 16px", color: "#374151" }}>{piece.title ?? <span style={{ color: "#9CA3AF" }}>—</span>}</td>
-                    <td style={{ padding: "12px 16px", color: "#6B7280" }}>{piece.category?.name ?? "—"}</td>
+                    <td style={{ padding: "12px 16px", fontFamily: font.mono, fontWeight: 600, color: color.ink }}>{piece.sku}</td>
+                    <td style={{ padding: "12px 16px", color: color.text }}>{piece.title ?? <span style={{ color: color.textFaint }}>—</span>}</td>
+                    <td style={{ padding: "12px 16px", color: color.textMuted }}>{piece.category?.name ?? "—"}</td>
                     <td style={{ padding: "12px 16px" }}><StatusBadge status={piece.status} /></td>
-                    <td style={{ padding: "12px 16px", color: "#6B7280" }}>{piece.location?.name ?? "—"}</td>
-                    <td style={{ padding: "12px 16px", color: "#6B7280", fontSize: 13 }}>{[piece.metal_karat, piece.metal_colour, piece.metal_type].filter(Boolean).join(" ") || "—"}</td>
-                    <td style={{ padding: "12px 16px", color: "#111827", fontWeight: 500 }}>
+                    <td style={{ padding: "12px 16px", color: color.textMuted }}>{piece.location?.name ?? "—"}</td>
+                    <td style={{ padding: "12px 16px", color: color.textMuted, fontSize: 13 }}>{[piece.metal_karat, piece.metal_colour, piece.metal_type].filter(Boolean).join(" ") || "—"}</td>
+                    <td style={{ padding: "12px 16px", color: color.ink, fontWeight: 500 }}>
                       {piece.retail_price != null
                         ? `$${piece.retail_price.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                        : <span style={{ color: "#9CA3AF" }}>—</span>}
+                        : <span style={{ color: color.textFaint }}>—</span>}
                     </td>
-                    <td style={{ padding: "12px 16px", color: "#6B7280", fontSize: 12 }}>View →</td>
+                    <td style={{ padding: "12px 16px", color: color.textMuted, fontSize: 12 }}>View →</td>
                   </tr>
                 ))}
               </tbody>
@@ -362,10 +365,10 @@ export default function InventoryPage() {
           {/* Pagination */}
           {totalPages > 1 && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 16 }}>
-              <span style={{ fontSize: 13, color: "#6B7280" }}>Page {page} of {totalPages}</span>
+              <span style={{ fontSize: 13, color: color.textMuted }}>Page {page} of {totalPages}</span>
               <div style={{ display: "flex", gap: 8 }}>
-                <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 13, cursor: page <= 1 ? "not-allowed" : "pointer", color: page <= 1 ? "#D1D5DB" : "#374151" }}>Prev</button>
-                <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 13, cursor: page >= totalPages ? "not-allowed" : "pointer", color: page >= totalPages ? "#D1D5DB" : "#374151" }}>Next</button>
+                <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} style={{ padding: "8px 18px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 13, cursor: page <= 1 ? "not-allowed" : "pointer", color: page <= 1 ? color.textFaint : color.ink }}>Prev</button>
+                <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} style={{ padding: "8px 18px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 13, cursor: page >= totalPages ? "not-allowed" : "pointer", color: page >= totalPages ? color.textFaint : color.ink }}>Next</button>
               </div>
             </div>
           )}
@@ -376,9 +379,9 @@ export default function InventoryPage() {
       {viewMode === "grouped" && (
         <div>
           {loadingGrouped ? (
-            <div style={{ padding: 40, textAlign: "center", color: "#9CA3AF" }}>Loading…</div>
+            <div style={{ padding: 40, textAlign: "center", color: color.textFaint }}>Loading…</div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {products.map(product => {
                 const isOpen = expandedProducts[product.id];
                 const detail = productDetail[product.id] as GroupedProduct | undefined;
@@ -387,73 +390,71 @@ export default function InventoryPage() {
                   ? product.category.name : null;
 
                 return (
-                  <div key={product.id} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
+                  <div key={product.id} style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: 16, boxShadow: shadow.card, overflow: "hidden" }}>
                     {/* Product row */}
                     <div
                       style={{ display: "flex", alignItems: "center", padding: "14px 18px", cursor: "pointer" }}
                       onClick={() => toggleProduct(product.id)}
                     >
-                      <div style={{ marginRight: 12, color: "#9CA3AF" }}>
+                      <div style={{ marginRight: 12, color: color.textFaint }}>
                         {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                       </div>
-                      <div style={{ width: 32, height: 32, borderRadius: 8, background: "#EEF2FF", display: "flex", alignItems: "center", justifyContent: "center", marginRight: 12, flexShrink: 0 }}>
-                        <Package size={14} style={{ color: "#635BFF" }} />
+                      <div style={{ width: 32, height: 32, borderRadius: radius.md, background: color.fill, display: "flex", alignItems: "center", justifyContent: "center", marginRight: 12, flexShrink: 0 }}>
+                        <Package size={14} style={{ color: color.ink }} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>{product.name}</div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: color.ink }}>{product.name}</div>
                         <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
-                          {catName && <span style={{ fontSize: 11, color: "#9CA3AF" }}>{catName}</span>}
-                          {product.collection && <span style={{ fontSize: 11, color: "#9CA3AF" }}>· {product.collection}</span>}
+                          {catName && <span style={{ fontSize: 11, color: color.textFaint }}>{catName}</span>}
+                          {product.collection && <span style={{ fontSize: 11, color: color.textFaint }}>· {product.collection}</span>}
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: 16, marginRight: 8 }}>
                         <div style={{ textAlign: "right" }}>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{product.piece_count ?? 0}</div>
-                          <div style={{ fontSize: 10, color: "#9CA3AF" }}>pieces</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: color.ink }}>{product.piece_count ?? 0}</div>
+                          <div style={{ fontSize: 10, color: color.textFaint }}>pieces</div>
                         </div>
                       </div>
                       <button
                         onClick={e => { e.stopPropagation(); router.push(`/inventory/products/${product.id}`); }}
-                        style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #E5E7EB", background: "#fff", fontSize: 12, cursor: "pointer", color: "#374151" }}
+                        style={{ padding: "6px 14px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 12, cursor: "pointer", color: color.ink }}
                       >Open</button>
                     </div>
 
                     {/* Expanded variants + pieces */}
                     {isOpen && (
-                      <div style={{ borderTop: "1px solid #F3F4F6" }}>
+                      <div style={{ borderTop: `1px solid ${color.line}` }}>
                         {isLoadingDetail ? (
-                          <div style={{ padding: "16px 52px", fontSize: 13, color: "#9CA3AF" }}>Loading…</div>
+                          <div style={{ padding: "16px 52px", fontSize: 13, color: color.textFaint }}>Loading…</div>
                         ) : detail?.variants?.map(variant => {
                           const specs = [variant.metal_karat, variant.metal_colour, variant.metal_type, variant.finger_size && `Size ${variant.finger_size}`].filter(Boolean) as string[];
                           const pieces = variant.pieces ?? [];
                           return (
-                            <div key={variant.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                            <div key={variant.id} style={{ borderBottom: `1px solid ${color.line}` }}>
                               {/* Variant row */}
-                              <div style={{ display: "flex", alignItems: "center", padding: "10px 18px 10px 52px", background: "#FAFAFA" }}>
+                              <div style={{ display: "flex", alignItems: "center", padding: "10px 18px 10px 52px", background: color.paper }}>
                                 <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
-                                  {variant.title && <span style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>{variant.title}</span>}
+                                  {variant.title && <span style={{ fontSize: 13, fontWeight: 600, color: color.text }}>{variant.title}</span>}
                                   <div style={{ display: "flex", gap: 4 }}>
                                     {specs.map((s, i) => <Pill key={i}>{s}</Pill>)}
                                   </div>
                                 </div>
-                                <span style={{ fontSize: 12, color: "#9CA3AF", marginRight: 8 }}>{pieces.length} piece{pieces.length !== 1 ? "s" : ""}</span>
+                                <span style={{ fontSize: 12, color: color.textFaint, marginRight: 8 }}>{pieces.length} piece{pieces.length !== 1 ? "s" : ""}</span>
                               </div>
                               {/* Pieces */}
                               {pieces.map(piece => (
                                 <div
                                   key={piece.id}
                                   onClick={() => router.push(`/inventory/${piece.id}`)}
-                                  style={{ display: "flex", alignItems: "center", padding: "8px 18px 8px 72px", cursor: "pointer", borderTop: "1px solid #F9FAFB" }}
-                                  onMouseEnter={e => (e.currentTarget.style.background = "#F9FAFB")}
+                                  style={{ display: "flex", alignItems: "center", padding: "8px 18px 8px 72px", cursor: "pointer", borderTop: `1px solid ${color.line}` }}
+                                  onMouseEnter={e => (e.currentTarget.style.background = color.hover)}
                                   onMouseLeave={e => (e.currentTarget.style.background = "")}
                                 >
-                                  <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 600, color: "#111827", width: 100, flexShrink: 0 }}>{piece.sku}</span>
-                                  <span style={{ fontSize: 13, color: "#374151", flex: 1 }}>{piece.title ?? "—"}</span>
-                                  <span style={{ fontSize: 12, color: "#9CA3AF", marginRight: 16 }}>{(piece.location as any)?.name ?? "—"}</span>
+                                  <span style={{ fontFamily: font.mono, fontSize: 12, fontWeight: 600, color: color.ink, width: 100, flexShrink: 0 }}>{piece.sku}</span>
+                                  <span style={{ fontSize: 13, color: color.text, flex: 1 }}>{piece.title ?? "—"}</span>
+                                  <span style={{ fontSize: 12, color: color.textFaint, marginRight: 16 }}>{(piece.location as any)?.name ?? "—"}</span>
                                   {piece.status && (
-                                    <span style={{ fontSize: 11, padding: "1px 8px", borderRadius: 999, background: (piece.status as any).colour + "22", color: (piece.status as any).colour, border: `1px solid ${(piece.status as any).colour}44`, fontWeight: 500 }}>
-                                      {piece.status.name}
-                                    </span>
+                                    <StatusBadge status={piece.status as any} />
                                   )}
                                 </div>
                               ))}
@@ -468,40 +469,38 @@ export default function InventoryPage() {
 
               {/* Unassigned group */}
               {unassignedPieces.length > 0 && (
-                <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: 16, boxShadow: shadow.card, overflow: "hidden" }}>
                   <div
                     style={{ display: "flex", alignItems: "center", padding: "14px 18px", cursor: "pointer" }}
                     onClick={() => setUnassignedExpanded(e => !e)}
                   >
-                    <div style={{ marginRight: 12, color: "#9CA3AF" }}>
+                    <div style={{ marginRight: 12, color: color.textFaint }}>
                       {unassignedExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: "#6B7280" }}>Unassigned Pieces</div>
-                      <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 1 }}>Not linked to any product</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: color.textMuted }}>Unassigned Pieces</div>
+                      <div style={{ fontSize: 12, color: color.textFaint, marginTop: 1 }}>Not linked to any product</div>
                     </div>
                     <div style={{ textAlign: "right", marginRight: 8 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: "#374151" }}>{unassignedPieces.length}</div>
-                      <div style={{ fontSize: 10, color: "#9CA3AF" }}>pieces</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: color.text }}>{unassignedPieces.length}</div>
+                      <div style={{ fontSize: 10, color: color.textFaint }}>pieces</div>
                     </div>
                   </div>
                   {unassignedExpanded && (
-                    <div style={{ borderTop: "1px solid #F3F4F6" }}>
+                    <div style={{ borderTop: `1px solid ${color.line}` }}>
                       {unassignedPieces.map(piece => (
                         <div
                           key={piece.id}
                           onClick={() => router.push(`/inventory/${piece.id}`)}
-                          style={{ display: "flex", alignItems: "center", padding: "10px 18px 10px 52px", cursor: "pointer", borderBottom: "1px solid #F9FAFB" }}
-                          onMouseEnter={e => (e.currentTarget.style.background = "#F9FAFB")}
+                          style={{ display: "flex", alignItems: "center", padding: "10px 18px 10px 52px", cursor: "pointer", borderBottom: `1px solid ${color.line}` }}
+                          onMouseEnter={e => (e.currentTarget.style.background = color.hover)}
                           onMouseLeave={e => (e.currentTarget.style.background = "")}
                         >
-                          <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 600, color: "#111827", width: 100, flexShrink: 0 }}>{piece.sku}</span>
-                          <span style={{ fontSize: 13, color: "#374151", flex: 1 }}>{piece.title ?? "—"}</span>
-                          <span style={{ fontSize: 12, color: "#9CA3AF", marginRight: 16 }}>{(piece.location as any)?.name ?? "—"}</span>
+                          <span style={{ fontFamily: font.mono, fontSize: 12, fontWeight: 600, color: color.ink, width: 100, flexShrink: 0 }}>{piece.sku}</span>
+                          <span style={{ fontSize: 13, color: color.text, flex: 1 }}>{piece.title ?? "—"}</span>
+                          <span style={{ fontSize: 12, color: color.textFaint, marginRight: 16 }}>{(piece.location as any)?.name ?? "—"}</span>
                           {piece.status && (
-                            <span style={{ fontSize: 11, padding: "1px 8px", borderRadius: 999, background: (piece.status as any).colour + "22", color: (piece.status as any).colour, border: `1px solid ${(piece.status as any).colour}44`, fontWeight: 500 }}>
-                              {piece.status.name}
-                            </span>
+                            <StatusBadge status={piece.status as any} />
                           )}
                         </div>
                       ))}
@@ -511,8 +510,8 @@ export default function InventoryPage() {
               )}
 
               {products.length === 0 && unassignedPieces.length === 0 && (
-                <div style={{ padding: 48, textAlign: "center", color: "#9CA3AF" }}>
-                  No products yet. <button onClick={() => router.push("/inventory/products")} style={{ color: "#635BFF", background: "none", border: "none", cursor: "pointer", fontSize: 14 }}>Create your first product</button>
+                <div style={{ padding: 48, textAlign: "center", color: color.textFaint }}>
+                  No products yet. <button onClick={() => router.push("/inventory/products")} style={{ color: color.ink, background: "none", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 500, textDecoration: "underline" }}>Create your first product</button>
                 </div>
               )}
             </div>
@@ -523,15 +522,15 @@ export default function InventoryPage() {
       {/* Add Item Modal */}
       {showAdd && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 32, width: "100%", maxWidth: 500, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", maxHeight: "90vh", overflowY: "auto" }}>
+          <div style={{ background: color.white, borderRadius: 16, padding: 32, width: "100%", maxWidth: 500, boxShadow: shadow.lg, maxHeight: "90vh", overflowY: "auto" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>Add New Item</h2>
-              <button onClick={() => setShowAdd(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><X size={20} /></button>
+              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em", color: color.ink }}>Add New Item</h2>
+              <button onClick={() => setShowAdd(false)} style={{ background: "none", border: "none", cursor: "pointer", color: color.textMuted }}><X size={20} /></button>
             </div>
 
             {/* AI description */}
-            <div style={{ background: "#F5F3FF", border: "1px solid #DDD6FE", borderRadius: 10, padding: 14, marginBottom: 20 }}>
-              <label style={{ ...LF, color: "#5B21B6", marginBottom: 6 }}>
+            <div style={{ background: color.fill, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: 14, marginBottom: 20 }}>
+              <label style={{ ...LF, color: color.ink, marginBottom: 6 }}>
                 <Sparkles size={13} style={{ display: "inline", marginRight: 4, verticalAlign: "middle" }} />
                 Describe the item (optional)
               </label>
@@ -541,22 +540,22 @@ export default function InventoryPage() {
                   onChange={e => setAiDesc(e.target.value)}
                   placeholder="e.g. 18ct yellow gold solitaire engagement ring with 0.5ct round brilliant diamond G VS1…"
                   rows={2}
-                  style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #DDD6FE", fontSize: 13, resize: "vertical", background: "#fff" }}
+                  style={{ flex: 1, padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 13, resize: "vertical", background: color.white, color: color.ink }}
                 />
                 <button
                   onClick={handleParseWithAI}
                   disabled={aiLoading || !aiDesc.trim()}
-                  style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0, padding: "8px 14px", borderRadius: 8, fontSize: 13, fontWeight: 500, background: "#635BFF", color: "#fff", border: "none", cursor: aiLoading || !aiDesc.trim() ? "not-allowed" : "pointer", opacity: !aiDesc.trim() ? 0.5 : 1, alignSelf: "flex-start" }}
+                  style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0, padding: "9px 16px", borderRadius: radius.pill, fontSize: 13, fontWeight: 500, background: color.ink, color: "#fff", border: "none", cursor: aiLoading || !aiDesc.trim() ? "not-allowed" : "pointer", opacity: !aiDesc.trim() ? 0.5 : 1, alignSelf: "flex-start" }}
                 >
                   {aiLoading ? <Loader size={13} style={{ animation: "spin 1s linear infinite" }} /> : <Sparkles size={13} />}
                   Parse
                 </button>
               </div>
-              {aiLoading && <div style={{ fontSize: 12, color: "#7C3AED", marginTop: 6 }}>Parsing with AI…</div>}
+              {aiLoading && <div style={{ fontSize: 12, color: color.textMuted, marginTop: 6 }}>Parsing with AI…</div>}
             </div>
 
             {addError && (
-              <div style={{ padding: "10px 14px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, fontSize: 13, marginBottom: 16 }}>{addError}</div>
+              <div style={{ padding: "10px 14px", background: color.dangerBg, color: color.danger, borderRadius: radius.md, fontSize: 13, marginBottom: 16 }}>{addError}</div>
             )}
 
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -566,7 +565,7 @@ export default function InventoryPage() {
               </div>
               <div>
                 <label style={LF}>Category</label>
-                <select value={addForm.category_id} onChange={e => setAddForm(f => ({ ...f, category_id: e.target.value }))} style={{ ...IF, background: "#fff" }}>
+                <select value={addForm.category_id} onChange={e => setAddForm(f => ({ ...f, category_id: e.target.value }))} style={{ ...IF, background: color.white }}>
                   <option value="">— Select category —</option>
                   {ref?.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
@@ -591,14 +590,14 @@ export default function InventoryPage() {
               </div>
               <div>
                 <label style={LF}>Status</label>
-                <select value={addForm.status_id} onChange={e => setAddForm(f => ({ ...f, status_id: e.target.value }))} style={{ ...IF, background: "#fff" }}>
+                <select value={addForm.status_id} onChange={e => setAddForm(f => ({ ...f, status_id: e.target.value }))} style={{ ...IF, background: color.white }}>
                   <option value="">— Select status —</option>
                   {ref?.statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
               <div>
                 <label style={LF}>Location</label>
-                <select value={addForm.location_id} onChange={e => setAddForm(f => ({ ...f, location_id: e.target.value }))} style={{ ...IF, background: "#fff" }}>
+                <select value={addForm.location_id} onChange={e => setAddForm(f => ({ ...f, location_id: e.target.value }))} style={{ ...IF, background: color.white }}>
                   <option value="">— Select location —</option>
                   {ref?.locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
@@ -610,8 +609,8 @@ export default function InventoryPage() {
             </div>
 
             <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
-              <button onClick={() => setShowAdd(false)} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer", color: "#374151" }}>Cancel</button>
-              <button onClick={handleAdd} disabled={saving} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 14, fontWeight: 500, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1 }}>
+              <button onClick={() => setShowAdd(false)} style={{ flex: 1, padding: "10px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 14, cursor: "pointer", color: color.ink }}>Cancel</button>
+              <button onClick={handleAdd} disabled={saving} style={{ flex: 1, padding: "10px", borderRadius: radius.pill, border: "none", background: color.ink, color: "#fff", fontSize: 14, fontWeight: 500, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1 }}>
                 {saving ? "Creating…" : "Create Item"}
               </button>
             </div>

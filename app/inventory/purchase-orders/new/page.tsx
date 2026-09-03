@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { InventoryReferenceData } from "@/lib/types";
 import { ArrowLeft, Plus, X, Sparkles, Loader } from "lucide-react";
+import { color, radius, shadow, type as typo } from "@/lib/theme";
 
 interface OpenPacket {
   id: string;
@@ -48,8 +49,8 @@ function blankLine(): PoLine {
   };
 }
 
-const LF = { fontSize: 13, fontWeight: 500 as const, color: "#374151", display: "block" as const, marginBottom: 3 };
-const IF = { width: "100%", boxSizing: "border-box" as const, padding: "7px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13 };
+const LF = { fontSize: 13, fontWeight: 500 as const, color: color.textMuted, display: "block" as const, marginBottom: 3 };
+const IF = { width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 13, color: color.ink };
 
 function packetLabel(p: OpenPacket): string {
   const name = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "Unknown";
@@ -75,20 +76,20 @@ function PacketPicker({ packets, value, onChange }: {
         onChange={e => { setSearch(e.target.value); if (!e.target.value) onChange(""); }}
         onFocus={e => e.target.select()}
         placeholder="Search orders…"
-        style={{ ...IF, borderColor: value ? "#6366F1" : "#E5E7EB" }}
+        style={{ ...IF, borderColor: value ? color.ink : color.line }}
       />
       {(search || !value) && filtered.length > 0 && (
-        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, zIndex: 30, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", maxHeight: 200, overflowY: "auto" }}>
+        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.md, zIndex: 30, boxShadow: shadow.lg, maxHeight: 200, overflowY: "auto" }}>
           {filtered.map(p => (
             <div
               key={p.id}
               onMouseDown={() => { onChange(p.id); setSearch(""); }}
-              style={{ padding: "8px 12px", fontSize: 13, cursor: "pointer", background: p.id === value ? "#EEF2FF" : "#fff", color: "#111827" }}
-              onMouseEnter={e => { if (p.id !== value) (e.currentTarget as HTMLElement).style.background = "#F9FAFB"; }}
-              onMouseLeave={e => { if (p.id !== value) (e.currentTarget as HTMLElement).style.background = "#fff"; }}
+              style={{ padding: "8px 12px", fontSize: 13, cursor: "pointer", background: p.id === value ? color.fill : color.white, color: color.ink }}
+              onMouseEnter={e => { if (p.id !== value) (e.currentTarget as HTMLElement).style.background = color.hover; }}
+              onMouseLeave={e => { if (p.id !== value) (e.currentTarget as HTMLElement).style.background = color.white; }}
             >
-              <span style={{ fontWeight: 600, fontFamily: "monospace" }}>{p.reference_number}</span>
-              <span style={{ color: "#6B7280", marginLeft: 8 }}>
+              <span style={{ fontWeight: 600, fontFamily: "var(--font-mono)" }}>{p.reference_number}</span>
+              <span style={{ color: color.textMuted, marginLeft: 8 }}>
                 {[p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "Unknown"}
               </span>
             </div>
@@ -229,18 +230,18 @@ export default function NewPurchaseOrderPage() {
       {/* Back */}
       <button
         onClick={() => router.push("/inventory/purchase-orders")}
-        style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: "#6B7280", fontSize: 14, marginBottom: 20, padding: 0 }}
+        style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: color.textMuted, fontSize: 14, marginBottom: 20, padding: 0 }}
       >
         <ArrowLeft size={16} /> Purchase Orders
       </button>
 
-      <h1 style={{ fontSize: 24, fontWeight: 700, color: "#111827", margin: "0 0 24px" }}>New Purchase Order</h1>
+      <h1 style={{ ...typo.h1, margin: "0 0 24px" }}>New Purchase Order</h1>
 
-      {error && <div style={{ padding: "10px 14px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, fontSize: 13, marginBottom: 16 }}>{error}</div>}
+      {error && <div style={{ padding: "10px 14px", background: color.dangerBg, color: color.danger, borderRadius: radius.md, fontSize: 13, marginBottom: 16 }}>{error}</div>}
 
       {/* PO Header */}
-      <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 24, marginBottom: 16 }}>
-        <h3 style={{ margin: "0 0 16px", fontSize: 12, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.06em" }}>Order Details</h3>
+      <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, boxShadow: shadow.card, padding: 24, marginBottom: 16 }}>
+        <h3 style={{ margin: "0 0 16px", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 500, color: color.textMuted, textTransform: "uppercase", letterSpacing: "0.08em" }}>Order Details</h3>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 24px" }}>
           <div>
             <label style={LF}>PO Number</label>
@@ -296,12 +297,12 @@ export default function NewPurchaseOrderPage() {
       {/* Lines */}
       <div style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <h3 style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          <h3 style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 500, color: color.textMuted, textTransform: "uppercase", letterSpacing: "0.08em" }}>
             Line Items ({lines.length})
           </h3>
           <button
             onClick={() => setLines(ls => [...ls, blankLine()])}
-            style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 8, border: "1px dashed #D1D5DB", background: "#F9FAFB", color: "#6B7280", fontSize: 13, cursor: "pointer" }}
+            style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 16px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, color: color.ink, fontSize: 13, fontWeight: 500, cursor: "pointer" }}
           >
             <Plus size={13} /> Add line item
           </button>
@@ -309,11 +310,11 @@ export default function NewPurchaseOrderPage() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {lines.map((line, idx) => (
-            <div key={line._id} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20 }}>
+            <div key={line._id} style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, boxShadow: shadow.card, padding: 20 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>Item {idx + 1}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>Item {idx + 1}</span>
                 {lines.length > 1 && (
-                  <button onClick={() => removeLine(line._id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF" }}>
+                  <button onClick={() => removeLine(line._id)} style={{ background: "none", border: "none", cursor: "pointer", color: color.textFaint }}>
                     <X size={15} />
                   </button>
                 )}
@@ -335,8 +336,8 @@ export default function NewPurchaseOrderPage() {
                   disabled={line.aiLoading || !line.aiDesc.trim()}
                   style={{
                     display: "flex", alignItems: "center", gap: 5,
-                    padding: "7px 14px", borderRadius: 8, fontSize: 13, fontWeight: 500,
-                    background: "#635BFF", color: "#fff", border: "none",
+                    padding: "9px 18px", borderRadius: radius.pill, fontSize: 13, fontWeight: 500,
+                    background: color.ink, color: color.white, border: "none",
                     cursor: line.aiLoading || !line.aiDesc.trim() ? "not-allowed" : "pointer",
                     opacity: !line.aiDesc.trim() ? 0.5 : 1, whiteSpace: "nowrap",
                   }}
@@ -436,21 +437,21 @@ export default function NewPurchaseOrderPage() {
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
         <button
           onClick={() => router.push("/inventory/purchase-orders")}
-          style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer", color: "#374151" }}
+          style={{ padding: "10px 20px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 14, fontWeight: 500, cursor: "pointer", color: color.ink }}
         >
           Cancel
         </button>
         <button
           onClick={() => handleSave("draft")}
           disabled={saving}
-          style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid #D1D5DB", background: "#F9FAFB", fontSize: 14, cursor: saving && saveAs === "draft" ? "not-allowed" : "pointer", color: "#374151", opacity: saving && saveAs === "draft" ? 0.7 : 1 }}
+          style={{ padding: "10px 20px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 14, fontWeight: 500, cursor: saving && saveAs === "draft" ? "not-allowed" : "pointer", color: color.ink, opacity: saving && saveAs === "draft" ? 0.7 : 1 }}
         >
           {saving && saveAs === "draft" ? "Saving…" : "Save as Draft"}
         </button>
         <button
           onClick={() => handleSave("ordered")}
           disabled={saving}
-          style={{ padding: "10px 20px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 14, fontWeight: 500, cursor: saving && saveAs === "ordered" ? "not-allowed" : "pointer", opacity: saving && saveAs === "ordered" ? 0.7 : 1 }}
+          style={{ padding: "10px 20px", borderRadius: radius.pill, border: "none", background: color.ink, color: color.white, fontSize: 14, fontWeight: 500, cursor: saving && saveAs === "ordered" ? "not-allowed" : "pointer", opacity: saving && saveAs === "ordered" ? 0.7 : 1 }}
         >
           {saving && saveAs === "ordered" ? "Saving…" : "Save + Mark as Ordered"}
         </button>

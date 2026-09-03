@@ -7,6 +7,8 @@ import { canManage } from "@/lib/userTypes";
 import { InventoryPiece, InventoryReferenceData } from "@/lib/types";
 // calculateLivePricing removed — pricing now uses calculate_price() RPC via /api/inventory/pieces/[id]/price
 import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
+import StatusBadge, { StatusTone } from "@/components/StatusBadge";
+import { color, radius, shadow } from "@/lib/theme";
 import {
   ArrowLeft, Edit2, Save, X, ArrowRight,
   Lock, AlertTriangle, TrendingDown, Package, MapPin, Clock, DollarSign, Bookmark, BookmarkX,
@@ -14,6 +16,16 @@ import {
 } from "lucide-react";
 
 const PAYMENT_METHODS = ["Cash", "EFTPOS", "Credit Card", "Bank Transfer", "Layby", "Finance", "Other"];
+
+/** Map a free-text status name to a StatusBadge tone (visual only). */
+function statusTone(name?: string | null): StatusTone {
+  const n = (name ?? "").toLowerCase();
+  if (n.includes("in stock") || n.includes("in-stock") || n.includes("available") || n.includes("active")) return "success";
+  if (n.includes("reserved") || n.includes("low") || n.includes("pending") || n.includes("hold") || n.includes("layby")) return "warning";
+  if (n.includes("sold") || n.includes("out") || n.includes("overdue") || n.includes("lost")) return "danger";
+  if (n.includes("transfer") || n.includes("workshop") || n.includes("repair")) return "info";
+  return "neutral";
+}
 
 /** Build "Grandparent › Parent › Leaf" path by climbing parent_id links. */
 function buildLocationPath(
@@ -51,8 +63,8 @@ function fmtDate(d: string | Date | null | undefined): string {
 function FieldView({ label, value }: { label: string; value?: string | number | null }) {
   return (
     <div>
-      <div style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 3 }}>{label}</div>
-      <div style={{ fontSize: 14, color: value != null && value !== "" ? "#111827" : "#D1D5DB" }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: color.textFaint, textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: 14, color: value != null && value !== "" ? color.ink : "#D1D5DB" }}>
         {value != null && value !== "" ? String(value) : "—"}
       </div>
     </div>
@@ -61,15 +73,15 @@ function FieldView({ label, value }: { label: string; value?: string | number | 
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20, marginBottom: 16 }}>
-      <h3 style={{ margin: "0 0 14px", fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>{title}</h3>
+    <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: 20, marginBottom: 16, boxShadow: shadow.card }}>
+      <h3 style={{ margin: "0 0 14px", fontSize: 11, fontWeight: 700, color: color.textFaint, textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>{title}</h3>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 20px" }}>{children}</div>
     </div>
   );
 }
 
 function GpChip({ gp, pct }: { gp: number | null; pct: number | null }) {
-  if (gp == null) return <span style={{ color: "#9CA3AF", fontSize: 13 }}>—</span>;
+  if (gp == null) return <span style={{ color: color.textFaint, fontSize: 13 }}>—</span>;
   const pctVal = pct ?? 0;
   const colour = pctVal >= 40 ? "#10B981" : pctVal >= 20 ? "#F59E0B" : "#EF4444";
   return (
@@ -82,10 +94,10 @@ function GpChip({ gp, pct }: { gp: number | null; pct: number | null }) {
 function PricingLineItem({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "4px 0", fontSize: 13 }}>
-      <span style={{ color: "#6B7280" }}>
-        {label}{sub && <span style={{ color: "#9CA3AF", marginLeft: 4, fontSize: 12 }}>{sub}</span>}
+      <span style={{ color: color.textMuted }}>
+        {label}{sub && <span style={{ color: color.textFaint, marginLeft: 4, fontSize: 12 }}>{sub}</span>}
       </span>
-      <span style={{ fontFamily: "monospace", fontWeight: 500, color: "#374151" }}>{value}</span>
+      <span style={{ fontFamily: "monospace", fontWeight: 500, color: color.textMuted }}>{value}</span>
     </div>
   );
 }
@@ -105,7 +117,7 @@ type TLEvent = {
 const TL_COLOUR: Record<TLEventType, string> = {
   created:  "#10B981",
   received: "#3B82F6",
-  movement: "#635BFF",
+  movement: color.ink,
   sold:     "#F59E0B",
 };
 
@@ -157,7 +169,7 @@ function Timeline({ piece, movements }: { piece: any; movements: any[] }) {
   const events = buildTimeline(piece, movements);
 
   if (events.length === 0) {
-    return <p style={{ margin: 0, fontSize: 13, color: "#9CA3AF" }}>No history recorded yet.</p>;
+    return <p style={{ margin: 0, fontSize: 13, color: color.textFaint }}>No history recorded yet.</p>;
   }
 
   return (
@@ -171,14 +183,14 @@ function Timeline({ piece, movements }: { piece: any; movements: any[] }) {
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
               <div style={{ width: 11, height: 11, borderRadius: "50%", background: colour, flexShrink: 0, marginTop: 3 }} />
               {!isLast && (
-                <div style={{ width: 2, flex: 1, minHeight: 18, background: "#E5E7EB", margin: "4px 0" }} />
+                <div style={{ width: 2, flex: 1, minHeight: 18, background: color.line, margin: "4px 0" }} />
               )}
             </div>
             {/* Content */}
             <div style={{ paddingBottom: isLast ? 0 : 18, flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 500, color: "#111827", lineHeight: 1.4 }}>{ev.label}</div>
-              {ev.notes && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>{ev.notes}</div>}
-              <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 3 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: color.ink, lineHeight: 1.4 }}>{ev.label}</div>
+              {ev.notes && <div style={{ fontSize: 12, color: color.textMuted, marginTop: 2 }}>{ev.notes}</div>}
+              <div style={{ fontSize: 11, color: color.textFaint, marginTop: 3 }}>
                 {ev.by ? `${ev.by}  ·  ` : ""}{fmtDate(ev.at)}
               </div>
             </div>
@@ -296,12 +308,12 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
   const lastFailed = !activeTag && !printedTag && !activeJob && recentJob?.status === "failed";
 
   return (
-    <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+    <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: 20, marginBottom: 16, boxShadow: shadow.card }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
         {activeTag
           ? <Wifi size={13} style={{ color: "#10B981" }} />
-          : <WifiOff size={13} style={{ color: "#9CA3AF" }} />}
-        <h3 style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>
+          : <WifiOff size={13} style={{ color: color.textFaint }} />}
+        <h3 style={{ margin: 0, fontSize: 11, fontWeight: 700, color: color.textFaint, textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>
           RFID Tag
         </h3>
         {activeJob && (
@@ -315,14 +327,14 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
       {/* Active (verified) tag */}
       {activeTag && (
         <div style={{ marginBottom: 12 }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 99, background: "#D1FAE5", color: "#065F46", fontSize: 11, fontWeight: 600, marginBottom: 6 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: radius.pill, background: "#D1FAE5", color: "#065F46", fontSize: 11, fontWeight: 600, marginBottom: 6 }}>
             <Wifi size={9} /> Verified active
           </span>
-          <div style={{ fontFamily: "monospace", fontSize: 12, color: "#374151", letterSpacing: "0.04em", wordBreak: "break-all" as const, marginTop: 6 }}>
+          <div style={{ fontFamily: "monospace", fontSize: 12, color: color.textMuted, letterSpacing: "0.04em", wordBreak: "break-all" as const, marginTop: 6 }}>
             EPC: {activeTag.epc}
           </div>
           {activeTag.activated_at && (
-            <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 3 }}>Verified {fmtDate(activeTag.activated_at)}</div>
+            <div style={{ fontSize: 11, color: color.textFaint, marginTop: 3 }}>Verified {fmtDate(activeTag.activated_at)}</div>
           )}
         </div>
       )}
@@ -330,14 +342,14 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
       {/* Printed (awaiting physical verification via UHF reader) */}
       {!activeTag && printedTag && !activeJob && (
         <div style={{ marginBottom: 12 }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 99, background: "#FEF3C7", color: "#92400E", fontSize: 11, fontWeight: 600, marginBottom: 8 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: radius.pill, background: "#FEF3C7", color: "#92400E", fontSize: 11, fontWeight: 600, marginBottom: 8 }}>
             Sent to printer — awaiting verification
           </span>
-          <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>Expected EPC:</div>
-          <div style={{ fontFamily: "monospace", fontSize: 12, color: "#374151", letterSpacing: "0.04em", wordBreak: "break-all" as const, marginBottom: 10 }}>
+          <div style={{ fontSize: 12, color: color.textMuted, marginBottom: 4 }}>Expected EPC:</div>
+          <div style={{ fontFamily: "monospace", fontSize: 12, color: color.textMuted, letterSpacing: "0.04em", wordBreak: "break-all" as const, marginBottom: 10 }}>
             {printedTag.epc}
           </div>
-          <p style={{ margin: "0 0 10px", fontSize: 12, color: "#6B7280", lineHeight: 1.5 }}>
+          <p style={{ margin: "0 0 10px", fontSize: 12, color: color.textMuted, lineHeight: 1.5 }}>
             Read the physical tag with a <strong>UHF EPC Gen2 reader</strong> (e.g. AZH-P1). Enter the observed EPC below to verify it matches.
             If no reader is available yet, leave the tag in this state — do not confirm without reading.
           </p>
@@ -350,7 +362,7 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
                 maxLength={32}
                 style={{
                   width: "100%", boxSizing: "border-box" as const,
-                  padding: "8px 10px", borderRadius: 8, fontSize: 12, fontFamily: "monospace",
+                  padding: "8px 10px", borderRadius: radius.md, fontSize: 12, fontFamily: "monospace",
                   border: epcError ? "1px solid #FCA5A5" : "1px solid #D1D5DB",
                   outline: "none", marginBottom: epcError ? 4 : 0,
                 }}
@@ -364,7 +376,7 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
       {/* No tag and no in-flight job */}
       {!activeTag && !printedTag && !activeJob && (
         <div style={{ marginBottom: 12 }}>
-          <p style={{ margin: 0, fontSize: 13, color: "#9CA3AF" }}>
+          <p style={{ margin: 0, fontSize: 13, color: color.textFaint }}>
             {lastFailed ? "Last print job failed." : "No RFID tag encoded for this piece."}
           </p>
           {lastFailed && recentJob?.last_error && (
@@ -382,7 +394,7 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
           {/* Print: available when no active/printed tag and no job in flight */}
           {!activeTag && !printedTag && !activeJob && (
             <button onClick={() => handlePrint(false)} disabled={printing}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #D1D5DB", background: printing ? "#F3F4F6" : "#fff", color: printing ? "#9CA3AF" : "#111827", fontSize: 13, cursor: printing ? "not-allowed" : "pointer", fontWeight: 500 }}>
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: radius.pill, border: "1px solid #D1D5DB", background: printing ? color.fill : color.white, color: printing ? color.textFaint : color.ink, fontSize: 13, cursor: printing ? "not-allowed" : "pointer", fontWeight: 500 }}>
               <Printer size={13} />
               {printing ? "Sending…" : "Print RFID Tag"}
             </button>
@@ -395,9 +407,9 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
               disabled={confirming || !/^[0-9a-f]{24}$/i.test(epcInput.trim())}
               style={{
                 display: "flex", alignItems: "center", gap: 6,
-                padding: "8px 14px", borderRadius: 8, border: "none",
-                background: !/^[0-9a-f]{24}$/i.test(epcInput.trim()) ? "#E5E7EB" : confirming ? "#D1FAE5" : "#10B981",
-                color: !/^[0-9a-f]{24}$/i.test(epcInput.trim()) ? "#9CA3AF" : "#fff",
+                padding: "8px 14px", borderRadius: radius.pill, border: "none",
+                background: !/^[0-9a-f]{24}$/i.test(epcInput.trim()) ? color.line : confirming ? "#D1FAE5" : "#10B981",
+                color: !/^[0-9a-f]{24}$/i.test(epcInput.trim()) ? color.textFaint : color.white,
                 fontSize: 13,
                 cursor: (confirming || !/^[0-9a-f]{24}$/i.test(epcInput.trim())) ? "not-allowed" : "pointer",
                 fontWeight: 500,
@@ -409,14 +421,14 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
           {/* Replace: available only when an active (verified) tag exists */}
           {activeTag && !activeJob && (
             <button onClick={() => handlePrint(true)} disabled={printing}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", fontSize: 13, cursor: printing ? "not-allowed" : "pointer" }}>
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: radius.pill, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", fontSize: 13, cursor: printing ? "not-allowed" : "pointer" }}>
               <Printer size={13} />
               Replace Tag
             </button>
           )}
 
           <button onClick={fetchRfid}
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#F9FAFB", color: "#6B7280", fontSize: 13, cursor: "pointer" }}>
+            style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: `1px solid ${color.line}`, background: color.paper, color: color.textMuted, fontSize: 13, cursor: "pointer" }}>
             <RefreshCw size={12} />
             Refresh
           </button>
@@ -449,8 +461,8 @@ function EF({ label, field, type = "text", opts }: {
   opts?: { value: string; label: string }[];
 }) {
   const { editing, piece, form, setForm } = useContext(EditContext);
-  const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 3, display: "block" };
-  const inputStyle: React.CSSProperties = { width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 };
+  const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: color.textFaint, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 3, display: "block" };
+  const inputStyle: React.CSSProperties = { width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14 };
   const value = editing ? (form[field] ?? "") : (piece?.[field] ?? "");
   const onChange = (val: string) => setForm(f => ({ ...f, [field]: val === "" ? null : val }));
 
@@ -460,7 +472,7 @@ function EF({ label, field, type = "text", opts }: {
       <div>
         <div style={labelStyle}>{label}</div>
         <select value={String(value)} onChange={e => onChange(e.target.value)}
-          style={{ ...inputStyle, background: "#fff" }}>
+          style={{ ...inputStyle, background: color.white }}>
           <option value="">—</option>
           {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
@@ -973,21 +985,20 @@ export default function InventoryItemPage({ params }: Params) {
   // ── Guard ─────────────────────────────────────────────────────────────────
 
   if (!hydrated || loading) {
-    return <div style={{ padding: 48, textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>Loading…</div>;
+    return <div style={{ padding: 48, textAlign: "center", color: color.textFaint, fontSize: 14 }}>Loading…</div>;
   }
   if (!piece) {
     return (
       <div style={{ padding: 48, textAlign: "center" }}>
-        <p style={{ color: "#6B7280" }}>Item not found.</p>
+        <p style={{ color: color.textMuted }}>Item not found.</p>
         <button onClick={() => router.push("/inventory")}
-          style={{ marginTop: 12, padding: "8px 16px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", cursor: "pointer", fontSize: 14 }}>
+          style={{ marginTop: 12, padding: "8px 16px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, cursor: "pointer", fontSize: 14 }}>
           Back to Stock
         </button>
       </div>
     );
   }
 
-  const statusColour = piece.status?.colour ?? "#9CA3AF";
   const lockedGP = piece.retail_price != null && piece.locked_cost != null
     ? Number(piece.retail_price) - Number(piece.locked_cost) : null;
   const lockedGPPct = lockedGP != null && piece.retail_price != null && Number(piece.retail_price) > 0
@@ -1010,31 +1021,29 @@ export default function InventoryItemPage({ params }: Params) {
 
       {/* Back */}
       <button onClick={() => router.push("/inventory")}
-        style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: "#6B7280", fontSize: 14, marginBottom: 20, padding: 0 }}>
+        style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: color.textMuted, fontSize: 14, marginBottom: 20, padding: 0 }}>
         <ArrowLeft size={16} /> Stock
       </button>
 
       {/* ── Header strip ── */}
-      <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: "16px 24px", marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+      <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: "16px 24px", marginBottom: 20, boxShadow: shadow.card, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", minWidth: 0 }}>
-          <span style={{ fontFamily: "monospace", fontSize: 20, fontWeight: 700, color: "#111827", flexShrink: 0 }}>{piece.sku}</span>
+          <span style={{ fontFamily: "monospace", fontSize: 26, fontWeight: 700, letterSpacing: "-0.02em", color: color.ink, flexShrink: 0 }}>{piece.sku}</span>
           {piece.status && (
-            <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 12, fontWeight: 500, flexShrink: 0, background: statusColour + "22", color: statusColour, border: `1px solid ${statusColour}44` }}>
-              {piece.status.name}
-            </span>
+            <StatusBadge tone={statusTone(piece.status.name)} label={piece.status.name} style={{ flexShrink: 0 }} />
           )}
           {piece.location && (
-            <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 13, color: "#6B7280", flexShrink: 0 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 13, color: color.textMuted, flexShrink: 0 }}>
               <MapPin size={13} />
               {buildLocationPath(piece.location?.id, ref?.locations ?? [], piece.location.name)}
             </span>
           )}
-          {piece.title && <span style={{ fontSize: 15, color: "#374151" }}>{piece.title}</span>}
+          {piece.title && <span style={{ fontSize: 15, color: color.textMuted }}>{piece.title}</span>}
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 16, flexShrink: 0 }}>
           {piece.retail_price != null && (
-            <span style={{ fontFamily: "monospace", fontSize: 18, fontWeight: 700, color: "#111827" }}>
+            <span style={{ fontFamily: "monospace", fontSize: 18, fontWeight: 700, color: color.ink }}>
               {fmtMoney(piece.retail_price)}
             </span>
           )}
@@ -1053,30 +1062,30 @@ export default function InventoryItemPage({ params }: Params) {
                     )}
                   </span>
                   <button onClick={() => { setReleaseReason(""); setRelError(""); setShowRelease(true); }}
-                    style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 12, cursor: "pointer", color: "#374151" }}>
+                    style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 12, cursor: "pointer", color: color.textMuted }}>
                     <BookmarkX size={13} /> Release
                   </button>
                 </div>
               ) : !isSold && (
                 <>
                   <button onClick={() => setShowMove(true)}
-                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 13, cursor: "pointer", color: "#374151", fontWeight: 500 }}>
+                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 13, cursor: "pointer", color: color.textMuted, fontWeight: 500 }}>
                     <ArrowRight size={14} /> Move
                   </button>
                   <button onClick={() => { setReserveForm({ reason: "", expires_at: "", quote_reference: "", order_reference: "" }); setResCustId(""); setResCustDisplay(""); setResCustSearch(""); setResError(""); setShowReserve(true); }}
-                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 13, cursor: "pointer", color: "#374151", fontWeight: 500 }}>
+                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 13, cursor: "pointer", color: color.textMuted, fontWeight: 500 }}>
                     <Bookmark size={14} /> Reserve
                   </button>
                 </>
               )}
               {!isSold && (
                 <button onClick={openSellModal}
-                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "none", background: "#10B981", color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: radius.pill, border: "none", background: "#10B981", color: color.white, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
                   <DollarSign size={14} /> Mark as Sold
                 </button>
               )}
               <button onClick={startEdit}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: radius.pill, border: "none", background: color.ink, color: color.white, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
                 <Edit2 size={14} /> Edit
               </button>
             </div>
@@ -1084,11 +1093,11 @@ export default function InventoryItemPage({ params }: Params) {
           {editing && (
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => setEditing(false)}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 13, cursor: "pointer", color: "#374151" }}>
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 13, cursor: "pointer", color: color.textMuted }}>
                 <X size={14} /> Cancel
               </button>
               <button onClick={handleSave} disabled={saving}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 13, fontWeight: 500, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1 }}>
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: radius.pill, border: "none", background: color.ink, color: color.white, fontSize: 13, fontWeight: 500, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1 }}>
                 <Save size={14} /> {saving ? "Saving…" : "Save"}
               </button>
             </div>
@@ -1118,13 +1127,13 @@ export default function InventoryItemPage({ params }: Params) {
           </SectionCard>
 
           {/* Product blueprint */}
-          <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+          <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: 20, marginBottom: 16, boxShadow: shadow.card }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-              <h3 style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>Product Blueprint</h3>
+              <h3 style={{ margin: 0, fontSize: 11, fontWeight: 700, color: color.textFaint, textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>Product Blueprint</h3>
               {isManager && !linkEditing && (
                 <button
                   onClick={() => { setLinkProductId(piece.product_id ?? ""); setLinkError(""); setLinkEditing(true); }}
-                  style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E5E7EB", background: "#fff", fontSize: 12, cursor: "pointer", color: "#374151" }}>
+                  style={{ padding: "3px 10px", borderRadius: 6, border: `1px solid ${color.line}`, background: color.white, fontSize: 12, cursor: "pointer", color: color.textMuted }}>
                   {piece.product_id ? "Change" : "Link"}
                 </button>
               )}
@@ -1132,33 +1141,33 @@ export default function InventoryItemPage({ params }: Params) {
             {!linkEditing ? (
               piece.product_id ? (
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <Package size={14} style={{ color: "#635BFF", flexShrink: 0 }} />
+                  <Package size={14} style={{ color: color.ink, flexShrink: 0 }} />
                   <button onClick={() => router.push(`/inventory/products/${piece.product_id}`)}
-                    style={{ fontSize: 14, fontWeight: 600, color: "#635BFF", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" as const }}>
+                    style={{ fontSize: 14, fontWeight: 600, color: color.ink, background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" as const }}>
                     {linkedProduct?.name ?? piece.product_id}
                   </button>
                   {linkedProduct?.category?.name && (
-                    <span style={{ fontSize: 12, color: "#9CA3AF" }}>{(linkedProduct.category as any).name}</span>
+                    <span style={{ fontSize: 12, color: color.textFaint }}>{(linkedProduct.category as any).name}</span>
                   )}
                 </div>
               ) : (
-                <p style={{ margin: 0, fontSize: 13, color: "#9CA3AF" }}>Not linked to a product blueprint</p>
+                <p style={{ margin: 0, fontSize: 13, color: color.textFaint }}>Not linked to a product blueprint</p>
               )
             ) : (
               <div>
                 {linkError && <div style={{ padding: "8px 12px", background: "#FEF2F2", color: "#DC2626", borderRadius: 6, fontSize: 12, marginBottom: 10 }}>{linkError}</div>}
                 <select value={linkProductId} onChange={e => setLinkProductId(e.target.value)}
-                  style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, background: "#fff", marginBottom: 10 }}>
+                  style={{ width: "100%", padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14, background: color.white, marginBottom: 10 }}>
                   <option value="">— None —</option>
                   {products.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button onClick={() => setLinkEditing(false)}
-                    style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 13, cursor: "pointer" }}>
+                    style={{ padding: "7px 14px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 13, cursor: "pointer" }}>
                     Cancel
                   </button>
                   <button onClick={handleSaveLink} disabled={linkSaving}
-                    style={{ padding: "7px 16px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 13, fontWeight: 500, cursor: linkSaving ? "not-allowed" : "pointer", opacity: linkSaving ? 0.7 : 1 }}>
+                    style={{ padding: "7px 16px", borderRadius: radius.pill, border: "none", background: color.ink, color: color.white, fontSize: 13, fontWeight: 500, cursor: linkSaving ? "not-allowed" : "pointer", opacity: linkSaving ? 0.7 : 1 }}>
                     {linkSaving ? "Saving…" : "Save"}
                   </button>
                 </div>
@@ -1167,13 +1176,13 @@ export default function InventoryItemPage({ params }: Params) {
           </div>
 
           {/* Paired piece */}
-          <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+          <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: 20, marginBottom: 16, boxShadow: shadow.card }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-              <h3 style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>Paired Piece</h3>
+              <h3 style={{ margin: 0, fontSize: 11, fontWeight: 700, color: color.textFaint, textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>Paired Piece</h3>
               {isManager && !pairEditing && (
                 <button
                   onClick={() => { setPairSelected(pairedPiece); setPairSearch(""); setPairError(""); setPairEditing(true); }}
-                  style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #E5E7EB", background: "#fff", fontSize: 12, cursor: "pointer", color: "#374151" }}>
+                  style={{ padding: "3px 10px", borderRadius: 6, border: `1px solid ${color.line}`, background: color.white, fontSize: 12, cursor: "pointer", color: color.textMuted }}>
                   {pairedPiece ? "Change" : "Link"}
                 </button>
               )}
@@ -1181,17 +1190,17 @@ export default function InventoryItemPage({ params }: Params) {
             {!pairEditing ? (
               pairedPiece ? (
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 13, color: "#9CA3AF" }}>Paired with</span>
+                  <span style={{ fontSize: 13, color: color.textFaint }}>Paired with</span>
                   <button onClick={() => router.push(`/inventory/${pairedPiece.id}`)}
-                    style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 600, color: "#635BFF", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                    style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 600, color: color.ink, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
                     {pairedPiece.sku}
                   </button>
                   {pairedPiece.title && (
-                    <span style={{ fontSize: 13, color: "#9CA3AF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{pairedPiece.title}</span>
+                    <span style={{ fontSize: 13, color: color.textFaint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{pairedPiece.title}</span>
                   )}
                 </div>
               ) : (
-                <p style={{ margin: 0, fontSize: 13, color: "#9CA3AF" }}>Not paired</p>
+                <p style={{ margin: 0, fontSize: 13, color: color.textFaint }}>Not paired</p>
               )
             ) : (
               <div>
@@ -1201,16 +1210,16 @@ export default function InventoryItemPage({ params }: Params) {
                     value={pairSearch}
                     onChange={e => { setPairSearch(e.target.value); setPairSelected(null); }}
                     placeholder={pairSelected ? pairSelected.sku : "Type SKU to search…"}
-                    style={{ width: "100%", boxSizing: "border-box" as const, padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }}
+                    style={{ width: "100%", boxSizing: "border-box" as const, padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14 }}
                   />
                   {pairDropdown && (
-                    <div style={{ position: "absolute" as const, top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.1)", zIndex: 20, maxHeight: 200, overflowY: "auto" as const }}>
+                    <div style={{ position: "absolute" as const, top: "100%", left: 0, right: 0, background: color.white, border: `1px solid ${color.line}`, borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.1)", zIndex: 20, maxHeight: 200, overflowY: "auto" as const }}>
                       {pairResults.map(p => (
                         <button key={p.id}
                           onClick={() => { setPairSelected(p); setPairSearch(""); setPairDropdown(false); }}
                           style={{ width: "100%", padding: "9px 12px", background: "none", border: "none", cursor: "pointer", textAlign: "left" as const, fontSize: 13, display: "flex", gap: 10, alignItems: "baseline" }}>
-                          <span style={{ fontFamily: "monospace", fontWeight: 600, color: "#111827" }}>{p.sku}</span>
-                          {p.title && <span style={{ color: "#9CA3AF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{p.title}</span>}
+                          <span style={{ fontFamily: "monospace", fontWeight: 600, color: color.ink }}>{p.sku}</span>
+                          {p.title && <span style={{ color: color.textFaint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{p.title}</span>}
                         </button>
                       ))}
                     </div>
@@ -1219,16 +1228,16 @@ export default function InventoryItemPage({ params }: Params) {
                 {pairSelected && (
                   <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: "#F0FDF4", border: "1px solid #86EFAC", borderRadius: 6, fontSize: 13, marginBottom: 10 }}>
                     <span style={{ fontFamily: "monospace", fontWeight: 600, color: "#15803D" }}>{pairSelected.sku}</span>
-                    <button onClick={() => setPairSelected(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", padding: 0 }}>✕</button>
+                    <button onClick={() => setPairSelected(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: color.textFaint, padding: 0 }}>✕</button>
                   </div>
                 )}
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <button onClick={() => { setPairEditing(false); setPairSearch(""); setPairSelected(null); setPairDropdown(false); }}
-                    style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 13, cursor: "pointer" }}>
+                    style={{ padding: "7px 14px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 13, cursor: "pointer" }}>
                     Cancel
                   </button>
                   <button onClick={handleSavePair} disabled={pairSaving || !pairSelected}
-                    style={{ padding: "7px 16px", borderRadius: 8, border: "none", background: pairSelected ? "#111827" : "#E5E7EB", color: pairSelected ? "#fff" : "#9CA3AF", fontSize: 13, fontWeight: 500, cursor: (pairSaving || !pairSelected) ? "not-allowed" : "pointer", opacity: pairSaving ? 0.7 : 1 }}>
+                    style={{ padding: "7px 16px", borderRadius: radius.pill, border: "none", background: pairSelected ? color.ink : color.line, color: pairSelected ? color.white : color.textFaint, fontSize: 13, fontWeight: 500, cursor: (pairSaving || !pairSelected) ? "not-allowed" : "pointer", opacity: pairSaving ? 0.7 : 1 }}>
                     {pairSaving ? "Saving…" : "Save"}
                   </button>
                   {pairedPiece && (
@@ -1251,7 +1260,7 @@ export default function InventoryItemPage({ params }: Params) {
                         setPairSearch("");
                         setPairSelected(null);
                       }}
-                      style={{ marginLeft: "auto", padding: "7px 12px", borderRadius: 8, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", fontSize: 13, cursor: pairSaving ? "not-allowed" : "pointer" }}>
+                      style={{ marginLeft: "auto", padding: "7px 12px", borderRadius: radius.pill, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", fontSize: 13, cursor: pairSaving ? "not-allowed" : "pointer" }}>
                       Remove pairing
                     </button>
                   )}
@@ -1287,8 +1296,8 @@ export default function InventoryItemPage({ params }: Params) {
 
           {/* Melee */}
           {(editing || (meleeQty != null && meleeQty > 0)) && (
-            <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20, marginBottom: 16 }}>
-              <h3 style={{ margin: "0 0 14px", fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>
+            <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: 20, marginBottom: 16, boxShadow: shadow.card }}>
+              <h3 style={{ margin: "0 0 14px", fontSize: 11, fontWeight: 700, color: color.textFaint, textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>
                 Melee Stones
               </h3>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 20px" }}>
@@ -1300,10 +1309,10 @@ export default function InventoryItemPage({ params }: Params) {
                   opts={editing ? ["VVS","VS","SI1","SI2","SI3","I1","I2","I3"].map(c => ({ value: c, label: c })) : undefined} />
                 {!editing && meleeQty != null && (piece as any).melee_carat_weight != null && (
                   <div style={{ gridColumn: "1 / -1" }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 3 }}>Total Melee</div>
-                    <div style={{ fontSize: 14, color: "#111827" }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: color.textFaint, textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 3 }}>Total Melee</div>
+                    <div style={{ fontSize: 14, color: color.ink }}>
                       {(Number(meleeQty) * Number((piece as any).melee_carat_weight)).toFixed(3)}ct
-                      <span style={{ color: "#9CA3AF", marginLeft: 6, fontSize: 13 }}>
+                      <span style={{ color: color.textFaint, marginLeft: 6, fontSize: 13 }}>
                         ({meleeQty} × {(piece as any).melee_carat_weight}ct)
                       </span>
                     </div>
@@ -1331,15 +1340,15 @@ export default function InventoryItemPage({ params }: Params) {
                 <EF label="Certificate Amount" field="valuation_amount" type="number" />
               </SectionCard>
             ) : (
-              <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20, marginBottom: 16 }}>
-                <h3 style={{ margin: "0 0 16px", fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>Pricing</h3>
+              <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: 20, marginBottom: 16, boxShadow: shadow.card }}>
+                <h3 style={{ margin: "0 0 16px", fontSize: 11, fontWeight: 700, color: color.textFaint, textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>Pricing</h3>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
 
                   {/* Actual Cost */}
-                  <div style={{ background: "#FAFAFA", border: "1px solid #E5E7EB", borderRadius: 10, padding: 16 }}>
+                  <div style={{ background: color.paper, border: `1px solid ${color.line}`, borderRadius: radius.md, padding: 16 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
-                      <Lock size={12} style={{ color: "#6B7280" }} />
-                      <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>Actual Cost</span>
+                      <Lock size={12} style={{ color: color.textMuted }} />
+                      <span style={{ fontSize: 11, fontWeight: 700, color: color.textMuted, textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>Actual Cost</span>
                     </div>
                     {piece.locked_cost == null ? (
                       <div style={{ display: "flex", alignItems: "flex-start", gap: 6, padding: "8px 10px", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 6 }}>
@@ -1348,11 +1357,11 @@ export default function InventoryItemPage({ params }: Params) {
                       </div>
                     ) : (
                       <>
-                        <div style={{ fontFamily: "monospace", fontSize: 20, fontWeight: 700, color: "#111827" }}>{fmtMoney(piece.locked_cost)}</div>
-                        <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2, marginBottom: 10 }}>Recorded at entry — never changes</div>
+                        <div style={{ fontFamily: "monospace", fontSize: 20, fontWeight: 700, color: color.ink }}>{fmtMoney(piece.locked_cost)}</div>
+                        <div style={{ fontSize: 11, color: color.textFaint, marginTop: 2, marginBottom: 10 }}>Recorded at entry — never changes</div>
                         {lockedGP != null && (
                           <div>
-                            <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>Locked GP</div>
+                            <div style={{ fontSize: 11, color: color.textFaint, marginBottom: 3 }}>Locked GP</div>
                             <GpChip gp={lockedGP} pct={lockedGPPct} />
                           </div>
                         )}
@@ -1361,8 +1370,8 @@ export default function InventoryItemPage({ params }: Params) {
                   </div>
 
                   {/* Live Pricing — driven by calculate_price() RPC */}
-                  <div style={{ background: "#FAFAFA", border: "1px solid #E5E7EB", borderRadius: 10, padding: 16 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 12 }}>Live Pricing</div>
+                  <div style={{ background: color.paper, border: `1px solid ${color.line}`, borderRadius: radius.md, padding: 16 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: color.textMuted, textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 12 }}>Live Pricing</div>
                     {priceCalcError ? (
                       <div style={{ display: "flex", alignItems: "flex-start", gap: 6, padding: "8px 10px", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 6 }}>
                         <AlertTriangle size={12} style={{ color: "#DC2626", marginTop: 1, flexShrink: 0 }} />
@@ -1380,10 +1389,10 @@ export default function InventoryItemPage({ params }: Params) {
                         </div>
                       </div>
                     ) : priceCalc == null ? (
-                      <div style={{ fontSize: 12, color: "#9CA3AF" }}>No pricing data — set metal weight to calculate.</div>
+                      <div style={{ fontSize: 12, color: color.textFaint }}>No pricing data — set metal weight to calculate.</div>
                     ) : (
                       <>
-                        <div style={{ borderBottom: "1px solid #E5E7EB", paddingBottom: 8, marginBottom: 8 }}>
+                        <div style={{ borderBottom: `1px solid ${color.line}`, paddingBottom: 8, marginBottom: 8 }}>
                           <PricingLineItem label="Metal" value={fmtMoney(priceCalc.metal_retail)} />
                           {(priceCalc.stone_retail ?? 0) > 0 && (
                             <PricingLineItem label="Stone" value={fmtMoney(priceCalc.stone_retail)} />
@@ -1394,8 +1403,8 @@ export default function InventoryItemPage({ params }: Params) {
                           )}
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10, fontSize: 12, fontWeight: 700 }}>
-                          <span style={{ color: "#374151" }}>Suggested retail</span>
-                          <span style={{ fontFamily: "monospace", fontSize: 14, color: "#111827" }}>{fmtMoney(priceCalc.total_retail)}</span>
+                          <span style={{ color: color.textMuted }}>Suggested retail</span>
+                          <span style={{ fontFamily: "monospace", fontSize: 14, color: color.ink }}>{fmtMoney(priceCalc.total_retail)}</span>
                         </div>
                         <PricingLineItem label="Actual retail" value={fmtMoney(piece.retail_price)} />
                         {underpriced && (
@@ -1421,16 +1430,16 @@ export default function InventoryItemPage({ params }: Params) {
                           const liveGPPct = liveGP != null && piece.retail_price != null && Number(piece.retail_price) > 0
                             ? (liveGP / Number(piece.retail_price)) * 100 : null;
                           return liveGP != null ? (
-                            <div style={{ marginTop: 8, borderTop: "1px solid #E5E7EB", paddingTop: 8 }}>
-                              <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>Live GP</div>
+                            <div style={{ marginTop: 8, borderTop: `1px solid ${color.line}`, paddingTop: 8 }}>
+                              <div style={{ fontSize: 11, color: color.textFaint, marginBottom: 3 }}>Live GP</div>
                               <GpChip gp={liveGP} pct={liveGPPct} />
                             </div>
                           ) : null;
                         })()}
                         {priceCalc.inputs && (
-                          <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #F3F4F6" }}>
-                            <div style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 4 }}>Inputs used</div>
-                            <div style={{ fontSize: 11, color: "#6B7280", lineHeight: 1.7 }}>
+                          <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${color.line}` }}>
+                            <div style={{ fontSize: 10, color: color.textFaint, fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 4 }}>Inputs used</div>
+                            <div style={{ fontSize: 11, color: color.textMuted, lineHeight: 1.7 }}>
                               {priceCalc.inputs.metal_type_key && (
                                 <div>{priceCalc.inputs.metal_type_key} · {fmtMoney(priceCalc.inputs.gold_price_per_gram)}/g · {priceCalc.inputs.gram_weight}g</div>
                               )}
@@ -1450,7 +1459,7 @@ export default function InventoryItemPage({ params }: Params) {
 
                 {/* Stored cost inputs — visible in view mode without editing */}
                 {(piece.labour_cost != null || piece.stone_cost != null || (piece as any).actual_cost != null) && (
-                  <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #E5E7EB", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px 20px" }}>
+                  <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${color.line}`, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px 20px" }}>
                     {piece.labour_cost != null && <FieldView label="Stored Labour Cost" value={fmtMoney(piece.labour_cost)} />}
                     {piece.stone_cost != null && <FieldView label="Stone Cost" value={fmtMoney(piece.stone_cost)} />}
                     {(piece as any).actual_cost != null && <FieldView label="Actual Cost Paid" value={fmtMoney((piece as any).actual_cost)} />}
@@ -1458,7 +1467,7 @@ export default function InventoryItemPage({ params }: Params) {
                 )}
 
                 {(piece.valuation_number || piece.valuation_amount) && (
-                  <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #E5E7EB", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 20px" }}>
+                  <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${color.line}`, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 20px" }}>
                     <FieldView label="Certificate Number" value={piece.valuation_number} />
                     <FieldView label="Certificate Amount" value={piece.valuation_amount} />
                   </div>
@@ -1477,7 +1486,7 @@ export default function InventoryItemPage({ params }: Params) {
 
           {/* Active reservation card */}
           {isReserved && activeRes && (
-            <div style={{ background: resExpired ? "#FEF2F2" : "#FFFBEB", border: `1px solid ${resExpired ? "#FECACA" : "#FDE68A"}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
+            <div style={{ background: resExpired ? "#FEF2F2" : "#FFFBEB", border: `1px solid ${resExpired ? "#FECACA" : "#FDE68A"}`, borderRadius: radius.lg, padding: 20, marginBottom: 16 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                 <Bookmark size={13} style={{ color: resExpired ? "#DC2626" : "#D97706" }} />
                 <h3 style={{ margin: 0, fontSize: 11, fontWeight: 700, color: resExpired ? "#DC2626" : "#D97706", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>
@@ -1503,13 +1512,13 @@ export default function InventoryItemPage({ params }: Params) {
           </SectionCard>
 
           {/* Notes */}
-          <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20, marginBottom: 16 }}>
-            <h3 style={{ margin: "0 0 10px", fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>Notes</h3>
+          <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: 20, marginBottom: 16, boxShadow: shadow.card }}>
+            <h3 style={{ margin: "0 0 10px", fontSize: 11, fontWeight: 700, color: color.textFaint, textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>Notes</h3>
             {editing ? (
               <textarea value={String(form.notes ?? "")} onChange={e => setForm(f => ({ ...f, notes: e.target.value || null }))} rows={4}
-                style={{ width: "100%", boxSizing: "border-box" as const, padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, resize: "vertical" as const }} />
+                style={{ width: "100%", boxSizing: "border-box" as const, padding: "10px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14, resize: "vertical" as const }} />
             ) : (
-              <p style={{ margin: 0, fontSize: 14, color: piece.notes ? "#374151" : "#D1D5DB", lineHeight: 1.6 }}>{piece.notes ?? "—"}</p>
+              <p style={{ margin: 0, fontSize: 14, color: piece.notes ? color.textMuted : "#D1D5DB", lineHeight: 1.6 }}>{piece.notes ?? "—"}</p>
             )}
           </div>
 
@@ -1529,9 +1538,9 @@ export default function InventoryItemPage({ params }: Params) {
 
           {/* Delete */}
           {isManager && !editing && (
-            <div style={{ borderTop: "1px solid #E5E7EB", paddingTop: 16 }}>
+            <div style={{ borderTop: `1px solid ${color.line}`, paddingTop: 16 }}>
               <button onClick={handleDelete}
-                style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", fontSize: 13, cursor: "pointer" }}>
+                style={{ padding: "8px 16px", borderRadius: radius.pill, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", fontSize: 13, cursor: "pointer" }}>
                 Delete Item
               </button>
             </div>
@@ -1540,11 +1549,11 @@ export default function InventoryItemPage({ params }: Params) {
 
         {/* ═══ RIGHT: Timeline ═══ */}
         <div style={{ position: "sticky", top: 24 }}>
-          <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20 }}>
+          <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: 20, boxShadow: shadow.card }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
-              <Clock size={13} style={{ color: "#9CA3AF" }} />
-              <h3 style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>History</h3>
-              <span style={{ marginLeft: "auto", fontSize: 11, color: "#9CA3AF" }}>{movements.length} movement{movements.length !== 1 ? "s" : ""}</span>
+              <Clock size={13} style={{ color: color.textFaint }} />
+              <h3 style={{ margin: 0, fontSize: 11, fontWeight: 700, color: color.textFaint, textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>History</h3>
+              <span style={{ marginLeft: "auto", fontSize: 11, color: color.textFaint }}>{movements.length} movement{movements.length !== 1 ? "s" : ""}</span>
             </div>
             <Timeline piece={piece} movements={movements} />
           </div>
@@ -1554,48 +1563,48 @@ export default function InventoryItemPage({ params }: Params) {
       {/* ── Move Modal ── */}
       {showMove && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 32, width: "100%", maxWidth: 400, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+          <div style={{ background: color.white, borderRadius: 16, padding: 32, width: "100%", maxWidth: 400, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
               <div>
-                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>Move Item</h2>
-                <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9CA3AF" }}>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: color.ink }}>Move Item</h2>
+                <p style={{ margin: "4px 0 0", fontSize: 13, color: color.textFaint }}>
                   Currently: {buildLocationPath(piece.location?.id, ref?.locations ?? [], piece.location?.name ?? "no location")} · {piece.status?.name ?? "no status"}
                 </p>
               </div>
-              <button onClick={() => setShowMove(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><X size={20} /></button>
+              <button onClick={() => setShowMove(false)} style={{ background: "none", border: "none", cursor: "pointer", color: color.textMuted }}><X size={20} /></button>
             </div>
             {moveError && <div style={{ padding: "10px 14px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, fontSize: 13, marginBottom: 16 }}>{moveError}</div>}
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div>
-                <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>New Location</label>
+                <label style={{ fontSize: 13, fontWeight: 500, color: color.textMuted, display: "block", marginBottom: 4 }}>New Location</label>
                 <select value={moveForm.to_location_id} onChange={e => setMoveForm(f => ({ ...f, to_location_id: e.target.value }))}
-                  style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, background: "#fff" }}>
+                  style={{ width: "100%", padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14, background: color.white }}>
                   <option value="">— Keep current —</option>
                   {ref?.locations.map(l => <option key={l.id} value={l.id}>{buildLocationPath(l.id, ref.locations, l.name)}</option>)}
                 </select>
               </div>
               <div>
-                <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>New Status</label>
+                <label style={{ fontSize: 13, fontWeight: 500, color: color.textMuted, display: "block", marginBottom: 4 }}>New Status</label>
                 <select value={moveForm.to_status_id} onChange={e => setMoveForm(f => ({ ...f, to_status_id: e.target.value }))}
-                  style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, background: "#fff" }}>
+                  style={{ width: "100%", padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14, background: color.white }}>
                   <option value="">— Keep current —</option>
                   {ref?.statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
               <div>
-                <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Notes</label>
+                <label style={{ fontSize: 13, fontWeight: 500, color: color.textMuted, display: "block", marginBottom: 4 }}>Notes</label>
                 <input value={moveForm.notes} onChange={e => setMoveForm(f => ({ ...f, notes: e.target.value }))}
                   placeholder="Optional reason…"
-                  style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }} />
+                  style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14 }} />
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 24 }}>
               <button onClick={() => setShowMove(false)}
-                style={{ flex: 1, padding: "10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer" }}>
+                style={{ flex: 1, padding: "10px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 14, cursor: "pointer" }}>
                 Cancel
               </button>
               <button onClick={handleMove} disabled={moveSaving}
-                style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 14, fontWeight: 500, cursor: moveSaving ? "not-allowed" : "pointer", opacity: moveSaving ? 0.7 : 1 }}>
+                style={{ flex: 1, padding: "10px", borderRadius: radius.pill, border: "none", background: color.ink, color: color.white, fontSize: 14, fontWeight: 500, cursor: moveSaving ? "not-allowed" : "pointer", opacity: moveSaving ? 0.7 : 1 }}>
                 {moveSaving ? "Saving…" : "Log Movement"}
               </button>
             </div>
@@ -1606,7 +1615,7 @@ export default function InventoryItemPage({ params }: Params) {
       {/* ── Mark as Sold Modal ── */}
       {showSell && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 32, width: "100%", maxWidth: 480, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", maxHeight: "90vh", overflowY: "auto" as const }}>
+          <div style={{ background: color.white, borderRadius: 16, padding: 32, width: "100%", maxWidth: 480, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", maxHeight: "90vh", overflowY: "auto" as const }}>
 
             {sellSuccess ? (
               /* ── Success state ── */
@@ -1614,8 +1623,8 @@ export default function InventoryItemPage({ params }: Params) {
                 <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#D1FAE5", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
                   <DollarSign size={24} style={{ color: "#10B981" }} />
                 </div>
-                <h2 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 700, color: "#111827" }}>Sale Recorded</h2>
-                <p style={{ margin: "0 0 16px", fontSize: 14, color: "#6B7280" }}>
+                <h2 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 700, color: color.ink }}>Sale Recorded</h2>
+                <p style={{ margin: "0 0 16px", fontSize: 14, color: color.textMuted }}>
                   {sellSuccess?.paired_sku
                     ? <><strong style={{ fontFamily: "monospace" }}>{piece.sku}</strong> + <strong style={{ fontFamily: "monospace" }}>{sellSuccess.paired_sku}</strong> have been marked as sold.</>
                     : <>{piece.sku} has been marked as sold.</>}
@@ -1632,7 +1641,7 @@ export default function InventoryItemPage({ params }: Params) {
                   </div>
                 )}
                 <button onClick={() => { setShowSell(false); setSellSuccess(null); }}
-                  style={{ width: "100%", padding: "10px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 14, fontWeight: 500, cursor: "pointer", marginTop: 8 }}>
+                  style={{ width: "100%", padding: "10px", borderRadius: radius.pill, border: "none", background: color.ink, color: color.white, fontSize: 14, fontWeight: 500, cursor: "pointer", marginTop: 8 }}>
                   Done
                 </button>
               </div>
@@ -1641,15 +1650,15 @@ export default function InventoryItemPage({ params }: Params) {
               <>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
                   <div>
-                    <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>Mark as Sold</h2>
-                    <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9CA3AF" }}>{piece.sku}{piece.title ? ` — ${piece.title}` : ""}</p>
+                    <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: color.ink }}>Mark as Sold</h2>
+                    <p style={{ margin: "4px 0 0", fontSize: 13, color: color.textFaint }}>{piece.sku}{piece.title ? ` — ${piece.title}` : ""}</p>
                   </div>
-                  <button onClick={() => setShowSell(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><X size={20} /></button>
+                  <button onClick={() => setShowSell(false)} style={{ background: "none", border: "none", cursor: "pointer", color: color.textMuted }}><X size={20} /></button>
                 </div>
 
                 {/* Pair toggle — shown only when a non-sold paired piece exists */}
                 {pairedPiece && !pairedPiece.is_sold && (
-                  <div style={{ marginBottom: 16, padding: "10px 14px", background: "#F5F3FF", border: "1px solid #C4B5FD", borderRadius: 10, display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ marginBottom: 16, padding: "10px 14px", background: "#F5F3FF", border: "1px solid #C4B5FD", borderRadius: radius.md, display: "flex", alignItems: "center", gap: 10 }}>
                     <span style={{ fontSize: 13, color: "#5B21B6", flex: 1 }}>
                       Paired with <strong style={{ fontFamily: "monospace" }}>{pairedPiece.sku}</strong>
                     </span>
@@ -1659,7 +1668,7 @@ export default function InventoryItemPage({ params }: Params) {
                           setSellAsPair(false);
                           setSellForm(f => ({ ...f, sold_price: piece.retail_price != null ? String(piece.retail_price) : "" }));
                         }}
-                        style={{ padding: "5px 12px", fontSize: 12, fontWeight: 500, border: "none", cursor: "pointer", background: !sellAsPair ? "#635BFF" : "#EDE9FE", color: !sellAsPair ? "#fff" : "#5B21B6" }}>
+                        style={{ padding: "5px 12px", fontSize: 12, fontWeight: 500, border: "none", cursor: "pointer", background: !sellAsPair ? color.ink : "#EDE9FE", color: !sellAsPair ? color.white : "#5B21B6" }}>
                         Individually
                       </button>
                       <button
@@ -1670,7 +1679,7 @@ export default function InventoryItemPage({ params }: Params) {
                           const combined = r1 + r2;
                           setSellForm(f => ({ ...f, sold_price: combined > 0 ? String(combined) : f.sold_price }));
                         }}
-                        style={{ padding: "5px 12px", fontSize: 12, fontWeight: 500, border: "none", cursor: "pointer", background: sellAsPair ? "#635BFF" : "#EDE9FE", color: sellAsPair ? "#fff" : "#5B21B6" }}>
+                        style={{ padding: "5px 12px", fontSize: 12, fontWeight: 500, border: "none", cursor: "pointer", background: sellAsPair ? color.ink : "#EDE9FE", color: sellAsPair ? color.white : "#5B21B6" }}>
                         Sell as pair
                       </button>
                     </div>
@@ -1678,8 +1687,8 @@ export default function InventoryItemPage({ params }: Params) {
                 )}
 
                 {sellAsPair && pairedPiece && !pairedPiece.is_sold && (
-                  <div style={{ marginBottom: 16, padding: "8px 12px", background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, color: "#6B7280" }}>
-                    <div style={{ marginBottom: 4, fontWeight: 500, color: "#374151" }}>Both pieces will be marked as sold</div>
+                  <div style={{ marginBottom: 16, padding: "8px 12px", background: color.paper, border: `1px solid ${color.line}`, borderRadius: 8, fontSize: 12, color: color.textMuted }}>
+                    <div style={{ marginBottom: 4, fontWeight: 500, color: color.textMuted }}>Both pieces will be marked as sold</div>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
                       <span style={{ fontFamily: "monospace" }}>{piece.sku}</span>
                       <span>{piece.retail_price != null ? fmtMoney(piece.retail_price) : "no price set"}</span>
@@ -1700,7 +1709,7 @@ export default function InventoryItemPage({ params }: Params) {
                   {/* Sold price + discount — side by side */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     <div>
-                      <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>
+                      <label style={{ fontSize: 13, fontWeight: 500, color: color.textMuted, display: "block", marginBottom: 4 }}>
                         Sold Price <span style={{ color: "#EF4444" }}>*</span>
                       </label>
                       <input
@@ -1708,29 +1717,29 @@ export default function InventoryItemPage({ params }: Params) {
                         value={sellForm.sold_price}
                         onChange={e => setSellForm(f => ({ ...f, sold_price: e.target.value }))}
                         placeholder="0.00"
-                        style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }}
+                        style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14 }}
                       />
                     </div>
                     <div>
-                      <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Discount</label>
+                      <label style={{ fontSize: 13, fontWeight: 500, color: color.textMuted, display: "block", marginBottom: 4 }}>Discount</label>
                       <input
                         type="number" min="0" step="0.01"
                         value={sellForm.discount_amount}
                         onChange={e => setSellForm(f => ({ ...f, discount_amount: e.target.value }))}
                         placeholder="0.00"
-                        style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }}
+                        style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14 }}
                       />
                     </div>
                   </div>
 
                   {/* Net price preview */}
                   {sellForm.sold_price && (
-                    <div style={{ fontSize: 13, color: "#6B7280", padding: "6px 10px", background: "#F9FAFB", borderRadius: 6 }}>
-                      Net: <strong style={{ fontFamily: "monospace", color: "#111827" }}>
+                    <div style={{ fontSize: 13, color: color.textMuted, padding: "6px 10px", background: color.paper, borderRadius: 6 }}>
+                      Net: <strong style={{ fontFamily: "monospace", color: color.ink }}>
                         {fmtMoney(parseFloat(sellForm.sold_price || "0") - parseFloat(sellForm.discount_amount || "0"))}
                       </strong>
                       {piece.retail_price != null && (
-                        <span style={{ color: "#9CA3AF", marginLeft: 8 }}>
+                        <span style={{ color: color.textFaint, marginLeft: 8 }}>
                           (listed at {fmtMoney(piece.retail_price)})
                         </span>
                       )}
@@ -1739,11 +1748,11 @@ export default function InventoryItemPage({ params }: Params) {
 
                   {/* Payment method */}
                   <div>
-                    <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Payment Method</label>
+                    <label style={{ fontSize: 13, fontWeight: 500, color: color.textMuted, display: "block", marginBottom: 4 }}>Payment Method</label>
                     <select
                       value={sellForm.payment_method}
                       onChange={e => setSellForm(f => ({ ...f, payment_method: e.target.value }))}
-                      style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, background: "#fff" }}>
+                      style={{ width: "100%", padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14, background: color.white }}>
                       <option value="">— Select —</option>
                       {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
@@ -1751,13 +1760,13 @@ export default function InventoryItemPage({ params }: Params) {
 
                   {/* Customer — search/select */}
                   <div style={{ position: "relative" as const }}>
-                    <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Customer</label>
+                    <label style={{ fontSize: 13, fontWeight: 500, color: color.textMuted, display: "block", marginBottom: 4 }}>Customer</label>
                     {custDisplay ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#F9FAFB" }}>
-                        <span style={{ flex: 1, fontSize: 14, color: "#111827" }}>{custDisplay}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, background: color.paper }}>
+                        <span style={{ flex: 1, fontSize: 14, color: color.ink }}>{custDisplay}</span>
                         <button
                           onClick={() => { setSellForm(f => ({ ...f, customer_id: "" })); setCustDisplay(""); }}
-                          style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", padding: 0 }}>
+                          style={{ background: "none", border: "none", cursor: "pointer", color: color.textFaint, padding: 0 }}>
                           <X size={14} />
                         </button>
                       </div>
@@ -1769,18 +1778,18 @@ export default function InventoryItemPage({ params }: Params) {
                           onChange={e => setCustSearch(e.target.value)}
                           onBlur={() => setTimeout(() => setCustDropdown(false), 200)}
                           placeholder="Search by name or email…"
-                          style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }}
+                          style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14 }}
                         />
                         {custDropdown && custResults.length > 0 && (
-                          <div style={{ position: "absolute" as const, top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.1)", zIndex: 10, marginTop: 4, overflow: "hidden" }}>
+                          <div style={{ position: "absolute" as const, top: "100%", left: 0, right: 0, background: color.white, border: `1px solid ${color.line}`, borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.1)", zIndex: 10, marginTop: 4, overflow: "hidden" }}>
                             {custResults.map(c => (
                               <div key={c.id}
                                 onMouseDown={() => selectCustomer(c)}
                                 style={{ padding: "10px 14px", cursor: "pointer", fontSize: 14 }}
-                                onMouseEnter={e => (e.currentTarget.style.background = "#F9FAFB")}
+                                onMouseEnter={e => (e.currentTarget.style.background = color.paper)}
                                 onMouseLeave={e => (e.currentTarget.style.background = "")}>
-                                <div style={{ fontWeight: 500, color: "#111827" }}>{`${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || "—"}</div>
-                                {c.email && <div style={{ fontSize: 12, color: "#9CA3AF" }}>{c.email}</div>}
+                                <div style={{ fontWeight: 500, color: color.ink }}>{`${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || "—"}</div>
+                                {c.email && <div style={{ fontSize: 12, color: color.textFaint }}>{c.email}</div>}
                               </div>
                             ))}
                           </div>
@@ -1791,11 +1800,11 @@ export default function InventoryItemPage({ params }: Params) {
 
                   {/* Salesperson */}
                   <div>
-                    <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Salesperson</label>
+                    <label style={{ fontSize: 13, fontWeight: 500, color: color.textMuted, display: "block", marginBottom: 4 }}>Salesperson</label>
                     <select
                       value={sellForm.staff_id}
                       onChange={e => setSellForm(f => ({ ...f, staff_id: e.target.value }))}
-                      style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, background: "#fff" }}>
+                      style={{ width: "100%", padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14, background: color.white }}>
                       <option value="">— None —</option>
                       {staffList.map(s => (
                         <option key={s.id} value={s.id}>{s.full_name}</option>
@@ -1805,24 +1814,24 @@ export default function InventoryItemPage({ params }: Params) {
 
                   {/* Notes */}
                   <div>
-                    <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Notes</label>
+                    <label style={{ fontSize: 13, fontWeight: 500, color: color.textMuted, display: "block", marginBottom: 4 }}>Notes</label>
                     <input
                       type="text"
                       value={sellForm.notes}
                       onChange={e => setSellForm(f => ({ ...f, notes: e.target.value }))}
                       placeholder="Optional — order ref, special instructions…"
-                      style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }}
+                      style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14 }}
                     />
                   </div>
                 </div>
 
                 <div style={{ display: "flex", gap: 8, marginTop: 24 }}>
                   <button onClick={() => setShowSell(false)}
-                    style={{ flex: 1, padding: "11px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer" }}>
+                    style={{ flex: 1, padding: "11px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 14, cursor: "pointer" }}>
                     Cancel
                   </button>
                   <button onClick={handleSell} disabled={sellSaving}
-                    style={{ flex: 1, padding: "11px", borderRadius: 8, border: "none", background: "#10B981", color: "#fff", fontSize: 14, fontWeight: 600, cursor: sellSaving ? "not-allowed" : "pointer", opacity: sellSaving ? 0.7 : 1 }}>
+                    style={{ flex: 1, padding: "11px", borderRadius: radius.pill, border: "none", background: "#10B981", color: color.white, fontSize: 14, fontWeight: 600, cursor: sellSaving ? "not-allowed" : "pointer", opacity: sellSaving ? 0.7 : 1 }}>
                     {sellSaving ? "Recording…" : "Confirm Sale"}
                   </button>
                 </div>
@@ -1835,13 +1844,13 @@ export default function InventoryItemPage({ params }: Params) {
       {/* ── Reserve Modal ── */}
       {showReserve && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 32, width: "100%", maxWidth: 460, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+          <div style={{ background: color.white, borderRadius: 16, padding: 32, width: "100%", maxWidth: 460, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
               <div>
-                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>Reserve Item</h2>
-                <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9CA3AF" }}>{piece.sku}{piece.title ? ` — ${piece.title}` : ""}</p>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: color.ink }}>Reserve Item</h2>
+                <p style={{ margin: "4px 0 0", fontSize: 13, color: color.textFaint }}>{piece.sku}{piece.title ? ` — ${piece.title}` : ""}</p>
               </div>
-              <button onClick={() => setShowReserve(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><X size={20} /></button>
+              <button onClick={() => setShowReserve(false)} style={{ background: "none", border: "none", cursor: "pointer", color: color.textMuted }}><X size={20} /></button>
             </div>
 
             {resError && <div style={{ padding: "10px 14px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, fontSize: 13, marginBottom: 16 }}>{resError}</div>}
@@ -1849,26 +1858,26 @@ export default function InventoryItemPage({ params }: Params) {
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {/* Customer search */}
               <div style={{ position: "relative" as const }}>
-                <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Customer</label>
+                <label style={{ fontSize: 13, fontWeight: 500, color: color.textMuted, display: "block", marginBottom: 4 }}>Customer</label>
                 {resCustDisplay ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#F9FAFB" }}>
-                    <span style={{ flex: 1, fontSize: 14, color: "#111827" }}>{resCustDisplay}</span>
-                    <button onClick={() => { setResCustId(""); setResCustDisplay(""); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", padding: 0 }}><X size={14} /></button>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, background: color.paper }}>
+                    <span style={{ flex: 1, fontSize: 14, color: color.ink }}>{resCustDisplay}</span>
+                    <button onClick={() => { setResCustId(""); setResCustDisplay(""); }} style={{ background: "none", border: "none", cursor: "pointer", color: color.textFaint, padding: 0 }}><X size={14} /></button>
                   </div>
                 ) : (
                   <>
                     <input type="text" value={resCustSearch} onChange={e => setResCustSearch(e.target.value)} onBlur={() => setTimeout(() => setResCustDropdown(false), 200)}
                       placeholder="Search by name or email…"
-                      style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }} />
+                      style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14 }} />
                     {resCustDropdown && resCustResults.length > 0 && (
-                      <div style={{ position: "absolute" as const, top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.1)", zIndex: 10, marginTop: 4, overflow: "hidden" }}>
+                      <div style={{ position: "absolute" as const, top: "100%", left: 0, right: 0, background: color.white, border: `1px solid ${color.line}`, borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.1)", zIndex: 10, marginTop: 4, overflow: "hidden" }}>
                         {resCustResults.map(c => (
                           <div key={c.id} onMouseDown={() => selectResCust(c)}
                             style={{ padding: "10px 14px", cursor: "pointer", fontSize: 14 }}
-                            onMouseEnter={e => (e.currentTarget.style.background = "#F9FAFB")}
+                            onMouseEnter={e => (e.currentTarget.style.background = color.paper)}
                             onMouseLeave={e => (e.currentTarget.style.background = "")}>
-                            <div style={{ fontWeight: 500, color: "#111827" }}>{`${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || "—"}</div>
-                            {c.email && <div style={{ fontSize: 12, color: "#9CA3AF" }}>{c.email}</div>}
+                            <div style={{ fontWeight: 500, color: color.ink }}>{`${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || "—"}</div>
+                            {c.email && <div style={{ fontSize: 12, color: color.textFaint }}>{c.email}</div>}
                           </div>
                         ))}
                       </div>
@@ -1879,39 +1888,39 @@ export default function InventoryItemPage({ params }: Params) {
 
               {/* Reason */}
               <div>
-                <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Reason</label>
+                <label style={{ fontSize: 13, fontWeight: 500, color: color.textMuted, display: "block", marginBottom: 4 }}>Reason</label>
                 <input type="text" value={reserveForm.reason} onChange={e => setReserveForm(f => ({ ...f, reason: e.target.value }))}
                   placeholder="e.g. Layby, customer on order, workshop hold…"
-                  style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }} />
+                  style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14 }} />
               </div>
 
               {/* Expiry + refs side by side */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <div>
-                  <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Expiry Date</label>
+                  <label style={{ fontSize: 13, fontWeight: 500, color: color.textMuted, display: "block", marginBottom: 4 }}>Expiry Date</label>
                   <input type="date" value={reserveForm.expires_at} onChange={e => setReserveForm(f => ({ ...f, expires_at: e.target.value }))}
-                    style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }} />
+                    style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14 }} />
                 </div>
                 <div>
-                  <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Quote Ref</label>
+                  <label style={{ fontSize: 13, fontWeight: 500, color: color.textMuted, display: "block", marginBottom: 4 }}>Quote Ref</label>
                   <input type="text" value={reserveForm.quote_reference} onChange={e => setReserveForm(f => ({ ...f, quote_reference: e.target.value }))}
                     placeholder="Optional"
-                    style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }} />
+                    style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14 }} />
                 </div>
               </div>
 
               <div>
-                <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Order Ref</label>
+                <label style={{ fontSize: 13, fontWeight: 500, color: color.textMuted, display: "block", marginBottom: 4 }}>Order Ref</label>
                 <input type="text" value={reserveForm.order_reference} onChange={e => setReserveForm(f => ({ ...f, order_reference: e.target.value }))}
                   placeholder="Optional"
-                  style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }} />
+                  style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14 }} />
               </div>
             </div>
 
             <div style={{ display: "flex", gap: 8, marginTop: 24 }}>
-              <button onClick={() => setShowReserve(false)} style={{ flex: 1, padding: "11px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer" }}>Cancel</button>
+              <button onClick={() => setShowReserve(false)} style={{ flex: 1, padding: "11px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 14, cursor: "pointer" }}>Cancel</button>
               <button onClick={handleReserve} disabled={resSaving}
-                style={{ flex: 1, padding: "11px", borderRadius: 8, border: "none", background: "#F59E0B", color: "#fff", fontSize: 14, fontWeight: 600, cursor: resSaving ? "not-allowed" : "pointer", opacity: resSaving ? 0.7 : 1 }}>
+                style={{ flex: 1, padding: "11px", borderRadius: radius.pill, border: "none", background: "#F59E0B", color: color.white, fontSize: 14, fontWeight: 600, cursor: resSaving ? "not-allowed" : "pointer", opacity: resSaving ? 0.7 : 1 }}>
                 {resSaving ? "Reserving…" : "Reserve Item"}
               </button>
             </div>
@@ -1922,26 +1931,26 @@ export default function InventoryItemPage({ params }: Params) {
       {/* ── Release Reservation Modal ── */}
       {showRelease && activeRes && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 32, width: "100%", maxWidth: 400, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+          <div style={{ background: color.white, borderRadius: 16, padding: 32, width: "100%", maxWidth: 400, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>Release Reservation</h2>
-              <button onClick={() => setShowRelease(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><X size={20} /></button>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: color.ink }}>Release Reservation</h2>
+              <button onClick={() => setShowRelease(false)} style={{ background: "none", border: "none", cursor: "pointer", color: color.textMuted }}><X size={20} /></button>
             </div>
-            <p style={{ margin: "0 0 16px", fontSize: 13, color: "#6B7280" }}>
+            <p style={{ margin: "0 0 16px", fontSize: 13, color: color.textMuted }}>
               This will return <strong>{piece.sku}</strong> to its previous status
               {activeRes.previous_status ? ` (${activeRes.previous_status.name})` : ""}.
             </p>
             {relError && <div style={{ padding: "10px 14px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, fontSize: 13, marginBottom: 14 }}>{relError}</div>}
             <div>
-              <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Reason (optional)</label>
+              <label style={{ fontSize: 13, fontWeight: 500, color: color.textMuted, display: "block", marginBottom: 4 }}>Reason (optional)</label>
               <input type="text" value={releaseReason} onChange={e => setReleaseReason(e.target.value)}
                 placeholder="e.g. Customer changed mind, quote expired…"
-                style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 }} />
+                style={{ width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14 }} />
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
-              <button onClick={() => setShowRelease(false)} style={{ flex: 1, padding: "11px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, cursor: "pointer" }}>Cancel</button>
+              <button onClick={() => setShowRelease(false)} style={{ flex: 1, padding: "11px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 14, cursor: "pointer" }}>Cancel</button>
               <button onClick={handleRelease} disabled={relSaving}
-                style={{ flex: 1, padding: "11px", borderRadius: 8, border: "none", background: "#6B7280", color: "#fff", fontSize: 14, fontWeight: 600, cursor: relSaving ? "not-allowed" : "pointer", opacity: relSaving ? 0.7 : 1 }}>
+                style={{ flex: 1, padding: "11px", borderRadius: radius.pill, border: "none", background: color.textMuted, color: color.white, fontSize: 14, fontWeight: 600, cursor: relSaving ? "not-allowed" : "pointer", opacity: relSaving ? 0.7 : 1 }}>
                 {relSaving ? "Releasing…" : "Release"}
               </button>
             </div>

@@ -6,15 +6,16 @@ import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
 import { ArrowLeft, Edit2, Trash2, Plus, X, Sparkles, Loader } from "lucide-react";
 import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
+import { color, radius, shadow, font } from "@/lib/theme";
 
 type Params = { params: { id: string } };
 
 function StatusDot({ colour, name }: { colour?: string | null; name?: string | null }) {
-  if (!name) return <span style={{ color: "#8A8A8A", fontSize: 12 }}>—</span>;
-  const c = colour ?? "#8A8A8A";
+  if (!name) return <span style={{ color: color.textFaint, fontSize: 12 }}>—</span>;
+  const c = colour ?? color.dotNeutral;
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 500, color: c }}>
-      <span style={{ width: 6, height: 6, borderRadius: "50%", background: c, flexShrink: 0 }} />
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 500, color: color.text, background: color.fill, borderRadius: radius.pill, padding: "3px 10px 3px 8px", whiteSpace: "nowrap" }}>
+      <span style={{ width: 7, height: 7, borderRadius: "50%", background: c, flexShrink: 0 }} />
       {name}
     </span>
   );
@@ -149,50 +150,50 @@ export default function ProductDetailPage({ params }: Params) {
     router.push(`/inventory/${json.piece.id}`);
   }
 
-  if (!hydrated || loading) return <div style={{ padding: 48, textAlign: "center", color: "#8A8A8A" }}>Loading…</div>;
+  if (!hydrated || loading) return <div style={{ padding: 48, textAlign: "center", color: color.textFaint }}>Loading…</div>;
   if (!product) return (
     <div style={{ padding: 48, textAlign: "center" }}>
-      <p style={{ color: "#595959" }}>Product not found.</p>
-      <button onClick={() => router.push("/inventory/products")} style={{ marginTop: 12, padding: "8px 16px", borderRadius: 8, border: "1px solid #E5E5E5", background: "#fff", cursor: "pointer", fontSize: 14 }}>Back to Products</button>
+      <p style={{ color: color.textMuted }}>Product not found.</p>
+      <button onClick={() => router.push("/inventory/products")} style={{ marginTop: 12, padding: "9px 18px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, cursor: "pointer", fontSize: 14, color: color.ink }}>Back to Products</button>
     </div>
   );
 
   const catName = typeof product.category === "object" && product.category && "name" in product.category
     ? product.category.name : typeof product.category === "string" ? product.category : null;
 
-  const LF = { fontSize: 13, fontWeight: 500 as const, color: "#2A2A2A", display: "block" as const, marginBottom: 4 };
-  const IF = { width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E5E5", fontSize: 14 };
+  const LF = { fontSize: 13, fontWeight: 500 as const, color: color.text, display: "block" as const, marginBottom: 4 };
+  const IF = { width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14, color: color.ink };
   const TA = { ...IF, resize: "vertical" as const };
 
   return (
     <div style={{ padding: "32px 32px 64px", maxWidth: 960, margin: "0 auto" }}>
       <button
         onClick={() => router.push("/inventory/products")}
-        style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: "#595959", fontSize: 14, marginBottom: 20, padding: 0 }}
+        style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: color.textMuted, fontSize: 14, marginBottom: 20, padding: 0 }}
       >
         <ArrowLeft size={16} /> Products
       </button>
 
       {/* Product header / edit card */}
-      <div style={{ background: "#fff", border: "1px solid #ececec", borderRadius: 16, boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.05)", padding: 24, marginBottom: 16 }}>
+      <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: 16, boxShadow: shadow.card, padding: 24, marginBottom: 16 }}>
         {!editing ? (
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                <h1 style={{ fontSize: 22, fontWeight: 700, color: "#0A0A0A", margin: 0 }}>{product.name}</h1>
-                {catName && <span style={{ fontSize: 11, padding: "2px 9px", borderRadius: 999, background: "#F5F5F5", color: "#595959", fontWeight: 500 }}>{catName}</span>}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.03em", color: color.ink, margin: 0 }}>{product.name}</h1>
+                {catName && <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: radius.pill, background: color.fill, color: color.text, fontWeight: 500 }}>{catName}</span>}
               </div>
-              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13, color: "#595959", marginBottom: 8 }}>
-                {product.collection    && <span>Collection: <strong style={{ color: "#2A2A2A" }}>{product.collection}</strong></span>}
-                {product.style         && <span>Style: <strong style={{ color: "#2A2A2A" }}>{product.style}</strong></span>}
-                {product.design        && <span>Design: <strong style={{ color: "#2A2A2A" }}>{product.design}</strong></span>}
-                {product.setting_type  && <span>Setting: <strong style={{ color: "#2A2A2A" }}>{product.setting_type}</strong></span>}
+              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13, color: color.textMuted, marginBottom: 8 }}>
+                {product.collection    && <span>Collection: <strong style={{ color: color.text }}>{product.collection}</strong></span>}
+                {product.style         && <span>Style: <strong style={{ color: color.text }}>{product.style}</strong></span>}
+                {product.design        && <span>Design: <strong style={{ color: color.text }}>{product.design}</strong></span>}
+                {product.setting_type  && <span>Setting: <strong style={{ color: color.text }}>{product.setting_type}</strong></span>}
               </div>
               {product.marketing_description && (
-                <p style={{ fontSize: 14, color: "#2A2A2A", margin: "8px 0 0", maxWidth: 640 }}>{product.marketing_description}</p>
+                <p style={{ fontSize: 14, color: color.text, margin: "8px 0 0", maxWidth: 640 }}>{product.marketing_description}</p>
               )}
-              <div style={{ marginTop: 12, fontSize: 13, color: "#595959" }}>
-                <strong style={{ color: "#0A0A0A" }}>{pieces.length}</strong> piece{pieces.length !== 1 ? "s" : ""} linked
+              <div style={{ marginTop: 12, fontSize: 13, color: color.textMuted }}>
+                <strong style={{ color: color.ink }}>{pieces.length}</strong> piece{pieces.length !== 1 ? "s" : ""} linked
               </div>
             </div>
             {isManager && (
@@ -214,11 +215,11 @@ export default function ProductDetailPage({ params }: Params) {
                   setEditing(true);
                   setEditError("");
                 }}
-                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E5E5", background: "#fff", fontSize: 14, cursor: "pointer", color: "#2A2A2A" }}>
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 18px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 14, cursor: "pointer", color: color.ink }}>
                   <Edit2 size={14} /> Edit
                 </button>
                 <button onClick={handleDelete} disabled={deleting}
-                  style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #FECACA", background: "#FEF2F2", color: "#DC2626", fontSize: 14, cursor: "pointer" }}>
+                  style={{ padding: "9px 12px", borderRadius: radius.pill, border: `1px solid ${color.danger}44`, background: color.dangerBg, color: color.danger, fontSize: 14, cursor: "pointer" }}>
                   <Trash2 size={14} />
                 </button>
               </div>
@@ -226,16 +227,16 @@ export default function ProductDetailPage({ params }: Params) {
           </div>
         ) : (
           <div>
-            <h3 style={{ margin: "0 0 16px", fontSize: 12, fontWeight: 700, color: "#8A8A8A", textTransform: "uppercase", letterSpacing: "0.06em" }}>Edit Product</h3>
-            {editError && <div style={{ padding: "10px 14px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, fontSize: 13, marginBottom: 14 }}>{editError}</div>}
+            <h3 style={{ margin: "0 0 16px", fontFamily: font.mono, fontSize: 12, fontWeight: 500, color: color.textMuted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Edit Product</h3>
+            {editError && <div style={{ padding: "10px 14px", background: color.dangerBg, color: color.danger, borderRadius: radius.md, fontSize: 13, marginBottom: 14 }}>{editError}</div>}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 20px" }}>
               <div style={{ gridColumn: "1 / -1" }}>
-                <label style={LF}>Name <span style={{ color: "#EF4444" }}>*</span></label>
+                <label style={LF}>Name <span style={{ color: color.danger }}>*</span></label>
                 <input value={editForm.name ?? ""} onChange={e => setEditForm((f: any) => ({ ...f, name: e.target.value }))} style={IF} />
               </div>
               <div>
                 <label style={LF}>Category</label>
-                <select value={editForm.category_id ?? ""} onChange={e => setEditForm((f: any) => ({ ...f, category_id: e.target.value }))} style={{ ...IF, background: "#fff" }}>
+                <select value={editForm.category_id ?? ""} onChange={e => setEditForm((f: any) => ({ ...f, category_id: e.target.value }))} style={{ ...IF, background: color.white }}>
                   <option value="">— None —</option>
                   {ref?.categories?.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
@@ -278,8 +279,8 @@ export default function ProductDetailPage({ params }: Params) {
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
-              <button onClick={() => setEditing(false)} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "1px solid #E5E5E5", background: "#fff", fontSize: 14, cursor: "pointer" }}>Cancel</button>
-              <button onClick={handleSaveProduct} disabled={editSaving} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: "#0A0A0A", color: "#fff", fontSize: 14, fontWeight: 500, cursor: editSaving ? "not-allowed" : "pointer", opacity: editSaving ? 0.7 : 1 }}>
+              <button onClick={() => setEditing(false)} style={{ flex: 1, padding: "10px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 14, cursor: "pointer", color: color.ink }}>Cancel</button>
+              <button onClick={handleSaveProduct} disabled={editSaving} style={{ flex: 1, padding: "10px", borderRadius: radius.pill, border: "none", background: color.ink, color: "#fff", fontSize: 14, fontWeight: 500, cursor: editSaving ? "not-allowed" : "pointer", opacity: editSaving ? 0.7 : 1 }}>
                 {editSaving ? "Saving…" : "Save"}
               </button>
             </div>
@@ -296,28 +297,28 @@ export default function ProductDetailPage({ params }: Params) {
 
       {/* Pieces */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#0A0A0A" }}>Linked Pieces ({pieces.length})</h2>
+        <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em", color: color.ink }}>Linked Pieces ({pieces.length})</h2>
         {isManager && (
           <button
             onClick={() => { setPieceForm({ ...BLANK_PIECE }); setPieceError(""); setAiDesc(""); setShowAddPiece(true); }}
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, border: "1px solid #E5E5E5", background: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer", color: "#2A2A2A" }}
+            style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 18px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 13, fontWeight: 500, cursor: "pointer", color: color.ink }}
           >
             <Plus size={14} /> Add Piece
           </button>
         )}
       </div>
 
-      <div style={{ background: "#fff", border: "1px solid #ececec", borderRadius: 16, boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.05)", overflow: "hidden" }}>
+      <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: 16, boxShadow: shadow.card, overflow: "hidden" }}>
         {pieces.length === 0 ? (
-          <div style={{ padding: 40, textAlign: "center", color: "#8A8A8A", fontSize: 14 }}>
+          <div style={{ padding: 40, textAlign: "center", color: color.textFaint, fontSize: 14 }}>
             No pieces linked to this product yet.
           </div>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
-              <tr style={{ background: "#FFFFFF" }}>
+              <tr style={{ background: color.white, borderBottom: `1px solid ${color.line}` }}>
                 {["SKU", "Title", "Metal", "Status", "Location", "Retail", ""].map(h => (
-                  <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontWeight: 600, color: "#8A8A8A", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em" }}>{h}</th>
+                  <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontFamily: font.mono, fontWeight: 500, color: color.textMuted, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em" }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -326,21 +327,21 @@ export default function ProductDetailPage({ params }: Params) {
                 <tr
                   key={piece.id}
                   onClick={() => router.push(`/inventory/${piece.id}`)}
-                  style={{ borderTop: "1px solid #F5F5F5", cursor: "pointer" }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "#FAFAFA")}
+                  style={{ borderTop: `1px solid ${color.line}`, cursor: "pointer" }}
+                  onMouseEnter={e => (e.currentTarget.style.background = color.hover)}
                   onMouseLeave={e => (e.currentTarget.style.background = "")}
                 >
-                  <td style={{ padding: "10px 16px", fontFamily: "monospace", fontWeight: 600, color: "#0A0A0A" }}>{piece.sku}</td>
-                  <td style={{ padding: "10px 16px", color: "#2A2A2A" }}>{piece.title ?? "—"}</td>
-                  <td style={{ padding: "10px 16px", color: "#595959" }}>
+                  <td style={{ padding: "10px 16px", fontFamily: font.mono, fontWeight: 600, color: color.ink }}>{piece.sku}</td>
+                  <td style={{ padding: "10px 16px", color: color.text }}>{piece.title ?? "—"}</td>
+                  <td style={{ padding: "10px 16px", color: color.textMuted }}>
                     {[piece.metal_karat, piece.metal_colour, piece.metal_type].filter(Boolean).join(" ") || "—"}
                   </td>
                   <td style={{ padding: "10px 16px" }}><StatusDot colour={piece.status?.colour} name={piece.status?.name} /></td>
-                  <td style={{ padding: "10px 16px", color: "#595959" }}>{piece.location?.name ?? "—"}</td>
-                  <td style={{ padding: "10px 16px", color: "#2A2A2A" }}>
+                  <td style={{ padding: "10px 16px", color: color.textMuted }}>{piece.location?.name ?? "—"}</td>
+                  <td style={{ padding: "10px 16px", color: color.text }}>
                     {piece.retail_price != null ? `$${Number(piece.retail_price).toLocaleString()}` : "—"}
                   </td>
-                  <td style={{ padding: "10px 16px", color: "#8A8A8A", fontSize: 12 }}>View →</td>
+                  <td style={{ padding: "10px 16px", color: color.textMuted, fontSize: 12 }}>View →</td>
                 </tr>
               ))}
             </tbody>
@@ -351,31 +352,31 @@ export default function ProductDetailPage({ params }: Params) {
       {/* Add Piece Modal */}
       {showAddPiece && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: "100%", maxWidth: 500, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", maxHeight: "90vh", overflowY: "auto" }}>
+          <div style={{ background: color.white, borderRadius: 16, padding: 28, width: "100%", maxWidth: 500, boxShadow: shadow.lg, maxHeight: "90vh", overflowY: "auto" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#0A0A0A" }}>Add Piece to {product.name}</h2>
-              <button onClick={() => setShowAddPiece(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#595959" }}><X size={20} /></button>
+              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em", color: color.ink }}>Add Piece to {product.name}</h2>
+              <button onClick={() => setShowAddPiece(false)} style={{ background: "none", border: "none", cursor: "pointer", color: color.textMuted }}><X size={20} /></button>
             </div>
 
             {/* AI parse */}
-            <div style={{ background: "#F5F5F5", border: "1px solid #E8E8E8", borderRadius: 10, padding: 14, marginBottom: 18 }}>
-              <label style={{ fontSize: 13, fontWeight: 500, color: "#111111", display: "block", marginBottom: 6 }}>
+            <div style={{ background: color.fill, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: 14, marginBottom: 18 }}>
+              <label style={{ fontSize: 13, fontWeight: 500, color: color.ink, display: "block", marginBottom: 6 }}>
                 <Sparkles size={13} style={{ display: "inline", marginRight: 4, verticalAlign: "middle" }} />Describe the item
               </label>
               <div style={{ display: "flex", gap: 8 }}>
-                <textarea value={aiDesc} onChange={e => setAiDesc(e.target.value)} placeholder="e.g. 18ct yellow gold, 0.5ct round brilliant G VS1…" rows={2} style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #E8E8E8", fontSize: 13, resize: "vertical", background: "#fff" }} />
-                <button onClick={handleParseWithAI} disabled={aiLoading || !aiDesc.trim()} style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0, padding: "8px 14px", borderRadius: 8, fontSize: 13, fontWeight: 500, background: "#111111", color: "#fff", border: "none", cursor: aiLoading || !aiDesc.trim() ? "not-allowed" : "pointer", opacity: !aiDesc.trim() ? 0.5 : 1, alignSelf: "flex-start" }}>
+                <textarea value={aiDesc} onChange={e => setAiDesc(e.target.value)} placeholder="e.g. 18ct yellow gold, 0.5ct round brilliant G VS1…" rows={2} style={{ flex: 1, padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 13, resize: "vertical", background: color.white, color: color.ink }} />
+                <button onClick={handleParseWithAI} disabled={aiLoading || !aiDesc.trim()} style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0, padding: "9px 16px", borderRadius: radius.pill, fontSize: 13, fontWeight: 500, background: color.ink, color: "#fff", border: "none", cursor: aiLoading || !aiDesc.trim() ? "not-allowed" : "pointer", opacity: !aiDesc.trim() ? 0.5 : 1, alignSelf: "flex-start" }}>
                   {aiLoading ? <Loader size={13} style={{ animation: "spin 1s linear infinite" }} /> : <Sparkles size={13} />} Parse
                 </button>
               </div>
             </div>
 
-            {pieceError && <div style={{ padding: "10px 14px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, fontSize: 13, marginBottom: 14 }}>{pieceError}</div>}
+            {pieceError && <div style={{ padding: "10px 14px", background: color.dangerBg, color: color.danger, borderRadius: radius.md, fontSize: 13, marginBottom: 14 }}>{pieceError}</div>}
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div><label style={LF}>Title</label><input value={pieceForm.title} onChange={e => setPieceForm(f => ({ ...f, title: e.target.value }))} style={IF} /></div>
               <div>
                 <label style={LF}>Category</label>
-                <select value={pieceForm.category_id} onChange={e => setPieceForm(f => ({ ...f, category_id: e.target.value }))} style={{ ...IF, background: "#fff" }}>
+                <select value={pieceForm.category_id} onChange={e => setPieceForm(f => ({ ...f, category_id: e.target.value }))} style={{ ...IF, background: color.white }}>
                   <option value="">— Select —</option>
                   {ref?.categories?.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
@@ -390,14 +391,14 @@ export default function ProductDetailPage({ params }: Params) {
               </div>
               <div>
                 <label style={LF}>Status</label>
-                <select value={pieceForm.status_id} onChange={e => setPieceForm(f => ({ ...f, status_id: e.target.value }))} style={{ ...IF, background: "#fff" }}>
+                <select value={pieceForm.status_id} onChange={e => setPieceForm(f => ({ ...f, status_id: e.target.value }))} style={{ ...IF, background: color.white }}>
                   <option value="">— Select —</option>
                   {ref?.statuses?.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
               <div>
                 <label style={LF}>Location</label>
-                <select value={pieceForm.location_id} onChange={e => setPieceForm(f => ({ ...f, location_id: e.target.value }))} style={{ ...IF, background: "#fff" }}>
+                <select value={pieceForm.location_id} onChange={e => setPieceForm(f => ({ ...f, location_id: e.target.value }))} style={{ ...IF, background: color.white }}>
                   <option value="">— Select —</option>
                   {ref?.locations?.map((l: any) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
@@ -405,8 +406,8 @@ export default function ProductDetailPage({ params }: Params) {
               <div><label style={LF}>Notes</label><textarea value={pieceForm.notes} onChange={e => setPieceForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...IF, resize: "vertical" as const }} /></div>
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
-              <button onClick={() => setShowAddPiece(false)} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "1px solid #E5E5E5", background: "#fff", fontSize: 14, cursor: "pointer" }}>Cancel</button>
-              <button onClick={handleAddPiece} disabled={pieceSaving} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: "#0A0A0A", color: "#fff", fontSize: 14, fontWeight: 500, cursor: pieceSaving ? "not-allowed" : "pointer", opacity: pieceSaving ? 0.7 : 1 }}>
+              <button onClick={() => setShowAddPiece(false)} style={{ flex: 1, padding: "10px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 14, cursor: "pointer", color: color.ink }}>Cancel</button>
+              <button onClick={handleAddPiece} disabled={pieceSaving} style={{ flex: 1, padding: "10px", borderRadius: radius.pill, border: "none", background: color.ink, color: "#fff", fontSize: 14, fontWeight: 500, cursor: pieceSaving ? "not-allowed" : "pointer", opacity: pieceSaving ? 0.7 : 1 }}>
                 {pieceSaving ? "Creating…" : "Create & Open"}
               </button>
             </div>

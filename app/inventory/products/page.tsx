@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
 import { Plus, X, Package, ChevronRight, Upload } from "lucide-react";
+import { color, radius, shadow } from "@/lib/theme";
 
 export default function ProductsPage() {
   const router = useRouter();
@@ -56,16 +57,16 @@ export default function ProductsPage() {
 
   if (!hydrated) return null;
 
-  const LF = { fontSize: 13, fontWeight: 500 as const, color: "#2A2A2A", display: "block" as const, marginBottom: 4 };
-  const IF = { width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E5E5", fontSize: 14 };
+  const LF = { fontSize: 13, fontWeight: 500 as const, color: color.text, display: "block" as const, marginBottom: 4 };
+  const IF = { width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: radius.md, border: `1px solid ${color.line}`, fontSize: 14, color: color.ink };
 
   return (
     <div style={{ padding: "32px 32px 64px", maxWidth: 1000, margin: "0 auto" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: "#0A0A0A", margin: 0 }}>Products</h1>
-          <p style={{ fontSize: 14, color: "#595959", margin: "4px 0 0" }}>
+          <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: "-0.03em", color: color.ink, margin: 0 }}>Products</h1>
+          <p style={{ fontSize: 14, color: color.textMuted, margin: "6px 0 0" }}>
             {loading ? "Loading…" : `${products.length} product${products.length !== 1 ? "s" : ""}`}
           </p>
         </div>
@@ -73,13 +74,13 @@ export default function ProductsPage() {
           <div style={{ display: "flex", gap: 8 }}>
             <button
               onClick={() => router.push("/inventory/products-import")}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 14, fontWeight: 500, background: "#FFFFFF", color: "#2A2A2A", border: "1px solid #E5E5E5", cursor: "pointer" }}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 18px", borderRadius: radius.pill, fontSize: 14, fontWeight: 500, background: color.white, color: color.ink, border: `1px solid ${color.line}`, cursor: "pointer" }}
             >
               <Upload size={15} /> Import CSV
             </button>
             <button
               onClick={() => { setShowNew(true); setNewError(""); }}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 14, fontWeight: 500, background: "#0A0A0A", color: "#fff", border: "none", cursor: "pointer" }}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 18px", borderRadius: radius.pill, fontSize: 14, fontWeight: 500, background: color.ink, color: "#fff", border: "none", cursor: "pointer" }}
             >
               <Plus size={15} /> New Product
             </button>
@@ -88,20 +89,20 @@ export default function ProductsPage() {
       </div>
 
       {/* List */}
-      <div style={{ background: "#fff", border: "1px solid #ececec", borderRadius: 16, boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.05)", overflow: "hidden" }}>
+      <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: 16, boxShadow: shadow.card, overflow: "hidden" }}>
         {loading ? (
-          <div style={{ padding: 40, textAlign: "center", color: "#8A8A8A" }}>Loading…</div>
+          <div style={{ padding: 40, textAlign: "center", color: color.textFaint }}>Loading…</div>
         ) : products.length === 0 ? (
           <div style={{ padding: 60, textAlign: "center" }}>
-            <Package size={40} style={{ color: "#E5E5E5", marginBottom: 12 }} />
-            <div style={{ fontSize: 15, fontWeight: 600, color: "#2A2A2A", marginBottom: 6 }}>No products yet</div>
-            <div style={{ fontSize: 13, color: "#8A8A8A", marginBottom: 20 }}>
+            <Package size={40} style={{ color: color.line, marginBottom: 12 }} />
+            <div style={{ fontSize: 15, fontWeight: 600, color: color.text, marginBottom: 6 }}>No products yet</div>
+            <div style={{ fontSize: 13, color: color.textFaint, marginBottom: 20 }}>
               Create a product to group and describe your stock by style.
             </div>
             {isManager && (
               <button
                 onClick={() => setShowNew(true)}
-                style={{ padding: "8px 16px", borderRadius: 8, fontSize: 14, fontWeight: 500, background: "#0A0A0A", color: "#fff", border: "none", cursor: "pointer" }}
+                style={{ padding: "9px 18px", borderRadius: radius.pill, fontSize: 14, fontWeight: 500, background: color.ink, color: "#fff", border: "none", cursor: "pointer" }}
               >
                 Create Product
               </button>
@@ -117,34 +118,34 @@ export default function ProductsPage() {
                 onClick={() => router.push(`/inventory/products/${product.id}`)}
                 style={{
                   display: "flex", alignItems: "center", padding: "16px 20px",
-                  borderBottom: i < products.length - 1 ? "1px solid #F5F5F5" : "none",
+                  borderBottom: i < products.length - 1 ? `1px solid ${color.line}` : "none",
                   cursor: "pointer",
                 }}
-                onMouseEnter={e => (e.currentTarget.style.background = "#FAFAFA")}
+                onMouseEnter={e => (e.currentTarget.style.background = color.hover)}
                 onMouseLeave={e => (e.currentTarget.style.background = "")}
               >
-                <div style={{ width: 40, height: 40, borderRadius: 10, background: "#F2F2F2", display: "flex", alignItems: "center", justifyContent: "center", marginRight: 16, flexShrink: 0 }}>
-                  <Package size={18} style={{ color: "#111111" }} />
+                <div style={{ width: 40, height: 40, borderRadius: radius.md, background: color.fill, display: "flex", alignItems: "center", justifyContent: "center", marginRight: 16, flexShrink: 0 }}>
+                  <Package size={18} style={{ color: color.ink }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: "#0A0A0A" }}>{product.name}</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: color.ink }}>{product.name}</div>
                   <div style={{ display: "flex", gap: 8, marginTop: 3, flexWrap: "wrap" }}>
                     {catName && (
-                      <span style={{ fontSize: 11, padding: "1px 8px", borderRadius: 999, background: "#F5F5F5", color: "#595959", fontWeight: 500 }}>{catName}</span>
+                      <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: radius.pill, background: color.fill, color: color.text, fontWeight: 500 }}>{catName}</span>
                     )}
                     {product.collection && (
-                      <span style={{ fontSize: 11, color: "#8A8A8A" }}>{product.collection}</span>
+                      <span style={{ fontSize: 11, color: color.textFaint }}>{product.collection}</span>
                     )}
                     {product.style && (
-                      <span style={{ fontSize: 11, color: "#8A8A8A" }}>{product.style}</span>
+                      <span style={{ fontSize: 11, color: color.textFaint }}>{product.style}</span>
                     )}
                   </div>
                 </div>
                 <div style={{ marginRight: 16, flexShrink: 0, textAlign: "right" }}>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: "#0A0A0A" }}>{product.piece_count ?? 0}</div>
-                  <div style={{ fontSize: 11, color: "#8A8A8A" }}>pieces</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: color.ink }}>{product.piece_count ?? 0}</div>
+                  <div style={{ fontSize: 11, color: color.textFaint }}>pieces</div>
                 </div>
-                <ChevronRight size={16} style={{ color: "#D4D4D4", flexShrink: 0 }} />
+                <ChevronRight size={16} style={{ color: color.textFaint, flexShrink: 0 }} />
               </div>
             );
           })
@@ -154,20 +155,20 @@ export default function ProductsPage() {
       {/* New Product Modal */}
       {showNew && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 32, width: "100%", maxWidth: 440, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+          <div style={{ background: color.white, borderRadius: 16, padding: 32, width: "100%", maxWidth: 440, boxShadow: shadow.lg }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#0A0A0A" }}>New Product</h2>
-              <button onClick={() => setShowNew(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#595959" }}><X size={20} /></button>
+              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em", color: color.ink }}>New Product</h2>
+              <button onClick={() => setShowNew(false)} style={{ background: "none", border: "none", cursor: "pointer", color: color.textMuted }}><X size={20} /></button>
             </div>
-            {newError && <div style={{ padding: "10px 14px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, fontSize: 13, marginBottom: 16 }}>{newError}</div>}
+            {newError && <div style={{ padding: "10px 14px", background: color.dangerBg, color: color.danger, borderRadius: radius.md, fontSize: 13, marginBottom: 16 }}>{newError}</div>}
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div>
-                <label style={LF}>Name <span style={{ color: "#EF4444" }}>*</span></label>
+                <label style={LF}>Name <span style={{ color: color.danger }}>*</span></label>
                 <input value={newForm.name} onChange={e => setNewForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Diamond Solitaire Ring" style={IF} />
               </div>
               <div>
                 <label style={LF}>Category</label>
-                <select value={newForm.category_id} onChange={e => setNewForm(f => ({ ...f, category_id: e.target.value }))} style={{ ...IF, background: "#fff" }}>
+                <select value={newForm.category_id} onChange={e => setNewForm(f => ({ ...f, category_id: e.target.value }))} style={{ ...IF, background: color.white }}>
                   <option value="">— None —</option>
                   {ref?.categories?.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
@@ -178,8 +179,8 @@ export default function ProductsPage() {
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
-              <button onClick={() => setShowNew(false)} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "1px solid #E5E5E5", background: "#fff", fontSize: 14, cursor: "pointer" }}>Cancel</button>
-              <button onClick={handleCreate} disabled={newSaving} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: "#0A0A0A", color: "#fff", fontSize: 14, fontWeight: 500, cursor: newSaving ? "not-allowed" : "pointer", opacity: newSaving ? 0.7 : 1 }}>
+              <button onClick={() => setShowNew(false)} style={{ flex: 1, padding: "10px", borderRadius: radius.pill, border: `1px solid ${color.line}`, background: color.white, fontSize: 14, cursor: "pointer", color: color.ink }}>Cancel</button>
+              <button onClick={handleCreate} disabled={newSaving} style={{ flex: 1, padding: "10px", borderRadius: radius.pill, border: "none", background: color.ink, color: "#fff", fontSize: 14, fontWeight: 500, cursor: newSaving ? "not-allowed" : "pointer", opacity: newSaving ? 0.7 : 1 }}>
                 {newSaving ? "Creating…" : "Create & Open"}
               </button>
             </div>

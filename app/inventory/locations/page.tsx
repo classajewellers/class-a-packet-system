@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
 import { InventoryLocation, InventoryLocationType } from "@/lib/types";
+import { color, radius, shadow, font } from "@/lib/theme";
 import { Plus, Pencil, Trash2, X, ChevronRight } from "lucide-react";
 
 // ─── constants ────────────────────────────────────────────────────────────────
@@ -170,11 +171,11 @@ function LocationForm({ initial, prefillParentId, allLocations, onClose, onSaved
   }
 
   const inputStyle = {
-    width: "100%", padding: "8px 10px", border: "1px solid #E5E7EB",
-    borderRadius: 6, fontSize: 13, color: "#1A1A2E", background: "#fff",
+    width: "100%", padding: "8px 10px", border: `1px solid ${color.line}`,
+    borderRadius: radius.md, fontSize: 13, color: color.ink, background: color.white,
     boxSizing: "border-box" as const,
   };
-  const labelStyle = { fontSize: 12, fontWeight: 500 as const, color: "#6B7280", marginBottom: 4, display: "block" as const };
+  const labelStyle = { fontSize: 12, fontWeight: 500 as const, color: color.textMuted, marginBottom: 4, display: "block" as const };
 
   const drawerTitle = isNew
     ? (prefillParentId ? "New Sub-location" : "New Location")
@@ -189,11 +190,11 @@ function LocationForm({ initial, prefillParentId, allLocations, onClose, onSaved
       style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.35)", display: "flex", justifyContent: "flex-end" }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div style={{ width: 420, height: "100%", background: "#fff", display: "flex", flexDirection: "column", boxShadow: "-4px 0 24px rgba(0,0,0,0.12)" }}>
+      <div style={{ width: 420, height: "100%", background: color.white, display: "flex", flexDirection: "column", boxShadow: "-4px 0 24px rgba(0,0,0,0.12)" }}>
         {/* Header */}
-        <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #F3F4F6", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#1A1A2E" }}>{drawerTitle}</h2>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", padding: 4 }}>
+        <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${color.line}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em", color: color.ink }}>{drawerTitle}</h2>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: color.textFaint, padding: 4 }}>
             <X size={18} />
           </button>
         </div>
@@ -201,14 +202,14 @@ function LocationForm({ initial, prefillParentId, allLocations, onClose, onSaved
         {/* Body */}
         <div style={{ padding: "20px 24px", flex: 1, display: "flex", flexDirection: "column", gap: 16, overflowY: "auto" }}>
           {error && (
-            <div style={{ padding: "10px 12px", background: "#FEE2E2", color: "#991B1B", borderRadius: 6, fontSize: 13 }}>{error}</div>
+            <div style={{ padding: "10px 12px", background: color.dangerBg, color: color.danger, borderRadius: radius.md, fontSize: 13 }}>{error}</div>
           )}
 
           {/* Parent Location */}
           <div>
             <label style={labelStyle}>Parent Location</label>
             {parentLocked ? (
-              <div style={{ ...inputStyle, background: "#F9FAFB", color: "#6B7280" }}>
+              <div style={{ ...inputStyle, background: color.paper, color: color.textMuted }}>
                 {lockedParentName ?? "—"}
               </div>
             ) : (
@@ -271,22 +272,22 @@ function LocationForm({ initial, prefillParentId, allLocations, onClose, onSaved
               onChange={(e) => set("shopify_visible", e.target.checked)}
               style={{ width: 16, height: 16, cursor: "pointer" }}
             />
-            <label htmlFor="shopify_visible" style={{ fontSize: 13, color: "#374151", cursor: "pointer" }}>Visible on Shopify</label>
+            <label htmlFor="shopify_visible" style={{ fontSize: 13, color: color.textMuted, cursor: "pointer" }}>Visible on Shopify</label>
           </div>
         </div>
 
         {/* Footer */}
-        <div style={{ padding: "16px 24px", borderTop: "1px solid #F3F4F6", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <div style={{ padding: "16px 24px", borderTop: `1px solid ${color.line}`, display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <button
             onClick={onClose}
-            style={{ padding: "8px 16px", background: "#F3F4F6", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, color: "#374151" }}
+            style={{ padding: "8px 16px", background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.pill, cursor: "pointer", fontSize: 13, color: color.ink }}
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
-            style={{ padding: "8px 20px", background: "#635BFF", color: "#fff", border: "none", borderRadius: 6, cursor: saving ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 500, opacity: saving ? 0.7 : 1 }}
+            style={{ padding: "8px 20px", background: color.ink, color: color.white, border: "none", borderRadius: radius.pill, cursor: saving ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 500, opacity: saving ? 0.7 : 1 }}
           >
             {saving ? "Saving…" : isNew ? "Create" : "Save Changes"}
           </button>
@@ -329,19 +330,19 @@ function LocationTreeNode({ loc, depth, childrenByParent, isAdmin, onAdd, onEdit
     gap: 10,
     padding: `${isRoot ? 14 : 10}px 16px`,
     paddingLeft: 16 + depth * 20,
-    borderBottom: "1px solid #F3F4F6",
-    background: depth % 2 === 0 ? "#fff" : "#FAFAFA",
+    borderBottom: `1px solid ${color.line}`,
+    background: depth % 2 === 0 ? color.white : color.paper,
   };
 
   return (
     <>
       <div style={rowStyle}>
         {depth > 0 && (
-          <span style={{ color: "#D1D5DB", fontSize: 12, flexShrink: 0, marginRight: 2 }}>↳</span>
+          <span style={{ color: color.textFaint, fontSize: 12, flexShrink: 0, marginRight: 2 }}>↳</span>
         )}
 
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
-          <span style={{ fontSize: isRoot ? 14 : 13, fontWeight: isRoot ? 600 : 500, color: "#1A1A2E" }}>
+          <span style={{ fontSize: isRoot ? 14 : 13, fontWeight: isRoot ? 600 : 500, color: color.ink }}>
             {loc.name}
           </span>
           {isRoot && typeLabel && (
@@ -356,7 +357,7 @@ function LocationTreeNode({ loc, depth, childrenByParent, isAdmin, onAdd, onEdit
             </span>
           )}
           {loc.bin_code_format && (
-            <code style={{ fontSize: 11, background: "#F3F4F6", color: "#6B7280", padding: "1px 6px", borderRadius: 4 }}>
+            <code style={{ fontSize: 11, background: color.fill, color: color.textMuted, padding: "1px 6px", borderRadius: 4 }}>
               {loc.bin_code_format}
             </code>
           )}
@@ -365,20 +366,20 @@ function LocationTreeNode({ loc, depth, childrenByParent, isAdmin, onAdd, onEdit
         <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
           <button
             onClick={() => onAdd(loc.id)}
-            style={{ display: "flex", alignItems: "center", gap: 3, padding: "4px 8px", background: "#EEF2FF", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 11, color: "#4338CA", fontWeight: 500 }}
+            style={{ display: "flex", alignItems: "center", gap: 3, padding: "4px 10px", background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.pill, cursor: "pointer", fontSize: 11, color: color.ink, fontWeight: 500 }}
           >
             <Plus size={11} /> Sub-location
           </button>
           <button
             onClick={() => onEdit(loc)}
-            style={{ display: "flex", alignItems: "center", gap: 3, padding: "4px 8px", background: "#F3F4F6", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 11, color: "#374151" }}
+            style={{ display: "flex", alignItems: "center", gap: 3, padding: "4px 10px", background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.pill, cursor: "pointer", fontSize: 11, color: color.ink }}
           >
             <Pencil size={11} /> Edit
           </button>
           {isAdmin && (
             <button
               onClick={() => onDelete(loc)}
-              style={{ display: "flex", alignItems: "center", gap: 3, padding: "4px 8px", background: "#FEE2E2", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 11, color: "#991B1B" }}
+              style={{ display: "flex", alignItems: "center", gap: 3, padding: "4px 10px", background: color.dangerBg, border: "none", borderRadius: radius.pill, cursor: "pointer", fontSize: 11, color: color.danger }}
             >
               <Trash2 size={11} /> Delete
             </button>
@@ -470,14 +471,14 @@ export default function InventoryLocationsPage() {
       {/* Page header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#1A1A2E" }}>Locations</h1>
-          <p style={{ margin: "4px 0 0", fontSize: 13, color: "#6B7280" }}>
+          <h1 style={{ margin: 0, fontSize: 32, fontWeight: 700, letterSpacing: "-0.03em", color: color.ink }}>Locations</h1>
+          <p style={{ margin: "6px 0 0", fontSize: 13, color: color.textMuted }}>
             Manage storage and display locations — supports Store → Area → Cabinet → Tray hierarchy
           </p>
         </div>
         <button
           onClick={() => setDrawer({ open: true, editing: null, prefillParentId: null })}
-          style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 500 }}
+          style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 18px", background: color.ink, color: color.white, border: "none", borderRadius: radius.pill, cursor: "pointer", fontSize: 13, fontWeight: 500 }}
         >
           <Plus size={15} />
           New Location
@@ -485,9 +486,9 @@ export default function InventoryLocationsPage() {
       </div>
 
       {loading ? (
-        <p style={{ color: "#9CA3AF", fontSize: 14 }}>Loading…</p>
+        <p style={{ color: color.textFaint, fontSize: 14 }}>Loading…</p>
       ) : locations.length === 0 ? (
-        <div style={{ padding: 40, textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>
+        <div style={{ padding: 40, textAlign: "center", color: color.textFaint, fontSize: 14 }}>
           No locations yet. Create your first one.
         </div>
       ) : (
@@ -495,7 +496,7 @@ export default function InventoryLocationsPage() {
           {roots.map((root) => (
             <div
               key={root.id}
-              style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, overflow: "hidden" }}
+              style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, overflow: "hidden", boxShadow: shadow.card }}
             >
               <LocationTreeNode
                 loc={root}

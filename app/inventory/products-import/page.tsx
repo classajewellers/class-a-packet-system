@@ -3,6 +3,8 @@
 import { useState, useRef } from "react";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
+import { color, radius, shadow, font } from "@/lib/theme";
+import StatusBadge from "@/components/StatusBadge";
 
 interface ImportRow {
   row_number:            number;
@@ -44,7 +46,7 @@ export default function ProductsImportPage() {
   if (!user) return null;
   if (!canManage(user.role)) {
     return (
-      <div style={{ maxWidth: 560, margin: "60px auto", padding: "0 20px", color: "#6B7280", fontSize: 15 }}>
+      <div style={{ maxWidth: 560, margin: "60px auto", padding: "0 20px", color: color.textMuted, fontSize: 15 }}>
         Bulk product import is available to managers only.
       </div>
     );
@@ -119,24 +121,25 @@ export default function ProductsImportPage() {
   }
 
   // ── Styles ──────────────────────────────────────────────────────────────
-  const th: React.CSSProperties = { padding: "8px 12px", fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", background: "#F9FAFB", textAlign: "left", borderBottom: "1px solid #E5E7EB", whiteSpace: "nowrap" };
-  const td: React.CSSProperties = { padding: "8px 12px", fontSize: 13, color: "#111827", borderBottom: "1px solid #F3F4F6", verticalAlign: "top" };
+  const th: React.CSSProperties = { padding: "8px 12px", fontFamily: font.mono, fontSize: 11, fontWeight: 500, color: color.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", background: color.white, textAlign: "left", borderBottom: `1px solid ${color.line}`, whiteSpace: "nowrap" };
+  const td: React.CSSProperties = { padding: "8px 12px", fontSize: 13, color: color.ink, borderBottom: `1px solid ${color.line}`, verticalAlign: "top" };
 
   const dupBadge = (c: ImportRow["dup_confidence"]) => {
-    if (c === "none") return <span style={{ background: "#D1FAE5", color: "#065F46", borderRadius: 4, padding: "2px 7px", fontSize: 11, fontWeight: 600 }}>New</span>;
-    const [bg, color, label] = c === "exact" ? ["#FEE2E2", "#991B1B", "Duplicate"] : ["#FEF3C7", "#92400E", "Possible dup"];
-    return <span style={{ background: bg, color, borderRadius: 4, padding: "2px 7px", fontSize: 11, fontWeight: 600 }}>{label}</span>;
+    if (c === "none") return <StatusBadge tone="success" label="New" />;
+    return c === "exact"
+      ? <StatusBadge tone="danger" label="Duplicate" />
+      : <StatusBadge tone="warning" label="Possible dup" />;
   };
 
   // ── Upload ──────────────────────────────────────────────────────────────
   if (step === "upload") return (
     <div style={{ maxWidth: 640, margin: "40px auto", padding: "0 20px" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Bulk Import Products</h1>
-      <p style={{ color: "#6B7280", fontSize: 14, marginBottom: 24 }}>
+      <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: "-0.03em", color: color.ink, marginBottom: 8 }}>Bulk Import Products</h1>
+      <p style={{ color: color.textMuted, fontSize: 14, marginBottom: 24 }}>
         Create new Designs from a CSV or spreadsheet. Needs a product-name column; collection, category, design, style and setting type are picked up automatically when present. Existing products are never modified.
       </p>
 
-      {error && <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, padding: "12px 16px", marginBottom: 20, color: "#B91C1C", fontSize: 14 }}>{error}</div>}
+      {error && <div style={{ background: color.dangerBg, border: `1px solid ${color.danger}44`, borderRadius: radius.md, padding: "12px 16px", marginBottom: 20, color: color.danger, fontSize: 14 }}>{error}</div>}
 
       <div
         onDragEnter={e => { e.preventDefault(); setDrag(true); }}
@@ -144,36 +147,36 @@ export default function ProductsImportPage() {
         onDragLeave={() => setDrag(false)}
         onDrop={e => { e.preventDefault(); setDrag(false); pickFile(e.dataTransfer.files); }}
         onClick={() => fileInputRef.current?.click()}
-        style={{ border: `2px dashed ${isDragging ? "#635BFF" : "#D1D5DB"}`, borderRadius: 10, padding: "32px 20px", textAlign: "center", cursor: "pointer", background: isDragging ? "#F5F3FF" : "#FAFAFA", marginBottom: 20 }}
+        style={{ border: `2px dashed ${isDragging ? color.ink : color.line}`, borderRadius: radius.lg, padding: "32px 20px", textAlign: "center", cursor: "pointer", background: isDragging ? color.fill : color.paper, marginBottom: 20 }}
       >
         <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" style={{ display: "none" }} onChange={e => pickFile(e.target.files)} />
-        <div style={{ color: "#9CA3AF", fontSize: 14 }}>{file ? file.name : "Drop a .csv / .xlsx here, or click to browse"}</div>
+        <div style={{ color: color.textFaint, fontSize: 14 }}>{file ? file.name : "Drop a .csv / .xlsx here, or click to browse"}</div>
       </div>
 
       <button onClick={runExtract} disabled={!file}
-        style={{ background: file ? "#635BFF" : "#E5E7EB", color: file ? "#fff" : "#9CA3AF", border: "none", borderRadius: 8, padding: "11px 28px", fontSize: 14, fontWeight: 600, cursor: file ? "pointer" : "not-allowed" }}>
+        style={{ background: file ? color.ink : color.fill, color: file ? "#fff" : color.textFaint, border: "none", borderRadius: radius.pill, padding: "11px 28px", fontSize: 14, fontWeight: 500, cursor: file ? "pointer" : "not-allowed" }}>
         Extract &amp; Preview
       </button>
     </div>
   );
 
-  if (step === "extracting") return <div style={{ maxWidth: 640, margin: "80px auto", textAlign: "center", color: "#6B7280", fontSize: 15 }}>Reading file and checking for duplicates…</div>;
+  if (step === "extracting") return <div style={{ maxWidth: 640, margin: "80px auto", textAlign: "center", color: color.textMuted, fontSize: 15 }}>Reading file and checking for duplicates…</div>;
 
   // ── Review ──────────────────────────────────────────────────────────────
   if (step === "review") {
     const dupCount = rows.filter(r => r.dup_confidence !== "none").length;
     return (
       <div style={{ padding: "32px 24px", maxWidth: 1300, margin: "0 auto" }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: "#111827", margin: "0 0 6px" }}>Review — {rows.length} rows</h1>
+        <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: "-0.03em", color: color.ink, margin: "0 0 8px" }}>Review — {rows.length} rows</h1>
         <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap", fontSize: 13 }}>
-          <span style={{ color: "#059669", fontWeight: 500 }}>{toCreateCount()} selected to create</span>
-          {dupCount > 0 && <span style={{ color: "#D97706", fontWeight: 500 }}>{dupCount} flagged as possible duplicates (unchecked by default)</span>}
+          <span style={{ color: color.dotSuccess, fontWeight: 500 }}>{toCreateCount()} selected to create</span>
+          {dupCount > 0 && <span style={{ color: color.dotWarning, fontWeight: 500 }}>{dupCount} flagged as possible duplicates (unchecked by default)</span>}
         </div>
 
-        {error && <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, padding: "12px 16px", marginBottom: 16, color: "#B91C1C", fontSize: 14 }}>{error}</div>}
+        {error && <div style={{ background: color.dangerBg, border: `1px solid ${color.danger}44`, borderRadius: radius.md, padding: "12px 16px", marginBottom: 16, color: color.danger, fontSize: 14 }}>{error}</div>}
 
         <div style={{ overflowX: "auto", marginBottom: 20 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg }}>
             <thead><tr>
               <th style={th}>Create</th><th style={th}>Name</th><th style={th}>Collection</th>
               <th style={th}>Category</th><th style={th}>Design</th><th style={th}>Style</th>
@@ -181,7 +184,7 @@ export default function ProductsImportPage() {
             </tr></thead>
             <tbody>
               {rows.map(row => (
-                <tr key={row.row_number} style={{ background: row.flagged ? "#FFFBEB" : "#fff" }}>
+                <tr key={row.row_number} style={{ background: row.flagged ? color.fill : color.white }}>
                   <td style={td}>
                     <input type="checkbox" checked={!!checked[row.row_number]}
                       onChange={e => setChecked(prev => ({ ...prev, [row.row_number]: e.target.checked }))} />
@@ -192,15 +195,15 @@ export default function ProductsImportPage() {
                     {row.category_raw ?? "—"}
                     {row.category_raw && (
                       row.category_matched_name
-                        ? <div style={{ color: "#059669", fontSize: 11 }}>→ linked</div>
-                        : <div style={{ color: "#D97706", fontSize: 11 }}>not found — text only</div>
+                        ? <div style={{ color: color.dotSuccess, fontSize: 11 }}>→ linked</div>
+                        : <div style={{ color: color.dotWarning, fontSize: 11 }}>not found — text only</div>
                     )}
                   </td>
                   <td style={td}>{row.design ?? "—"}</td>
                   <td style={td}>{row.style ?? "—"}</td>
                   <td style={td}>{row.setting_type ?? "—"}</td>
                   <td style={td}>{dupBadge(row.dup_confidence)}</td>
-                  <td style={td}>{row.flag_reasons.map((f, i) => <div key={i} style={{ fontSize: 11, color: "#92400E", marginBottom: 2 }}>{f}</div>)}</td>
+                  <td style={td}>{row.flag_reasons.map((f, i) => <div key={i} style={{ fontSize: 11, color: color.dotWarning, marginBottom: 2 }}>{f}</div>)}</td>
                 </tr>
               ))}
             </tbody>
@@ -209,9 +212,9 @@ export default function ProductsImportPage() {
 
         <div style={{ display: "flex", gap: 12 }}>
           <button onClick={() => { setStep("upload"); setRows([]); }}
-            style={{ background: "#F3F4F6", color: "#374151", border: "none", borderRadius: 8, padding: "10px 22px", fontSize: 14, fontWeight: 500, cursor: "pointer" }}>← Back</button>
+            style={{ background: color.white, color: color.ink, border: `1px solid ${color.line}`, borderRadius: radius.pill, padding: "10px 22px", fontSize: 14, fontWeight: 500, cursor: "pointer" }}>← Back</button>
           <button onClick={runConfirm} disabled={toCreateCount() === 0}
-            style={{ background: toCreateCount() > 0 ? "#635BFF" : "#E5E7EB", color: toCreateCount() > 0 ? "#fff" : "#9CA3AF", border: "none", borderRadius: 8, padding: "10px 28px", fontSize: 14, fontWeight: 600, cursor: toCreateCount() > 0 ? "pointer" : "not-allowed" }}>
+            style={{ background: toCreateCount() > 0 ? color.ink : color.fill, color: toCreateCount() > 0 ? "#fff" : color.textFaint, border: "none", borderRadius: radius.pill, padding: "10px 28px", fontSize: 14, fontWeight: 500, cursor: toCreateCount() > 0 ? "pointer" : "not-allowed" }}>
             Create {toCreateCount()} products
           </button>
         </div>
@@ -219,33 +222,36 @@ export default function ProductsImportPage() {
     );
   }
 
-  if (step === "confirming") return <div style={{ maxWidth: 640, margin: "80px auto", textAlign: "center", color: "#6B7280", fontSize: 15 }}>Creating products…</div>;
+  if (step === "confirming") return <div style={{ maxWidth: 640, margin: "80px auto", textAlign: "center", color: color.textMuted, fontSize: 15 }}>Creating products…</div>;
 
   // ── Done ────────────────────────────────────────────────────────────────
   if (step === "done" && result) return (
     <div style={{ maxWidth: 560, margin: "60px auto", padding: "0 20px" }}>
-      <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 12, padding: 28, marginBottom: 24 }}>
-        <div style={{ fontSize: 18, fontWeight: 700, color: "#065F46", marginBottom: 8 }}>Import complete</div>
-        <div style={{ fontSize: 14, color: "#374151", lineHeight: 1.7 }}>
+      <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, boxShadow: shadow.card, padding: 28, marginBottom: 24 }}>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em", color: color.ink, marginBottom: 8 }}>
+          <span style={{ width: 9, height: 9, borderRadius: "50%", background: color.dotSuccess, flexShrink: 0 }} />
+          Import complete
+        </div>
+        <div style={{ fontSize: 14, color: color.text, lineHeight: 1.7 }}>
           <div><strong>{result.created}</strong> products created</div>
-          {result.skipped.length > 0 && <div style={{ marginTop: 8, color: "#92400E" }}><strong>{result.skipped.length}</strong> skipped</div>}
+          {result.skipped.length > 0 && <div style={{ marginTop: 8, color: color.dotWarning }}><strong>{result.skipped.length}</strong> skipped</div>}
         </div>
       </div>
 
       {result.skipped.length > 0 && (
-        <div style={{ background: "#FFF", border: "1px solid #E5E7EB", borderRadius: 8, overflow: "hidden", marginBottom: 24 }}>
-          <div style={{ padding: "10px 16px", background: "#FEF3C7", fontSize: 13, fontWeight: 600, color: "#92400E" }}>Skipped</div>
+        <div style={{ background: color.white, border: `1px solid ${color.line}`, borderRadius: radius.lg, boxShadow: shadow.card, overflow: "hidden", marginBottom: 24 }}>
+          <div style={{ padding: "10px 16px", background: color.fill, fontFamily: font.mono, fontSize: 11, fontWeight: 500, letterSpacing: "0.05em", textTransform: "uppercase", color: color.textMuted }}>Skipped</div>
           {result.skipped.map((s, i) => (
-            <div key={i} style={{ padding: "8px 16px", borderTop: "1px solid #F3F4F6", fontSize: 13 }}>
-              <span style={{ fontWeight: 500, marginRight: 8 }}>{s.name}</span>
-              <span style={{ color: "#6B7280" }}>{s.reason}</span>
+            <div key={i} style={{ padding: "8px 16px", borderTop: `1px solid ${color.line}`, fontSize: 13 }}>
+              <span style={{ fontWeight: 500, marginRight: 8, color: color.ink }}>{s.name}</span>
+              <span style={{ color: color.textMuted }}>{s.reason}</span>
             </div>
           ))}
         </div>
       )}
 
       <button onClick={() => { setStep("upload"); setFile(null); setRows([]); setResult(null); }}
-        style={{ background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+        style={{ background: color.ink, color: "#fff", border: "none", borderRadius: radius.pill, padding: "10px 24px", fontSize: 14, fontWeight: 500, cursor: "pointer" }}>
         Import another file
       </button>
     </div>
