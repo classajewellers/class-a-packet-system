@@ -11,9 +11,9 @@
   --bg: #fafafa;
 }
 
-/* Geist Sans everywhere (variable set on <html> in layout.tsx); Inter is the
-   fallback while the font loads. */
-* { font-family: var(--font-geist-sans), 'Inter', system-ui, sans-serif; }
+/* Route the catch-all through the same --font-sans lever as html,body and the
+   .ds-* classes, so nothing fights it on specificity. */
+* { font-family: var(--font-sans); }
 
 /* Minimal high-contrast frame: near-white ground, near-black ink, crisp type. */
 body {
@@ -113,8 +113,11 @@ input[type="date"] {
   --shadow-lg: 0 18px 40px rgba(0,0,0,0.12);
   --shadow-drawer: -4px 0 24px rgba(0,0,0,0.08);
   /* Typography */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: 'SF Mono', ui-monospace, Menlo, monospace;
+  /* Geist first (variable set on <html> in layout.tsx), old fonts as fallback.
+     This is the app's real font lever — html,body and the .ds-* classes all
+     resolve font-family through these two variables. */
+  --font-sans: var(--font-geist-sans, 'Inter'), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: var(--font-geist-mono, 'SF Mono'), ui-monospace, Menlo, monospace;
   /* Density */
   --row-pad-y: 12px;
   --card-pad: 20px;
