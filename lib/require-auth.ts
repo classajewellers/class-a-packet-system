@@ -10,6 +10,15 @@
  *
  * This is the reusable version of that pattern (audit remediation "Fix 2").
  * Use it in new routes so they are not added to the header-trust vulnerable set.
+ *
+ *   requireManager(req) — verified session AND manager/admin role.
+ *   requireAuth(req)    — verified session, ANY role (staff or manager). Use for
+ *                         staff-facing routes (e.g. attachments) that must still
+ *                         be tenant-isolated but must not lock staff out.
+ *
+ * Both are defence-in-depth: even with the middleware session guard in place,
+ * these re-derive tenant/role directly from the session so the route never
+ * depends on an upstream header being trustworthy.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
@@ -25,10 +34,10 @@ export type AuthResult =
   | { ok: true;  ctx: AuthContext }
   | { ok: false; response: NextResponse };
 
-/** Verify a Supabase session and require the caller be a manager or admin.
- *  On success returns the server-derived tenantId/role; on failure returns a
- *  ready-to-send 401/403/503 response. */
-export async function requireManager(req: NextRequest): Promise<AuthResult> {
+/** Verify a Supabase session and resolve the caller's tenant_id + role from the
+ *  profiles table. Returns the AuthContext on success, or a ready-to-send
+ *  401/403/503 response on failure. Shared by requireAuth and requireManager. */
+async function resolveAuth(req: NextRequest): Promise<AuthResult> {
   const url  = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anon) {
@@ -59,9 +68,24 @@ export async function requireManager(req: NextRequest): Promise<AuthResult> {
   if (error || !profile?.tenant_id) {
     return { ok: false, response: NextResponse.json({ error: "No tenant associated with this account" }, { status: 403 }) };
   }
-  if (profile.role !== "manager" && profile.role !== "admin") {
-    return { ok: false, response: NextResponse.json({ error: "Forbidden — manager or admin only" }, { status: 403 }) };
-  }
 
   return { ok: true, ctx: { userId: user.id, tenantId: String(profile.tenant_id), role: String(profile.role) } };
+}
+
+/** Verify a Supabase session. Any authenticated tenant user (staff or manager)
+ *  is allowed; tenantId/role are server-derived. Use for staff-facing routes. */
+export async function requireAuth(req: NextRequest): Promise<AuthResult> {
+  return resolveAuth(req);
+}
+
+/** Verify a Supabase session and require the caller be a manager or admin.
+ *  On success returns the server-derived tenantId/role; on failure returns a
+ *  ready-to-send 401/403/503 response. */
+export async function requireManager(req: NextRequest): Promise<AuthResult> {
+  const result = await resolveAuth(req);
+  if (!result.ok) return result;
+  if (result.ctx.role !== "manager" && result.ctx.role !== "admin") {
+    return { ok: false, response: NextResponse.json({ error: "Forbidden — manager or admin only" }, { status: 403 }) };
+  }
+  return result;
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { requireManager } from "@/lib/require-auth";
 import { parseSizeLabel } from "@/lib/melee-size-parse";
 
 export const dynamic = "force-dynamic";
@@ -308,7 +309,9 @@ async function extractSingleFile(
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    const tenantId = req.headers.get("x-tenant-id") ?? "";
+    const auth = await requireManager(req);
+    if (!auth.ok) return auth.response;
+    const { tenantId } = auth.ctx;
     await createTenantSupabaseClient(tenantId);
 
     const formData = await req.formData();

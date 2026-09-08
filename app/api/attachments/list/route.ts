@@ -1,24 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { requireAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get("x-tenant-id") ?? "";
+  const auth = await requireAuth(req);
+  if (!auth.ok) return auth.response;
+  const { tenantId } = auth.ctx;
+
   const { searchParams } = new URL(req.url);
   const entityType = searchParams.get("entity_type");
   const entityId = searchParams.get("entity_id");
 
   if (!entityType || !entityId) {
     return NextResponse.json({ error: "entity_type and entity_id are required" }, { status: 400 });
-  }
-
-  // Tenant scope is mandatory — without it this route returned any tenant's
-  // attachments for a known entity_id (cross-tenant read). An empty tenant is
-  // rejected rather than silently matching tenant_id = ''.
-  if (!tenantId) {
-    return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
   }
 
   const supabase = await createTenantSupabaseClient(tenantId);

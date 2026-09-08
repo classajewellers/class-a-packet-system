@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { requireManager } from "@/lib/require-auth";
 import { parseSizeLabel } from "@/lib/melee-size-parse";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +25,9 @@ interface GroupPayload {
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    const tenantId = req.headers.get("x-tenant-id") ?? "";
+    const auth = await requireManager(req);
+    if (!auth.ok) return auth.response;
+    const { tenantId } = auth.ctx;
     const supabase = await createTenantSupabaseClient(tenantId);
 
     const body = await req.json();

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { requireAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -11,8 +12,9 @@ const ALLOWED_MIME = new Set([
 const ALLOWED_EXT = /\.(jpg|jpeg|png|webp|heic|heif|pdf)$/i;
 
 export async function POST(req: NextRequest) {
-  const tenantId = req.headers.get("x-tenant-id") ?? "";
-  if (!tenantId) return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
+  const auth = await requireAuth(req);
+  if (!auth.ok) return auth.response;
+  const { tenantId } = auth.ctx;
 
   try {
     const formData = await req.formData();

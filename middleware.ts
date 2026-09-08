@@ -1,24 +1,53 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
 
-// Exact paths that bypass all auth checks
+// Exact public PAGE paths that bypass the session redirect. API publics are a
+// separate, tighter list (API_PUBLIC_ROUTES) applied in the /api/* branch —
+// keep /api/* entries OUT of here so there is one source of truth per surface.
 const PUBLIC_ROUTES = new Set([
   "/login",
   "/signup",
   "/onboarding",
   "/set-password",
+  "/vault-admin/login",
+]);
+
+// Prefix-based public PAGE paths (trailing-slash and query-string safe).
+// /claim/<reference> is the customer-facing packet claim page.
+const PUBLIC_PREFIXES = ["/claim/"];
+
+// ── API auth allowlist (Fix 1: middleware session guard) ─────────────────────
+// These /api/* paths are the ONLY ones that may be reached without a Supabase
+// session. Everything else under /api/* requires a verified session + tenant.
+// Keep this list tight — each entry is a deliberate hole, justified below.
+//
+//   Auth flows (pre-session by definition):
+//     /api/auth/callback, /api/auth/confirm, /api/auth/signup, /api/auth/verify-pin
+//   Inbound webhooks (server-to-server; verify their own signature/HMAC):
+//     /api/shopify/webhook, /api/twilio/webhook, /api/stripe/webhook, /api/billing/webhook
+//   OAuth redirect (browser redirect from Shopify; verifies HMAC + state itself):
+//     /api/shopify/oauth/callback
+//   Public store list (pre-auth login store selector; GET-only, non-sensitive):
+//     /api/tenants
+const API_PUBLIC_ROUTES = new Set([
   "/api/auth/callback",
   "/api/auth/confirm",
   "/api/auth/signup",
   "/api/auth/verify-pin",
   "/api/shopify/webhook",
-  "/api/shopify/customer",
+  "/api/shopify/oauth/callback",
   "/api/twilio/webhook",
-  "/vault-admin/login",
+  "/api/stripe/webhook",
+  "/api/billing/webhook",
+  "/api/tenants",
 ]);
 
-// Prefix-based public paths (trailing-slash and query-string safe)
-const PUBLIC_PREFIXES = ["/claim/", "/api/shopify/"];
+// Self-authenticating API prefixes: these validate their OWN credential (the
+// RFID bridge Bearer token, hashed against rfid_bridge_installations) and are
+// called by a headless device that has no Supabase session. They are exempt
+// from the session guard but are NOT unauthenticated — the route enforces the
+// Bearer token itself.
+const API_SELF_AUTH_PREFIXES = ["/api/rfid/bridge/", "/api/rfid/lookup/"];
 
 // Auth routes: 5 requests per 15 minutes per IP
 const AUTH_RATE_LIMIT_ROUTES = new Set([
@@ -74,6 +103,103 @@ async function edgeRateLimit(
   }
 }
 
+/**
+ * Edge-compatible profile lookup via Supabase REST API (service role).
+ * Returns the caller's tenant_id + role, or null if none can be resolved.
+ * Mirrors the edgeRateLimit fetch pattern (no Node modules).
+ *
+ * Fails CLOSED (returns null → 403) — unlike rate limiting, we must never grant
+ * access when the tenant/role cannot be verified.
+ */
+async function edgeResolveProfile(
+  userId: string
+): Promise<{ tenantId: string; role: string } | null> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceKey) return null;
+
+  try {
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}&select=tenant_id,role&limit=1`,
+      {
+        headers: {
+          apikey:        serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+        },
+      }
+    );
+    if (!res.ok) return null;
+    const rows = (await res.json()) as { tenant_id: string | null; role: string | null }[];
+    const row  = Array.isArray(rows) ? rows[0] : null;
+    if (!row?.tenant_id) return null;
+    return { tenantId: String(row.tenant_id), role: String(row.role ?? "") };
+  } catch {
+    return null;
+  }
+}
+
+/** JSON 401/403 helper for API responses. */
+function apiError(message: string, status: number): NextResponse {
+  return new NextResponse(JSON.stringify({ error: message }), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+/**
+ * API auth guard (Fix 1). Requires a verified Supabase session for the request,
+ * resolves the caller's tenant_id + role from the profiles table, STRIPS any
+ * client-supplied x-tenant-id / x-user-* headers, and injects the trusted
+ * server-derived values so downstream route handlers can read them safely.
+ *
+ * Returns a NextResponse (either the forwarded request with rewritten headers,
+ * or a 401/403/503 error). The caller returns this directly.
+ */
+async function guardApiRequest(request: NextRequest): Promise<NextResponse> {
+  const url  = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anon) return apiError("Auth is not configured", 503);
+
+  // Verify the session. Collect any refreshed auth cookies to replay onto the
+  // response, but derive tenant/role before building the forwarded request.
+  const cookiesToSet: { name: string; value: string; options: any }[] = [];
+  const supabase = createServerClient(url, anon, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(list) {
+        list.forEach((c) => cookiesToSet.push(c));
+      },
+    },
+  });
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return apiError("Unauthorized", 401);
+
+  const profile = await edgeResolveProfile(user.id);
+  if (!profile) return apiError("No tenant associated with this account", 403);
+
+  // Build the forwarded request headers: start from the originals, remove any
+  // client-supplied trust headers (case-insensitive delete covers all casings),
+  // then inject the trusted server-derived values.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete("x-tenant-id");
+  requestHeaders.delete("x-user-id");
+  requestHeaders.delete("x-user-role");
+  requestHeaders.set("x-tenant-id", profile.tenantId);
+  requestHeaders.set("x-user-id", user.id);
+  requestHeaders.set("x-user-role", profile.role);
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  cookiesToSet.forEach(({ name, value, options }) =>
+    response.cookies.set(name, value, options)
+  );
+  return response;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -117,7 +243,32 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // ── Auth checks ──────────────────────────────────────────────────────────────
+  // ── API auth guard (Fix 1) ─────────────────────────────────────────────────
+  // Handle /api/* BEFORE the page-oriented public/allowlist logic so the API
+  // rules (JSON errors, header rewrite, bridge/webhook exemptions) apply cleanly.
+  if (pathname.startsWith("/api/")) {
+    // Self-authenticating device routes (RFID bridge Bearer token) — exempt.
+    if (API_SELF_AUTH_PREFIXES.some((p) => pathname.startsWith(p))) {
+      return NextResponse.next();
+    }
+    // Explicit public API allowlist (auth flows, signed webhooks, store list).
+    if (API_PUBLIC_ROUTES.has(pathname)) {
+      return NextResponse.next();
+    }
+    // Operator admin API — gated on the operator cookie (a separate auth
+    // domain, not a Supabase tenant session). This closes the fully-open hole;
+    // hardening the operator cookie itself is tracked separately (C4).
+    if (pathname.startsWith("/api/vault-admin/")) {
+      const operatorAuth = request.cookies.get("vault_operator_auth")?.value;
+      if (operatorAuth !== "1") return apiError("Unauthorized", 401);
+      return NextResponse.next();
+    }
+    // Everything else under /api/* — require a verified session + tenant, and
+    // inject the trusted x-tenant-id.
+    return guardApiRequest(request);
+  }
+
+  // ── Auth checks (pages) ─────────────────────────────────────────────────────
 
   // 3. Completely public — return immediately, no Supabase client created
   if (
@@ -136,12 +287,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 5. API routes — pass through (service-role key used server-side)
-  if (pathname.startsWith("/api/")) {
-    return NextResponse.next();
-  }
-
-  // 6. All other routes — require a valid Supabase session
+  // 5. All other routes — require a valid Supabase session
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { requireManager } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,9 @@ interface ConfirmedRow {
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    const tenantId = req.headers.get("x-tenant-id") ?? "";
+    const auth = await requireManager(req);
+    if (!auth.ok) return auth.response;
+    const { tenantId } = auth.ctx;
     const supabase = await createTenantSupabaseClient(tenantId);
 
     const body = await req.json();

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { requireAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -36,8 +37,9 @@ const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 // ── GET /api/attachments?record_type=X&record_id=Y[&attachment_type=Z] ────────
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  const tenantId = req.headers.get("x-tenant-id") ?? "";
-  if (!tenantId) return NextResponse.json({ attachments: [] }, { status: 400 });
+  const auth = await requireAuth(req);
+  if (!auth.ok) return auth.response;
+  const { tenantId } = auth.ctx;
 
   const { searchParams } = new URL(req.url);
   const recordType = searchParams.get("record_type");
@@ -83,8 +85,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 // ── POST /api/attachments (multipart) ─────────────────────────────────────────
 // Fields: file (File), record_type, record_id, attachment_type?, display_name?, notes?
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const tenantId = req.headers.get("x-tenant-id") ?? "";
-  if (!tenantId) return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
+  const auth = await requireAuth(req);
+  if (!auth.ok) return auth.response;
+  const { tenantId } = auth.ctx;
 
   let formData: FormData;
   try {

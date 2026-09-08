@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { requireAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -11,8 +12,9 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const tenantId = req.headers.get("x-tenant-id") ?? "";
-  if (!tenantId) return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
+  const auth = await requireAuth(req);
+  if (!auth.ok) return auth.response;
+  const { tenantId } = auth.ctx;
 
   const supabase = await createTenantSupabaseClient(tenantId);
 

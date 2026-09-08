@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { requireManager } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -289,7 +290,9 @@ function buildMatchCandidates(
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    const tenantId = req.headers.get("x-tenant-id") ?? "";
+    const auth = await requireManager(req);
+    if (!auth.ok) return auth.response;
+    const { tenantId } = auth.ctx;
     const supabase = await createTenantSupabaseClient(tenantId);
 
     const formData = await req.formData();
