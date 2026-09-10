@@ -51,18 +51,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
   // is still running, causing setHydrated(true) to fire with user=null.
   const loadingRef = useRef<Promise<void> | null>(null);
 
-  const fallbackUser = (userId: string, userEmail: string): LoggedInUser => ({
-    id:            userId,
-    name:          userEmail.split("@")[0],
-    role:          "manager" as UserRole,
-    email:         userEmail,
-    tenantId:      "00000000-0000-0000-0000-000000000001",
-    tenantSlug:    "classa",
-    initials:      userEmail.substring(0, 2).toUpperCase(),
-    loggedInAt:    new Date().toISOString(),
-    permissions:   null,
-    can_see_costs: false,
-  });
+  // A failed profile/tenant resolution must FAIL LOUDLY — never silently default
+  // to a tenant. Previously this fell back to a hardcoded Class A user, which
+  // meant any account whose profile couldn't be resolved was quietly dropped
+  // INTO Class A's data. There is no safe default tenant; if we can't resolve the
+  // caller's real tenant we treat them as not-logged-in and surface the error.
+  const failResolution = (reason: string) => {
+    console.error(`[UserContext] tenant resolution failed — ${reason}. NOT defaulting to any tenant.`);
+    setUser(null);
+    setRoleLoading(false);
+  };
 
   // accessToken: pass the session JWT from callers that already hold it
   // (onAuthStateChange provides session directly; IIFE calls getSession() before
@@ -84,9 +82,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     try {
       console.log("[UserContext] fetching profile for:", userId);
 
-      // Use caller-provided session JWT when available so RLS policy
-      // (auth_user_id = auth.uid()) evaluates against the real user identity.
-      // Falls back to anon key when no session is available.
+      // Use caller-provided session JWT when available; falls back to anon key.
       const token = accessToken ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
       // Raw REST fetch with 5s AbortController timeout —
@@ -97,8 +93,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
       let data: Record<string, unknown> | null = null;
 
       try {
+        // Look up by `id`, not `auth_user_id`: profiles.id IS the auth user id
+        // (set by both the handle_new_user trigger and signup), so it's always
+        // present. auth_user_id was historically left NULL by the trigger, which
+        // made this lookup miss and silently fall back to Class A.
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/profiles?auth_user_id=eq.${encodeURIComponent(userId)}&select=*&limit=1`,
+          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}&select=*&limit=1`,
           {
             signal: controller.signal,
             headers: {
@@ -119,9 +119,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
       }
 
       if (!data) {
-        console.log("[UserContext] no profile data — using auth fallback");
-        setUser(fallbackUser(userId, userEmail));
-        setRoleLoading(false);
+        // No profile row (or the lookup timed out). Do NOT default to a tenant.
+        failResolution(`no profile row for user ${userId}`);
+        return;
+      }
+
+      if (!data.tenant_id) {
+        // Profile exists but has no tenant — a broken/half-provisioned account.
+        // Fail rather than guess a tenant.
+        failResolution(`profile ${userId} has no tenant_id`);
         return;
       }
 
@@ -136,8 +142,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
         name:          String(data.full_name ?? userEmail),
         role:          (data.role as UserRole) ?? "manager",
         email:         String(data.email ?? userEmail),
-        tenantId:      data.tenant_id ? String(data.tenant_id) : "00000000-0000-0000-0000-000000000001",
-        tenantSlug:    "classa",
+        tenantId:      String(data.tenant_id),
+        // profiles has no slug column; the old code hardcoded "classa" here, which
+        // was wrong for any non-Class-A tenant. Leave null rather than mislabel.
+        tenantSlug:    null,
         initials:      String(data.full_name ?? userEmail).substring(0, 2).toUpperCase(),
         loggedInAt:    new Date().toISOString(),
         permissions,
@@ -146,8 +154,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setRoleLoading(false);
     } catch (err) {
       console.error("[UserContext] loadProfile unexpected error:", err);
-      setUser(fallbackUser(userId, userEmail));
-      setRoleLoading(false);
+      failResolution(`unexpected error resolving profile for ${userId}`);
     } finally {
       resolveLoading();
       loadingRef.current = null;

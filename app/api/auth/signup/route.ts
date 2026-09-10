@@ -66,20 +66,38 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const authUser = authData.user;
 
-    // 4. Create profile
-    const { error: profileError } = await supabase.from("profiles").insert({
-      id:           authUser.id,
-      full_name:    fullName.trim(),
-      role:         "manager",
-      email:        email.toLowerCase().trim(),
-      auth_user_id: authUser.id,
-      tenant_id:    tenant.id,
-      ...(phone?.trim() ? { phone: phone.trim() } : {}),
-    });
+    // 4. Set up the profile.
+    //
+    // IMPORTANT: the `handle_new_user` trigger on auth.users has ALREADY inserted
+    // a profiles row (id, full_name, role) by the time we get here — with no
+    // tenant_id (so it takes the column default, historically Class A) and no
+    // auth_user_id. A plain INSERT therefore hits ON CONFLICT (id) and fails,
+    // leaving the profile pointing at the wrong tenant. That was the root cause of
+    // new signups landing inside Class A's tenant. We UPSERT on the id key so the
+    // trigger-created row is corrected with THIS tenant and the auth link.
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .upsert(
+        {
+          id:           authUser.id,
+          full_name:    fullName.trim(),
+          role:         "manager",
+          email:        email.toLowerCase().trim(),
+          auth_user_id: authUser.id,
+          tenant_id:    tenant.id,
+          ...(phone?.trim() ? { phone: phone.trim() } : {}),
+        },
+        { onConflict: "id" }
+      );
 
     if (profileError) {
-      console.error("[signup] profile insert failed:", profileError.message);
-      // Non-fatal — user can still log in; profile will be created on first login
+      // FATAL: a profile that doesn't point at the new tenant is worse than no
+      // account — the user would silently operate inside another tenant. Roll the
+      // whole signup back rather than leave a mis-tenanted profile behind.
+      console.error("[signup] profile upsert failed:", profileError.message);
+      await supabase.auth.admin.deleteUser(authUser.id).catch(() => {});
+      await supabase.from("tenants").delete().eq("id", tenant.id);
+      return NextResponse.json({ error: "Failed to finish setting up your account" }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, tenantId: tenant.id, userId: authUser.id });
