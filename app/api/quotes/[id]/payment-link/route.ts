@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { Quote } from "@/lib/types";
+import { outboundBlock, logSuppressedOutbound } from "@/lib/outbound-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +51,13 @@ export async function POST(
       );
     }
     depositAmount = body.amount;
+  }
+
+  // Outbound suppression — test tenant only: never create a real Stripe object.
+  const block = outboundBlock("stripe", tenantId);
+  if (block) {
+    logSuppressedOutbound("stripe:payment_link", tenantId, { quote: params.id, amount: depositAmount }, block);
+    return NextResponse.json({ url: null, suppressed: true });
   }
 
   const stripeKey = process.env.STRIPE_SECRET_KEY;

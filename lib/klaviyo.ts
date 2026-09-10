@@ -1,5 +1,6 @@
 import { Packet, PacketType } from "./types";
 import { formatDateAU, formatCurrency, packetTypeLabel } from "./formatters";
+import { outboundBlock, logSuppressedOutbound } from "./outbound-guard";
 
 const BASE_URL = "https://a.klaviyo.com/api";
 
@@ -14,6 +15,11 @@ function headers() {
 
 // ─── Upsert profile ──────────────────────────────────────────────────────────
 export async function upsertKlaviyoProfile(packet: Packet): Promise<void> {
+  const block = outboundBlock("klaviyo", packet.tenant_id);
+  if (block) {
+    logSuppressedOutbound("klaviyo:upsert_profile", packet.tenant_id, { email: packet.customer_email }, block);
+    return;
+  }
   const addressLine = [
     packet.customer_street,
     packet.customer_suburb,
@@ -74,6 +80,11 @@ const eventNameMap: Record<PacketType, string> = {
 };
 
 export async function fireKlaviyoEvent(packet: Packet): Promise<void> {
+  const block = outboundBlock("klaviyo", packet.tenant_id);
+  if (block) {
+    logSuppressedOutbound("klaviyo:event", packet.tenant_id, { ref: packet.reference_number, email: packet.customer_email }, block);
+    return;
+  }
   const eventName = eventNameMap[packet.packet_type] ?? "Packet Submitted";
 
   const body = {
@@ -121,6 +132,11 @@ export async function fireKlaviyoEvent(packet: Packet): Promise<void> {
 
 // ─── Confirmation email event ─────────────────────────────────────────────────
 export async function sendKlaviyoConfirmationEmail(packet: Packet): Promise<void> {
+  const block = outboundBlock("klaviyo", packet.tenant_id);
+  if (block) {
+    logSuppressedOutbound("klaviyo:confirmation_email", packet.tenant_id, { email: packet.customer_email, ref: packet.reference_number }, block);
+    return;
+  }
   const customerName = [packet.customer_first_name, packet.customer_last_name]
     .filter(Boolean)
     .join(" ");

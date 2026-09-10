@@ -5,6 +5,8 @@
  * Zap 2  Ready for Pickup SMS    — fires when workshop packet moves to 'ready'
  */
 
+import { outboundBlock, logSuppressedOutbound } from "./outbound-guard";
+
 const ZAP_ORDER_CONFIRMATION =
   process.env.ZAPIER_ORDER_CONFIRMATION_WEBHOOK ??
   "https://hooks.zapier.com/hooks/catch/16866217/4yds9xh/";
@@ -41,6 +43,7 @@ function send(url: string, payload: Record<string, unknown>): void {
 }
 
 interface OrderPacket {
+  tenant_id?:           string | null;
   customer_first_name?: string | null;
   customer_last_name?:  string | null;
   customer_phone?:      string | null;
@@ -55,6 +58,11 @@ interface OrderPacket {
  * Only fires if the customer has a valid Australian mobile number.
  */
 export function fireOrderConfirmationZap(packet: OrderPacket): void {
+  const block = outboundBlock("sms", packet.tenant_id);
+  if (block) {
+    logSuppressedOutbound("zapier:order_confirmation", packet.tenant_id, { ref: packet.reference_number, phone: packet.customer_phone }, block);
+    return;
+  }
   if (!packet.customer_phone) return;
   const phone = formatAustralianPhone(packet.customer_phone);
   if (!phone) return;
@@ -88,6 +96,7 @@ export function fireOrderConfirmationZap(packet: OrderPacket): void {
 }
 
 interface WorkshopPacket {
+  tenant_id?:           string | null;
   customer_first_name?: string | null;
   customer_last_name?:  string | null;
   customer_phone?:      string | null;
@@ -103,6 +112,11 @@ interface WorkshopPacket {
  * Only fires if the customer has a valid Australian mobile number.
  */
 export function fireReadyForPickupZap(packet: WorkshopPacket): void {
+  const block = outboundBlock("sms", packet.tenant_id);
+  if (block) {
+    logSuppressedOutbound("zapier:ready_for_pickup", packet.tenant_id, { ref: packet.reference_number, phone: packet.customer_phone }, block);
+    return;
+  }
   if (!packet.customer_phone) return;
   const phone = formatAustralianPhone(packet.customer_phone);
   if (!phone) return;
