@@ -74,6 +74,25 @@ export function outboundBlock(
 }
 
 /**
+ * Runtime status of both layers, evaluated by the SAME logic the guard uses, so
+ * a status check can never drift from actual behaviour. Consumed by
+ * GET /api/pentest-status to verify the live deployment after a redeploy.
+ */
+export function outboundGuardStatus(): {
+  outbound_kill_switch: "ON" | "OFF";
+  killed_channels: OutboundChannel[];
+  test_tenant_configured: boolean;
+} {
+  const on = killSwitchOn();
+  return {
+    outbound_kill_switch: on ? "ON" : "OFF",
+    killed_channels: on ? [...GLOBALLY_KILLABLE] : [],
+    // whether Layer 2 is configured — never expose the tenant id value itself
+    test_tenant_configured: !!process.env.OPSYS_TEST_TENANT_ID?.trim(),
+  };
+}
+
+/**
  * Record an outbound send that was stubbed (by either layer), so the pen test
  * can see what WOULD have been sent without anything reaching a real person.
  */
