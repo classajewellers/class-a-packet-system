@@ -40,6 +40,10 @@ const API_PUBLIC_ROUTES = new Set([
   "/api/stripe/webhook",
   "/api/billing/webhook",
   "/api/tenants",
+  // pen-test kill-switch status probe — unauthenticated by design (returns only
+  // ON/OFF, no secrets) so it can be curl-verified after a redeploy. Temporary;
+  // remove with the pen-test tooling.
+  "/api/pentest-status",
 ]);
 
 // Self-authenticating API prefixes: these validate their OWN credential (the
