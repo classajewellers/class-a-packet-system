@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { outboundBlock, logSuppressedOutbound } from "@/lib/outbound-guard";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -8,6 +9,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!apiKey) {
     console.error("[klaviyo/sync] KLAVIYO_PRIVATE_API_KEY not configured");
     return NextResponse.json({ error: "Klaviyo API key not configured" }, { status: 500 });
+  }
+
+  // Outbound suppression — test tenant only (see lib/outbound-guard.ts)
+  const tenantId = req.headers.get("x-tenant-id") ?? "";
+  const block = outboundBlock("klaviyo", tenantId);
+  if (block) {
+    logSuppressedOutbound("klaviyo:sync", tenantId, {}, block);
+    return NextResponse.json({ ok: true, suppressed: true });
   }
 
   let body: Record<string, unknown>;

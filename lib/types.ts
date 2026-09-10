@@ -146,6 +146,7 @@ export const defaultFormData: PacketFormData = {
 // ─────────────────────────────────────────────
 export interface Packet {
   id: string;
+  tenant_id?: string | null;
   created_at: string;
   reference_number: string;
   packet_type: PacketType;

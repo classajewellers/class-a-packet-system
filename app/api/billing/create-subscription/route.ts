@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe, PLAN_TO_PRICE_ID } from "@/lib/stripe";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { outboundBlock, logSuppressedOutbound } from "@/lib/outbound-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (tenantId === CLASS_A_TENANT) return NextResponse.json({ ok: true });
   if (!tenantId) return NextResponse.json({ error: "x-tenant-id required" }, { status: 400 });
+
+  // Outbound suppression — test tenant only: never create a real Stripe subscription.
+  const block = outboundBlock("stripe", tenantId);
+  if (block) {
+    logSuppressedOutbound("stripe:create_subscription", tenantId, {}, block);
+    return NextResponse.json({ ok: true, suppressed: true });
+  }
 
   try {
     const body = await req.json() as { plan: string; email: string; store_name: string };

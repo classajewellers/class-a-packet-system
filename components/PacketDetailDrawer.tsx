@@ -1300,6 +1300,31 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
                   />
                 </div>
                 <div>
+                  <Label>Delivery</Label>
+                  {/* Auto-mapped from the order at import (webhook detectDeliveryMethod);
+                      editable here so staff can correct a mis-read before printing.
+                      Stored as canonical "pickup"/"shipping" — the label and the
+                      workshop badges both read delivery_method. */}
+                  <select
+                    value={
+                      ((local as unknown as { delivery_method?: string | null }).delivery_method === "pickup" ||
+                        /pick\s?up|collect/i.test(
+                          String((local as unknown as { delivery_method?: string | null }).delivery_method ?? "")
+                        ))
+                        ? "pickup"
+                        : "shipping"
+                    }
+                    onChange={(e) => {
+                      set("delivery_method", e.target.value as Packet["delivery_method"]);
+                      patch({ delivery_method: e.target.value });
+                    }}
+                    style={{ ...fieldStyle, cursor: "pointer" }}
+                  >
+                    <option value="pickup">🏪 Pickup</option>
+                    <option value="shipping">📦 Shipping</option>
+                  </select>
+                </div>
+                <div>
                   <Label>Tracking #</Label>
                   <input
                     type="text"

@@ -13,6 +13,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { Packet } from "./types";
 import { formatAustralianPhone } from "./formatters";
+import { outboundBlock, logSuppressedOutbound } from "./outbound-guard";
 
 export interface ClaimSlipResult {
   url: string;
@@ -37,6 +38,12 @@ async function sendClaimSlipSMS(
   packet: Packet,
   claimSlipUrl: string
 ): Promise<void> {
+  const block = outboundBlock("sms", packet.tenant_id);
+  if (block) {
+    logSuppressedOutbound("claim_slip:sms", packet.tenant_id, { ref: packet.reference_number, phone: packet.customer_phone }, block);
+    return;
+  }
+
   const webhook = process.env.ZAPIER_CLAIM_SLIP_WEBHOOK;
   if (!webhook) {
     console.warn("[claim-slip] ZAPIER_CLAIM_SLIP_WEBHOOK not set — SMS skipped");

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { packetTypeLabel, formatDateAU, formatAustralianPhone } from "@/lib/formatters";
+import { outboundBlock, logSuppressedOutbound } from "@/lib/outbound-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +81,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     due_date:         formatDateAU(packet.due_date),
     total_charges:    formatCurrency(packet.total_charges),
   };
+
+  // ── Outbound suppression — test tenant only (see lib/outbound-guard.ts) ──────
+  const block = outboundBlock(channel, tenantId);
+  if (block) {
+    logSuppressedOutbound(`notifications:${channel}`, tenantId, { ref: packet.reference_number, phone: formattedPhone, template }, block);
+    return NextResponse.json({ ok: true, suppressed: true });
+  }
 
   // ── Fire webhook ────────────────────────────────────────────────────────────
   let zapRes: Response;

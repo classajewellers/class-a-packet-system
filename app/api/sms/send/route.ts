@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { outboundBlock, logSuppressedOutbound } from "@/lib/outbound-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     const toNumber = normaliseAuMobile(customer.phone);
+
+    // Outbound suppression — test tenant only (see lib/outbound-guard.ts)
+    const block = outboundBlock("sms", tenantId);
+    if (block) {
+      logSuppressedOutbound("sms:twilio", tenantId, { to: toNumber, body: messageBody.trim().slice(0, 80) }, block);
+      return NextResponse.json({ success: true, suppressed: true });
+    }
 
     // Send via Twilio REST API
     const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;

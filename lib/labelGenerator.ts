@@ -514,6 +514,12 @@ export function generatePrintHTML(packet: Packet): string {
   const isOnline = packet.packet_type === "online_order";
   const giftWrap = resolveGiftWrap(packet.gift_wrapping);
   const deliveryDisplay = resolveDelivery(packet);
+  // A pickup/collection order must never be labelled "Shipping". delivery_method
+  // is the authoritative flag (set by the Shopify webhook's detectDeliveryMethod
+  // and shown in the Vault UI); fall back to keyword-matching the resolved value.
+  const isPickup =
+    (packet as { delivery_method?: string | null }).delivery_method === "pickup" ||
+    /pick\s?up|collect/i.test(deliveryDisplay);
   const dueDateDisplay = resolveDueDate(packet.due_date);
   const componentsText = resolveComponents(packet);
 
@@ -695,7 +701,7 @@ export function generatePrintHTML(packet: Packet): string {
   <!-- 4. Gift wrapping | Delivery + Order number -->
   <div class="grid" style="margin-bottom:1.5mm;">
     <div class="field"><div class="field-label">Gift Wrapping</div><strong>${giftWrap}</strong></div>
-    <div class="field"><div class="field-label">${isOnline ? "Shipping" : "Delivery"}</div><strong>${esc(deliveryDisplay)}</strong></div>
+    <div class="field"><div class="field-label">${isPickup ? "Delivery" : (isOnline ? "Shipping" : "Delivery")}</div><strong>${isPickup ? "Pickup" : esc(deliveryDisplay)}</strong></div>
     ${isOnline && packet.order_number ? `<div class="field full-width"><div class="field-label">Order #</div>${esc(packet.order_number)}</div>` : ""}
   </div>
 
