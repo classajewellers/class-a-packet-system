@@ -1,7 +1,7 @@
 "use client";
 
 import { PacketFormData } from "@/lib/types";
-import { STAFF_NAMES } from "@/lib/staffList";
+import { useStaff } from "@/lib/useStaff";
 
 const REFERRAL_SOURCES = [
   { value: "instagram", label: "Instagram" },
@@ -20,6 +20,7 @@ interface Props {
 }
 
 export default function ReferralStaffSection({ data, onChange, errors }: Props) {
+  const { names: STAFF_NAMES } = useStaff();
   const selectClass =
     "w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-black";
 

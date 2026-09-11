@@ -23,7 +23,7 @@ import {
   useCallback,
   useEffect,
 } from "react";
-import { STAFF_LIST } from "@/lib/staffList";
+import { useStaff } from "@/lib/useStaff";
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -54,6 +54,7 @@ export function usePinSession(): PinSessionValue {
 }
 
 export function PinSessionProvider({ children }: { children: React.ReactNode }) {
+  const { staff: staffOptions } = useStaff();
   const [activeStaff, setActiveStaff] = useState<ActiveStaff | null>(null);
   const credsRef = useRef<PinCredentials | null>(null);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -168,7 +169,7 @@ export function PinSessionProvider({ children }: { children: React.ReactNode }) 
               }}
             >
               <option value="">Select your name…</option>
-              {STAFF_LIST.map((s) => (
+              {staffOptions.map((s) => (
                 <option key={s.name} value={s.name}>{s.name}</option>
               ))}
             </select>

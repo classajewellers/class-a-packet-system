@@ -25,7 +25,7 @@ export async function POST(
   const supabase = await createTenantSupabaseClient(tenantId);
 
   // ── PIN gate ───────────────────────────────────────────────────────────────
-  const pinResult = await verifyStaffPin(supabase, body.pinName, body.pin);
+  const pinResult = await verifyStaffPin(supabase, tenantId, body.pinName, body.pin);
   if (!pinResult.ok) {
     return NextResponse.json({ error: pinResult.error }, { status: pinResult.status });
   }
