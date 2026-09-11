@@ -73,27 +73,33 @@ export default function QuotesPage() {
 
   useEffect(() => { fetchQuotes(); }, [fetchQuotes]);
 
-  // Real-time subscriptions
+  // Real-time subscriptions — scoped to this user's tenant. The tenant_id
+  // filter is defence-in-depth on top of the RLS tenant_read_by_profile
+  // policy; both must agree. Wait for tenantId before subscribing so we never
+  // open an unfiltered (cross-tenant) channel.
   useEffect(() => {
+    const tenantId = user?.tenantId;
+    if (!tenantId) return;
     let supabase: ReturnType<typeof getSupabaseClient>;
     try {
       supabase = getSupabaseClient();
     } catch {
       return;
     }
+    const tenantFilter = `tenant_id=eq.${tenantId}`;
     const channel = supabase
       .channel("quotes-realtime")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "quotes" }, (payload) => {
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "quotes", filter: tenantFilter }, (payload) => {
         const row = payload.new as Quote;
         setQuotes((prev) => prev.some((q) => q.id === row.id) ? prev : [row, ...prev]);
       })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "quotes" }, (payload) => {
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "quotes", filter: tenantFilter }, (payload) => {
         const row = payload.new as Quote;
         setQuotes((prev) => prev.map((q) => q.id === row.id ? row : q));
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [user?.tenantId]);
 
   function handleUpdate(updated: Quote) {
     setQuotes((prev) => prev.map((q) => q.id === updated.id ? updated : q));

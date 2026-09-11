@@ -83,28 +83,34 @@ function OrdersPageInner() {
     return () => clearTimeout(timer);
   }, [search, from, to, fetchOrders]);
 
-  // Real-time subscriptions
+  // Real-time subscriptions — scoped to this user's tenant. The tenant_id
+  // filter is defence-in-depth on top of the RLS tenant_read_by_profile
+  // policy; both must agree. Wait for tenantId before subscribing so we never
+  // open an unfiltered (cross-tenant) channel.
   useEffect(() => {
+    const tenantId = user?.tenantId;
+    if (!tenantId) return;
     let supabase: ReturnType<typeof getSupabaseClient>;
     try {
       supabase = getSupabaseClient();
     } catch {
       return;
     }
+    const tenantFilter = `tenant_id=eq.${tenantId}`;
     const channel = supabase
       .channel("orders-realtime")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "packets" }, (payload) => {
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "packets", filter: tenantFilter }, (payload) => {
         const row = payload.new as Packet;
         setPackets((prev) => prev.some((p) => p.id === row.id) ? prev : [row, ...prev]);
       })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "packets" }, (payload) => {
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "packets", filter: tenantFilter }, (payload) => {
         const row = payload.new as Packet;
         setPackets((prev) => prev.map((p) => p.id === row.id ? row : p));
         setSelectedPacket((cur) => cur?.id === row.id ? row : cur);
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [user?.tenantId]);
 
   useEffect(() => { setSelectedIds(new Set()); setPage(1); }, [orderFilter]);
   useEffect(() => { setPage(1); }, [search, from, to, urlFilter]);

@@ -165,7 +165,12 @@ export default function AdminPage() {
   }, [activeTab, fetchQuotes]);
 
   // ── Supabase real-time subscriptions ─────────────────────────────────────
+  // Scoped to this user's tenant. The tenant_id filter is defence-in-depth on
+  // top of the RLS tenant_read_by_profile policy; both must agree. Wait for
+  // tenantId before subscribing so we never open an unfiltered channel.
   useEffect(() => {
+    const tenantId = user?.tenantId;
+    if (!tenantId) return;
     let supabase: ReturnType<typeof getSupabaseClient>;
     try {
       supabase = getSupabaseClient();
@@ -174,17 +179,18 @@ export default function AdminPage() {
       return;
     }
 
+    const tenantFilter = `tenant_id=eq.${tenantId}`;
     const channel = supabase
       .channel("admin-realtime")
       .on("postgres_changes",
-        { event: "INSERT", schema: "public", table: "quotes" },
+        { event: "INSERT", schema: "public", table: "quotes", filter: tenantFilter },
         (payload) => {
           const row = payload.new as Quote;
           setQuotes((prev) => prev.some((q) => q.id === row.id) ? prev : [row, ...prev]);
         }
       )
       .on("postgres_changes",
-        { event: "UPDATE", schema: "public", table: "quotes" },
+        { event: "UPDATE", schema: "public", table: "quotes", filter: tenantFilter },
         (payload) => {
           const row = payload.new as Quote;
           setQuotes((prev) => prev.map((q) => q.id === row.id ? row : q));
@@ -192,7 +198,7 @@ export default function AdminPage() {
         }
       )
       .on("postgres_changes",
-        { event: "INSERT", schema: "public", table: "packets" },
+        { event: "INSERT", schema: "public", table: "packets", filter: tenantFilter },
         (payload) => {
           const row = payload.new as Packet;
           // All packet types go into the single packets array; orderFilter handles display
@@ -200,7 +206,7 @@ export default function AdminPage() {
         }
       )
       .on("postgres_changes",
-        { event: "UPDATE", schema: "public", table: "packets" },
+        { event: "UPDATE", schema: "public", table: "packets", filter: tenantFilter },
         (payload) => {
           const row = payload.new as Packet;
           setPackets((prev) => prev.map((p) => p.id === row.id ? row : p));
@@ -210,7 +216,7 @@ export default function AdminPage() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [user?.tenantId]);
 
   // ── 10-second fallback poll ───────────────────────────────────────────────
   useEffect(() => {
