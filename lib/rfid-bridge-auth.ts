@@ -7,6 +7,11 @@ export type BridgeIdentity = {
   printerId: string | null;
 };
 
+// Never let Next's Data Cache serve a stale result for the auth lookup — a
+// cached empty result would reject a valid, active bridge key indefinitely.
+const noStoreFetch: typeof fetch = (input, init) =>
+  fetch(input as RequestInfo, { ...(init ?? {}), cache: "no-store" });
+
 /** Validate a bridge Bearer token and return its identity, or null if invalid. */
 export async function validateBridgeAuth(
   authHeader: string | null
@@ -19,14 +24,24 @@ export async function validateBridgeAuth(
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false }, global: { fetch: noStoreFetch } }
   );
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("rfid_bridge_installations")
     .select("id, tenant_id, printer_id, is_active")
     .eq("api_key_hash", hash)
     .maybeSingle();
+
+  // ⚠️ TEMPORARY DEBUG — remove after diagnosing the bridge-auth rejection.
+  // Logs the computed hash (NOT the raw key) + the live query outcome.
+  console.log("[BRIDGE-AUTH-DEBUG]", JSON.stringify({
+    incoming_hash: hash,
+    row_found: !!data,
+    is_active: data?.is_active ?? null,
+    query_error: error ? error.message : null,
+  }));
 
   if (!data || !data.is_active) return null;
 

@@ -4,6 +4,7 @@ import { validateBridgeAuth } from "@/lib/rfid-bridge-auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 // PATCH /api/rfid/bridge/jobs/[id]
 // Bridge reports status transitions.
