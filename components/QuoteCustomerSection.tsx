@@ -1,7 +1,7 @@
 "use client";
 
 import { QuoteFormData } from "@/lib/types";
-import { STAFF_NAMES } from "@/lib/staffList";
+import { useStaff } from "@/lib/useStaff";
 
 interface Props {
   data: QuoteFormData;
@@ -10,6 +10,7 @@ interface Props {
 }
 
 export default function QuoteCustomerSection({ data, onChange, errors }: Props) {
+  const { names: STAFF_NAMES } = useStaff();
   const inputClass = (field: keyof QuoteFormData) =>
     `w-full rounded-lg border px-3 py-2.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-black ${
       errors[field] ? "border-red-500 bg-red-50" : "border-gray-300 bg-white"

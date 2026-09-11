@@ -41,7 +41,7 @@ export async function PATCH(
     if (!LEAD_STATUSES.includes(body.status as never)) {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
-    const pinResult = await verifyStaffPin(supabase, body.pinName, body.pin);
+    const pinResult = await verifyStaffPin(supabase, tenantId, body.pinName, body.pin);
     if (!pinResult.ok) {
       return NextResponse.json({ error: pinResult.error }, { status: pinResult.status });
     }

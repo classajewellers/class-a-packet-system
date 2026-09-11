@@ -9,7 +9,7 @@ import { generatePrintHTML } from "@/lib/labelGenerator";
 import { printOrderConfirmation } from "@/lib/orderConfirmationGenerator";
 import ItemSpecificationsForm from "./ItemSpecificationsForm";
 import { generateValuationCertificate } from "@/lib/valuationCertificateGenerator";
-import { STAFF_NAMES } from "@/lib/staffList";
+import { useStaff } from "@/lib/useStaff";
 import AttachmentsSection from "./AttachmentsSection";
 import AddressAutocomplete from "./AddressAutocomplete";
 
@@ -66,6 +66,7 @@ function Label({ children, bold }: { children: React.ReactNode; bold?: boolean }
 
 export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate }: Props) {
   const { user } = useUser();
+  const { names: STAFF_NAMES } = useStaff();
   const [local, setLocal] = useState<Packet>(packet);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [reprintLoading, setReprintLoading] = useState(false);

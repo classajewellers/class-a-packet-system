@@ -22,7 +22,8 @@ const PUBLIC_PREFIXES = ["/claim/"];
 // Keep this list tight — each entry is a deliberate hole, justified below.
 //
 //   Auth flows (pre-session by definition):
-//     /api/auth/callback, /api/auth/confirm, /api/auth/signup, /api/auth/verify-pin
+//     /api/auth/callback, /api/auth/confirm, /api/auth/signup
+//   (verify-pin is NOT here — it requires a session so the tenant can be derived)
 //   Inbound webhooks (server-to-server; verify their own signature/HMAC):
 //     /api/shopify/webhook, /api/twilio/webhook, /api/stripe/webhook, /api/billing/webhook
 //   OAuth redirect (browser redirect from Shopify; verifies HMAC + state itself):
@@ -33,7 +34,10 @@ const API_PUBLIC_ROUTES = new Set([
   "/api/auth/callback",
   "/api/auth/confirm",
   "/api/auth/signup",
-  "/api/auth/verify-pin",
+  // NOTE: /api/auth/verify-pin is intentionally NOT public — it is now guarded
+  // so the middleware injects the trusted x-tenant-id used to scope the PIN
+  // lookup to the caller's tenant. Its only caller (the PIN modal) is always
+  // authenticated.
   "/api/shopify/webhook",
   "/api/shopify/oauth/callback",
   "/api/twilio/webhook",

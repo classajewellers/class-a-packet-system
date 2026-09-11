@@ -25,15 +25,21 @@ export type StaffPinResult =
   | { ok: true; staff: VerifiedStaff }
   | { ok: false; status: number; error: string };
 
-/** Verify a staff name + PIN against staff_pins. On success returns the staff
- *  id/name/role. On failure returns a ready-to-send status + message
- *  (401 wrong PIN, 429 locked out, 400 missing input, 500 service error). */
+/** Verify a staff name + PIN against staff_pins, scoped to the caller's tenant.
+ *  On success returns the staff id/name/role. On failure returns a
+ *  ready-to-send status + message (401 wrong PIN, 429 locked out, 400 missing
+ *  input, 500 service error). tenantId MUST be the trusted, server-derived
+ *  tenant (from the middleware-injected x-tenant-id), never a client value. */
 export async function verifyStaffPin(
   // service-role client (bypasses RLS) — pass createServerSupabaseClient()
   supabase: SupabaseClient,
+  tenantId: string | undefined | null,
   name: string | undefined | null,
   pin: string | undefined | null
 ): Promise<StaffPinResult> {
+  if (!tenantId) {
+    return { ok: false, status: 403, error: "No tenant associated with this account" };
+  }
   if (!name || !pin) {
     return { ok: false, status: 400, error: "Staff PIN required" };
   }
@@ -41,6 +47,7 @@ export async function verifyStaffPin(
   const { data: staff, error } = await supabase
     .from("staff_pins")
     .select("id, name, role, pin_hash")
+    .eq("tenant_id", tenantId)
     .eq("name", name)
     .eq("active", true)
     .maybeSingle();
@@ -53,7 +60,9 @@ export async function verifyStaffPin(
   const pinCorrect = !!staff && (await bcrypt.compare(pin.trim(), staff.pin_hash));
 
   if (!pinCorrect) {
-    const rl = await checkRateLimit(supabase, `pin:${name}`, MAX_ATTEMPTS, WINDOW_SECONDS);
+    // Tenant-scoped rate-limit key so one tenant can't lock out another
+    // tenant's identically-named staff.
+    const rl = await checkRateLimit(supabase, `pin:${tenantId}:${name}`, MAX_ATTEMPTS, WINDOW_SECONDS);
     if (!rl.allowed || rl.remaining === 0) {
       const minutesLeft = Math.ceil((rl.resetAt.getTime() - Date.now()) / 60000);
       return {

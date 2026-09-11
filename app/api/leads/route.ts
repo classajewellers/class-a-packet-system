@@ -129,7 +129,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const supabase = await createTenantSupabaseClient(tenantId);
 
   // ── PIN gate + attribution (server-enforced) ───────────────────────────────
-  const pinResult = await verifyStaffPin(supabase, body.pinName, body.pin);
+  const pinResult = await verifyStaffPin(supabase, tenantId, body.pinName, body.pin);
   if (!pinResult.ok) {
     return NextResponse.json({ error: pinResult.error }, { status: pinResult.status });
   }
