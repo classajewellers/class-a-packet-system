@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { unstable_noStore as noStore } from "next/cache";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
+// Force EVERY fetch in this route segment — including supabase-js's internal
+// REST calls, which go through Next's patched global fetch — to bypass the Data
+// Cache. force-dynamic governs rendering; this governs fetch-level caching.
+export const fetchCache = "force-no-store";
 
 // ⚠️ TEMPORARY DEBUG INSTRUMENTATION — remove after diagnosing the Preview
 // onboarding/status discrepancy. Logs are prefixed [ONB-STATUS-DEBUG] for easy
 // grepping in `vercel logs`. Never logs the service-role key.
 export async function GET(req: NextRequest): Promise<NextResponse> {
+  noStore(); // opt this request out of the Next.js Data Cache at runtime too
   const rawHeader = req.headers.get("x-tenant-id");
   const tenantId = rawHeader ?? "";
 
