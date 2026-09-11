@@ -4,6 +4,7 @@ import { validateBridgeAuth } from "@/lib/rfid-bridge-auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 // POST /api/rfid/bridge/heartbeat
 // Bridge sends this periodically to confirm it is alive.
