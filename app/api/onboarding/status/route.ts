@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { unstable_noStore as noStore } from "next/cache";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
+// Force EVERY fetch in this route segment — including supabase-js's internal
+// REST calls, which go through Next's patched global fetch — to bypass the Data
+// Cache. Without this, a stale onboarding status could be served indefinitely.
+export const fetchCache = "force-no-store";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
+  noStore(); // belt-and-suspenders: opt this request out of the Data Cache at runtime too
   const tenantId = req.headers.get("x-tenant-id") ?? "";
   try {
     const supabase = await createTenantSupabaseClient(tenantId);

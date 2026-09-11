@@ -16,6 +16,7 @@ import {
   ChevronDown,
   Brain,
   Package,
+  UserPlus,
   X,
 } from "lucide-react";
 import { canManage, hasPermission } from "@/lib/userTypes";
@@ -197,6 +198,8 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
           <NavLink href="/" icon={LayoutDashboard} label="Dashboard" />
 
           {can("orders")    && <NavLink href="/orders"    icon={ShoppingBag} label="Orders" />}
+
+          <NavLink href="/leads" icon={UserPlus} label="Leads" />
 
           {can("quotes") && (
             <div>
