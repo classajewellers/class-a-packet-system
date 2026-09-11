@@ -28,20 +28,11 @@ export async function validateBridgeAuth(
     { auth: { persistSession: false }, global: { fetch: noStoreFetch } }
   );
 
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("rfid_bridge_installations")
     .select("id, tenant_id, printer_id, is_active")
     .eq("api_key_hash", hash)
     .maybeSingle();
-
-  // ⚠️ TEMPORARY DEBUG — remove after diagnosing the bridge-auth rejection.
-  // Logs the computed hash (NOT the raw key) + the live query outcome.
-  console.log("[BRIDGE-AUTH-DEBUG]", JSON.stringify({
-    incoming_hash: hash,
-    row_found: !!data,
-    is_active: data?.is_active ?? null,
-    query_error: error ? error.message : null,
-  }));
 
   if (!data || !data.is_active) return null;
 
