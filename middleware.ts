@@ -57,6 +57,13 @@ const API_PUBLIC_ROUTES = new Set([
 // Bearer token itself.
 const API_SELF_AUTH_PREFIXES = ["/api/rfid/bridge/", "/api/rfid/lookup/"];
 
+// Truly-public API prefixes: unauthenticated by design (no session, no device
+// credential). Each route enforces its OWN abuse protection (per-key + per-IP
+// rate limiting, honeypot). Currently only the public website lead-capture
+// endpoint: /api/public/leads/<public_lead_key> — the key in the path is a
+// low-privilege capability token (create-a-lead only), validated by the route.
+const API_PUBLIC_PREFIXES = ["/api/public/"];
+
 // Auth routes: 5 requests per 15 minutes per IP
 const AUTH_RATE_LIMIT_ROUTES = new Set([
   "/api/auth/callback",
@@ -257,6 +264,12 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith("/api/")) {
     // Self-authenticating device routes (RFID bridge Bearer token) — exempt.
     if (API_SELF_AUTH_PREFIXES.some((p) => pathname.startsWith(p))) {
+      return NextResponse.next();
+    }
+    // Truly-public API routes (website lead capture) — no session; the route
+    // enforces its own key + rate limiting. The general per-IP API limit above
+    // still applies as a coarse backstop.
+    if (API_PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) {
       return NextResponse.next();
     }
     // Explicit public API allowlist (auth flows, signed webhooks, store list).
