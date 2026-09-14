@@ -19,13 +19,36 @@ export async function GET(
   const tenantId = req.headers.get("x-tenant-id") ?? "";
   const supabase = await createTenantSupabaseClient(tenantId);
 
-  const { data, error } = await supabase
-    .from("inventory_pieces")
-    .select(JOINED_SELECT)
-    .eq("id", params.id)
-    .single();
+  // Try the joined select (rich related names on fully-migrated envs). If any
+  // embedded relation is missing/broken (schema drift), fall back to a scalar
+  // select so the page still renders — never mask a query error as "Not found".
+  let data: unknown = null;
+  let error: { message: string } | null = null;
+  {
+    const joined = await supabase
+      .from("inventory_pieces")
+      .select(JOINED_SELECT)
+      .eq("id", params.id)
+      .maybeSingle();
+    if (joined.error) {
+      console.warn("[pieces/[id]] joined select failed, falling back to scalar:", joined.error.message);
+      const scalar = await supabase
+        .from("inventory_pieces")
+        .select("*")
+        .eq("id", params.id)
+        .maybeSingle();
+      data = scalar.data;
+      error = scalar.error;
+    } else {
+      data = joined.data;
+    }
+  }
 
-  if (error || !data) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (error) {
+    console.error("[pieces/[id]] piece query failed:", error.message);
+    return NextResponse.json({ error: `Failed to load piece: ${error.message}` }, { status: 500 });
+  }
+  if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ piece: data });
 }
 
