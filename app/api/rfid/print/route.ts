@@ -99,20 +99,47 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // ── Fetch piece (with design name for label title) ─────────────────────────
+  // ── Fetch piece (scalar columns only — no PostgREST embed) ─────────────────
   const { data: piece, error: pErr } = await supabase
     .from("inventory_pieces")
     .select(`
       id, sku, notes, barcode,
       metal_karat, metal_colour,
-      diamond_carat, diamond_colour, diamond_type,
-      design:inventory_designs(id, name)
+      diamond_carat, diamond_colour, diamond_type
     `)
     .eq("id", piece_id)
-    .single();
+    .maybeSingle();
 
-  if (pErr || !piece) {
+  // Distinguish a real query error from a genuinely missing piece. A DB error
+  // must NEVER be mislabelled as "Piece not found" — that masked a schema
+  // mismatch (the old design:inventory_designs(...) embed erroring on tenants
+  // whose inventory_pieces has no design_id column).
+  if (pErr) {
+    console.error("[rfid/print] piece query failed:", pErr.message);
+    return NextResponse.json({ error: `Failed to load piece: ${pErr.message}` }, { status: 500 });
+  }
+  if (!piece) {
     return NextResponse.json({ error: "Piece not found" }, { status: 404 });
+  }
+
+  // Design name is OPTIONAL and looked up separately so a missing design_id
+  // column (schema drift) can never break printing. Any failure → no title.
+  let designName: string | null = null;
+  {
+    const { data: pd, error: pdErr } = await supabase
+      .from("inventory_pieces")
+      .select("design_id")
+      .eq("id", piece_id)
+      .maybeSingle();
+    const designId = !pdErr ? ((pd as { design_id?: string | null } | null)?.design_id ?? null) : null;
+    if (designId) {
+      const { data: d } = await supabase
+        .from("inventory_designs")
+        .select("name")
+        .eq("id", designId)
+        .maybeSingle();
+      designName = (d as { name?: string | null } | null)?.name ?? null;
+    }
   }
 
   // ── Generate EPC (random 96-bit, 24 hex chars) ─────────────────────────────
@@ -125,7 +152,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Label dimensions use defaults until Sean confirms actual label spec.
   // widthDots / lengthDots should come from printer config once confirmed.
   const p = piece as any;
-  const designName = p.design?.name ?? null;
   const metalName  = [p.metal_karat, p.metal_colour].filter(Boolean).join(" ") || null;
   const stoneName  = p.diamond_type && p.diamond_type !== "None"
     ? [p.diamond_carat ? `${p.diamond_carat}ct` : null, p.diamond_colour, p.diamond_type]
