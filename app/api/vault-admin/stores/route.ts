@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { requireOperator } from "@/lib/require-operator";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(req: NextRequest): Promise<NextResponse> {
+  const op = await requireOperator(req);
+  if (!op.ok) return op.response;
   try {
     const supabase = createServerSupabaseClient();
     const { data, error } = await supabase
@@ -27,6 +30,8 @@ export async function GET(): Promise<NextResponse> {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const op = await requireOperator(req);
+  if (!op.ok) return op.response;
   try {
     const body = await req.json();
     const {

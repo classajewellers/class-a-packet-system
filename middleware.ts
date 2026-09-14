@@ -9,7 +9,7 @@ const PUBLIC_ROUTES = new Set([
   "/signup",
   "/onboarding",
   "/set-password",
-  "/vault-admin/login",
+  "/vault-admin/not-authorized",
 ]);
 
 // Prefix-based public PAGE paths (trailing-slash and query-string safe).
@@ -128,14 +128,14 @@ async function edgeRateLimit(
  */
 async function edgeResolveProfile(
   userId: string
-): Promise<{ tenantId: string; role: string } | null> {
+): Promise<{ tenantId: string; role: string; isOperator: boolean } | null> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceKey) return null;
 
   try {
     const res = await fetch(
-      `${supabaseUrl}/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}&select=tenant_id,role&limit=1`,
+      `${supabaseUrl}/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}&select=tenant_id,role,is_operator&limit=1`,
       {
         headers: {
           apikey:        serviceKey,
@@ -144,13 +144,43 @@ async function edgeResolveProfile(
       }
     );
     if (!res.ok) return null;
-    const rows = (await res.json()) as { tenant_id: string | null; role: string | null }[];
+    const rows = (await res.json()) as { tenant_id: string | null; role: string | null; is_operator: boolean | null }[];
     const row  = Array.isArray(rows) ? rows[0] : null;
     if (!row?.tenant_id) return null;
-    return { tenantId: String(row.tenant_id), role: String(row.role ?? "") };
+    return { tenantId: String(row.tenant_id), role: String(row.role ?? ""), isOperator: row.is_operator === true };
   } catch {
     return null;
   }
+}
+
+/**
+ * Operator (superadmin) gate for /vault-admin and /api/vault-admin/*.
+ * Requires a verified Supabase session whose profile has is_operator = true.
+ * Replaces the old forgeable `vault_operator_auth=1` cookie. Returns:
+ *   { ok:true }          — session present and is_operator
+ *   { ok:false, status } — 401 (no session) or 403 (session but not operator)
+ * Fails CLOSED.
+ */
+async function edgeVerifyOperator(
+  request: NextRequest
+): Promise<{ ok: true } | { ok: false; status: 401 | 403 }> {
+  const url  = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anon) return { ok: false, status: 403 };
+
+  const supabase = createServerClient(url, anon, {
+    cookies: {
+      getAll() { return request.cookies.getAll(); },
+      setAll() { /* middleware read-only for this check */ },
+    },
+  });
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, status: 401 };
+
+  const profile = await edgeResolveProfile(user.id);
+  if (!profile || !profile.isOperator) return { ok: false, status: 403 };
+  return { ok: true };
 }
 
 /** JSON 401/403 helper for API responses. */
@@ -276,12 +306,12 @@ export async function middleware(request: NextRequest) {
     if (API_PUBLIC_ROUTES.has(pathname)) {
       return NextResponse.next();
     }
-    // Operator admin API — gated on the operator cookie (a separate auth
-    // domain, not a Supabase tenant session). This closes the fully-open hole;
-    // hardening the operator cookie itself is tracked separately (C4).
+    // Operator admin API — require a verified Supabase session whose profile
+    // has is_operator = true (C4 fix; replaces the forgeable cookie). Each route
+    // also re-checks via requireOperator() as defence-in-depth.
     if (pathname.startsWith("/api/vault-admin/")) {
-      const operatorAuth = request.cookies.get("vault_operator_auth")?.value;
-      if (operatorAuth !== "1") return apiError("Unauthorized", 401);
+      const gate = await edgeVerifyOperator(request);
+      if (!gate.ok) return apiError(gate.status === 401 ? "Unauthorized" : "Forbidden", gate.status);
       return NextResponse.next();
     }
     // Everything else under /api/* — require a verified session + tenant, and
@@ -299,11 +329,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 4. Vault operator admin — cookie-based auth, no Supabase session needed
+  // 4. Vault operator admin — require a Supabase session with is_operator=true.
+  //    Non-operators (incl. unauthenticated) get the dedicated 403 page, which
+  //    is itself public (in PUBLIC_ROUTES) to avoid a redirect loop.
   if (pathname.startsWith("/vault-admin")) {
-    const operatorAuth = request.cookies.get("vault_operator_auth")?.value;
-    if (operatorAuth !== "1") {
-      return NextResponse.redirect(new URL("/vault-admin/login", request.url));
+    const gate = await edgeVerifyOperator(request);
+    if (!gate.ok) {
+      return NextResponse.redirect(new URL("/vault-admin/not-authorized", request.url));
     }
     return NextResponse.next();
   }

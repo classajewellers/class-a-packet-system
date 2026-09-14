@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
+import { getSupabaseClient } from "@/lib/supabase";
 
 const NAV = [
   { label: "Dashboard", href: "/vault-admin" },
@@ -13,13 +14,15 @@ export default function VaultAdminLayout({ children }: { children: React.ReactNo
   const pathname = usePathname();
   const router = useRouter();
 
-  const handleLogout = () => {
-    document.cookie = "vault_operator_auth=; max-age=0; path=/vault-admin";
-    router.push("/vault-admin/login");
+  // Operator access is now the Supabase session + is_operator flag — sign out of
+  // the app session (no operator cookie exists any more).
+  const handleLogout = async () => {
+    try { await getSupabaseClient().auth.signOut(); } catch { /* ignore */ }
+    router.push("/login");
   };
 
-  // Login page renders without sidebar
-  if (pathname === "/vault-admin/login") {
+  // The 403 page renders without the operator sidebar (viewer isn't an operator)
+  if (pathname === "/vault-admin/not-authorized") {
     return <>{children}</>;
   }
 
