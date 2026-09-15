@@ -27,12 +27,17 @@
  * physical read confirmation → tag status "active" (verified).
  *
  * ── Label dimensions ─────────────────────────────────────────────────────────
- * widthDots and lengthDots must be calibrated to your actual label stock.
- * 300 DPI: 1mm ≈ 11.81 dots.
- * Common jewellery tag sizes:
- *   50mm × 30mm → ^PW590 ^LL354
- *   38mm × 25mm → ^PW449 ^LL295
- * DO NOT assume dimensions until Sean confirms the label specification.
+ * Calibrated to the supplied stock: NXP UCODE 9, 68mm × 26mm (antenna 42×11mm),
+ * per the manufacturer datasheet + original setup notes.
+ * 300 DPI: dots = mm / 25.4 × 300.
+ *   68mm → ^PW803   26mm → ^LL307
+ *
+ * ── RFID program position ─────────────────────────────────────────────────────
+ * Set explicitly via SGD `rfid.position.program` = "F4" (calibrated on the real
+ * label stock) so encoding is consistent regardless of the printer touchscreen.
+ * This is the direct analog of the front-panel "Program Position"; ZPL ^RS's
+ * position parameter takes a dot value, not the F/B notation, so the SGD form is
+ * used to match the calibrated F-value exactly.
  */
 
 export type LabelData = {
@@ -42,8 +47,9 @@ export type LabelData = {
   metal?: string | null;
   stone?: string | null;
   barcode?: string | null;
-  widthDots?: number;       // print width in dots — MUST match physical label
-  lengthDots?: number;      // label length in dots — MUST match physical label
+  widthDots?: number;       // print width in dots — defaults to the calibrated 68mm
+  lengthDots?: number;      // label length in dots — defaults to the calibrated 26mm
+  programPosition?: string; // RFID program position (SGD rfid.position.program), default "F4"
 };
 
 /**
@@ -56,8 +62,9 @@ export type LabelData = {
 export function generateJewelleryZpl(data: LabelData): string {
   const { epc, sku, title, metal, stone } = data;
   const barcodeValue = data.barcode || sku;
-  const widthDots  = data.widthDots  ?? 406;  // calibrate before production
-  const lengthDots = data.lengthDots ?? 203;  // calibrate before production
+  const widthDots  = data.widthDots  ?? 803;  // 68mm @ 300dpi (calibrated stock)
+  const lengthDots = data.lengthDots ?? 307;  // 26mm @ 300dpi (calibrated stock)
+  const programPosition = (data.programPosition ?? "F4").replace(/[^A-Za-z0-9]/g, ""); // sanitise
 
   if (epc.length !== 24 || !/^[0-9a-f]+$/i.test(epc)) {
     throw new Error(`Invalid EPC: must be exactly 24 lowercase hex chars, got "${epc}"`);
@@ -69,6 +76,9 @@ export function generateJewelleryZpl(data: LabelData): string {
   const skuLine   = truncate(sku,        18);
 
   return [
+    // Set the RFID program position (calibrated) via SGD before the label, so
+    // the encode position is consistent regardless of the printer touchscreen.
+    `! U1 setvar "rfid.position.program" "${programPosition}"`,
     "^XA",
     "^MMT",                           // tear-off mode
     `^PW${widthDots}`,                // print width (calibrate to label)
