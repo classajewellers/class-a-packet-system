@@ -1,5 +1,5 @@
 {
-  "vaultApiUrl": "https://yourdomain.com",
+  "vaultApiUrl": "https://www.yourdomain.com",
   "bridgeApiKey": "PASTE_API_KEY_FROM_VAULT_SETTINGS_HERE",
   "pollIntervalMs": 3000,
   "heartbeatIntervalMs": 30000,
@@ -7,7 +7,11 @@
     "host": "192.168.40.242",
     "port": 9100,
     "connectTimeoutMs": 5000,
-    "writeTimeoutMs": 10000
+    "writeTimeoutMs": 10000,
+    "webUser": "admin",
+    "webPassword": "PRINTER_WEB_PASSWORD_HERE",
+    "webScheme": "https",
+    "webRejectUnauthorized": false
   },
   "logLevel": "info"
 }

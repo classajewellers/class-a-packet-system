@@ -1,6 +1,7 @@
 import net from "net";
 import { BridgeConfig, PrintJob } from "./types";
 import { sendZpl } from "./zebra";
+import { fetchRfidLog, findEpcWriteInLog } from "./rfidlog";
 
 const BRIDGE_VERSION = "1.0.0";
 
@@ -95,11 +96,61 @@ async function processJob(config: BridgeConfig, job: PrintJob): Promise<void> {
     // Physical verification is required before the tag becomes active in Vault.
     log("info", `Job ${job.id} ZPL transmitted — awaiting physical verification`);
     await updateJobStatus(config, job.id, "completed");
+    // Auto-verify from the printer's own write log (skips the manual UHF scan
+    // for the base case). Non-fatal: on any failure the tag stays 'printed' and
+    // the manual verification path remains available.
+    await attemptAutoVerify(config, job);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     log("error", `Job ${job.id} TCP send failed: ${msg}`);
     await updateJobStatus(config, job.id, "failed", msg);
   }
+}
+
+/**
+ * After a job's ZPL is transmitted, confirm from the printer's /rfidlog that the
+ * expected EPC was written, then ask Vault to activate the tag automatically.
+ * The EPC we told the printer to encode (job.label_data.epc) is the correlation
+ * key. Best-effort: skipped if printer web creds aren't configured; never throws.
+ */
+async function attemptAutoVerify(config: BridgeConfig, job: PrintJob): Promise<void> {
+  const expectedEpc =
+    job.label_data && typeof job.label_data.epc === "string" ? job.label_data.epc : "";
+  if (!expectedEpc) return;
+
+  if (!config.printer.webUser || !config.printer.webPassword) {
+    log("info", `Job ${job.id}: printer web creds not set — skipping auto-verify (manual verification still available)`);
+    return;
+  }
+
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const body = await fetchRfidLog(config);
+    const match = body ? findEpcWriteInLog(body, expectedEpc) : null;
+    if (match) {
+      try {
+        const res = await vaultFetch(config, "/api/rfid/bridge/verify", {
+          method: "POST",
+          body: JSON.stringify({
+            job_id: job.id,
+            epc: match.epc,
+            device_id: config.printer.host,
+            printer_timestamp: match.timestamp,
+          }),
+        });
+        if (res.ok) {
+          const j = (await res.json().catch(() => ({}))) as { result?: { ok?: boolean } };
+          log("info", `Job ${job.id}: auto-verified via printer log (EPC ${match.epc}) — ${j?.result?.ok ? "tag active" : "verify result: " + JSON.stringify(j?.result)}`);
+        } else {
+          log("warn", `Job ${job.id}: auto-verify POST returned HTTP ${res.status}`);
+        }
+      } catch (err: unknown) {
+        log("warn", `Job ${job.id}: auto-verify request failed`, err instanceof Error ? err.message : err);
+      }
+      return;
+    }
+    if (attempt < 5) await sleep(2000);
+  }
+  log("info", `Job ${job.id}: EPC not found in printer log after retries — left for manual verification`);
 }
 
 async function poll(config: BridgeConfig): Promise<void> {

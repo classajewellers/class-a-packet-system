@@ -8,6 +8,13 @@ export interface BridgeConfig {
     port: number;
     connectTimeoutMs: number;
     writeTimeoutMs: number;
+    // Optional printer web UI (HTTP Basic auth) for auto-verification via the
+    // /rfidlog page. If webUser/webPassword are absent, auto-verify is skipped
+    // and tags are left for manual UHF verification.
+    webUser?: string;
+    webPassword?: string;
+    webScheme?: "http" | "https";
+    webRejectUnauthorized?: boolean;  // false for self-signed printer certs (default)
   };
   logLevel: "debug" | "info" | "warn" | "error";
 }

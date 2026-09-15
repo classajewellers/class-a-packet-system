@@ -44,6 +44,10 @@ function loadConfig(): BridgeConfig {
       port:             Number(printer.port)            || 9100,
       connectTimeoutMs: Number(printer.connectTimeoutMs) || 5000,
       writeTimeoutMs:   Number(printer.writeTimeoutMs)  || 10000,
+      webUser:              printer.webUser              ? String(printer.webUser) : undefined,
+      webPassword:          printer.webPassword          ? String(printer.webPassword) : undefined,
+      webScheme:            printer.webScheme === "http" ? "http" : "https",
+      webRejectUnauthorized: printer.webRejectUnauthorized === true,  // default false (self-signed)
     },
     logLevel: (c.logLevel as BridgeConfig["logLevel"]) || "info",
   };
