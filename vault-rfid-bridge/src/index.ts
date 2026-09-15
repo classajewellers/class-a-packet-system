@@ -44,6 +44,10 @@ function loadConfig(): BridgeConfig {
       port:             Number(printer.port)            || 9100,
       connectTimeoutMs: Number(printer.connectTimeoutMs) || 5000,
       writeTimeoutMs:   Number(printer.writeTimeoutMs)  || 10000,
+      webUser:              printer.webUser              ? String(printer.webUser) : undefined,
+      webPassword:          printer.webPassword          ? String(printer.webPassword) : undefined,
+      webScheme:            printer.webScheme === "http" ? "http" : "https",
+      webRejectUnauthorized: printer.webRejectUnauthorized === true,  // default false (self-signed)
     },
     logLevel: (c.logLevel as BridgeConfig["logLevel"]) || "info",
   };
@@ -55,6 +59,7 @@ function testTcpReachable(host: string, port: number, timeoutMs: number): Promis
     const socket = new net.Socket();
     const timer = setTimeout(() => {
       socket.destroy();
+      console.log(`[WARN] TCP reachability: connect to ${host}:${port} TIMED OUT after ${timeoutMs}ms`);
       resolve(false);
     }, timeoutMs);
     socket.connect(port, host, () => {
@@ -62,8 +67,12 @@ function testTcpReachable(host: string, port: number, timeoutMs: number): Promis
       socket.destroy();
       resolve(true);
     });
-    socket.on("error", () => {
+    socket.on("error", (err: NodeJS.ErrnoException) => {
       clearTimeout(timer);
+      // Surface the real reason instead of swallowing it. ENETUNREACH/EHOSTUNREACH
+      // => routing/netns (WSL/container/VPN); ECONNREFUSED => nothing listening
+      // from this process's view; ETIMEDOUT => SYN dropped for this context.
+      console.log(`[WARN] TCP reachability: connect to ${host}:${port} FAILED — code=${err.code} errno=${err.errno} msg=${err.message}`);
       resolve(false);
     });
   });
