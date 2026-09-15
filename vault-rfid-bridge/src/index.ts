@@ -55,6 +55,7 @@ function testTcpReachable(host: string, port: number, timeoutMs: number): Promis
     const socket = new net.Socket();
     const timer = setTimeout(() => {
       socket.destroy();
+      console.log(`[WARN] TCP reachability: connect to ${host}:${port} TIMED OUT after ${timeoutMs}ms`);
       resolve(false);
     }, timeoutMs);
     socket.connect(port, host, () => {
@@ -62,8 +63,12 @@ function testTcpReachable(host: string, port: number, timeoutMs: number): Promis
       socket.destroy();
       resolve(true);
     });
-    socket.on("error", () => {
+    socket.on("error", (err: NodeJS.ErrnoException) => {
       clearTimeout(timer);
+      // Surface the real reason instead of swallowing it. ENETUNREACH/EHOSTUNREACH
+      // => routing/netns (WSL/container/VPN); ECONNREFUSED => nothing listening
+      // from this process's view; ETIMEDOUT => SYN dropped for this context.
+      console.log(`[WARN] TCP reachability: connect to ${host}:${port} FAILED — code=${err.code} errno=${err.errno} msg=${err.message}`);
       resolve(false);
     });
   });

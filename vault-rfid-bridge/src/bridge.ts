@@ -56,13 +56,22 @@ async function updateJobStatus(
 function checkPrinterReachable(config: BridgeConfig): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = new net.Socket();
-    const timer = setTimeout(() => { socket.destroy(); resolve(false); }, config.printer.connectTimeoutMs);
-    socket.connect(config.printer.port, config.printer.host, () => {
+    const { host, port, connectTimeoutMs } = config.printer;
+    const timer = setTimeout(() => {
+      socket.destroy();
+      log("warn", `printer reachability: connect to ${host}:${port} TIMED OUT after ${connectTimeoutMs}ms`);
+      resolve(false);
+    }, connectTimeoutMs);
+    socket.connect(port, host, () => {
       clearTimeout(timer);
       socket.destroy();
       resolve(true);
     });
-    socket.on("error", () => { clearTimeout(timer); resolve(false); });
+    socket.on("error", (err: NodeJS.ErrnoException) => {
+      clearTimeout(timer);
+      log("error", `printer reachability: connect to ${host}:${port} FAILED — code=${err.code} errno=${err.errno} msg=${err.message}`);
+      resolve(false);
+    });
   });
 }
 
