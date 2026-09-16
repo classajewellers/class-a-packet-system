@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requireManager } from "@/lib/require-auth";
-import { ORIGIN_SUPPLIER_NAME, resolveSupplierIdForOrigin, resolveMeleeOrigin } from "@/lib/melee-pricing";
+import { resolveMeleeOrigin, priceMelee } from "@/lib/melee-pricing";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0; // never serve a cached response — always read fresh
@@ -40,7 +40,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const clar   = (piece.melee_clarity ?? "").trim();
   const shape  = (piece.melee_shape ?? "").trim();
 
+  // "none" is a piece-only concept (piece has no melee stones set) — kept here.
   if (!qty || qty <= 0) return NextResponse.json({ status: "none" });
+
+  // Preserve the original status ORDER: incomplete is flagged before origin, so a
+  // piece missing both fields and origin still returns "incomplete" as before.
   if (!carat || carat <= 0 || !colour || !clar || !shape) {
     return NextResponse.json({ status: "incomplete", missing: {
       carat: !carat, colour_group: !colour, clarity: !clar, shape: !shape,
@@ -49,6 +53,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   // Origin → supplier (see lib/melee-pricing.ts for the current-state assumption).
   // Strict: an unrecognised diamond_type (e.g. a typo) is flagged, never guessed.
+  // Origin-level resolution stays in the endpoint; priceMelee takes a resolved origin.
   const originRes = resolveMeleeOrigin(piece.diamond_type);
   if (originRes.origin == null) {
     return NextResponse.json({
@@ -56,70 +61,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       diamond_type: piece.diamond_type ?? null,
     });
   }
-  const origin = originRes.origin;
 
-  const { data: suppliers } = await supabase
-    .from("inventory_suppliers").select("id, name").eq("tenant_id", tenantId);
-  const supplierId = resolveSupplierIdForOrigin(origin, suppliers ?? []);
-  if (!supplierId) {
-    return NextResponse.json({ status: "supplier_missing", origin, supplier_name: ORIGIN_SUPPLIER_NAME[origin] });
-  }
-
-  // (colour_group, clarity) → confirmed quality string. No mapping = flag, never guess.
-  const { data: mapRow } = await supabase
-    .from("pricing_melee_quality_map")
-    .select("quality")
-    .eq("tenant_id", tenantId)
-    .eq("supplier_id", supplierId)
-    .ilike("colour_group", colour)
-    .ilike("clarity", clar)
-    .maybeSingle();
-  if (!mapRow) {
-    return NextResponse.json({
-      status: "unmapped", colour_group: colour, clarity: clar,
-      supplier_name: ORIGIN_SUPPLIER_NAME[origin], origin,
-    });
-  }
-
-  // Exact price-list row: supplier + origin + shape + mapped quality, carat within band.
-  const { data: priceRows, error: prErr } = await supabase
-    .from("pricing_melee_stones")
-    .select("price_per_carat, price_per_stone, size_from, size_to, size_type, shape, quality")
-    .eq("tenant_id", tenantId)
-    .eq("supplier_id", supplierId)
-    .eq("origin", origin)
-    .eq("size_type", "carat_range")
-    .ilike("shape", shape)
-    .eq("quality", mapRow.quality)
-    .lte("size_from", carat)
-    .gte("size_to", carat)
-    .order("size_from", { ascending: true });
-  if (prErr) return NextResponse.json({ error: prErr.message }, { status: 500 });
-
-  const row = (priceRows ?? [])[0];
-  if (!row) {
-    return NextResponse.json({
-      status: "no_price", shape, quality: mapRow.quality, carat,
-      supplier_name: ORIGIN_SUPPLIER_NAME[origin],
-    });
-  }
-
-  // Per-stone from price_per_carat (the real unit); fall back to legacy per-stone.
-  const ppc = row.price_per_carat != null ? Number(row.price_per_carat) : null;
-  const pps = row.price_per_stone != null ? Number(row.price_per_stone) : null;
-  const perStone = ppc != null ? ppc * carat : pps;
-  if (perStone == null) {
-    return NextResponse.json({ status: "no_price", shape, quality: mapRow.quality, carat, supplier_name: ORIGIN_SUPPLIER_NAME[origin] });
-  }
-
-  return NextResponse.json({
-    status:        "ok",
-    quantity:      qty,
-    carat,
-    per_stone:     Math.round(perStone * 100) / 100,
-    total:         Math.round(perStone * qty * 100) / 100,
-    quality:       mapRow.quality,
-    shape,
-    supplier_name: ORIGIN_SUPPLIER_NAME[origin],
+  // Shared pricing lookup (identical logic to before — extracted verbatim).
+  const result = await priceMelee(supabase, {
+    tenantId, origin: originRes.origin, shape, colourGroup: colour, clarity: clar,
+    carat: carat ?? NaN, qty,
   });
+  if (result.status === "error") {
+    return NextResponse.json({ error: result.message }, { status: 500 });
+  }
+  return NextResponse.json(result);
 }
