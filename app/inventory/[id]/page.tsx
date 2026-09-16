@@ -1337,22 +1337,19 @@ export default function InventoryItemPage({ params }: Params) {
                       <div style={{ fontSize: 14, color: "#111827" }}>
                         {meleePrice.quantity} × {fmtMoney(meleePrice.per_stone)} = <strong>{fmtMoney(meleePrice.total)}</strong>
                         <span style={{ color: "#9CA3AF", marginLeft: 8, fontSize: 12 }}>
-                          {meleePrice.shape} · {meleePrice.quality} · {meleePrice.supplier_name}
+                          {meleePrice.shape} · {meleePrice.quality}{meleePrice.mm ? ` · ${meleePrice.mm}mm` : ""}
                         </span>
                       </div>
                     ) : meleePrice.status === "unmapped" ? (
                       <div style={{ fontSize: 13, color: "#B45309" }}>
-                        Quality not mapped for {meleePrice.colour_group} / {meleePrice.clarity} ({meleePrice.supplier_name}).{" "}
-                        <a href="/pricing/melee-quality-map" style={{ color: "#635BFF", fontWeight: 500 }}>Confirm mapping →</a>
+                        Quality not mapped for {meleePrice.colour_group} / {meleePrice.clarity} — import the melee list or add the mapping in Settings → Melee.
                       </div>
                     ) : meleePrice.status === "no_price" ? (
                       <div style={{ fontSize: 13, color: "#B45309" }}>
-                        No exact price-list match ({meleePrice.shape}, {meleePrice.quality}, {meleePrice.carat}ct) in {meleePrice.supplier_name}’s list.
+                        No exact price-list match ({meleePrice.shape}, {meleePrice.quality}, {meleePrice.carat}ct{meleePrice.mm ? `, ${meleePrice.mm}mm` : ""}).
                       </div>
                     ) : meleePrice.status === "incomplete" ? (
-                      <div style={{ fontSize: 13, color: "#9CA3AF" }}>Add shape, colour, clarity and carat to price these stones.</div>
-                    ) : meleePrice.status === "supplier_missing" ? (
-                      <div style={{ fontSize: 13, color: "#B45309" }}>Supplier “{meleePrice.supplier_name}” is not set up for this tenant.</div>
+                      <div style={{ fontSize: 13, color: "#9CA3AF" }}>Add shape, colour, clarity, carat and mm to price these stones.</div>
                     ) : meleePrice.status === "origin_unrecognized" ? (
                       <div style={{ fontSize: 13, color: "#B45309" }}>
                         Diamond Type “{meleePrice.diamond_type}” isn’t a recognised value — fix it (Natural / Lab Grown / None) to price melee.
