@@ -6,6 +6,11 @@ import { waitUntil } from "@vercel/functions";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { generateReferenceNumber } from "@/lib/referenceNumber";
 import { todayISO } from "@/lib/formatters";
+import {
+  buildArticles,
+  parseLineItems,
+  isNativeShopifyFormat,
+} from "@/lib/shopify-articles";
 
 // Fallback tenant for legacy Zapier webhooks that have no X-Shopify-Shop-Domain header.
 // Native Shopify webhooks (registered via OAuth) are identified by shop_domain lookup.
@@ -149,12 +154,8 @@ interface ZapierFlatOrder {
 // ── FORMAT DETECTION ──────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function isNativeShopifyFormat(body: Record<string, unknown>): boolean {
-  return (
-    body.line_items !== undefined ||
-    !!(body.id && body.name && body.shipping_address)
-  );
-}
+// isNativeShopifyFormat is imported from @/lib/shopify-articles (shared with the
+// complimentary-item backfill so both route stored payloads identically).
 
 // Returns 'pickup' when the shipping method title indicates local/in-store pickup,
 // 'shipping' otherwise. Checks for "pickup", "pick up", and "collect" keywords.
@@ -170,26 +171,7 @@ function detectDeliveryMethod(shippingMethod: string | null): "pickup" | "shippi
 // ── SHARED UTILITIES ──────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const meaningfulKeys = [
-  "metal", "carat", "carat", "gold", "colour", "color",
-  "stone", "gem", "diamond", "sapphire", "ruby", "emerald",
-  "size", "ring size", "engraving", "personalisation", "personalization",
-  "chain", "initial", "birthstone",
-  // Pendants — numbered and un-numbered
-  "pendant", "pendant 1", "pendant 2", "pendant 3", "pendant 4", "pendant 5", "pendant 6",
-  // Charms — PCN products often use "Charm 1/2/3" not "Pendant 1/2/3"
-  "charm", "charm 1", "charm 2", "charm 3", "charm 4", "charm 5", "charm 6",
-  "number", "font", "text", "message", "name",
-  "finish", "width", "length", "weight", "alloy",
-  // Metal/material specifics
-  "material", "plating", "rhodium", "silver", "platinum",
-  "confirmation", "style", "design",
-  // Explicit compound keys often used on PCN/necklace products
-  "carat weight", "metal colour", "metal color", "gold colour", "gold color",
-  "metal type", "gold type", "chain type", "chain metal", "chain colour",
-  // Abbreviations
-  "ct", "kt",
-];
+// meaningfulKeys lives in @/lib/shopify-articles (shared with the backfill).
 
 const MONTH_NAMES = [
   "january", "february", "march", "april", "may", "june",
@@ -267,58 +249,8 @@ function resolveNameNative(order: ShopifyOrder): { firstName: string; lastName: 
   return { firstName: "Online", lastName: "Customer" };
 }
 
-function buildArticles(lineItems: ShopifyLineItem[]): string {
-  const results: string[] = [];
-
-  for (const item of lineItems) {
-    const name = item.title?.trim() || "";
-    if (!name) continue;
-
-    if (name.toLowerCase().includes("free gift")) continue;
-
-    const price = parseFloat(item.price || "0");
-    const qty   = item.quantity || 1;
-
-    const variantRaw = item.variant_title?.trim() ?? "";
-    const isDefaultVariant =
-      !variantRaw ||
-      variantRaw.toLowerCase() === "default title" ||
-      variantRaw.toLowerCase() === "none" ||
-      variantRaw.toLowerCase() === "null";
-    const variantAlreadyInName = name.toLowerCase().includes(variantRaw.toLowerCase());
-    const shouldAppendVariant  = !isDefaultVariant && !variantAlreadyInName;
-    const displayName = shouldAppendVariant ? `${name} - ${variantRaw}` : name;
-
-    // Attribute parsing runs BEFORE the price=0 guard so $0 add-on line items
-    // (e.g. "Pendant 1") are retained when they carry meaningful attributes.
-    const props = item.properties ?? [];
-    const attrs = props
-      .filter((p) => {
-        const key = p.name?.toLowerCase().trim() ?? "";
-        const val = p.value?.trim() ?? "";
-        if (!val) return false;
-        if (key.startsWith("_") || key.startsWith("cl_")) return false;
-        return meaningfulKeys.some((k) => key.includes(k));
-      })
-      .map((p) => `  ${p.name}: ${p.value.trim()}`)
-      .join("\n");
-
-    if (price === 0 && !attrs) continue;
-
-    console.log(
-      "[webhook] line item:",
-      name,
-      "price:", price,
-      "variantTitle:", variantRaw || "(none)",
-      "appendVariant:", shouldAppendVariant,
-      "attrs kept:", attrs ? attrs.split("\n").length : 0
-    );
-
-    results.push(`${qty}x ${displayName}${attrs ? "\n" + attrs : ""}`);
-  }
-
-  return results.join("\n");
-}
+// buildArticles is imported from @/lib/shopify-articles — the shared builder now
+// KEEPS complimentary / free-gift line items and flags them " — COMPLIMENTARY".
 
 function extractShippingMethodNative(shippingLines: ShopifyShippingLine[] | undefined): string | null {
   if (!shippingLines || shippingLines.length === 0) return null;
@@ -362,71 +294,8 @@ function resolveNameZapier(body: ZapierFlatOrder): { firstName: string; lastName
   return { firstName, lastName };
 }
 
-function parseLineItems(raw: any): string {
-  if (!raw || typeof raw !== "string") return "";
-
-  const blocks = raw.split(/\n\n+/);
-  const results: string[] = [];
-
-  for (const block of blocks) {
-    const nameMatch = block.match(/^name:\s*(.+)$/m);
-    if (!nameMatch) continue;
-    const name = nameMatch[1].trim();
-
-    const variantMatch = block.match(/^variantTitle:\s*(.+)$/m);
-    const variantRaw   = variantMatch?.[1]?.trim() ?? "";
-    const isDefaultVariant =
-      !variantRaw ||
-      variantRaw.toLowerCase() === "default title" ||
-      variantRaw.toLowerCase() === "none" ||
-      variantRaw.toLowerCase() === "null";
-    const variantAlreadyInName = name.toLowerCase().includes(variantRaw.toLowerCase());
-    const shouldAppendVariant  = !isDefaultVariant && !variantAlreadyInName;
-    const displayName = shouldAppendVariant ? `${name} - ${variantRaw}` : name;
-
-    if (name.toLowerCase().includes("free gift")) continue;
-
-    const priceMatch = block.match(/discountedTotalSet:.*?'amount':\s*'([\d.]+)'/);
-    const price = parseFloat(priceMatch?.[1] || "0");
-
-    const qtyMatch = block.match(/^quantity:\s*(\d+)$/m);
-    const qty = qtyMatch?.[1] || "1";
-
-    const attrMatches: RegExpExecArray[] = [];
-    const attrRe = /'key':\s*'([^']*)',\s*'value':\s*'([^']*)'/g;
-    let attrM: RegExpExecArray | null;
-    while ((attrM = attrRe.exec(block)) !== null) attrMatches.push(attrM);
-
-    // BUG FIX (Bug 1): attribute parsing runs BEFORE the price=0 guard so
-    // pendant add-on line items (Pendant 1 as a $0 add-on) are retained.
-    const attrs = attrMatches
-      .filter((m) => {
-        const key = m[1].toLowerCase().trim();
-        const val = m[2].trim();
-        if (!val) return false;
-        if (key.startsWith("_") || key.startsWith("cl_")) return false;
-        return meaningfulKeys.some((k) => key.includes(k.toLowerCase()));
-      })
-      .map((m) => `  ${m[1]}: ${m[2].trim()}`)
-      .join("\n");
-
-    if (price === 0 && !attrs) continue;
-
-    console.log(
-      "[webhook] line item:",
-      name,
-      "price:", price,
-      "variantTitle:", variantRaw || "(none)",
-      "appendVariant:", shouldAppendVariant,
-      "attrs found:", attrMatches.length,
-      "attrs kept:", attrs ? attrs.split("\n").length : 0
-    );
-
-    results.push(`${qty}x ${displayName}${attrs ? "\n" + attrs : ""}`);
-  }
-
-  return results.join("\n");
-}
+// parseLineItems is imported from @/lib/shopify-articles — the shared parser now
+// KEEPS complimentary / free-gift line items and flags them " — COMPLIMENTARY".
 
 function extractShippingMethodZapier(raw: unknown): string | null {
   if (!raw) return null;
