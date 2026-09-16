@@ -10,6 +10,11 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { LoggedInUser, UserRole, UserPermissions, DEFAULT_STAFF_PERMISSIONS } from "@/lib/userTypes";
+import {
+  resolveEffectiveRole,
+  canSeeCostsForEffectiveRole,
+  EFFECTIVE_ROLE_COOKIE,
+} from "@/lib/effective-role";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
@@ -26,6 +31,13 @@ const UserContext = createContext<UserContextType>({
   roleLoading: true,
   logout: async () => {},
 });
+
+/** Read a non-httpOnly cookie value in the browser. Returns null if absent. */
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+  return match ? decodeURIComponent(match[1]) : null;
+}
 
 function deriveInitials(name: string): string {
   return name
@@ -137,10 +149,21 @@ export function UserProvider({ children }: { children: ReactNode }) {
         ...(rawPerms ?? {}),
       };
 
+      // View-as override (display side). The same shared helper the server uses:
+      // honoured only for Josh's id, downgrade-only. For everyone else this is a
+      // no-op and effectiveRole === realRole. The server independently enforces
+      // the effective role, so UI and enforcement stay in lockstep.
+      const resolvedId   = String(data.id ?? userId);
+      const realRole     = (data.role as UserRole) ?? "manager";
+      const requested    = readCookie(EFFECTIVE_ROLE_COOKIE);
+      const effectiveRole = resolveEffectiveRole(resolvedId, realRole, requested) as UserRole;
+      const realCanSeeCosts = data.can_see_costs === true;
+
       setUser({
-        id:            String(data.id ?? userId),
+        id:            resolvedId,
         name:          String(data.full_name ?? userEmail),
-        role:          (data.role as UserRole) ?? "manager",
+        role:          effectiveRole,
+        realRole,
         email:         String(data.email ?? userEmail),
         tenantId:      String(data.tenant_id),
         // profiles has no slug column; the old code hardcoded "classa" here, which
@@ -149,7 +172,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
         initials:      String(data.full_name ?? userEmail).substring(0, 2).toUpperCase(),
         loggedInAt:    new Date().toISOString(),
         permissions,
-        can_see_costs: data.can_see_costs === true,
+        // Viewing as staff suppresses cost visibility regardless of the real flag.
+        can_see_costs: canSeeCostsForEffectiveRole(effectiveRole ?? "staff", realCanSeeCosts),
       });
       setRoleLoading(false);
     } catch (err) {

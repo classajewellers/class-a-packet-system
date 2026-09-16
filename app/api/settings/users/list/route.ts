@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { requireManager } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
-    const tenantId = req.headers.get("x-tenant-id") ?? "";
-    if (!tenantId) {
-      return NextResponse.json({ users: [] }, { status: 400 });
-    }
+    // Server-side manager/admin gate (was previously client-hidden only).
+    // Honours the view-as override, so Josh-as-staff is correctly 403'd.
+    const auth = await requireManager(req);
+    if (!auth.ok) return auth.response;
+    const tenantId = auth.ctx.tenantId;
 
     const supabase = await createTenantSupabaseClient(tenantId);
     const { data, error } = await supabase

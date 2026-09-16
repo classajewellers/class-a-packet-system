@@ -23,11 +23,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { resolveEffectiveRole, EFFECTIVE_ROLE_COOKIE } from "@/lib/effective-role";
 
 export interface AuthContext {
   userId:   string;
   tenantId: string;
+  /** EFFECTIVE role — equals realRole for everyone except Josh's view-as
+   *  override, and never higher than realRole. Gate on this. */
   role:     string;
+  /** TRUE role from profiles.role. Use for audit logging / anything that must
+   *  record who the user actually is — never persist `role` as if it were real. */
+  realRole: string;
 }
 
 export type AuthResult =
@@ -69,7 +75,16 @@ async function resolveAuth(req: NextRequest): Promise<AuthResult> {
     return { ok: false, response: NextResponse.json({ error: "No tenant associated with this account" }, { status: 403 }) };
   }
 
-  return { ok: true, ctx: { userId: user.id, tenantId: String(profile.tenant_id), role: String(profile.role) } };
+  // Apply the view-as override (Josh only, downgrade-only). For every other
+  // account this is a no-op and effectiveRole === realRole.
+  const realRole      = String(profile.role);
+  const requestedRole = req.cookies.get(EFFECTIVE_ROLE_COOKIE)?.value ?? null;
+  const effectiveRole = resolveEffectiveRole(user.id, realRole, requestedRole);
+
+  return {
+    ok: true,
+    ctx: { userId: user.id, tenantId: String(profile.tenant_id), role: effectiveRole, realRole },
+  };
 }
 
 /** Verify a Supabase session. Any authenticated tenant user (staff or manager)

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createHmac, randomBytes } from "crypto";
+import { resolveEffectiveRole, EFFECTIVE_ROLE_COOKIE } from "@/lib/effective-role";
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +62,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!profile?.tenant_id) {
     return NextResponse.json({ error: "No tenant associated with this account" }, { status: 403 });
   }
-  if (profile.role !== "manager" && profile.role !== "admin") {
+  // Apply the view-as override (Josh only, downgrade-only) via the shared helper.
+  const effectiveRole = resolveEffectiveRole(
+    user.id,
+    profile.role,
+    req.cookies.get(EFFECTIVE_ROLE_COOKIE)?.value ?? null
+  );
+  if (effectiveRole !== "manager" && effectiveRole !== "admin") {
     return NextResponse.json({ error: "Only managers and admins can connect Shopify" }, { status: 403 });
   }
 
