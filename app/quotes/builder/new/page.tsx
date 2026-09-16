@@ -12,6 +12,7 @@ import { calculateRetailPrice, calculateBlendedRetailFromBrackets, calculateMult
 import type { BlendedBreakdownLine } from "@/lib/marginCalculator";
 import NivodaModal, { type NivodaStone } from "@/components/NivodaModal";
 import CharmNecklaceBuilder, { type CharmLineItem } from "@/components/CharmNecklaceBuilder";
+import { caratToMmRoundBrilliant } from "@/lib/melee-pricing";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -38,10 +39,28 @@ interface StoneEntry {
   // time. Cleared to undefined the moment a manager types over the cost manually.
   costSource?: "estimated" | "exact";
 }
+// Structured melee row (v2). Cost is DERIVED from the shared melee pricing
+// lookup (POST /api/quotes/melee-price → priceMelee), not manually typed:
+//   origin + shape + colourGroup + clarity + carat → per-stone cost (quality is
+//   resolved server-side via pricing_melee_quality_map).
 interface MeleeRow {
-  id: string; stoneType: string; quality: string; shape: string;
-  caratWeight: string; individualCost: string; qty: string; location: string;
+  id: string;
+  origin: "" | "Lab Grown" | "Natural";
+  shape: string;
+  colourGroup: string;
+  clarity: string;
+  caratWeight: string;   // carat drives the price lookup; the mm label is display-only
+  qty: string;
+  location: string;
+  // Derived (manager-only meaning) — filled from the live lookup:
+  perStoneCost: string;  // "" until priced
+  quality: string;       // resolved quality string from the map (display)
+  supplierName: string;
+  priceStatus: string;   // "" | ok | incomplete | unmapped | no_price | supplier_missing | origin_unrecognized | no_origin | error
 }
+// Reference rows from /api/pricing used to populate the dropdowns.
+interface MeleeStoneRef { id: string; supplier_id: string; origin: string; shape: string; quality: string; size_type: string; size_from: number; size_to: number; price_per_carat: number | null; price_per_stone: number | null; }
+interface MeleeQualityMapRef { id: string; supplier_id: string; colour_group: string; clarity: string; quality: string; }
 interface ComponentRow { id: string; name: string; cost: string; }
 interface StoneOption {
   id: string; label: string; stones: StoneEntry[];
@@ -84,7 +103,12 @@ interface CustomerResult { first_name: string | null; last_name: string | null; 
 function uid() { return Math.random().toString(36).slice(2); }
 function newStone(): StoneEntry { return { id: uid(), caratWeight: "", shape: "", colour: "", clarity: "", origin: "Lab Grown", cost: "" }; }
 function newMetal(): MetalRow { return { id: uid(), type: "", weight: "" }; }
-function newMelee(): MeleeRow { return { id: uid(), stoneType: "", quality: "", shape: "", caratWeight: "", individualCost: "", qty: "1", location: "" }; }
+function newMelee(): MeleeRow { return { id: uid(), origin: "", shape: "", colourGroup: "", clarity: "", caratWeight: "", qty: "1", location: "", perStoneCost: "", quality: "", supplierName: "", priceStatus: "" }; }
+// Origin label → the value the melee-price endpoint understands.
+const MELEE_ORIGINS: { label: string; value: "Lab Grown" | "Natural" }[] = [
+  { label: "Lab Grown", value: "Lab Grown" },
+  { label: "Natural",   value: "Natural" },
+];
 function newStoneOption(index: number): StoneOption { return { id: uid(), label: `Option ${index + 1}`, stones: [newStone()] }; }
 function newItem(index = 0): BuilderItem {
   return {
@@ -229,7 +253,7 @@ function computeItemPricing(
     : 0;
 
   const meleeCost = isManager
-    ? item.meleeRows.reduce((s, r) => s + (parseFloat(r.individualCost) || 0) * (parseInt(r.qty) || 0), 0)
+    ? item.meleeRows.reduce((s, r) => s + (parseFloat(r.perStoneCost) || 0) * (parseInt(r.qty) || 0), 0)
     : 0;
 
   let addonsCost = mainStoneSettingCost;
@@ -334,14 +358,105 @@ interface ItemCardProps {
   errors: Record<string, string>;
   stonePricing: StonePricingData | null;
   ndData: NdData | null;
+  meleeStones: MeleeStoneRef[];
+  meleeQualityMap: MeleeQualityMapRef[];
+  tenantId: string;
 }
 
-function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManager, setItems, onShowNivoda, errors, stonePricing, ndData }: ItemCardProps) {
+function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManager, setItems, onShowNivoda, errors, stonePricing, ndData, meleeStones, meleeQualityMap, tenantId }: ItemCardProps) {
   const [activeOptIdx, setActiveOptIdx] = useState(0);
 
   function set<K extends keyof BuilderItem>(key: K, value: BuilderItem[K]) {
     setItems(prev => prev.map(it => it.id === item.id ? { ...it, [key]: value } : it));
   }
+
+  // ── Melee dropdown options (derived from the loaded price/quality-map rows) ──
+  function meleeOriginKey(origin: string): "lab" | "natural" | "" {
+    if (origin === "Lab Grown") return "lab";
+    if (origin === "Natural") return "natural";
+    return "";
+  }
+  function meleeSupplierIds(originKey: string): Set<string> {
+    return new Set(meleeStones.filter(m => (m.origin ?? "").toLowerCase() === originKey && m.size_type === "carat_range").map(m => m.supplier_id));
+  }
+  function meleeShapeOptions(originKey: string): string[] {
+    const set = new Set(meleeStones.filter(m => (m.origin ?? "").toLowerCase() === originKey && m.size_type === "carat_range" && m.shape).map(m => m.shape));
+    return Array.from(set).sort();
+  }
+  function meleeColourOptions(originKey: string): string[] {
+    const sup = meleeSupplierIds(originKey);
+    const set = new Set(meleeQualityMap.filter(q => sup.has(q.supplier_id) && q.colour_group).map(q => q.colour_group));
+    return Array.from(set).sort();
+  }
+  function meleeClarityOptions(originKey: string): string[] {
+    const sup = meleeSupplierIds(originKey);
+    const set = new Set(meleeQualityMap.filter(q => sup.has(q.supplier_id) && q.clarity).map(q => q.clarity));
+    return Array.from(set).sort();
+  }
+  // Carat options = the distinct carat_range bands for the chosen origin (+shape).
+  // Value is the band's size_from (always inside the band); label shows mm.
+  function meleeCaratOptions(originKey: string, shape: string): { value: string; label: string }[] {
+    const rows = meleeStones.filter(m =>
+      (m.origin ?? "").toLowerCase() === originKey && m.size_type === "carat_range" &&
+      (!shape || (m.shape ?? "").toLowerCase() === shape.toLowerCase()));
+    const seen = new Map<string, { value: string; label: string }>();
+    for (const m of rows) {
+      const from = Number(m.size_from);
+      if (!Number.isFinite(from) || from <= 0) continue;
+      const key = String(from);
+      if (!seen.has(key)) seen.set(key, { value: key, label: `${from}ct (${caratToMmRoundBrilliant(from)}mm)` });
+    }
+    return Array.from(seen.values()).sort((a, b) => Number(a.value) - Number(b.value));
+  }
+
+  // Live melee pricing via the shared endpoint (single source of truth).
+  async function repriceMeleeRow(row: MeleeRow) {
+    const complete = row.origin && row.shape && row.colourGroup && row.clarity && row.caratWeight;
+    const applyToRow = (patch: Partial<MeleeRow>) =>
+      setItems(prev => prev.map(it => it.id === item.id
+        ? { ...it, meleeRows: it.meleeRows.map(x => x.id === row.id ? { ...x, ...patch } : x) }
+        : it));
+    if (!complete) { applyToRow({ perStoneCost: "", quality: "", supplierName: "", priceStatus: "" }); return; }
+    try {
+      const res = await fetch("/api/quotes/melee-price", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-tenant-id": tenantId },
+        body: JSON.stringify({
+          origin: row.origin, shape: row.shape, colourGroup: row.colourGroup,
+          clarity: row.clarity, carat: parseFloat(row.caratWeight) || 0, qty: parseInt(row.qty) || 1,
+        }),
+      });
+      const j = await res.json();
+      applyToRow({
+        priceStatus:  j.status ?? "error",
+        perStoneCost: j.status === "ok" ? String(j.per_stone) : "",
+        quality:      j.status === "ok" ? (j.quality ?? "") : "",
+        supplierName: j.supplier_name ?? "",
+      });
+    } catch {
+      applyToRow({ priceStatus: "error", perStoneCost: "" });
+    }
+  }
+
+  // Merge a field change into a melee row; re-price when a price-affecting field changes.
+  function patchMeleeRow(rowId: string, patch: Partial<MeleeRow>) {
+    const current = item.meleeRows.find(x => x.id === rowId);
+    if (!current) return;
+    const merged = { ...current, ...patch };
+    set("meleeRows", item.meleeRows.map(x => x.id === rowId ? merged : x));
+    const PRICE_FIELDS: (keyof MeleeRow)[] = ["origin", "shape", "colourGroup", "clarity", "caratWeight"];
+    if (PRICE_FIELDS.some(k => k in patch)) void repriceMeleeRow(merged);
+  }
+
+  const MELEE_STATUS_MSG: Record<string, string> = {
+    incomplete:          "Select origin, shape, colour, clarity and size to price.",
+    unmapped:            "No confirmed quality mapping for that colour + clarity.",
+    no_price:            "No price-list row matches that shape / quality / size.",
+    supplier_missing:    "Supplier for this origin not found.",
+    origin_unrecognized: "Origin not recognised.",
+    no_origin:           "Select an origin.",
+    error:               "Couldn't price this row — try again.",
+  };
 
   function Toggle({ on, onChange, children }: { on: boolean; onChange: (v: boolean) => void; children: React.ReactNode }) {
     return (
@@ -601,28 +716,81 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
           <div style={sectionStyle}>
             <div style={headingStyle}>Melee / Small Stones</div>
             {item.meleeRows.map((r, idx) => {
-              const rowTotal = isManager ? (parseFloat(r.individualCost) || 0) * (parseInt(r.qty) || 0) : 0;
+              const originKey  = meleeOriginKey(r.origin);
+              const perStone   = parseFloat(r.perStoneCost) || 0;
+              const qtyN       = parseInt(r.qty) || 0;
+              const rowTotal   = isManager ? perStone * qtyN : 0;
+              const priced     = r.priceStatus === "ok" && perStone > 0;
+              const statusMsg  = r.priceStatus && r.priceStatus !== "ok" ? (MELEE_STATUS_MSG[r.priceStatus] ?? "") : "";
               return (
                 <div key={r.id} style={{ background: "#F9FAFB", border: "1px solid #E8E8F0", borderRadius: 10, padding: 14, marginBottom: 12 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
                     <span style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>Row {idx + 1}</span>
                     <button onClick={() => set("meleeRows", item.meleeRows.filter(x => x.id !== r.id))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 18, color: "#9CA3AF" }}>×</button>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
-                    <div><label style={labelStyle}>Stone Shape</label><input style={inputStyle} type="text" value={r.stoneType} onChange={e => set("meleeRows", item.meleeRows.map(x => x.id === r.id ? { ...x, stoneType: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField} placeholder="Round Brilliant Diamond" /></div>
-                    <div><label style={labelStyle}>Quality</label><input style={inputStyle} type="text" value={r.quality} onChange={e => set("meleeRows", item.meleeRows.map(x => x.id === r.id ? { ...x, quality: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField} placeholder="G/VS" /></div>
-                    <div><label style={labelStyle}>Shape</label><input style={inputStyle} type="text" value={r.shape} onChange={e => set("meleeRows", item.meleeRows.map(x => x.id === r.id ? { ...x, shape: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField} placeholder="Round" /></div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                    <div>
+                      <label style={labelStyle}>Origin</label>
+                      <select style={inputStyle} value={r.origin} onChange={e => patchMeleeRow(r.id, { origin: e.target.value as MeleeRow["origin"], shape: "", colourGroup: "", clarity: "", caratWeight: "" })}>
+                        <option value="">Select origin…</option>
+                        {MELEE_ORIGINS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Shape</label>
+                      <select style={inputStyle} value={r.shape} disabled={!originKey} onChange={e => patchMeleeRow(r.id, { shape: e.target.value, caratWeight: "" })}>
+                        <option value="">{originKey ? "Select shape…" : "Select origin first"}</option>
+                        {meleeShapeOptions(originKey).map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
                   </div>
-                  <div style={{ marginBottom: 10 }}>
-                    <label style={labelStyle}>Location</label>
-                    <input style={inputStyle} type="text" value={r.location} onChange={e => set("meleeRows", item.meleeRows.map(x => x.id === r.id ? { ...x, location: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField} placeholder="e.g. hidden halo, halo, diamond band, band" />
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
+                    <div>
+                      <label style={labelStyle}>Colour</label>
+                      <select style={inputStyle} value={r.colourGroup} disabled={!originKey} onChange={e => patchMeleeRow(r.id, { colourGroup: e.target.value })}>
+                        <option value="">{originKey ? "Colour…" : "—"}</option>
+                        {meleeColourOptions(originKey).map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Clarity</label>
+                      <select style={inputStyle} value={r.clarity} disabled={!originKey} onChange={e => patchMeleeRow(r.id, { clarity: e.target.value })}>
+                        <option value="">{originKey ? "Clarity…" : "—"}</option>
+                        {meleeClarityOptions(originKey).map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Size</label>
+                      <select style={inputStyle} value={r.caratWeight} disabled={!r.shape} onChange={e => patchMeleeRow(r.id, { caratWeight: e.target.value })}>
+                        <option value="">{r.shape ? "Size…" : "Select shape first"}</option>
+                        {meleeCaratOptions(originKey, r.shape).map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                      </select>
+                    </div>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: isManager ? "1fr 1fr 1fr" : "1fr 1fr", gap: 10 }}>
-                    <div><label style={labelStyle}>Carat / Stone</label><input style={inputStyle} type="number" step="0.001" min="0" value={r.caratWeight} onChange={e => set("meleeRows", item.meleeRows.map(x => x.id === r.id ? { ...x, caratWeight: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField} placeholder="0.05ct" /></div>
-                    {isManager && <div><label style={{ ...labelStyle, color: "#635BFF" }}>Cost / Stone ($)</label><input style={{ ...inputStyle, borderColor: "#C4BFFE" }} type="number" step="0.01" min="0" value={r.individualCost} onChange={e => set("meleeRows", item.meleeRows.map(x => x.id === r.id ? { ...x, individualCost: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField} placeholder="0.00" /></div>}
-                    <div><label style={labelStyle}>Qty</label><input style={inputStyle} type="number" step="1" min="1" value={r.qty} onChange={e => set("meleeRows", item.meleeRows.map(x => x.id === r.id ? { ...x, qty: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField} /></div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div>
+                      <label style={labelStyle}>Location</label>
+                      <input style={inputStyle} type="text" value={r.location} onChange={e => set("meleeRows", item.meleeRows.map(x => x.id === r.id ? { ...x, location: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField} placeholder="e.g. hidden halo, halo, band" />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Qty</label>
+                      <input style={inputStyle} type="number" step="1" min="1" value={r.qty} onChange={e => set("meleeRows", item.meleeRows.map(x => x.id === r.id ? { ...x, qty: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField} />
+                    </div>
                   </div>
-                  {isManager && rowTotal > 0 && <div style={{ marginTop: 6, fontSize: 12, color: "#6B7280", textAlign: "right" }}>Row total: <strong style={{ color: "#1A1A2E" }}>${Number(rowTotal).toFixed(2)}</strong></div>}
+                  {/* Derived pricing — cost is manager-only; staff still see the row + retail impact upstream. */}
+                  {statusMsg && <div style={{ marginTop: 8, fontSize: 12, color: "#B45309", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 6, padding: "6px 10px" }}>{statusMsg}</div>}
+                  {isManager && priced && (
+                    <div style={{ marginTop: 8, fontSize: 12, color: "#374151", background: "#EEF2FF", border: "1px solid #C4BFFE", borderRadius: 6, padding: "8px 10px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span style={{ color: "#6B7280" }}>{r.quality ? `${r.quality} · ` : ""}{r.supplierName || ""}</span>
+                        <span>${perStone.toFixed(2)}/stone × {qtyN || 1}</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+                        <span style={{ fontWeight: 600, color: "#374151" }}>Row cost</span>
+                        <strong style={{ color: "#1A1A2E" }}>${Number(rowTotal).toFixed(2)}</strong>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -702,7 +870,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                         stoneOptions: item.includeMainStone && item.stoneOptions.length > 1
                           ? item.stoneOptions.map(opt => ({ label: opt.label, stones: opt.stones }))
                           : null,
-                        meleeStones: item.meleeRows.filter(m => m.stoneType),
+                        meleeStones: item.meleeRows.filter(m => m.shape),
                         engraving: { hand: item.handEngraving, laser: item.laserEngraving },
                         fingerSize: item.fingerSize || null,
                         stockSku: item.stockSku || null,
@@ -743,9 +911,10 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                   return <div key={s.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Stone {idx + 1}: {parts || "—"}</span><span style={{ fontWeight: 500 }}>${Number(displayCost).toFixed(2)}</span></div>;
                 })}
                 {item.includeMainStone && (item.stoneOptions[0]?.stones.length ?? 0) > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Stone Settings: {item.stoneOptions[0]?.stones.length} × ${Number(pricing.mainStoneSettingRate).toFixed(2)}</span><span style={{ fontWeight: 500 }}>${Number(pricing.mainStoneSettingCost).toFixed(2)}</span></div>}
-                {item.meleeRows.filter(r => r.stoneType).map((r, idx) => {
-                  const t = (parseFloat(r.individualCost) || 0) * (parseInt(r.qty) || 0);
-                  return <div key={r.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Melee {idx + 1}: {r.qty || 1}× {r.stoneType}</span><span style={{ fontWeight: 500 }}>${Number(t).toFixed(2)}</span></div>;
+                {item.meleeRows.filter(r => r.shape).map((r, idx) => {
+                  const t = (parseFloat(r.perStoneCost) || 0) * (parseInt(r.qty) || 0);
+                  const desc = [r.shape, r.quality].filter(Boolean).join(" ");
+                  return <div key={r.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Melee {idx + 1}: {r.qty || 1}× {desc || "—"}</span><span style={{ fontWeight: 500 }}>${Number(t).toFixed(2)}</span></div>;
                 })}
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Labour</span><span style={{ fontWeight: 500 }}>${Number(pricing.costMap.labour ?? 0).toFixed(2)}</span></div>
                 {item.smallSettings && (parseInt(item.smallSettingsQty) || 0) > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Melee Settings: {item.smallSettingsQty} × $30.00</span><span style={{ fontWeight: 500 }}>${Number(pricing.costMap.smallSettings ?? 0).toFixed(2)}</span></div>}
@@ -871,6 +1040,8 @@ function QuoteBuilderPageInner() {
   const [marginBrackets, setMarginBrackets] = useState<MarginBracket[]>([]);
   const [stonePricing, setStonePricing] = useState<StonePricingData | null>(null);
   const [ndData, setNdData] = useState<NdData | null>(null);
+  const [meleeStones, setMeleeStones] = useState<MeleeStoneRef[]>([]);
+  const [meleeQualityMap, setMeleeQualityMap] = useState<MeleeQualityMapRef[]>([]);
 
   // Customer
   const [firstName, setFirstName] = useState("");
@@ -920,6 +1091,8 @@ function QuoteBuilderPageInner() {
         setMetalRates(sortedMetals);
         setFixedCosts(json.fixedCosts ?? []);
         setMarginBrackets(json.marginBrackets ?? []);
+        setMeleeStones(json.meleeStones ?? []);
+        setMeleeQualityMap(json.meleeQualityMap ?? []);
       })
       .catch(() => {});
     fetch("/api/settings/stone-pricing", { headers })
@@ -1092,14 +1265,21 @@ function QuoteBuilderPageInner() {
             })),
             quoted_price: p.stoneOptionPrices[oi] ?? p.finalPrice,
           })) : [],
+          // Locked cost snapshot (v2): structured fields + the DERIVED per-stone
+          // cost frozen at save. stone_type kept for back-compat readers.
           melee_stones: item.meleeRows.length > 0 ? item.meleeRows.map(r => ({
-            stone_type: r.stoneType || null,
-            quality: r.quality || null,
+            stone_type: r.shape || null,
+            origin: r.origin || null,
             shape: r.shape || null,
+            colour_group: r.colourGroup || null,
+            clarity: r.clarity || null,
+            quality: r.quality || null,          // resolved via the quality-map
+            supplier_name: r.supplierName || null,
             carat_weight: parseFloat(r.caratWeight) || null,
-            individual_cost: isManager ? (parseFloat(r.individualCost) || 0) : 0,
+            individual_cost: isManager ? (parseFloat(r.perStoneCost) || 0) : 0,
             qty: parseInt(r.qty) || 0,
-            row_total: isManager ? (parseFloat(r.individualCost) || 0) * (parseInt(r.qty) || 0) : 0,
+            row_total: isManager ? (parseFloat(r.perStoneCost) || 0) * (parseInt(r.qty) || 0) : 0,
+            price_status: r.priceStatus || null,
           })) : null,
           addons: {
             labour: fixedCosts.find(fc => fc.key === "labour")?.amount ?? 300,
@@ -1246,9 +1426,13 @@ function QuoteBuilderPageInner() {
               })),
               quoted_price: p.stoneOptionPrices[oi] ?? p.finalPrice,
             })) : [],
-            melee_stones: item.meleeRows.filter(r => r.stoneType).map(r => ({
-              stone_type: r.stoneType || null, shape: r.shape || null,
+            melee_stones: item.meleeRows.filter(r => r.shape).map(r => ({
+              stone_type: r.shape || null, shape: r.shape || null,
+              origin: r.origin || null, colour_group: r.colourGroup || null, clarity: r.clarity || null,
+              quality: r.quality || null, supplier_name: r.supplierName || null,
               carat_weight: parseFloat(r.caratWeight) || null, qty: parseInt(r.qty) || 0,
+              individual_cost: isManager ? (parseFloat(r.perStoneCost) || 0) : 0,
+              row_total: isManager ? (parseFloat(r.perStoneCost) || 0) * (parseInt(r.qty) || 0) : 0,
             })),
             addons: {
               hand_engraving: item.handEngraving,
@@ -1380,6 +1564,9 @@ function QuoteBuilderPageInner() {
               errors={errors}
               stonePricing={stonePricing}
               ndData={ndData}
+              meleeStones={meleeStones}
+              meleeQualityMap={meleeQualityMap}
+              tenantId={user?.tenantId ?? ""}
             />
           ))}
 

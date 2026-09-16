@@ -35,12 +35,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           .map(formatStone)
           .join(", ");
 
-    type Melee = { stoneType: string; shape: string; quality: string; caratWeight: string; qty: string };
+    // Melee rows are now structured (shape + colourGroup/clarity → quality). Fall
+    // back to the legacy `stoneType`/`quality` free-text if an older payload arrives.
+    type Melee = { stoneType?: string; shape?: string; colourGroup?: string; clarity?: string; quality?: string; origin?: string; caratWeight?: string; qty?: string };
     const meleeStr = (meleeStones ?? [])
-      .filter((m: Melee) => m.stoneType)
-      .map((m: Melee) =>
-        `${m.qty && m.qty !== "1" ? `${m.qty}× ` : ""}${m.caratWeight ? `${m.caratWeight}ct ` : ""}${m.shape ? `${m.shape} ` : ""}${m.stoneType}${m.quality ? ` ${m.quality}` : ""}`.replace(/\s+/g, " ").trim()
-      )
+      .filter((m: Melee) => m.shape || m.stoneType)
+      .map((m: Melee) => {
+        const qualityStr = m.quality || [m.colourGroup, m.clarity].filter(Boolean).join("/");
+        const shapeStr   = m.shape || m.stoneType || "";
+        return `${m.qty && m.qty !== "1" ? `${m.qty}× ` : ""}${m.caratWeight ? `${m.caratWeight}ct ` : ""}${shapeStr}${qualityStr ? ` ${qualityStr}` : ""}`.replace(/\s+/g, " ").trim();
+      })
       .join(", ");
 
     const hasContent = metalStr || itemLabel || mainStoneStr || design;
