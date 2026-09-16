@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requireManager } from "@/lib/require-auth";
 import { parseSizeLabel } from "@/lib/melee-size-parse";
+import { normalizeMm } from "@/lib/melee-pricing";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ interface MeleeRow {
   size_label: string;
   size_from: number | null;
   size_to: number | null;
-  mm: number | null;
+  mm: string | null;   // "0.90" (round) or "2.50 x 2.50" (fancy) — exact-match text, never numeric
   quality: string;
   price_per_carat: number | null;
   price_per_stone: number | null;
@@ -83,7 +84,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
       const inserts = priceableRows.map((r) => {
         const parsed = parseSizeLabel(r.size_label); // classify from the label, not the AI hint
-        const mm = r.mm != null && Number.isFinite(Number(r.mm)) ? Number(r.mm) : null;
+        // mm is TEXT — never coerce through Number(), which would corrupt fancy
+        // L×W values ("2.50 x 2.50" -> NaN -> null) and strip canonical trailing
+        // zeros ("0.90" -> 0.9). Re-normalize so any caller's formatting still
+        // matches what priceMelee()'s normalizeMm() produces at lookup time.
+        const normalized = normalizeMm(r.mm ?? null);
+        const mm = normalized ? normalized : null;
         return {
           tenant_id: tenantId,
           supplier_id: null,                    // no supplier concept

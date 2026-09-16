@@ -74,10 +74,26 @@ export function caratWithMmLabel(carat: number): string {
 //   ok | incomplete | supplier_missing | unmapped | no_price | error
 // Carat-range sizing only (size_type='carat_range'); mm/pieces modes out of scope.
 // ─────────────────────────────────────────────────────────────────────────────
-/** Canonical form of an mm dimension so import + lookup match exactly:
- *  "2.50x2.50" / "2.50 X 2.50" → "2.50 x 2.50"; "0.90 " → "0.90". */
+/** Format one numeric mm side to a fixed 2 decimals ("0.9" / "0.90" → "0.90");
+ *  non-numeric input is returned trimmed, unchanged (defensive, never throws). */
+function formatMmNumber(s: string): string {
+  const n = Number(s.trim());
+  return Number.isFinite(n) ? n.toFixed(2) : s.trim();
+}
+
+/** Canonical form of an mm dimension so import + lookup ALWAYS match exactly,
+ *  regardless of how a source (xltx text cell vs CSV numeric export vs staff
+ *  typing on a piece) formatted it: "0.9" / "0.90" both → "0.90";
+ *  "2.5x2.5" / "2.50 X 2.50" both → "2.50 x 2.50". mm is an exact-match text
+ *  key, so this canonicalization is load-bearing — without it, the same
+ *  physical stone imported once as "0.9" and once as "0.90" would silently
+ *  fail to match. */
 export function normalizeMm(mm: string | null | undefined): string {
-  return (mm ?? "").trim().replace(/\s*[xX]\s*/g, " x ").replace(/\s+/g, " ");
+  const trimmed = (mm ?? "").trim();
+  if (!trimmed) return "";
+  const parts = trimmed.split(/\s*[xX]\s*/);
+  if (parts.length === 2) return `${formatMmNumber(parts[0])} x ${formatMmNumber(parts[1])}`;
+  return formatMmNumber(trimmed);
 }
 
 export interface PriceMeleeParams {
