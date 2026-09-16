@@ -1,16 +1,24 @@
 // POST /api/pricing/melee-import/parse — dry-run parse of an uploaded melee
 // price-list CSV (Settings → Melee "Import CSV"). Manager-only. Parses and
 // normalizes via lib/melee-import-shared.mjs — the SAME module
-// scripts/import-prana-melee.mjs uses — and returns stats + samples + the
-// exact payload the confirm endpoint would write. NEVER touches the database:
-// this is preview-only, matching the app's standard import safety pattern
-// (extract/preview → confirm, same as the complimentary-items backfill).
+// scripts/import-prana-melee.mjs uses — and returns stats + validation
+// detail + the exact payload the confirm endpoint would write. NEVER touches
+// the database: this is preview-only, matching the app's standard import
+// safety pattern (extract/preview → confirm, same as the complimentary-items
+// backfill).
 //
 // Expects multipart/form-data with a single "file" field (the CSV).
-// Combined-file format (confirmed with Josh): one CSV with an explicit
-// Origin column (Natural / Lab Grown), Price Mode (Parcels/Precised),
-// Shape, Carat / stone, Colour, Clarity, Dimensions (mm), Price / stone
-// (AUD) and/or Price / carat (AUD), optional Category + Listing ID.
+// CURRENT STANDARD FORMAT (replaces the earlier 11-column format entirely):
+//   Origin, Shape, Quality, Carat, mm, $/carat, $/stone
+// Quality arrives pre-combined (e.g. "EF VVS") — stored verbatim, never
+// composed. No Price Mode column in this format — every row is a real price.
+//
+// If required columns are missing entirely, buildMeleeImportPayload returns
+// ok:false BEFORE any row is parsed — that error is returned as-is so the
+// preview can say exactly which column(s) are absent, before attempting to
+// read a single row. Per-row problems (missing/invalid Shape, Carat, mm, etc.)
+// are returned as `rowIssues`: one entry per bad row naming the exact field(s)
+// at fault, not just a total skipped count.
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireManager } from "@/lib/require-auth";
@@ -58,7 +66,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     filename: file.name,
     header,
     stats: result.stats,
-    skippedSamples: result.skippedSamples,
+    rowIssues: result.rowIssues,
+    rowIssuesTruncated: result.rowIssuesTruncated,
     // Sample rows per origin, for the preview UI — full payload also returned
     // so the client can hold it and POST it to /confirm unchanged on approval.
     samples: Object.fromEntries(

@@ -124,8 +124,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       totalImported += inserts.length;
     }
 
-    // Optionally rebuild the tenant's quality map from the same import (supplier-free,
-    // keyed on colour_group + clarity → composed quality). Replace-all for the tenant.
+    // Quality-map rebuild — PAUSED for the current import format. The standard
+    // format (Origin, Shape, Quality, Carat, mm, $/carat, $/stone) gives Quality
+    // pre-combined with no separate colour_group/clarity, so this endpoint can
+    // no longer safely derive quality_map entries from an import (splitting a
+    // combined string like "Fancy Yellow SI1-SI2+" back into parts would be a
+    // guess — against this project's convention of never guessing a mapping).
+    // This block only runs if a caller explicitly supplies a well-formed
+    // {colour_group, clarity, quality} quality_map (nothing currently does) —
+    // existing map entries are left untouched by a normal import either way.
+    // See lib/melee-pricing.ts for the open design question this raises.
     let mapImported = 0;
     if (Array.isArray(quality_map) && quality_map.length > 0) {
       const { error: mapDelErr } = await supabase

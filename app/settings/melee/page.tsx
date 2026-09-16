@@ -8,7 +8,7 @@ interface MeleeStone {
   id: string;
   origin: string | null;
   shape: string | null;
-  quality: string | null;      // "<Colour> <Clarity>"
+  quality: string | null;      // stored verbatim (pre-combined in the current import format)
   size_from: number | null;    // nominal carat
   mm: string | null;           // "0.90" or "2.50 x 2.50"
   price_per_carat: number | null;
@@ -26,15 +26,19 @@ interface MeleeImportGroup { origin: "natural" | "lab"; rows: MeleeImportRow[] }
 interface MeleeImportPreview {
   filename: string;
   stats: {
-    totalDataRows: number; parcelsRows: number; droppedNonParcels: number;
-    skippedIncomplete: number; unrecognizedOrigin: number; unrecognizedOriginValues: string[];
-    rowsToStore: number; qualityMapCombos: number;
+    totalDataRows: number; skippedIncomplete: number;
+    unrecognizedOrigin: number; unrecognizedOriginValues: string[];
+    rowsToStore: number; distinctQualities: number;
     conflicts: Array<{ origin: string; key: string; prices: number[] }>;
   };
-  skippedSamples: Array<{ row: number; reason: string }>;
+  rowIssues: Array<{ row: number; fields: string[]; reason: string }>;
+  rowIssuesTruncated: boolean;
   samples: Record<string, MeleeImportRow[]>;
-  payload: { groups: MeleeImportGroup[]; quality_map: Array<{ colour_group: string; clarity: string; quality: string }> };
+  payload: { groups: MeleeImportGroup[] };
 }
+// The parse endpoint returns this shape when required columns are missing
+// entirely — no rows are parsed in that case.
+interface MeleeImportColumnError { error: string; missing: string[] }
 
 const th: React.CSSProperties = { textAlign: "left", padding: "8px 10px", fontSize: 11, fontWeight: 700, color: "#6B7099", textTransform: "uppercase", letterSpacing: 0.4, borderBottom: "1px solid #E8E8F0", position: "sticky", top: 0, background: "#F9FAFB" };
 const td: React.CSSProperties = { padding: "7px 10px", fontSize: 13, color: "#1B1F3B", borderBottom: "1px solid #F1F1F6", whiteSpace: "nowrap" };
@@ -61,8 +65,10 @@ export default function MeleePricingPage() {
   const [toast, setToast] = useState<string | null>(null);
 
   const [preview, setPreview] = useState<MeleeImportPreview | null>(null);
+  const [columnError, setColumnError] = useState<MeleeImportColumnError | null>(null);
   const [parsing, setParsing] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   function loadRows() {
     if (!user?.tenantId) return;
@@ -78,13 +84,25 @@ export default function MeleePricingPage() {
 
   async function handleFileSelected(file: File) {
     setPreview(null);
+    setColumnError(null);
     setParsing(true);
     try {
       const fd = new FormData();
       fd.append("file", file);
       const res = await fetch("/api/pricing/melee-import/parse", { method: "POST", body: fd });
       const j = await res.json();
-      if (!res.ok) { setToast(j.error || "Failed to parse CSV"); return; }
+      if (!res.ok) {
+        // Missing-column failures carry `missing` — shown as a persistent,
+        // explicit block (not a toast) so it can't be missed or dismissed
+        // before Josh reads it. Anything else (bad file, empty upload) still
+        // goes to the toast.
+        if (Array.isArray(j.missing) && j.missing.length > 0) {
+          setColumnError(j as MeleeImportColumnError);
+        } else {
+          setToast(j.error || "Failed to parse CSV");
+        }
+        return;
+      }
       setPreview(j as MeleeImportPreview);
     } catch {
       setToast("Failed to parse CSV");
@@ -104,13 +122,36 @@ export default function MeleePricingPage() {
       });
       const j = await res.json();
       if (!res.ok) { setToast(j.error || "Import failed"); return; }
-      setToast(`Imported ${j.total_imported} melee prices + ${j.quality_map_imported ?? 0} quality-map entries.`);
+      setToast(`Imported ${j.total_imported} melee prices.`);
       setPreview(null);
       loadRows(); // refreshes the table + "Last import" timestamp from real data
     } catch {
       setToast("Import failed");
     } finally {
       setImporting(false);
+    }
+  }
+
+  async function handleExport() {
+    if (!user?.tenantId) return;
+    setExporting(true);
+    try {
+      const res = await fetch("/api/pricing/melee-export", { headers: { "x-tenant-id": user.tenantId } });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); setToast(j.error || "Export failed"); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const stamp = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `melee-price-list-${stamp}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setToast("Export failed");
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -132,7 +173,10 @@ export default function MeleePricingPage() {
         (a.quality ?? "").localeCompare(b.quality ?? ""));
   }, [rows, q, originFilter]);
 
-  const CAP = 1000;
+  const CAP = 2000; // render cap for the live table only — the reported row
+                     // count above and the "Last import" date always reflect
+                     // the FULL server-side result (fixed: /api/pricing used
+                     // to silently cap the fetch itself at 1000 rows).
   const shown = filtered.slice(0, CAP);
 
   async function saveEdit() {
@@ -190,13 +234,22 @@ export default function MeleePricingPage() {
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1B1F3B", margin: 0 }}>Melee Pricing</h1>
           <p style={{ fontSize: 13, color: "#6B7099", marginTop: 4 }}>
-            Live melee price list — priced by origin, shape, carat, mm, colour + clarity.
+            Live melee price list — priced by origin, shape, carat, mm and quality.
             {isManager ? " Click a price to edit." : " View only — ask a manager to edit prices."}
           </p>
         </div>
-        <div style={{ fontSize: 12, color: "#6B7099", textAlign: "right" }}>
-          <div>{loading ? "Loading…" : `${filtered.length} rows`}</div>
-          <div>Last import: <strong style={{ color: "#1B1F3B" }}>{lastImport ? new Date(lastImport).toLocaleString() : "—"}</strong></div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ fontSize: 12, color: "#6B7099", textAlign: "right" }}>
+            <div>{loading ? "Loading…" : `${rows.length} rows`}</div>
+            <div>Last import: <strong style={{ color: "#1B1F3B" }}>{lastImport ? new Date(lastImport).toLocaleString() : "—"}</strong></div>
+          </div>
+          <button
+            onClick={handleExport}
+            disabled={exporting || rows.length === 0}
+            style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid #E8E8F0", background: "#fff", color: "#374151", fontSize: 13, fontWeight: 600, cursor: exporting ? "wait" : "pointer", whiteSpace: "nowrap" }}
+          >
+            {exporting ? "Exporting…" : "Export CSV"}
+          </button>
         </div>
       </div>
 
@@ -204,9 +257,8 @@ export default function MeleePricingPage() {
         <div style={{ marginTop: 16, padding: 16, border: "1px solid #E8E8F0", borderRadius: 10, background: "#F9FAFB" }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: "#1B1F3B", marginBottom: 4 }}>Monthly price-list refresh</div>
           <p style={{ fontSize: 12, color: "#6B7099", margin: "0 0 10px" }}>
-            Upload the combined CSV (Origin, Category, Price Mode, Shape, Carat / stone, Colour, Clarity,
-            Dimensions (mm), Price / stone (AUD), Price / carat (AUD), Listing ID). This REPLACES the entire
-            melee price list for this tenant — review the preview below before confirming.
+            Upload a CSV with columns: <strong>Origin, Shape, Quality, Carat, mm, $/carat, $/stone</strong>.
+            This REPLACES the entire melee price list for this tenant — review the preview below before confirming.
           </p>
           <input
             type="file" accept=".csv"
@@ -216,6 +268,17 @@ export default function MeleePricingPage() {
           />
           {parsing && <span style={{ marginLeft: 10, fontSize: 13, color: "#6B7099" }}>Parsing…</span>}
 
+          {/* Missing-column failure — stop-the-line, persistent, before any row content. */}
+          {columnError && (
+            <div style={{ marginTop: 14, background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: 8, padding: "12px 14px" }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: "#B91C1C", marginBottom: 4 }}>Can&apos;t read this file</div>
+              <div style={{ fontSize: 13, color: "#7F1D1D" }}>{columnError.error}</div>
+              <div style={{ fontSize: 12, color: "#991B1B", marginTop: 6 }}>
+                Missing: {columnError.missing.join(", ")}
+              </div>
+            </div>
+          )}
+
           {preview && (
             <div style={{ marginTop: 14, borderTop: "1px solid #E8E8F0", paddingTop: 14 }}>
               <div style={{ fontWeight: 600, fontSize: 13, color: "#1B1F3B", marginBottom: 8 }}>
@@ -223,12 +286,10 @@ export default function MeleePricingPage() {
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8, fontSize: 12, marginBottom: 10 }}>
                 <Stat label="Data rows" value={preview.stats.totalDataRows} />
-                <Stat label="Parcels kept" value={preview.stats.parcelsRows} />
-                <Stat label="Dropped (Precised etc.)" value={preview.stats.droppedNonParcels} />
-                <Stat label="Skipped (incomplete)" value={preview.stats.skippedIncomplete} />
+                <Stat label="Skipped (invalid)" value={preview.stats.skippedIncomplete} warn={preview.stats.skippedIncomplete > 0} />
                 <Stat label="Unrecognized origin" value={preview.stats.unrecognizedOrigin} warn={preview.stats.unrecognizedOrigin > 0} />
                 <Stat label="Rows to store" value={preview.stats.rowsToStore} strong />
-                <Stat label="Quality-map combos" value={preview.stats.qualityMapCombos} />
+                <Stat label="Distinct qualities" value={preview.stats.distinctQualities} />
                 <Stat label="Price conflicts" value={preview.stats.conflicts.length} warn={preview.stats.conflicts.length > 0} />
               </div>
 
@@ -242,9 +303,18 @@ export default function MeleePricingPage() {
                   {preview.stats.conflicts.length} row(s) had the same shape+carat+mm+quality with different prices — first price kept for each. Review the source file.
                 </div>
               )}
-              {preview.skippedSamples.length > 0 && (
-                <div style={{ fontSize: 12, color: "#6B7099", marginBottom: 10 }}>
-                  Sample skipped rows: {preview.skippedSamples.slice(0, 5).map((s) => `row ${s.row} (${s.reason})`).join("; ")}
+
+              {/* Per-row validation detail — exact row + exact field(s), not a bare count. */}
+              {preview.rowIssues.length > 0 && (
+                <div style={{ marginBottom: 10, background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 6, padding: "8px 10px", maxHeight: 220, overflowY: "auto" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#92400E", marginBottom: 4 }}>
+                    {preview.rowIssues.length} row(s) with problems{preview.rowIssuesTruncated ? " (showing first 200)" : ""}:
+                  </div>
+                  <div style={{ fontSize: 12, color: "#92400E", fontFamily: "monospace" }}>
+                    {preview.rowIssues.map((issue, i) => (
+                      <div key={i}>row {issue.row}: {issue.reason}</div>
+                    ))}
+                  </div>
                 </div>
               )}
 

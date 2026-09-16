@@ -1,6 +1,10 @@
 // Type declarations for melee-import-shared.mjs — plain JS so it can run
-// standalone under `node` (see that file's header comment for why). Keep this
-// in sync with the .mjs implementation.
+// standalone under `node` (see that file's header comment for why). Named
+// .d.mts (not .d.ts) because TypeScript's declaration lookup for an `.mjs`
+// import specifically requires that extension under moduleResolution:
+// "bundler" — a .d.ts companion is silently ignored, falling back to loose
+// allowJs inference (this broke discriminated-union narrowing once already —
+// see the commit that renamed this file).
 
 export interface MeleeImportRow {
   shape: string;
@@ -9,7 +13,7 @@ export interface MeleeImportRow {
   size_from: number;
   size_to: number;
   mm: string;
-  quality: string;
+  quality: string;        // stored verbatim — pre-combined in the current format
   price_per_carat: number | null;
   price_per_stone: number | null;
   flagged: boolean;
@@ -20,35 +24,29 @@ export interface MeleeImportGroup {
   rows: MeleeImportRow[];
 }
 
-export interface MeleeQualityMapEntry {
-  colour_group: string;
-  clarity: string;
-  quality: string;
-}
-
 export interface MeleeImportStats {
   totalDataRows: number;
-  parcelsRows: number;
-  droppedNonParcels: number;
   skippedIncomplete: number;
   unrecognizedOrigin: number;
   unrecognizedOriginValues: string[];
   rowsToStore: number;
-  qualityMapCombos: number;
+  distinctQualities: number;
   conflicts: Array<{ origin: string; key: string; prices: number[] }>;
 }
 
-export interface MeleeImportSkippedSample {
+export interface MeleeImportRowIssue {
   row: number;
+  fields: string[];
   reason: string;
 }
 
 export type BuildMeleeImportResult =
   | {
       ok: true;
-      payload: { groups: MeleeImportGroup[]; quality_map: MeleeQualityMapEntry[] };
+      payload: { groups: MeleeImportGroup[] };
       stats: MeleeImportStats;
-      skippedSamples: MeleeImportSkippedSample[];
+      rowIssues: MeleeImportRowIssue[];
+      rowIssuesTruncated: boolean;
     }
   | { ok: false; error: string; missing: string[] };
 
@@ -65,3 +63,10 @@ export function buildMeleeImportPayload(
   opts?: { forcedOrigin?: "natural" | "lab" | null; rowNumberOffset?: number }
 ): BuildMeleeImportResult;
 export function parseCsv(text: string): string[][];
+export function rowsToCsv(
+  rows: Array<{
+    origin?: string | null; shape?: string | null; quality?: string | null;
+    size_from?: number | null; mm?: string | null;
+    price_per_carat?: number | null; price_per_stone?: number | null;
+  }>
+): string;
