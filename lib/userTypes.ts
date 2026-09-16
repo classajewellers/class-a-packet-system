@@ -49,8 +49,13 @@ export const MODULE_LABELS: Record<keyof UserPermissions, string> = {
 
 export interface LoggedInUser {
   id: string;
-  name: string;
+  /** EFFECTIVE role — reflects the view-as override for Josh; equals realRole
+   *  for everyone else. Drive UI gating (canManage/hasPermission) off this. */
   role: UserRole;
+  /** TRUE role from the profile — used only to render the Switch View control
+   *  and the "viewing as" indicator. Never gate real permissions off this. */
+  realRole: UserRole;
+  name: string;
   email: string;
   initials: string;
   loggedInAt: string;

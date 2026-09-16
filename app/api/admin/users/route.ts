@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireManager } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -15,10 +16,10 @@ function createAdminClient() {
 // GET /api/admin/users — list users with their profiles, scoped to the caller's tenant
 export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
-    const tenantId = req.headers.get("x-tenant-id") ?? "";
-    if (!tenantId) {
-      return NextResponse.json({ error: "x-tenant-id header required" }, { status: 400 });
-    }
+    // Server-side manager/admin gate (was previously client-hidden only).
+    const auth = await requireManager(req);
+    if (!auth.ok) return auth.response;
+    const tenantId = auth.ctx.tenantId;
 
     const supabase = createAdminClient();
 
@@ -61,6 +62,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 // POST /api/admin/users — invite a new user by email
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
+    // Server-side manager/admin gate (was previously client-hidden only).
+    const auth = await requireManager(req);
+    if (!auth.ok) return auth.response;
+    const tenantId = auth.ctx.tenantId;
+
     const { email, full_name, role } = await req.json();
 
     if (!email || !role) {
@@ -72,11 +78,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     if (!["admin", "manager", "staff"].includes(role)) {
       return NextResponse.json({ error: "Invalid role" }, { status: 400 });
-    }
-
-    const tenantId = req.headers.get("x-tenant-id") ?? "";
-    if (!tenantId) {
-      return NextResponse.json({ error: "x-tenant-id header required" }, { status: 400 });
     }
 
     const supabase = createAdminClient();

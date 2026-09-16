@@ -18,8 +18,10 @@ import {
   Package,
   UserPlus,
   X,
+  Eye,
 } from "lucide-react";
-import { canManage, hasPermission } from "@/lib/userTypes";
+import { canManage, hasPermission, UserRole } from "@/lib/userTypes";
+import { VIEW_AS_ALLOWED_PROFILE_ID } from "@/lib/effective-role";
 
 interface Props {
   onOpenAI: () => void;
@@ -61,6 +63,39 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
 
   const initials = (name: string) =>
     name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
+
+  // ── View-as ("Switch View") — Josh's account only ──────────────────────────
+  const canSwitchView = !!user && user.id === VIEW_AS_ALLOWED_PROFILE_ID;
+  const isViewingAs   = !!user && user.role !== user.realRole;
+  const [switchMenuOpen, setSwitchMenuOpen] = useState(false);
+  const [switching, setSwitching]           = useState(false);
+
+  const RANK: Record<Exclude<UserRole, null>, number> = { staff: 1, manager: 2, admin: 3 };
+  // Offer the real role (= exit) plus every lower role. Escalation is impossible
+  // server-side regardless, but we don't even present higher options.
+  const roleOptions = (["admin", "manager", "staff"] as const).filter(
+    (r) => user?.realRole != null && RANK[r] <= RANK[user.realRole as Exclude<UserRole, null>]
+  );
+
+  async function switchView(role: UserRole) {
+    if (switching) return;
+    setSwitching(true);
+    try {
+      // role === realRole clears the override; otherwise sets the downgrade.
+      const body = role && role !== user?.realRole ? { role } : { role: null };
+      await fetch("/api/dev/switch-view", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      // Full reload so server (require-auth) and client (UserContext) re-read
+      // the cookie together — no half-switched state.
+      window.location.reload();
+    } catch {
+      setSwitching(false);
+      setSwitchMenuOpen(false);
+    }
+  }
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
@@ -167,8 +202,38 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
           height: "100vh",
           display: "flex", flexDirection: "column",
           overflow: "hidden",
+          // Loud, persistent indicator that a downgraded view is active.
+          borderLeft: isViewingAs ? "4px solid #F59E0B" : undefined,
         }}
       >
+        {isViewingAs && (
+          <div
+            style={{
+              background: "#F59E0B", color: "#1A1760",
+              fontSize: 11, fontWeight: 700,
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              gap: 8, padding: "6px 12px",
+            }}
+          >
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+              <Eye size={13} strokeWidth={2.5} />
+              Viewing as {String(user?.role).toUpperCase()}
+            </span>
+            <button
+              type="button"
+              disabled={switching}
+              onClick={() => switchView(user?.realRole ?? null)}
+              style={{
+                background: "rgba(26,23,96,0.15)", border: "1px solid rgba(26,23,96,0.35)",
+                color: "#1A1760", cursor: switching ? "wait" : "pointer",
+                borderRadius: 5, padding: "2px 8px", fontSize: 10, fontWeight: 700,
+              }}
+            >
+              Exit view
+            </button>
+          </div>
+        )}
+
         {/* Brand + mobile close */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "24px 20px 20px" }}>
           <span style={{ width: 40, height: 40, borderRadius: 10, background: "#635BFF", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -300,9 +365,71 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
               <span style={{ width: 34, height: 34, borderRadius: "50%", background: "#635BFF", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
                 {initials(user.name)}
               </span>
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
                 <div style={{ fontSize: 13, fontWeight: 500, color: "#FFFFFF", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</div>
-                <div style={{ fontSize: 11, color: DEFAULT_COLOR, textTransform: "capitalize" }}>{user.role ?? "…"}</div>
+
+                {canSwitchView ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setSwitchMenuOpen(o => !o)}
+                      title="Switch view"
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: 4, marginTop: 2,
+                        border: "none", cursor: "pointer", borderRadius: 6, padding: "2px 7px",
+                        fontSize: 11, fontWeight: 600, lineHeight: 1.4,
+                        ...(isViewingAs
+                          ? { background: "rgba(245,158,11,0.18)", color: "#FbbF24" }   // amber when downgraded
+                          : { background: "transparent", color: DEFAULT_COLOR }),
+                      }}
+                    >
+                      {isViewingAs && <Eye size={12} strokeWidth={2.25} />}
+                      <span style={{ textTransform: isViewingAs ? "none" : "capitalize" }}>
+                        {isViewingAs ? `Viewing as ${String(user.role).toUpperCase()}` : (user.role ?? "…")}
+                      </span>
+                      <ChevronDown size={12} strokeWidth={2.25} />
+                    </button>
+
+                    {switchMenuOpen && (
+                      <div
+                        style={{
+                          position: "absolute", bottom: "calc(100% + 6px)", left: 0, zIndex: 50,
+                          minWidth: 150, background: "#1B1F3B", border: "1px solid rgba(255,255,255,0.12)",
+                          borderRadius: 8, padding: 4, boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+                        }}
+                      >
+                        <div style={{ fontSize: 10, color: "#6B7099", padding: "4px 8px 6px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                          View Vault as
+                        </div>
+                        {roleOptions.map((r) => {
+                          const isReal = r === user.realRole;
+                          const active = r === user.role;
+                          return (
+                            <button
+                              key={r}
+                              type="button"
+                              disabled={switching}
+                              onClick={() => switchView(r)}
+                              style={{
+                                display: "flex", alignItems: "center", justifyContent: "space-between",
+                                width: "100%", border: "none", cursor: switching ? "wait" : "pointer",
+                                background: active ? ACTIVE_BG : "transparent",
+                                color: active ? "#FFFFFF" : DEFAULT_COLOR,
+                                borderRadius: 6, padding: "7px 8px", fontSize: 12, fontWeight: 500,
+                                textAlign: "left", textTransform: "capitalize",
+                              }}
+                            >
+                              <span>{r}{isReal ? " (your role)" : ""}</span>
+                              {active && <span style={{ fontSize: 10 }}>●</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ fontSize: 11, color: DEFAULT_COLOR, textTransform: "capitalize" }}>{user.role ?? "…"}</div>
+                )}
               </div>
               <button
                 onClick={logout}

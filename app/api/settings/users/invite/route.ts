@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { requireManager } from "@/lib/require-auth";
 import { randomUUID } from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -7,17 +8,18 @@ export const revalidate = 0;
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
+    // Server-side manager/admin gate (was previously client-hidden only).
+    const auth = await requireManager(req);
+    if (!auth.ok) return auth.response;
+    const tenantId = auth.ctx.tenantId;
+
     const body = await req.json();
     const { name, email, role, permissions, can_see_costs } = body as { name: string; email: string; role: "manager" | "staff"; permissions?: Record<string, boolean> | null; can_see_costs?: boolean };
-    const tenantId = req.headers.get("x-tenant-id") ?? "";
     const fullName = name?.trim();
     const normalizedEmail = email?.toLowerCase().trim();
 
     if (!fullName || !normalizedEmail || !role) {
       return NextResponse.json({ error: "name, email, and role are required" }, { status: 400 });
-    }
-    if (!tenantId) {
-      return NextResponse.json({ error: "x-tenant-id header required" }, { status: 400 });
     }
 
     const supabase = createServerSupabaseClient();

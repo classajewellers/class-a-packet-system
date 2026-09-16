@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSapphireCredentials, clearSapphireTokenCache } from "@/lib/sapphire-auth";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createServerClient } from "@supabase/ssr";
+import { resolveEffectiveRole, EFFECTIVE_ROLE_COOKIE } from "@/lib/effective-role";
 
 export const dynamic    = "force-dynamic";
 export const revalidate = 0;
@@ -108,12 +109,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     .select("role")
     .eq("id", user.id)
     .single();
-  console.log("[sapphire/sync] profile role:", profile?.role ?? "null", "error:", profileError?.message ?? "none");
-  if (profile?.role !== "manager" && profile?.role !== "admin") {
-    console.log("[sapphire/sync] returning 403 — role", profile?.role ?? "null", "not permitted");
+  // Apply the view-as override (Josh only, downgrade-only) via the shared helper.
+  const effectiveRole = resolveEffectiveRole(
+    user.id,
+    profile?.role,
+    req.cookies.get(EFFECTIVE_ROLE_COOKIE)?.value ?? null
+  );
+  console.log("[sapphire/sync] role — real:", profile?.role ?? "null", "effective:", effectiveRole);
+  if (effectiveRole !== "manager" && effectiveRole !== "admin") {
+    console.log("[sapphire/sync] returning 403 — effective role", effectiveRole, "not permitted");
     return NextResponse.json({ error: "Forbidden — manager or admin only" }, { status: 403 });
   }
-  console.log("[sapphire/sync] auth passed — role:", profile.role);
+  console.log("[sapphire/sync] auth passed — effective role:", effectiveRole);
 
   try {
     let creds = await getSapphireCredentials();
