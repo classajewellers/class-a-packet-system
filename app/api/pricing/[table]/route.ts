@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createTenantSupabaseClient } from '@/lib/supabase-server'
+import { requireManager } from '@/lib/require-auth'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -8,6 +9,11 @@ const ALLOWED_TABLES = ['pricing_metal_rates', 'pricing_fixed_costs', 'pricing_m
 
 export async function PATCH(req: NextRequest, { params }: { params: { table: string } }) {
   try {
+    // Editing prices is manager/admin only (honours Switch View's effective role).
+    const auth = await requireManager(req)
+    if (!auth.ok) return auth.response
+    const tenantId = auth.ctx.tenantId
+
     const { table } = params
     if (!ALLOWED_TABLES.includes(table)) {
       return NextResponse.json({ error: 'Table not allowed' }, { status: 400 })
@@ -17,7 +23,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { table: str
     if (!id || !field) {
       return NextResponse.json({ error: 'Missing id or field' }, { status: 400 })
     }
-    const tenantId = req.headers.get('x-tenant-id') ?? ''
     const supabase = await createTenantSupabaseClient(tenantId)
     const { error } = await supabase
       .from(table)
