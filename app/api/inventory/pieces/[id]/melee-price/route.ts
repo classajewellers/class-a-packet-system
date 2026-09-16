@@ -28,7 +28,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const { data: piece, error: pErr } = await supabase
     .from("inventory_pieces")
-    .select("id, diamond_type, melee_quantity, melee_carat_weight, melee_colour_group, melee_clarity, melee_shape")
+    .select("id, diamond_type, melee_quantity, melee_carat_weight, melee_mm, melee_colour_group, melee_clarity, melee_shape")
     .eq("id", params.id)
     .eq("tenant_id", tenantId)
     .single();
@@ -36,6 +36,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const qty    = piece.melee_quantity != null ? Number(piece.melee_quantity) : 0;
   const carat  = piece.melee_carat_weight != null ? Number(piece.melee_carat_weight) : null;
+  const mm     = (piece.melee_mm ?? "").trim();
   const colour = (piece.melee_colour_group ?? "").trim();
   const clar   = (piece.melee_clarity ?? "").trim();
   const shape  = (piece.melee_shape ?? "").trim();
@@ -43,17 +44,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   // "none" is a piece-only concept (piece has no melee stones set) — kept here.
   if (!qty || qty <= 0) return NextResponse.json({ status: "none" });
 
-  // Preserve the original status ORDER: incomplete is flagged before origin, so a
-  // piece missing both fields and origin still returns "incomplete" as before.
-  if (!carat || carat <= 0 || !colour || !clar || !shape) {
+  // Preserve the original status ORDER: incomplete is flagged before origin.
+  // mm is now required for an exact price match (0.01ct differs by mm).
+  if (!carat || carat <= 0 || !mm || !colour || !clar || !shape) {
     return NextResponse.json({ status: "incomplete", missing: {
-      carat: !carat, colour_group: !colour, clarity: !clar, shape: !shape,
+      carat: !carat, mm: !mm, colour_group: !colour, clarity: !clar, shape: !shape,
     }});
   }
 
-  // Origin → supplier (see lib/melee-pricing.ts for the current-state assumption).
-  // Strict: an unrecognised diamond_type (e.g. a typo) is flagged, never guessed.
-  // Origin-level resolution stays in the endpoint; priceMelee takes a resolved origin.
+  // diamond_type → origin. Strict: an unrecognised value is flagged, never guessed.
+  // (No supplier concept — origin only selects which price rows apply.)
   const originRes = resolveMeleeOrigin(piece.diamond_type);
   if (originRes.origin == null) {
     return NextResponse.json({
@@ -62,10 +62,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     });
   }
 
-  // Shared pricing lookup (identical logic to before — extracted verbatim).
+  // Shared, mm-precise, supplier-free pricing lookup.
   const result = await priceMelee(supabase, {
     tenantId, origin: originRes.origin, shape, colourGroup: colour, clarity: clar,
-    carat: carat ?? NaN, qty,
+    carat, mm, qty,
   });
   if (result.status === "error") {
     return NextResponse.json({ error: result.message }, { status: 500 });

@@ -525,8 +525,10 @@ export interface InventoryPiece {
   // melee stone fields
   melee_quantity?: number | null;
   melee_carat_weight?: number | null;
+  melee_mm?: string | null;        // "0.90" (round) or "2.50 x 2.50" (fancy) — exact price-match key
   melee_colour_group?: string | null;
   melee_clarity?: string | null;
+  melee_shape?: string | null;
   // product hierarchy
   product_id?: string | null;
   variant_id?: string | null;

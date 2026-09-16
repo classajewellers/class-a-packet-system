@@ -26,7 +26,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   let body: {
     origin?: string; shape?: string; colourGroup?: string;
-    clarity?: string; carat?: number | string; qty?: number | string;
+    clarity?: string; carat?: number | string; mm?: number | string; qty?: number | string;
   } = {};
   try {
     body = await req.json();
@@ -52,6 +52,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     colourGroup: String(body.colourGroup ?? ""),
     clarity:     String(body.clarity ?? ""),
     carat:       body.carat != null ? Number(body.carat) : NaN,
+    mm:          body.mm != null ? String(body.mm) : null,
     qty:         body.qty != null ? Number(body.qty) : 0,
   });
 

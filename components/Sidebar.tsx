@@ -326,6 +326,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
                   {can("settings") && isManager && <SubLink href="/settings"           label="Integrations" />}
                   {can("pricing")  && <SubLink href="/pricing"                      label="Pricing" />}
                   {can("pricing")  && <SubLink href="/settings/pricing"           label="Pricing Margins" />}
+                  {can("pricing")  && <SubLink href="/settings/melee"             label="Melee Pricing" />}
                   {can("pricing")  && <SubLink href="/pricing/charm-builder"      label="Charm Builder" />}
                   {can("settings") && <SubLink href="/settings/users"     label="Users" />}
                   {can("settings") && <SubLink href="/settings/staff"     label="Staff" />}

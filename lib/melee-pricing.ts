@@ -97,6 +97,12 @@ export function caratWithMmLabel(carat: number): string {
 //   ok | incomplete | supplier_missing | unmapped | no_price | error
 // Carat-range sizing only (size_type='carat_range'); mm/pieces modes out of scope.
 // ─────────────────────────────────────────────────────────────────────────────
+/** Canonical form of an mm dimension so import + lookup match exactly:
+ *  "2.50x2.50" / "2.50 X 2.50" → "2.50 x 2.50"; "0.90 " → "0.90". */
+export function normalizeMm(mm: string | null | undefined): string {
+  return (mm ?? "").trim().replace(/\s*[xX]\s*/g, " x ").replace(/\s+/g, " ");
+}
+
 export interface PriceMeleeParams {
   tenantId:    string;
   origin:      MeleeOrigin;
@@ -104,16 +110,16 @@ export interface PriceMeleeParams {
   colourGroup: string;
   clarity:     string;
   carat:       number;
+  mm:          string | null; // mm variant (exact match) — "0.90" or "2.50 x 2.50"
   qty:         number;
 }
 
 export type PriceMeleeResult =
-  | { status: "ok"; quantity: number; carat: number; per_stone: number; total: number;
-      quality: string; shape: string; supplier_name: string; origin: MeleeOrigin }
-  | { status: "incomplete"; missing: { carat: boolean; colour_group: boolean; clarity: boolean; shape: boolean } }
-  | { status: "supplier_missing"; origin: MeleeOrigin; supplier_name: string }
-  | { status: "unmapped"; colour_group: string; clarity: string; origin: MeleeOrigin; supplier_name: string }
-  | { status: "no_price"; shape: string; quality: string; carat: number; supplier_name: string }
+  | { status: "ok"; quantity: number; carat: number; mm: string; per_stone: number; total: number;
+      quality: string; shape: string; origin: MeleeOrigin }
+  | { status: "incomplete"; missing: { carat: boolean; mm: boolean; colour_group: boolean; clarity: boolean; shape: boolean } }
+  | { status: "unmapped"; colour_group: string; clarity: string; origin: MeleeOrigin }
+  | { status: "no_price"; shape: string; quality: string; carat: number; mm: string }
   | { status: "error"; message: string };
 
 /**
@@ -129,50 +135,44 @@ export async function priceMelee(
   const { tenantId, origin } = params;
   const qty    = Number(params.qty) || 0;
   const carat  = params.carat != null ? Number(params.carat) : NaN;
+  const mm     = normalizeMm(params.mm);
   const colour = (params.colourGroup ?? "").trim();
   const clar   = (params.clarity ?? "").trim();
   const shape  = (params.shape ?? "").trim();
 
   if (!qty || qty <= 0) {
-    return { status: "incomplete", missing: { carat: true, colour_group: true, clarity: true, shape: true } };
+    return { status: "incomplete", missing: { carat: true, mm: true, colour_group: true, clarity: true, shape: true } };
   }
-  if (!Number.isFinite(carat) || carat <= 0 || !colour || !clar || !shape) {
+  // mm is required — pricing is mm-precise now (0.01ct differs by mm).
+  if (!Number.isFinite(carat) || carat <= 0 || !mm || !colour || !clar || !shape) {
     return { status: "incomplete", missing: {
-      carat: !Number.isFinite(carat) || carat <= 0, colour_group: !colour, clarity: !clar, shape: !shape,
+      carat: !Number.isFinite(carat) || carat <= 0, mm: !mm,
+      colour_group: !colour, clarity: !clar, shape: !shape,
     }};
   }
 
-  // origin → supplier (single-supplier-per-origin assumption, see top of file).
-  const { data: suppliers } = await supabase
-    .from("inventory_suppliers").select("id, name").eq("tenant_id", tenantId);
-  const supplierId = resolveSupplierIdForOrigin(origin, suppliers ?? []);
-  if (!supplierId) {
-    return { status: "supplier_missing", origin, supplier_name: ORIGIN_SUPPLIER_NAME[origin] };
-  }
-
-  // (colour_group, clarity) → confirmed quality. No mapping = flag, never guess.
+  // (colour_group, clarity) → confirmed quality. No supplier concept. No mapping = flag.
   const { data: mapRow } = await supabase
     .from("pricing_melee_quality_map")
     .select("quality")
     .eq("tenant_id", tenantId)
-    .eq("supplier_id", supplierId)
     .ilike("colour_group", colour)
     .ilike("clarity", clar)
     .maybeSingle();
   if (!mapRow) {
-    return { status: "unmapped", colour_group: colour, clarity: clar, origin, supplier_name: ORIGIN_SUPPLIER_NAME[origin] };
+    return { status: "unmapped", colour_group: colour, clarity: clar, origin };
   }
 
-  // Exact price-list row: supplier + origin + shape + mapped quality, carat in band.
+  // Exact price-list row: origin + shape + mapped quality, carat in band AND exact mm.
   const { data: priceRows, error: prErr } = await supabase
     .from("pricing_melee_stones")
-    .select("price_per_carat, price_per_stone, size_from, size_to, size_type, shape, quality")
+    .select("price_per_carat, price_per_stone, size_from, size_to, size_type, shape, quality, mm")
     .eq("tenant_id", tenantId)
-    .eq("supplier_id", supplierId)
     .eq("origin", origin)
     .eq("size_type", "carat_range")
     .ilike("shape", shape)
     .eq("quality", mapRow.quality)
+    .eq("mm", mm)
     .lte("size_from", carat)
     .gte("size_to", carat)
     .order("size_from", { ascending: true });
@@ -180,25 +180,26 @@ export async function priceMelee(
 
   const row = (priceRows ?? [])[0];
   if (!row) {
-    return { status: "no_price", shape, quality: mapRow.quality, carat, supplier_name: ORIGIN_SUPPLIER_NAME[origin] };
+    return { status: "no_price", shape, quality: mapRow.quality, carat, mm };
   }
 
+  // Prefer the real per-stone price (now imported, not 0); fall back to per_carat × carat.
+  const pps = row.price_per_stone != null && Number(row.price_per_stone) > 0 ? Number(row.price_per_stone) : null;
   const ppc = row.price_per_carat != null ? Number(row.price_per_carat) : null;
-  const pps = row.price_per_stone != null ? Number(row.price_per_stone) : null;
-  const perStone = ppc != null ? ppc * carat : pps;
+  const perStone = pps != null ? pps : (ppc != null ? ppc * carat : null);
   if (perStone == null) {
-    return { status: "no_price", shape, quality: mapRow.quality, carat, supplier_name: ORIGIN_SUPPLIER_NAME[origin] };
+    return { status: "no_price", shape, quality: mapRow.quality, carat, mm };
   }
 
   return {
-    status:        "ok",
-    quantity:      qty,
+    status:     "ok",
+    quantity:   qty,
     carat,
-    per_stone:     Math.round(perStone * 100) / 100,
-    total:         Math.round(perStone * qty * 100) / 100,
-    quality:       mapRow.quality,
+    mm,
+    per_stone:  Math.round(perStone * 100) / 100,
+    total:      Math.round(perStone * qty * 100) / 100,
+    quality:    mapRow.quality,
     shape,
-    supplier_name: ORIGIN_SUPPLIER_NAME[origin],
     origin,
   };
 }

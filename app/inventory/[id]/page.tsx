@@ -1311,6 +1311,8 @@ export default function InventoryItemPage({ params }: Params) {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 20px" }}>
                 <EF label="Quantity" field={"melee_quantity" as keyof InventoryPiece} type="number" />
                 <EF label="ct / stone" field={"melee_carat_weight" as keyof InventoryPiece} type="number" />
+                {/* mm as listed by the supplier: "0.90" for round, "2.50 x 2.50" for fancy shapes. Part of the exact price match. */}
+                <EF label="mm (e.g. 0.90 or 2.50 x 2.50)" field={"melee_mm" as keyof InventoryPiece} />
                 <EF label="Colour Group" field={"melee_colour_group" as keyof InventoryPiece}
                   opts={editing ? ["D-F","G-H","I-J","K-L","M-N"].map(g => ({ value: g, label: g })) : undefined} />
                 <EF label="Clarity" field={"melee_clarity" as keyof InventoryPiece}
