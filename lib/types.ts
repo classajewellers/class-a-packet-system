@@ -526,6 +526,7 @@ export interface InventoryPiece {
   melee_quantity?: number | null;
   melee_carat_weight?: number | null;
   melee_mm?: string | null;        // "0.90" (round) or "2.50 x 2.50" (fancy) — exact price-match key
+  melee_quality?: string | null;   // selected directly (e.g. "EF VVS") — migration 122, no colour/clarity/map
   melee_colour_group?: string | null;
   melee_clarity?: string | null;
   melee_shape?: string | null;

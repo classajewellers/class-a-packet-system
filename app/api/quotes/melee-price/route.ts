@@ -6,10 +6,11 @@
 // Manager/admin only: melee cost is manager-only in the builder, and this returns
 // per-stone cost. Under Switch View, an effective-staff role is correctly 403'd.
 //
-// Body: { origin, shape, colourGroup, clarity, carat, qty }
+// Body: { origin, shape, quality, carat, mm, qty }
 //   origin accepts "lab"/"natural" or "Lab Grown"/"Natural" (resolved strictly).
-// Returns the priceMelee discriminated status (ok/incomplete/unmapped/no_price/
-// supplier_missing/origin_unrecognized/error).
+//   quality is selected directly (no colour/clarity — migration 122).
+// Returns the priceMelee discriminated status (ok/incomplete/no_price/
+// origin_unrecognized/error).
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
@@ -25,8 +26,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const { tenantId } = auth.ctx;
 
   let body: {
-    origin?: string; shape?: string; colourGroup?: string;
-    clarity?: string; carat?: number | string; mm?: number | string; qty?: number | string;
+    origin?: string; shape?: string; quality?: string;
+    carat?: number | string; mm?: number | string; qty?: number | string;
   } = {};
   try {
     body = await req.json();
@@ -47,13 +48,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const supabase = createServerSupabaseClient();
   const result = await priceMelee(supabase, {
     tenantId,
-    origin:      originRes.origin,
-    shape:       String(body.shape ?? ""),
-    colourGroup: String(body.colourGroup ?? ""),
-    clarity:     String(body.clarity ?? ""),
-    carat:       body.carat != null ? Number(body.carat) : NaN,
-    mm:          body.mm != null ? String(body.mm) : null,
-    qty:         body.qty != null ? Number(body.qty) : 0,
+    origin:  originRes.origin,
+    shape:   String(body.shape ?? ""),
+    quality: String(body.quality ?? ""),
+    carat:   body.carat != null ? Number(body.carat) : NaN,
+    mm:      body.mm != null ? String(body.mm) : null,
+    qty:     body.qty != null ? Number(body.qty) : 0,
   });
 
   if (result.status === "error") {

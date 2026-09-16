@@ -33,6 +33,53 @@ function buildLocationPath(
   return parts.length ? parts.join(" › ") : (fallback ?? "");
 }
 
+// ── Melee cascading dropdowns (Origin → Shape → Quality → Size) ────────────────
+// Same model as the quote builder's melee row: options at every level are
+// sourced live from pricing_melee_stones, filtered by everything selected
+// above, so a combination with no stored price can never be picked.
+interface MeleeStoneRef { origin: string; shape: string; quality: string; size_type: string; size_from: number; size_to: number; mm: string | null; }
+
+function meleeOriginFromDiamondType(diamondType: string | null | undefined): "lab" | "natural" | "" {
+  const s = (diamondType ?? "").trim().toLowerCase();
+  if (s === "natural") return "natural";
+  if (s === "lab grown" || s === "lab-grown" || s === "lab") return "lab";
+  return "";
+}
+function meleeShapeOptionsFor(stones: MeleeStoneRef[], originKey: string): string[] {
+  return Array.from(new Set(stones.filter(m => (m.origin ?? "").toLowerCase() === originKey && m.size_type === "carat_range" && m.shape).map(m => m.shape))).sort();
+}
+function meleeQualityOptionsFor(stones: MeleeStoneRef[], originKey: string, shape: string): string[] {
+  return Array.from(new Set(stones.filter(m =>
+    (m.origin ?? "").toLowerCase() === originKey && m.size_type === "carat_range" &&
+    (m.shape ?? "").toLowerCase() === shape.toLowerCase() && m.quality
+  ).map(m => m.quality))).sort();
+}
+function meleeSizeOptionsFor(stones: MeleeStoneRef[], originKey: string, shape: string, quality: string): { value: string; carat: number; mm: string; label: string }[] {
+  const rows = stones.filter(m =>
+    (m.origin ?? "").toLowerCase() === originKey && m.size_type === "carat_range" &&
+    (m.shape ?? "").toLowerCase() === shape.toLowerCase() &&
+    (m.quality ?? "").toLowerCase() === quality.toLowerCase());
+  const seen = new Map<string, { value: string; carat: number; mm: string; label: string }>();
+  for (const m of rows) {
+    const carat = Number(m.size_from);
+    if (!Number.isFinite(carat) || carat <= 0) continue;
+    const mm = (m.mm ?? "").trim();
+    const value = `${carat}|${mm}`;
+    if (!seen.has(value)) seen.set(value, { value, carat, mm, label: mm ? `${carat}ct (${mm}mm)` : `${carat}ct` });
+  }
+  return Array.from(seen.values()).sort((a, b) => a.carat - b.carat || a.mm.localeCompare(b.mm));
+}
+
+/** Quality for VIEW-mode display: melee_quality if set, else the composed
+ *  legacy colour_group + clarity (pieces saved before migration 122). */
+function resolvePieceMeleeQualityDisplay(piece: { melee_quality?: string | null; melee_colour_group?: string | null; melee_clarity?: string | null }): string {
+  const direct = (piece.melee_quality ?? "").trim();
+  if (direct) return direct;
+  const colour = (piece.melee_colour_group ?? "").trim();
+  const clarity = (piece.melee_clarity ?? "").trim();
+  return colour && clarity ? `${colour} ${clarity}` : "—";
+}
+
 type Params = { params: { id: string } };
 
 // ── Formatters ───────────────────────────────────────────────────────────────
@@ -505,6 +552,11 @@ export default function InventoryItemPage({ params }: Params) {
   const [meleePrice, setMeleePrice]         = useState<any>(null);
   const [updatingSuggested, setUpdatingSuggested] = useState(false);
 
+  // Live melee price rows — cascading dropdown options (Shape/Quality/Size) are
+  // sourced from these, filtered by whatever's selected above, so a combination
+  // with no stored price can never be selected (migration 122).
+  const [meleeStones, setMeleeStones] = useState<MeleeStoneRef[]>([]);
+
   const [showMove, setShowMove]     = useState(false);
   const [moveForm, setMoveForm]     = useState({ to_location_id: "", to_status_id: "", notes: "" });
   const [moveSaving, setMoveSaving] = useState(false);
@@ -622,6 +674,15 @@ export default function InventoryItemPage({ params }: Params) {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  // Live melee price rows for the cascading Shape/Quality/Size dropdowns.
+  useEffect(() => {
+    if (!tenantId) return;
+    fetch("/api/pricing", { headers: { "x-tenant-id": tenantId } })
+      .then(r => r.json())
+      .then(j => setMeleeStones((j.meleeStones ?? []) as MeleeStoneRef[]))
+      .catch(() => {});
+  }, [tenantId]);
+
   function roundUpToNine(n: number): number {
     // Always round UP to the next number ending in 9 (e.g. $6,434.50 → $6,439)
     return Math.ceil((n - 9) / 10) * 10 + 9;
@@ -643,6 +704,13 @@ export default function InventoryItemPage({ params }: Params) {
     // Auto-suggest retail price only when the calc is complete (metal + labour both present)
     if (base.retail_price == null && priceCalcIsComplete()) {
       base.retail_price = roundUpToNine(priceCalc.total_retail) as any;
+    }
+    // Legacy fallback: a piece saved before migration 122 may have
+    // melee_colour_group + melee_clarity but no melee_quality yet — pre-fill the
+    // new Quality field with the composed legacy value so it starts sensible
+    // (editable/correctable via the dropdown) instead of blank.
+    if (!base.melee_quality && (piece as any).melee_colour_group && (piece as any).melee_clarity) {
+      (base as any).melee_quality = `${(piece as any).melee_colour_group} ${(piece as any).melee_clarity}`;
     }
     setForm(base);
     setEditing(true);
@@ -1310,15 +1378,61 @@ export default function InventoryItemPage({ params }: Params) {
               </h3>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 20px" }}>
                 <EF label="Quantity" field={"melee_quantity" as keyof InventoryPiece} type="number" />
-                <EF label="ct / stone" field={"melee_carat_weight" as keyof InventoryPiece} type="number" />
-                {/* mm as listed by the supplier: "0.90" for round, "2.50 x 2.50" for fancy shapes. Part of the exact price match. */}
-                <EF label="mm (e.g. 0.90 or 2.50 x 2.50)" field={"melee_mm" as keyof InventoryPiece} />
-                <EF label="Colour Group" field={"melee_colour_group" as keyof InventoryPiece}
-                  opts={editing ? ["D-F","G-H","I-J","K-L","M-N"].map(g => ({ value: g, label: g })) : undefined} />
-                <EF label="Clarity" field={"melee_clarity" as keyof InventoryPiece}
-                  opts={editing ? ["VVS","VS","SI1","SI2","SI3","I1","I2","I3"].map(c => ({ value: c, label: c })) : undefined} />
-                <EF label="Shape" field={"melee_shape" as keyof InventoryPiece}
-                  opts={editing ? ["Round","Oval","Cushion","Princess","Pear","Marquise","Emerald","Baguette","Trillion"].map(s => ({ value: s, label: s })) : undefined} />
+                {(() => {
+                  // Cascading Shape → Quality → Size, sourced live from
+                  // pricing_melee_stones and filtered by Diamond Type (origin) so
+                  // a combination with no stored price can never be selected
+                  // (migration 122 — Quality replaces Colour Group + Clarity).
+                  const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 3, display: "block" };
+                  const inputStyle: React.CSSProperties = { width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, background: "#fff" };
+                  const diamondType = editing ? (form.diamond_type ?? "") : (piece.diamond_type ?? "");
+                  const originKey = meleeOriginFromDiamondType(diamondType);
+                  const shape = String((editing ? form.melee_shape : piece.melee_shape) ?? "");
+                  const quality = String((editing ? (form as any).melee_quality : (piece as any).melee_quality) ?? "");
+                  const carat = (editing ? form.melee_carat_weight : piece.melee_carat_weight) ?? "";
+                  const mm = String((editing ? form.melee_mm : piece.melee_mm) ?? "");
+
+                  if (!editing) {
+                    return (
+                      <>
+                        <FieldView label="Shape" value={piece.melee_shape} />
+                        <FieldView label="Quality" value={resolvePieceMeleeQualityDisplay(piece)} />
+                        <FieldView label="Size" value={carat != null && carat !== "" ? `${carat}ct${mm ? ` (${mm}mm)` : ""}` : "—"} />
+                      </>
+                    );
+                  }
+                  return (
+                    <>
+                      <div>
+                        <div style={labelStyle}>Shape</div>
+                        <select style={inputStyle} value={shape} disabled={!originKey}
+                          onChange={e => setForm(f => ({ ...f, melee_shape: e.target.value || null, melee_quality: null, melee_carat_weight: null, melee_mm: null } as any))}>
+                          <option value="">{originKey ? "Select shape…" : "Set Diamond Type first"}</option>
+                          {meleeShapeOptionsFor(meleeStones, originKey).map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <div style={labelStyle}>Quality</div>
+                        <select style={inputStyle} value={quality} disabled={!shape}
+                          onChange={e => setForm(f => ({ ...f, melee_quality: e.target.value || null, melee_carat_weight: null, melee_mm: null } as any))}>
+                          <option value="">{shape ? "Select quality…" : "Select shape first"}</option>
+                          {meleeQualityOptionsFor(meleeStones, originKey, shape).map(q => <option key={q} value={q}>{q}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <div style={labelStyle}>Size</div>
+                        <select style={inputStyle} value={carat ? `${carat}|${mm}` : ""} disabled={!quality}
+                          onChange={e => {
+                            const opt = meleeSizeOptionsFor(meleeStones, originKey, shape, quality).find(o => o.value === e.target.value);
+                            setForm(f => ({ ...f, melee_carat_weight: opt ? opt.carat : null, melee_mm: opt ? opt.mm : null } as any));
+                          }}>
+                          <option value="">{quality ? "Size…" : "Select quality first"}</option>
+                          {meleeSizeOptionsFor(meleeStones, originKey, shape, quality).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      </div>
+                    </>
+                  );
+                })()}
                 {!editing && meleeQty != null && (piece as any).melee_carat_weight != null && (
                   <div style={{ gridColumn: "1 / -1" }}>
                     <div style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 3 }}>Total Melee</div>
@@ -1340,16 +1454,12 @@ export default function InventoryItemPage({ params }: Params) {
                           {meleePrice.shape} · {meleePrice.quality}{meleePrice.mm ? ` · ${meleePrice.mm}mm` : ""}
                         </span>
                       </div>
-                    ) : meleePrice.status === "unmapped" ? (
-                      <div style={{ fontSize: 13, color: "#B45309" }}>
-                        Quality not mapped for {meleePrice.colour_group} / {meleePrice.clarity} — import the melee list or add the mapping in Settings → Melee.
-                      </div>
                     ) : meleePrice.status === "no_price" ? (
                       <div style={{ fontSize: 13, color: "#B45309" }}>
-                        No exact price-list match ({meleePrice.shape}, {meleePrice.quality}, {meleePrice.carat}ct{meleePrice.mm ? `, ${meleePrice.mm}mm` : ""}).
+                        No exact price-list match ({meleePrice.shape}, {meleePrice.quality}, {meleePrice.carat}ct{meleePrice.mm ? `, ${meleePrice.mm}mm` : ""}). Import the current melee list or check Settings → Melee.
                       </div>
                     ) : meleePrice.status === "incomplete" ? (
-                      <div style={{ fontSize: 13, color: "#9CA3AF" }}>Add shape, colour, clarity, carat and mm to price these stones.</div>
+                      <div style={{ fontSize: 13, color: "#9CA3AF" }}>Set shape, quality, carat and mm to price these stones.</div>
                     ) : meleePrice.status === "origin_unrecognized" ? (
                       <div style={{ fontSize: 13, color: "#B45309" }}>
                         Diamond Type “{meleePrice.diamond_type}” isn’t a recognised value — fix it (Natural / Lab Grown / None) to price melee.

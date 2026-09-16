@@ -2,9 +2,13 @@
  * melee-pricing.ts — melee price resolution.
  *
  * Melee pricing is a pure price-fetch by spec: origin + shape + carat + mm +
- * (colour/clarity → quality via the quality map). There is NO supplier concept
- * (removed in migration 121) — the single price list IS the source of truth, and
- * `origin` ('natural' | 'lab') only selects which rows apply.
+ * quality — quality is selected DIRECTLY (as it exists verbatim in
+ * pricing_melee_stones, e.g. "EF VVS", "Fancy Yellow SI1-SI2+"), not resolved
+ * from separate colour/clarity via a map (migration 122 retired that path —
+ * pricing_melee_quality_map is left in place, unused, same treatment as
+ * supplier_id). There is NO supplier concept (removed in migration 121) — the
+ * single price list IS the source of truth, and `origin` ('natural' | 'lab')
+ * only selects which rows apply.
  */
 
 export type MeleeOrigin = "lab" | "natural";
@@ -65,13 +69,12 @@ export function caratWithMmLabel(carat: number): string {
 // ─────────────────────────────────────────────────────────────────────────────
 // priceMelee — the single melee pricing lookup, shared by the per-piece endpoint
 // and the quote-builder endpoint. Pure parameter logic (no piece/quote coupling):
-// origin → supplier → (colour_group, clarity) quality-map → pricing_melee_stones
-// (carat within band) → per_stone = price_per_carat · carat.
+// origin + shape + quality + carat (in band) + exact mm → pricing_melee_stones row
+// → per_stone = real price_per_stone, or price_per_carat · carat as fallback.
 //
 // Origin-level resolution (diamond_type → origin, "no_origin"/"origin_unrecognized")
-// stays in the CALLER — this function takes an already-resolved MeleeOrigin. It
-// returns the same discriminated statuses the piece endpoint returned before:
-//   ok | incomplete | supplier_missing | unmapped | no_price | error
+// stays in the CALLER — this function takes an already-resolved MeleeOrigin.
+// Returns a discriminated status: ok | incomplete | no_price | error.
 // Carat-range sizing only (size_type='carat_range'); mm/pieces modes out of scope.
 // ─────────────────────────────────────────────────────────────────────────────
 /** Format one numeric mm side to a fixed 2 decimals ("0.9" / "0.90" → "0.90");
@@ -96,22 +99,41 @@ export function normalizeMm(mm: string | null | undefined): string {
   return formatMmNumber(trimmed);
 }
 
+/**
+ * Resolve the effective quality for a piece: prefer melee_quality (the direct
+ * field going forward); fall back to composing the LEGACY melee_colour_group +
+ * melee_clarity fields for pieces saved before migration 122. This is not a
+ * guess — it reverses the exact, well-established "<colour> <clarity>" join
+ * this app has always used to build a quality string, so it reproduces the
+ * same value the old quality-map flow would have resolved to.
+ */
+export function resolvePieceMeleeQuality(
+  meleeQuality: string | null | undefined,
+  legacyColourGroup: string | null | undefined,
+  legacyClarity: string | null | undefined
+): string {
+  const direct = (meleeQuality ?? "").trim();
+  if (direct) return direct;
+  const colour = (legacyColourGroup ?? "").trim();
+  const clarity = (legacyClarity ?? "").trim();
+  if (colour && clarity) return `${colour} ${clarity}`;
+  return "";
+}
+
 export interface PriceMeleeParams {
-  tenantId:    string;
-  origin:      MeleeOrigin;
-  shape:       string;
-  colourGroup: string;
-  clarity:     string;
-  carat:       number;
-  mm:          string | null; // mm variant (exact match) — "0.90" or "2.50 x 2.50"
-  qty:         number;
+  tenantId: string;
+  origin:   MeleeOrigin;
+  shape:    string;
+  quality:  string; // selected directly, verbatim as it exists in pricing_melee_stones
+  carat:    number;
+  mm:       string | null; // mm variant (exact match) — "0.90" or "2.50 x 2.50"
+  qty:      number;
 }
 
 export type PriceMeleeResult =
   | { status: "ok"; quantity: number; carat: number; mm: string; per_stone: number; total: number;
       quality: string; shape: string; origin: MeleeOrigin }
-  | { status: "incomplete"; missing: { carat: boolean; mm: boolean; colour_group: boolean; clarity: boolean; shape: boolean } }
-  | { status: "unmapped"; colour_group: string; clarity: string; origin: MeleeOrigin }
+  | { status: "incomplete"; missing: { carat: boolean; mm: boolean; quality: boolean; shape: boolean } }
   | { status: "no_price"; shape: string; quality: string; carat: number; mm: string }
   | { status: "error"; message: string };
 
@@ -126,37 +148,24 @@ export async function priceMelee(
   params: PriceMeleeParams
 ): Promise<PriceMeleeResult> {
   const { tenantId, origin } = params;
-  const qty    = Number(params.qty) || 0;
-  const carat  = params.carat != null ? Number(params.carat) : NaN;
-  const mm     = normalizeMm(params.mm);
-  const colour = (params.colourGroup ?? "").trim();
-  const clar   = (params.clarity ?? "").trim();
-  const shape  = (params.shape ?? "").trim();
+  const qty     = Number(params.qty) || 0;
+  const carat   = params.carat != null ? Number(params.carat) : NaN;
+  const mm      = normalizeMm(params.mm);
+  const quality = (params.quality ?? "").trim();
+  const shape   = (params.shape ?? "").trim();
 
   if (!qty || qty <= 0) {
-    return { status: "incomplete", missing: { carat: true, mm: true, colour_group: true, clarity: true, shape: true } };
+    return { status: "incomplete", missing: { carat: true, mm: true, quality: true, shape: true } };
   }
-  // mm is required — pricing is mm-precise now (0.01ct differs by mm).
-  if (!Number.isFinite(carat) || carat <= 0 || !mm || !colour || !clar || !shape) {
+  // mm is required — pricing is mm-precise (0.01ct differs by mm).
+  if (!Number.isFinite(carat) || carat <= 0 || !mm || !quality || !shape) {
     return { status: "incomplete", missing: {
-      carat: !Number.isFinite(carat) || carat <= 0, mm: !mm,
-      colour_group: !colour, clarity: !clar, shape: !shape,
+      carat: !Number.isFinite(carat) || carat <= 0, mm: !mm, quality: !quality, shape: !shape,
     }};
   }
 
-  // (colour_group, clarity) → confirmed quality. No supplier concept. No mapping = flag.
-  const { data: mapRow } = await supabase
-    .from("pricing_melee_quality_map")
-    .select("quality")
-    .eq("tenant_id", tenantId)
-    .ilike("colour_group", colour)
-    .ilike("clarity", clar)
-    .maybeSingle();
-  if (!mapRow) {
-    return { status: "unmapped", colour_group: colour, clarity: clar, origin };
-  }
-
-  // Exact price-list row: origin + shape + mapped quality, carat in band AND exact mm.
+  // Exact price-list row: origin + shape + quality (selected directly, no map),
+  // carat in band AND exact mm.
   const { data: priceRows, error: prErr } = await supabase
     .from("pricing_melee_stones")
     .select("price_per_carat, price_per_stone, size_from, size_to, size_type, shape, quality, mm")
@@ -164,7 +173,7 @@ export async function priceMelee(
     .eq("origin", origin)
     .eq("size_type", "carat_range")
     .ilike("shape", shape)
-    .eq("quality", mapRow.quality)
+    .ilike("quality", quality)
     .eq("mm", mm)
     .lte("size_from", carat)
     .gte("size_to", carat)
@@ -173,7 +182,7 @@ export async function priceMelee(
 
   const row = (priceRows ?? [])[0];
   if (!row) {
-    return { status: "no_price", shape, quality: mapRow.quality, carat, mm };
+    return { status: "no_price", shape, quality, carat, mm };
   }
 
   // Prefer the real per-stone price (now imported, not 0); fall back to per_carat × carat.
@@ -181,7 +190,7 @@ export async function priceMelee(
   const ppc = row.price_per_carat != null ? Number(row.price_per_carat) : null;
   const perStone = pps != null ? pps : (ppc != null ? ppc * carat : null);
   if (perStone == null) {
-    return { status: "no_price", shape, quality: mapRow.quality, carat, mm };
+    return { status: "no_price", shape, quality, carat, mm };
   }
 
   return {
@@ -191,7 +200,7 @@ export async function priceMelee(
     mm,
     per_stone:  Math.round(perStone * 100) / 100,
     total:      Math.round(perStone * qty * 100) / 100,
-    quality:    mapRow.quality,
+    quality:    row.quality, // stored value (canonical casing) rather than the caller's input
     shape,
     origin,
   };
