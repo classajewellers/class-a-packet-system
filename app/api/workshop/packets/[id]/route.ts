@@ -36,6 +36,7 @@ const ALLOWED_FIELDS = [
   "blocked_at",
   "delivery_method",
   "shopify_order_id",
+  "pending_customer_approval",
 ];
 
 // Fields that trigger a revert to intake/pre_check when the packet is not already in intake
@@ -81,6 +82,7 @@ export async function PATCH(
     const needsCurrent =
       body.status === "ready" ||
       body.status === "to_be_valued" ||
+      body.status !== undefined ||
       updates.total_charges !== undefined ||
       updates.deposit !== undefined ||
       intakeTriggerPresent ||
@@ -98,12 +100,13 @@ export async function PATCH(
       assigned_to?: string | null;
       workshop_subcontractor_name?: string | null;
       workshop_step_index?: number | null;
+      pending_customer_approval?: boolean | null;
     } | null = null;
 
     if (needsCurrent) {
       const { data } = await supabase
         .from("packets")
-        .select("status, total_charges, deposit, workshop_needs_valuation, workshop_valuer, assigned_to, workshop_subcontractor_name, workshop_step_index")
+        .select("status, total_charges, deposit, workshop_needs_valuation, workshop_valuer, assigned_to, workshop_subcontractor_name, workshop_step_index, pending_customer_approval")
         .eq("id", params.id)
         .single();
       current = data;
@@ -120,6 +123,22 @@ export async function PATCH(
     // Status side-effects (only set if status is changing via body or the rule above)
     const incomingStatus = (updates.status ?? body.status) as string | undefined;
     if (body.status !== undefined || (intakeTriggerPresent && current?.status !== "intake")) {
+      // Pending-approval gate: packets auto-created from a paid quote must
+      // be approved by a manager (this same PATCH clearing the flag, e.g.
+      // { pending_customer_approval: false }) before they can move to ANY
+      // other stage — not just a specific transition like the valuation
+      // gate below. Mirrors that exact pattern (069_workshop_rebuild.sql).
+      if (incomingStatus && incomingStatus !== current?.status) {
+        const stillPending = updates.pending_customer_approval !== undefined
+          ? updates.pending_customer_approval
+          : current?.pending_customer_approval;
+        if (stillPending) {
+          return NextResponse.json({
+            error: "This order was auto-created and is pending manager approval. Approve it before moving it through the workshop.",
+          }, { status: 422 });
+        }
+      }
+
       if (!updates.status_updated_at) {
         updates.status_updated_at = new Date().toISOString();
       }

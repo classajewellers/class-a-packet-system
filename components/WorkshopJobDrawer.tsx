@@ -52,6 +52,7 @@ export interface WorkshopPacket {
   delivery_method: string | null;
   shopify_order_id: string | null;
   shopify_fulfillment_id: string | null;
+  pending_customer_approval?: boolean | null;
 }
 
 export interface TeamMember     { id: string; tenant_id: string; name: string; profile_id: string | null; sort_order: number; active: boolean; }
@@ -426,6 +427,23 @@ export default function WorkshopJobDrawer({
   function renderOverview() {
     return (
       <div>
+        {local.pending_customer_approval && (
+          <div style={{ background: "#FFF5F3", border: "1px solid #FDBA74", borderRadius: 8, padding: "10px 12px", marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#EA580C", marginBottom: isManager ? 8 : 0 }}>
+              ⏳ Auto-created — pending your approval before this can move through the workshop
+            </div>
+            {isManager ? (
+              <button
+                onClick={() => patch({ pending_customer_approval: false })}
+                style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: "#EA580C", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+              >
+                Approve Order
+              </button>
+            ) : (
+              <div style={{ fontSize: 12, color: "#9A5B3A" }}>A manager needs to approve this order before work can begin.</div>
+            )}
+          </div>
+        )}
         {(overdue || dueToday) && (
           <div style={{ background: overdue ? "#FEE2E2" : "#FEF3C7", border: `1px solid ${overdue ? "#FCA5A5" : "#FDE68A"}`, borderRadius: 8, padding: "8px 12px", marginBottom: 14, fontSize: 13, fontWeight: 600, color: overdue ? "#DC2626" : "#B45309" }}>
             {overdue ? "⚠ Overdue" : "⏰ Due today"}
@@ -441,9 +459,17 @@ export default function WorkshopJobDrawer({
             const active  = isStageActive(entry);
             const payload: Record<string, unknown> = { status: entry.status };
             if (entry.substatus !== null) payload.workshop_intake_substatus = entry.substatus;
+            // Server-side gate (app/api/workshop/packets/[id]/route.ts) rejects
+            // this anyway while pending approval — disabling here just makes
+            // that visible instead of a silent-looking failed click.
+            const blockedByApproval = !!local.pending_customer_approval && !active;
             return (
-              <button key={`${entry.status}_${entry.substatus ?? ""}`} onClick={() => patch(payload)}
-                style={{ padding: "6px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: `1px solid ${active ? entry.accent : "#E8E8F0"}`, background: active ? entry.accent : "#fff", color: active ? "#fff" : "#6B7280", transition: "all .12s" }}>
+              <button
+                key={`${entry.status}_${entry.substatus ?? ""}`}
+                onClick={() => !blockedByApproval && patch(payload)}
+                disabled={blockedByApproval}
+                title={blockedByApproval ? "Approve this order before changing its stage" : undefined}
+                style={{ padding: "6px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: blockedByApproval ? "not-allowed" : "pointer", border: `1px solid ${active ? entry.accent : "#E8E8F0"}`, background: active ? entry.accent : "#fff", color: active ? "#fff" : blockedByApproval ? "#D1D5DB" : "#6B7280", opacity: blockedByApproval ? 0.6 : 1, transition: "all .12s" }}>
                 {entry.label}
               </button>
             );

@@ -82,8 +82,7 @@ export function generateQuoteHTML(
         }
 
         itemMetals.filter(m => m.type).forEach(m => {
-          const w = m.weight ? ` &mdash; ${m.weight}g` : "";
-          rows += `<tr><td style="${SL}">Metal</td><td style="${SV}">${esc(m.type ?? "")}${w}</td></tr>`;
+          rows += `<tr><td style="${SL}">Metal</td><td style="${SV}">${esc(m.type ?? "")}</td></tr>`;
         });
 
         if (stoneOptions.length > 1) {
@@ -193,8 +192,7 @@ export function generateQuoteHTML(
       }
 
       metals.filter(m => m.type).forEach(m => {
-        const weightStr = m.weight ? ` &mdash; ${m.weight}g` : "";
-        rows += `<tr><td style="${SL}">Metal</td><td style="${SV}">${esc(m.type ?? "")}${weightStr}</td></tr>`;
+        rows += `<tr><td style="${SL}">Metal</td><td style="${SV}">${esc(m.type ?? "")}</td></tr>`;
       });
 
       mainStones.forEach((s, i) => {
@@ -351,20 +349,26 @@ export function generateQuoteHTML(
     ? `<div style="margin:12px 0 0;padding:10px 14px;background:#F9FAFB;border-left:2px solid #635BFF;border-radius:0 4px 4px 0;font-size:8.5pt;color:#6B7280;line-height:1.75;"><div style="font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#635BFF;margin-bottom:4px;">Notes</div>${esc(quote.notes).replace(/\n/g, "<br>")}</div>`
     : "";
 
-  // ── Payment / deposit box ───────────────────────────────────────────────────
-  const depositAmt = opts?.deposit_amount != null
-    ? `$${Number(opts.deposit_amount).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    : null;
+  // ── Place Your Order box ────────────────────────────────────────────────────
+  // Links to the customer-facing order/confirmation page (/quote/[id]/order)
+  // rather than a pre-generated Stripe payment link — under the uniform
+  // order-page flow, the payment link isn't created until AFTER the customer
+  // confirms their option, address, and terms there, so no deposit amount is
+  // knowable yet at PDF-generation time (and varies by option for multi-option
+  // quotes anyway). opts.payment_link_url / opts.deposit_amount are still
+  // accepted for backward compatibility but no longer drive this box.
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "https://jewelleryvault.com.au").replace(/\/$/, "");
+  const orderPageUrl = `${appUrl}/quote/${quote.id}/order`;
 
-  const paymentSection = !opts?.hidePayment && opts?.payment_link_url ? `
+  const paymentSection = !opts?.hidePayment && quote.accepted_option == null ? `
 <div style="margin:16px 0 0;">
-  <a href="${opts.payment_link_url}" style="text-decoration:none;display:block;border:1px solid #635BFF;border-radius:6px;padding:14px 20px;">
+  <a href="${orderPageUrl}" style="text-decoration:none;display:block;border:1px solid #635BFF;border-radius:6px;padding:14px 20px;">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <div>
-        <div style="font-size:6.5pt;text-transform:uppercase;letter-spacing:0.12em;color:#9CA3AF;font-weight:700;margin-bottom:4px;">30% Deposit Required</div>
-        <div style="font-size:19pt;font-weight:700;color:#635BFF;">${depositAmt ?? "&nbsp;"}</div>
+        <div style="font-size:6.5pt;text-transform:uppercase;letter-spacing:0.12em;color:#9CA3AF;font-weight:700;margin-bottom:4px;">Ready To Proceed?</div>
+        <div style="font-size:14pt;font-weight:700;color:#635BFF;">Confirm your order &amp; pay your deposit</div>
       </div>
-      <div style="font-size:10pt;font-weight:500;color:#635BFF;letter-spacing:0.03em;">Pay Now &rsaquo;</div>
+      <div style="font-size:10pt;font-weight:500;color:#635BFF;letter-spacing:0.03em;white-space:nowrap;">Place Order &rsaquo;</div>
     </div>
   </a>
   <div style="text-align:center;margin-top:5px;font-size:7pt;color:#9CA3AF;">Secure payment powered by Stripe</div>

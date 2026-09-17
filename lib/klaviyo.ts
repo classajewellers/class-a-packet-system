@@ -221,3 +221,102 @@ export async function sendKlaviyoConfirmationEmail(packet: Packet): Promise<void
     throw new Error(`Klaviyo confirmation email failed (${res.status}): ${text}`);
   }
 }
+
+// ─── Pending-approval email event ──────────────────────────────────────────────
+// Distinct metric from "Packet Confirmation Email" (rather than a property
+// flag on it) so whoever manages the Klaviyo Flow can build separate
+// messaging for auto-created, not-yet-approved orders without adding
+// conditional logic inside the existing confirmation flow. Used for packets
+// auto-created from a paid quote (see lib/createPacket.ts,
+// app/api/stripe/webhook/route.ts) — same property set as the normal
+// confirmation email, just under a different event name.
+export async function sendKlaviyoPendingApprovalEmail(packet: Packet): Promise<void> {
+  const block = outboundBlock("klaviyo", packet.tenant_id);
+  if (block) {
+    logSuppressedOutbound("klaviyo:pending_approval_email", packet.tenant_id, { email: packet.customer_email, ref: packet.reference_number }, block);
+    return;
+  }
+  const customerName = [packet.customer_first_name, packet.customer_last_name]
+    .filter(Boolean)
+    .join(" ");
+
+  const addressLine = [
+    packet.customer_street,
+    packet.customer_suburb,
+    packet.customer_state,
+    packet.customer_postcode,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const fullSummary = [
+    `Reference: ${packet.reference_number}`,
+    `Type: ${packetTypeLabel(packet.packet_type)}`,
+    `Customer: ${customerName}`,
+    `Phone: ${packet.customer_phone ?? ""}`,
+    `Email: ${packet.customer_email ?? ""}`,
+    `Address: ${addressLine}`,
+    `Articles: ${packet.articles ?? ""}`,
+    `Instructions: ${packet.instructions ?? ""}`,
+    `In Date: ${formatDateAU(packet.in_date)}`,
+    `Due Date: ${formatDateAU(packet.due_date)}`,
+    `Total Charges: ${formatCurrency(packet.total_charges)}`,
+    `Deposit: ${formatCurrency(packet.deposit)}`,
+    `Balance: ${formatCurrency(packet.balance)}`,
+    `Staff: ${packet.staff_member ?? ""}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const body = {
+    data: {
+      type: "event",
+      attributes: {
+        metric: {
+          data: {
+            type: "metric",
+            attributes: { name: "Packet Pending Approval Email" },
+          },
+        },
+        profile: {
+          data: {
+            type: "profile",
+            attributes: { email: packet.customer_email },
+          },
+        },
+        properties: {
+          customer_name: customerName,
+          customer_email: packet.customer_email,
+          reference_number: packet.reference_number,
+          packet_type: packetTypeLabel(packet.packet_type),
+          articles: packet.articles,
+          instructions: packet.instructions,
+          in_date: formatDateAU(packet.in_date),
+          due_date: formatDateAU(packet.due_date),
+          total_charges: formatCurrency(packet.total_charges),
+          deposit: formatCurrency(packet.deposit),
+          balance: formatCurrency(packet.balance),
+          staff_member: packet.staff_member,
+          store_name: "Vault",
+          store_phone: "+61 8 8344 7722",
+          store_email: "customercare@classa.com.au",
+          store_address: "40 North East Road, Walkerville SA 5081",
+          disclaimer:
+            "This confirmation records the details of your order as submitted online. Our team is reviewing it and will be in touch shortly to confirm everything before work begins.",
+          full_summary: fullSummary,
+        },
+      },
+    },
+  };
+
+  const res = await fetch(`${BASE_URL}/events/`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Klaviyo pending-approval email failed (${res.status}): ${text}`);
+  }
+}

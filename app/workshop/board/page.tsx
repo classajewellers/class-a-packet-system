@@ -59,6 +59,7 @@ interface WorkshopPacket {
   delivery_method: string | null;
   shopify_order_id: string | null;
   shopify_fulfillment_id: string | null;
+  pending_customer_approval?: boolean | null;
 }
 
 interface TeamMember     { id: string; tenant_id: string; name: string; profile_id: string | null; sort_order: number; active: boolean; }
@@ -417,7 +418,7 @@ function JobCard({ packet, config, accent, grouping, draggingDisabled, onDragSta
   const jtColor  = JOB_TYPE_COLORS[jt] ?? JOB_TYPE_COLORS.repair;
   const stepLabel = resolveStepLabel(packet, config);
   const assignee  = resolveAssignee(packet);
-  const leftBorder = overdue ? "3px solid #EF4444" : stale && !dueToday ? "3px solid #F59E0B" : packet.blocked_reason ? "3px solid #EA580C" : "3px solid transparent";
+  const leftBorder = packet.pending_customer_approval ? "3px solid #EA580C" : overdue ? "3px solid #EF4444" : stale && !dueToday ? "3px solid #F59E0B" : packet.blocked_reason ? "3px solid #EA580C" : "3px solid transparent";
   const moveOptions = getMoveOptions(packet, grouping, config);
 
   const submitBlock = (e: React.MouseEvent) => {
@@ -454,6 +455,11 @@ function JobCard({ packet, config, accent, grouping, draggingDisabled, onDragSta
 
       {/* Badges */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
+        {packet.pending_customer_approval && (
+          <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: "#FFF5F3", color: "#EA580C", border: "1px solid #FDBA74" }}>
+            ⏳ Pending Approval
+          </span>
+        )}
         {subStageLabel && <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 999, background: "#EFF6FF", color: "#3B82F6" }}>{subStageLabel}</span>}
         {stepLabel && <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 999, background: "#F5F3FF", color: "#635BFF" }}>{stepLabel}</span>}
         {packet.blocked_reason && (

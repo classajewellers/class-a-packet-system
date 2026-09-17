@@ -26,11 +26,20 @@ export async function POST(
 
     const { data: pkt } = await supabase
       .from("packets")
-      .select("status, workshop_needs_valuation, customer_id, customer_phone, customer_first_name, customer_last_name, reference_number")
+      .select("status, workshop_needs_valuation, pending_customer_approval, customer_id, customer_phone, customer_first_name, customer_last_name, reference_number")
       .eq("id", params.id)
       .single();
 
     if (!pkt) return NextResponse.json({ error: "Job not found" }, { status: 404 });
+
+    // Defense in depth — a pending-approval packet should never actually
+    // reach "quality_check" without first clearing the flag via the main
+    // PATCH route's gate, but check explicitly rather than rely on that.
+    if (pkt.pending_customer_approval) {
+      return NextResponse.json({
+        error: "This order was auto-created and is pending manager approval. Approve it before recording QC results.",
+      }, { status: 422 });
+    }
 
     if (pkt.status !== "quality_check") {
       return NextResponse.json({

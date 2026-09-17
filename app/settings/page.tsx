@@ -11,7 +11,7 @@ interface MetalRate { id: string; metal_type: string; price_per_gram: number; up
 interface FixedCost { id: string; key: string; label: string; amount: number; updated_at: string; }
 interface MarginBracket { id: string; cost_min: number; cost_max: number | null; multiplier: number; stone_type: string | null; }
 interface MeleeStone { id: string; size_label: string; stone_type: string; price_per_stone: number; updated_at: string; }
-interface StoreDetails { bank_name: string; account_name: string; bsb: string; account_number: string; }
+interface StoreDetails { bank_name: string; account_name: string; bsb: string; account_number: string; deposit_percentage: string; terms_and_conditions: string; }
 type SaveState = Record<string, 'saving' | 'saved' | 'error'>;
 interface ShopifyConnection {
   connected: boolean;
@@ -69,7 +69,7 @@ export default function SettingsPage() {
   const [saveStates, setSaveStates] = useState<SaveState>({});
 
   /* Store state */
-  const [store, setStore] = useState<StoreDetails>({ bank_name: '', account_name: '', bsb: '', account_number: '' });
+  const [store, setStore] = useState<StoreDetails>({ bank_name: '', account_name: '', bsb: '', account_number: '', deposit_percentage: '30', terms_and_conditions: '' });
   const [storeLoading, setStoreLoading] = useState(false);
   const [storeLoaded, setStoreLoaded] = useState(false);
   const [storeSaving, setStoreSaving] = useState(false);
@@ -148,7 +148,19 @@ export default function SettingsPage() {
       fetch('/api/settings/store', { headers: { 'x-tenant-id': user?.tenantId ?? '' } })
         .then(r => r.json())
         .then(json => {
-          setStore({ bank_name: json.bank_name ?? '', account_name: json.account_name ?? '', bsb: json.bsb ?? '', account_number: json.account_number ?? '' });
+          // Note: the API returns { settings: {...} } — this previously read
+          // the fields off the bare response body, so a saved value never
+          // actually populated the form on reload. Fixed alongside adding
+          // deposit_percentage since it would have inherited the same bug.
+          const s = json.settings ?? {};
+          setStore({
+            bank_name: s.bank_name ?? '',
+            account_name: s.account_name ?? '',
+            bsb: s.bsb ?? '',
+            account_number: s.account_number ?? '',
+            deposit_percentage: s.deposit_percentage != null ? String(s.deposit_percentage) : '30',
+            terms_and_conditions: s.terms_and_conditions ?? '',
+          });
           setStoreLoaded(true);
         })
         .catch(() => {})
@@ -618,6 +630,36 @@ export default function SettingsPage() {
           {/* ── Store Details ── */}
           {section === 'store' && (
             <div style={{ ...card, padding: 24, maxWidth: 520 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A1760', marginBottom: 4 }}>Deposit Settings</h2>
+              <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 24 }}>Default deposit percentage used when auto-generating a customer payment link. Staff can still override the amount per quote.</p>
+
+              {storeLoading ? (
+                <div style={{ color: '#9CA3AF', fontSize: 14 }}>Loading…</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 28 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 6 }}>Deposit Percentage (%)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={store.deposit_percentage}
+                      placeholder="e.g. 30"
+                      onChange={e => setStore(prev => ({ ...prev, deposit_percentage: e.target.value }))}
+                      style={{
+                        width: '100%', maxWidth: 160, boxSizing: 'border-box',
+                        border: '1px solid #E8E8F0', borderRadius: 8,
+                        padding: '9px 12px', fontSize: 14, color: '#1A1A2E',
+                        outline: 'none', transition: 'border-color .15s',
+                      }}
+                      onFocus={e => (e.target.style.borderColor = '#635BFF')}
+                      onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
+                    />
+                  </div>
+                </div>
+              )}
+
               <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A1760', marginBottom: 4 }}>Bank Details</h2>
               <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 24 }}>Shown on quote PDFs sent to customers.</p>
 
@@ -649,6 +691,26 @@ export default function SettingsPage() {
                       />
                     </div>
                   ))}
+
+                  <div style={{ borderTop: '1px solid #E8E8F0', paddingTop: 16, marginTop: 4 }}>
+                    <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A1760', marginBottom: 4 }}>Terms & Conditions</h2>
+                    <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 12 }}>Shown to customers on the order confirmation page — they must tick a checkbox to agree before paying. Leave blank to skip the checkbox entirely.</p>
+                    <textarea
+                      value={store.terms_and_conditions}
+                      placeholder="Paste or write your terms & conditions here…"
+                      rows={8}
+                      onChange={e => setStore(prev => ({ ...prev, terms_and_conditions: e.target.value }))}
+                      style={{
+                        width: '100%', boxSizing: 'border-box',
+                        border: '1px solid #E8E8F0', borderRadius: 8,
+                        padding: '9px 12px', fontSize: 13, color: '#1A1A2E',
+                        outline: 'none', transition: 'border-color .15s',
+                        fontFamily: 'inherit', resize: 'vertical',
+                      }}
+                      onFocus={e => (e.target.style.borderColor = '#635BFF')}
+                      onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
+                    />
+                  </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
                     <button
