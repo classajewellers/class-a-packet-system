@@ -34,6 +34,8 @@ interface StoneEntry {
   id: string; caratWeight: string; shape: string; colour: string;
   clarity: string; origin: "Lab Grown" | "Natural"; cost: string;
   nivodaId?: string;
+  nivodaVideo?: string;
+  nivodaImage?: string;
   // "estimated" = converted from the Browse Stones exchange-rate estimate (or still
   // pending the exact lookup); "exact" = confirmed via get_diamond_by_id at selection
   // time. Cleared to undefined the moment a manager types over the cost manually.
@@ -78,6 +80,9 @@ interface BuilderItem {
   design: string;
   fingerSize: string;
   stockSku: string;
+  // Set when stockSku was populated via the piece picker (not free-typed) —
+  // the real link back to inventory_pieces, used to auto-fill metal weight.
+  linkedPieceId?: string;
   // Metals
   metals: MetalRow[];
   // Stones
@@ -345,6 +350,97 @@ function computeItemPricing(
   };
 }
 
+// ─── PiecePicker ───────────────────────────────────────────────────────────────
+// Small debounced search-and-select against the real inventory_pieces search
+// endpoint (already built, searches sku + title) — replaces free-typing a SKU
+// that was never actually validated against anything.
+
+interface InventoryPieceResult {
+  id: string;
+  sku: string;
+  metal_weight_grams: number | string | null;
+  status?: string | null;
+  product?: { name: string } | null;
+}
+
+function PiecePicker({
+  value,
+  tenantId,
+  onSelect,
+  onClear,
+}: {
+  value: string;
+  tenantId: string;
+  onSelect: (piece: InventoryPieceResult) => void;
+  onClear: () => void;
+}) {
+  const [query, setQuery] = useState(value);
+  const [results, setResults] = useState<InventoryPieceResult[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => { setQuery(value); }, [value]);
+
+  useEffect(() => {
+    if (!open || query.trim().length < 2) { setResults([]); return; }
+    setLoading(true);
+    const t = setTimeout(() => {
+      fetch(`/api/inventory/pieces/search?search=${encodeURIComponent(query.trim())}&per_page=8`, {
+        headers: { "x-tenant-id": tenantId },
+      })
+        .then(r => r.json())
+        .then(json => setResults(json.pieces ?? []))
+        .catch(() => setResults([]))
+        .finally(() => setLoading(false));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [query, open, tenantId]);
+
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        style={inputStyle}
+        type="text"
+        value={query}
+        onChange={e => { setQuery(e.target.value); setOpen(true); if (!e.target.value) onClear(); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder="Search SKU or title…"
+      />
+      {open && query.trim().length >= 2 && (
+        <div style={{
+          position: "absolute", top: "100%", left: 0, right: 0, zIndex: 20,
+          background: "#fff", border: "1px solid #E8E8F0", borderRadius: 8,
+          marginTop: 4, maxHeight: 220, overflowY: "auto",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+        }}>
+          {loading && <div style={{ padding: "8px 12px", fontSize: 12, color: "#9CA3AF" }}>Searching…</div>}
+          {!loading && results.length === 0 && (
+            <div style={{ padding: "8px 12px", fontSize: 12, color: "#9CA3AF" }}>No pieces found</div>
+          )}
+          {!loading && results.map(p => (
+            <div
+              key={p.id}
+              onMouseDown={() => { onSelect(p); setOpen(false); }}
+              style={{ padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #F3F4F6", fontSize: 13 }}
+              onMouseEnter={e => (e.currentTarget.style.background = "#F9FAFB")}
+              onMouseLeave={e => (e.currentTarget.style.background = "#fff")}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <span style={{ fontWeight: 600, color: "#1A1A2E" }}>{p.sku}</span>
+                {p.status && (
+                  <span style={{ fontSize: 10, fontWeight: 600, color: "#6B7280", background: "#F3F4F6", padding: "1px 6px", borderRadius: 999 }}>{p.status}</span>
+                )}
+              </div>
+              {p.product?.name && <div style={{ color: "#6B7280", marginTop: 2 }}>{p.product.name}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── ItemCard ──────────────────────────────────────────────────────────────────
 
 interface ItemCardProps {
@@ -561,8 +657,22 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                 <input style={inputStyle} type="text" value={item.fingerSize} onChange={e => set("fingerSize", e.target.value)} onFocus={onFocus} onBlur={onBlurField} placeholder="e.g. N, O½, 7" />
               </div>
               <div>
-                <label style={labelStyle}>SKU</label>
-                <input style={inputStyle} type="text" value={item.stockSku} onChange={e => set("stockSku", e.target.value)} onFocus={onFocus} onBlur={onBlurField} placeholder="if based off a product" />
+                <label style={labelStyle}>Linked Piece {item.linkedPieceId && <span style={{ fontWeight: 400, color: "#10B981" }}>✓ linked</span>}</label>
+                <PiecePicker
+                  value={item.stockSku}
+                  tenantId={tenantId}
+                  onClear={() => setItems(prev => prev.map(it => it.id !== item.id ? it : { ...it, stockSku: "", linkedPieceId: undefined }))}
+                  onSelect={piece => {
+                    setItems(prev => prev.map(it => {
+                      if (it.id !== item.id) return it;
+                      const weight = piece.metal_weight_grams != null ? String(piece.metal_weight_grams) : null;
+                      const metals = weight && it.metals[0] && !it.metals[0].weight
+                        ? it.metals.map((m, i) => i === 0 ? { ...m, weight } : m)
+                        : it.metals;
+                      return { ...it, stockSku: piece.sku, linkedPieceId: piece.id, metals };
+                    }));
+                  }}
+                />
               </div>
             </div>
           </div>
@@ -1198,6 +1308,8 @@ function QuoteBuilderPageInner() {
       origin: stone.labgrown ? "Lab Grown" : "Natural",
       cost: wholesaleAud,
       nivodaId: stone.id,
+      nivodaVideo: stone.video || undefined,
+      nivodaImage: stone.image || undefined,
       costSource: "estimated",
     };
     const targetId    = nivodaTargetItemId.current;
@@ -1262,6 +1374,9 @@ function QuoteBuilderPageInner() {
               clarity: s.clarity || null,
               origin: s.origin,
               cost: isManager ? (parseFloat(s.cost) || 0) : 0,
+              nivoda_id: s.nivodaId || null,
+              nivoda_video: s.nivodaVideo || null,
+              nivoda_image: s.nivodaImage || null,
             })),
             quoted_price: p.stoneOptionPrices[oi] ?? p.finalPrice,
           })) : [],
@@ -1292,6 +1407,7 @@ function QuoteBuilderPageInner() {
           ai_description: item.aiDesc || null,
           finger_size: item.fingerSize || null,
           stock_sku: item.stockSku || null,
+          linked_piece_id: item.linkedPieceId || null,
           total_cost: p.totalCost,
           quoted_price: p.finalPrice,
           multiplier: p.activeMultiplier,
@@ -1421,6 +1537,9 @@ function QuoteBuilderPageInner() {
                 colour: s.colour || null,
                 clarity: s.clarity || null,
                 origin: s.origin,
+                nivoda_id: s.nivodaId || null,
+                nivoda_video: s.nivodaVideo || null,
+                nivoda_image: s.nivodaImage || null,
               })),
               quoted_price: p.stoneOptionPrices[oi] ?? p.finalPrice,
             })) : [],
@@ -1440,6 +1559,7 @@ function QuoteBuilderPageInner() {
             ai_description: item.aiDesc || null,
             finger_size: item.fingerSize || null,
             stock_sku: item.stockSku || null,
+            linked_piece_id: item.linkedPieceId || null,
             quoted_price: p.finalPrice,
           };
         }),
