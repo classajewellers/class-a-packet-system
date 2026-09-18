@@ -151,6 +151,8 @@ export interface Packet {
   reference_number: string;
   packet_type: PacketType;
 
+  /** Present on every real row when resolvable — previously undeclared here. */
+  customer_id?: string | null;
   customer_first_name: string | null;
   customer_last_name: string | null;
   customer_email: string | null;
@@ -191,6 +193,9 @@ export interface Packet {
   sms_sent: boolean;
   label_printed: boolean;
   sheets_logged: boolean;
+  /** Set true on packets auto-created from a paid quote; blocks workshop
+   * pipeline progression until a manager clears it. */
+  pending_customer_approval?: boolean;
 
   // Online order fields
   order_number: string | null;
@@ -405,6 +410,13 @@ export interface Quote {
   deposit_amount?: number | null;
   deposit_paid?: boolean | null;
   deposit_paid_at?: string | null;
+  // Delivery address (collected on the customer-facing order page)
+  customer_street?: string | null;
+  customer_suburb?: string | null;
+  customer_state?: string | null;
+  customer_postcode?: string | null;
+  // Present on every real row but previously undeclared here
+  tenant_id?: string | null;
   // Follow-up reminder schedule
   follow_up_7d?: string | null;
   follow_up_14d?: string | null;

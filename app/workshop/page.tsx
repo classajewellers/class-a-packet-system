@@ -31,6 +31,7 @@ interface WorkshopPacket {
   blocked_reason: string | null;
   blocked_note: string | null;
   delivery_method: string | null;
+  pending_customer_approval?: boolean | null;
 }
 
 interface TeamMember { id: string; name: string; profile_id: string | null; active: boolean; }
@@ -539,12 +540,17 @@ export default function WorkshopPage() {
 
                       {/* Blocked */}
                       <td style={{ padding: "10px 14px" }}>
-                        {p.blocked_reason ? (
+                        {(p.pending_customer_approval || p.blocked_reason) ? (
                           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                            <Badge
-                              label={BLOCKED_LABELS[p.blocked_reason] ?? p.blocked_reason}
-                              bg="#FFF5F3" color="#EA580C" border="1px solid #FDBA74"
-                            />
+                            {p.pending_customer_approval && (
+                              <Badge label="⏳ Pending Approval" bg="#FFF5F3" color="#EA580C" border="1px solid #FDBA74" />
+                            )}
+                            {p.blocked_reason && (
+                              <Badge
+                                label={BLOCKED_LABELS[p.blocked_reason] ?? p.blocked_reason}
+                                bg="#FFF5F3" color="#EA580C" border="1px solid #FDBA74"
+                              />
+                            )}
                             {p.blocked_reason === "other" && p.blocked_note && (
                               <span style={{ fontSize: 10, color: "#9CA3AF", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.blocked_note}</span>
                             )}

@@ -7,9 +7,10 @@ import QuoteDocument from "./QuoteDocument";
 interface Props {
   quote: Quote;
   onNew: () => void;
+  brandLogoUrl?: string | null;
 }
 
-export default function QuotePreviewScreen({ quote, onNew }: Props) {
+export default function QuotePreviewScreen({ quote, onNew, brandLogoUrl }: Props) {
   const router = useRouter();
 
   const customerName =
@@ -165,7 +166,7 @@ export default function QuotePreviewScreen({ quote, onNew }: Props) {
             className="max-w-[794px] mx-auto bg-white shadow-2xl"
             style={{ minHeight: "1123px" }}
           >
-            <QuoteDocument quote={quote} />
+            <QuoteDocument quote={quote} brandLogoUrl={brandLogoUrl} />
           </div>
 
           {/* Bottom breathing room */}

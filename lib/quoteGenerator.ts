@@ -11,6 +11,24 @@ function esc(s: string | null | undefined): string {
     .replace(/"/g, "&quot;");
 }
 
+// Only stones actually sourced via Browse Stones (Nivoda) carry a link — a
+// manually-typed stone has neither field and is simply omitted, no
+// placeholder. brandColor is threaded through so the links match whatever
+// tenant branding this quote is using.
+function stoneLinksHtml(stones: Array<Record<string, unknown>>, brandColor: string): string {
+  const parts: string[] = [];
+  for (const s of stones) {
+    if (typeof s.nivoda_video === "string" && s.nivoda_video) {
+      parts.push(`<a href="${esc(s.nivoda_video)}" style="color:${brandColor};font-weight:600;text-decoration:none;">&#9654; View Video</a>`);
+    }
+    if (typeof s.nivoda_image === "string" && s.nivoda_image) {
+      parts.push(`<a href="${esc(s.nivoda_image)}" style="color:${brandColor};font-weight:600;text-decoration:none;">View Photo</a>`);
+    }
+  }
+  if (parts.length === 0) return "";
+  return `<div style="margin-top:3px;font-size:7.5pt;">${parts.join(" &nbsp;&middot;&nbsp; ")}</div>`;
+}
+
 function formatDateAU(iso: string | null | undefined): string {
   if (!iso) return "";
   const [y, m, d] = iso.split("T")[0].split("-");
@@ -25,10 +43,26 @@ export interface BankDetails {
   account_number?: string | null;
 }
 
+export interface BrandSettings {
+  brand_logo_url?: string | null;
+  brand_primary_colour?: string | null;
+}
+
 export function generateQuoteHTML(
   quote: Quote,
-  opts?: { payment_link_url?: string | null; deposit_amount?: number | null; hidePayment?: boolean; bankDetails?: BankDetails | null }
+  opts?: {
+    payment_link_url?: string | null;
+    deposit_amount?: number | null;
+    hidePayment?: boolean;
+    bankDetails?: BankDetails | null;
+    brandSettings?: BrandSettings | null;
+  }
 ): string {
+  // Per-tenant branding, falling back to Vault's own look when a tenant
+  // hasn't configured their own (Settings -> Branding).
+  const brandColor = opts?.brandSettings?.brand_primary_colour || "#635BFF";
+  const brandLogo = opts?.brandSettings?.brand_logo_url || BLACK_LOGO_DATA_URI;
+
   const customerName = [quote.customer_first_name, quote.customer_last_name]
     .filter(Boolean)
     .join(" ");
@@ -41,7 +75,7 @@ export function generateQuoteHTML(
   const PRICE_VAL = `padding:12px 0 4px;font-size:15pt;font-weight:700;color:#1A1A2E;text-align:right;border-top:1px solid #E8E8F0;`;
 
   const secHdr = (label: string) =>
-    `<tr><td colspan="2" style="padding:14px 0 0;"><div style="font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#635BFF;padding-bottom:7px;">${label}</div><div style="height:1px;background:#E8E8F0;"></div></td></tr>`;
+    `<tr><td colspan="2" style="padding:14px 0 0;"><div style="font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:${brandColor};padding-bottom:7px;">${label}</div><div style="height:1px;background:#E8E8F0;"></div></td></tr>`;
 
   // ── Detect builder quote ────────────────────────────────────────────────────
   const builderData = quote.quote_builder_data as Record<string, unknown> | null | undefined;
@@ -82,8 +116,7 @@ export function generateQuoteHTML(
         }
 
         itemMetals.filter(m => m.type).forEach(m => {
-          const w = m.weight ? ` &mdash; ${m.weight}g` : "";
-          rows += `<tr><td style="${SL}">Metal</td><td style="${SV}">${esc(m.type ?? "")}${w}</td></tr>`;
+          rows += `<tr><td style="${SL}">Metal</td><td style="${SV}">${esc(m.type ?? "")}</td></tr>`;
         });
 
         if (stoneOptions.length > 1) {
@@ -97,8 +130,9 @@ export function generateQuoteHTML(
               ? `$${opt.quoted_price.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
               : "";
             const optLabel = esc(String(opt.label || `Option ${oi + 1}`));
-            const priceSpan = optPrice ? `<span style="float:right;color:#635BFF;font-weight:600;">${optPrice}</span>` : "";
-            rows += `<tr><td style="${SL}"><span style="font-weight:600;">${optLabel}</span></td><td style="${SV}">${esc(specsText)}${priceSpan}</td></tr>`;
+            const priceSpan = optPrice ? `<span style="float:right;color:${brandColor};font-weight:600;">${optPrice}</span>` : "";
+            const optLinks = stoneLinksHtml(stones, brandColor);
+            rows += `<tr><td style="${SL}"><span style="font-weight:600;">${optLabel}</span></td><td style="${SV}">${esc(specsText)}${priceSpan}${optLinks}</td></tr>`;
           });
         } else if (stoneOptions.length === 1) {
           const opt = stoneOptions[0];
@@ -107,7 +141,8 @@ export function generateQuoteHTML(
             const parts = [s.carat_weight != null ? `${s.carat_weight}ct` : null, s.colour, s.clarity, s.origin, s.shape]
               .map(v => (v != null && v !== "" ? String(v) : null)).filter(Boolean).join(" ");
             const lbl = stones.length === 1 ? "Stone" : `Stone ${si + 1}`;
-            if (parts) rows += `<tr><td style="${SL}">${lbl}</td><td style="${SV}">${esc(parts)}</td></tr>`;
+            const stoneLink = stoneLinksHtml([s], brandColor);
+            if (parts) rows += `<tr><td style="${SL}">${lbl}</td><td style="${SV}">${esc(parts)}${stoneLink}</td></tr>`;
           });
         }
 
@@ -193,8 +228,7 @@ export function generateQuoteHTML(
       }
 
       metals.filter(m => m.type).forEach(m => {
-        const weightStr = m.weight ? ` &mdash; ${m.weight}g` : "";
-        rows += `<tr><td style="${SL}">Metal</td><td style="${SV}">${esc(m.type ?? "")}${weightStr}</td></tr>`;
+        rows += `<tr><td style="${SL}">Metal</td><td style="${SV}">${esc(m.type ?? "")}</td></tr>`;
       });
 
       mainStones.forEach((s, i) => {
@@ -203,7 +237,8 @@ export function generateQuoteHTML(
           s.colour, s.clarity, s.origin, s.shape,
         ].map(v => (v != null && v !== "" ? String(v) : null)).filter(Boolean).join(" ");
         const lbl = mainStones.length === 1 ? "Stone" : `Stone ${i + 1}`;
-        if (parts) rows += `<tr><td style="${SL}">${lbl}</td><td style="${SV}">${esc(parts)}</td></tr>`;
+        const stoneLink = stoneLinksHtml([s], brandColor);
+        if (parts) rows += `<tr><td style="${SL}">${lbl}</td><td style="${SV}">${esc(parts)}${stoneLink}</td></tr>`;
       });
 
       meleeStones.filter(r => r.stone_type).forEach(r => {
@@ -333,10 +368,10 @@ export function generateQuoteHTML(
     itemsSection = `<table class="line-items">
       <thead>
         <tr style="border-bottom:1px solid #E8E8F0;">
-          <th style="width:24px;padding:0 8px 8px 0;text-align:center;font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#635BFF;">#</th>
-          <th style="padding:0 8px 8px;font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#635BFF;text-align:left;">Design</th>
-          <th style="padding:0 8px 8px;font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#635BFF;text-align:left;">Stone</th>
-          <th style="padding:0 0 8px;font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#635BFF;text-align:right;white-space:nowrap;">Price (incl. GST)</th>
+          <th style="width:24px;padding:0 8px 8px 0;text-align:center;font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:${brandColor};">#</th>
+          <th style="padding:0 8px 8px;font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:${brandColor};text-align:left;">Design</th>
+          <th style="padding:0 8px 8px;font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:${brandColor};text-align:left;">Stone</th>
+          <th style="padding:0 0 8px;font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:${brandColor};text-align:right;white-space:nowrap;">Price (incl. GST)</th>
         </tr>
       </thead>
       <tbody>${tableRows}</tbody>
@@ -348,23 +383,29 @@ export function generateQuoteHTML(
   const staffEmailAddr = staffEmail(quote.staff_member);
 
   const notesSection = quote.notes
-    ? `<div style="margin:12px 0 0;padding:10px 14px;background:#F9FAFB;border-left:2px solid #635BFF;border-radius:0 4px 4px 0;font-size:8.5pt;color:#6B7280;line-height:1.75;"><div style="font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#635BFF;margin-bottom:4px;">Notes</div>${esc(quote.notes).replace(/\n/g, "<br>")}</div>`
+    ? `<div style="margin:12px 0 0;padding:10px 14px;background:#F9FAFB;border-left:2px solid ${brandColor};border-radius:0 4px 4px 0;font-size:8.5pt;color:#6B7280;line-height:1.75;"><div style="font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:${brandColor};margin-bottom:4px;">Notes</div>${esc(quote.notes).replace(/\n/g, "<br>")}</div>`
     : "";
 
-  // ── Payment / deposit box ───────────────────────────────────────────────────
-  const depositAmt = opts?.deposit_amount != null
-    ? `$${Number(opts.deposit_amount).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    : null;
+  // ── Place Your Order box ────────────────────────────────────────────────────
+  // Links to the customer-facing order/confirmation page (/quote/[id]/order)
+  // rather than a pre-generated Stripe payment link — under the uniform
+  // order-page flow, the payment link isn't created until AFTER the customer
+  // confirms their option, address, and terms there, so no deposit amount is
+  // knowable yet at PDF-generation time (and varies by option for multi-option
+  // quotes anyway). opts.payment_link_url / opts.deposit_amount are still
+  // accepted for backward compatibility but no longer drive this box.
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "https://jewelleryvault.com.au").replace(/\/$/, "");
+  const orderPageUrl = `${appUrl}/quote/${quote.id}/order`;
 
-  const paymentSection = !opts?.hidePayment && opts?.payment_link_url ? `
+  const paymentSection = !opts?.hidePayment && quote.accepted_option == null ? `
 <div style="margin:16px 0 0;">
-  <a href="${opts.payment_link_url}" style="text-decoration:none;display:block;border:1px solid #635BFF;border-radius:6px;padding:14px 20px;">
+  <a href="${orderPageUrl}" style="text-decoration:none;display:block;border:1px solid ${brandColor};border-radius:6px;padding:14px 20px;">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <div>
-        <div style="font-size:6.5pt;text-transform:uppercase;letter-spacing:0.12em;color:#9CA3AF;font-weight:700;margin-bottom:4px;">30% Deposit Required</div>
-        <div style="font-size:19pt;font-weight:700;color:#635BFF;">${depositAmt ?? "&nbsp;"}</div>
+        <div style="font-size:6.5pt;text-transform:uppercase;letter-spacing:0.12em;color:#9CA3AF;font-weight:700;margin-bottom:4px;">Ready To Proceed?</div>
+        <div style="font-size:14pt;font-weight:700;color:${brandColor};">Confirm your order &amp; pay your deposit</div>
       </div>
-      <div style="font-size:10pt;font-weight:500;color:#635BFF;letter-spacing:0.03em;">Pay Now &rsaquo;</div>
+      <div style="font-size:10pt;font-weight:500;color:${brandColor};letter-spacing:0.03em;white-space:nowrap;">Place Order &rsaquo;</div>
     </div>
   </a>
   <div style="text-align:center;margin-top:5px;font-size:7pt;color:#9CA3AF;">Secure payment powered by Stripe</div>
@@ -381,7 +422,7 @@ export function generateQuoteHTML(
     if (bd.account_number) bdRows.push(`<tr><td style="font-size:7.5pt;color:#9CA3AF;padding:3px 16px 3px 0;">Account No.</td><td style="font-size:8.5pt;color:#1A1A2E;font-family:monospace;">${esc(bd.account_number)}</td></tr>`);
     if (bdRows.length === 0) return "";
     return `<div style="margin:12px 0 0;border:1px solid #E8E8F0;border-radius:6px;padding:10px 16px;">
-      <div style="font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#635BFF;margin-bottom:8px;">Bank Transfer</div>
+      <div style="font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:${brandColor};margin-bottom:8px;">Bank Transfer</div>
       <table style="border-collapse:collapse;width:100%;"><tbody>${bdRows.join("")}</tbody></table>
     </div>`;
   })();
@@ -541,7 +582,7 @@ export function generateQuoteHTML(
   <!-- Header -->
   <div class="header">
     <div>
-      <img class="wordmark-logo" src="${BLACK_LOGO_DATA_URI}" alt="Vault">
+      <img class="wordmark-logo" src="${brandLogo}" alt="Logo">
     </div>
     <div class="header-right">
       <div class="quotation-title">Quotation</div>

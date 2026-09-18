@@ -263,6 +263,12 @@ function computeItemPricing(
     ? item.meleeRows.reduce((s, r) => s + (parseFloat(r.perStoneCost) || 0) * (parseInt(r.qty) || 0), 0)
     : 0;
 
+  // Small stone settings quantity is derived automatically from the total
+  // melee quantity across all rows (e.g. 20 melee stones = 20 settings) —
+  // no manual toggle/entry.
+  const totalMeleeQty = item.meleeRows.reduce((s, r) => s + (parseInt(r.qty) || 0), 0);
+  const smallSettingsCost = totalMeleeQty * 30;
+
   let addonsCost = mainStoneSettingCost;
   const costMap: Record<string, number> = {};
   if (mainStoneSettingCost > 0) costMap.mainStoneSetting = mainStoneSettingCost;
@@ -271,11 +277,12 @@ function computeItemPricing(
     if (fc.key === "labour") { addonsCost += Number(fc.amount); costMap.labour = Number(fc.amount); }
   }
 
-  // Small stone settings are auto-derived from melee row quantities (not a
-  // manual toggle) - one setting per melee stone, same $30 rate as before.
-  const totalMeleeQty = item.meleeRows.reduce((s, r) => s + (parseInt(r.qty) || 0), 0);
-  const smallSettingsCost = totalMeleeQty * 30;
-  if (smallSettingsCost > 0) { addonsCost += smallSettingsCost; costMap.smallSettings = smallSettingsCost; }
+  // totalMeleeQty/smallSettingsCost already computed above (auto-derived
+  // from melee row quantities, not a manual toggle - one setting per melee
+  // stone, same $30 rate as before).
+  if (smallSettingsCost > 0) {
+    addonsCost += smallSettingsCost; costMap.smallSettings = smallSettingsCost;
+  }
 
   const componentsCost = item.components.reduce((s, c) => s + (parseFloat(c.cost) || 0), 0);
   addonsCost += componentsCost;
@@ -779,38 +786,13 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                             <input style={inputStyle} type="text" value={stone.clarity} onChange={e => set("stoneOptions", item.stoneOptions.map(o => o.id === opt.id ? { ...o, stones: o.stones.map(s => s.id === stone.id ? { ...s, clarity: e.target.value } : s) } : o))} onFocus={onFocus} onBlur={onBlurField} placeholder="VS1, VS2, SI1" />
                           </div>
                         </div>
-                        <div style={{ display: "flex", gap: 0, borderRadius: 8, overflow: "hidden", border: "1px solid #E8E8F0", width: "fit-content", marginBottom: isManager ? 8 : 0 }}>
+                        <div style={{ display: "flex", gap: 0, borderRadius: 8, overflow: "hidden", border: "1px solid #E8E8F0", width: "fit-content" }}>
                           {(["Lab Grown", "Natural"] as const).map(o => (
                             <button key={o} onClick={() => set("stoneOptions", item.stoneOptions.map(opt2 => opt2.id === opt.id ? { ...opt2, stones: opt2.stones.map(s => s.id === stone.id ? { ...s, origin: o } : s) } : opt2))}
                               style={{ padding: "5px 14px", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, background: stone.origin === o ? "#635BFF" : "#fff", color: stone.origin === o ? "#fff" : "#635BFF", transition: "all .15s" }}
                             >{o}</button>
                           ))}
                         </div>
-                        {isManager && (
-                          <div style={{ marginTop: 4 }}>
-                            <label style={{ ...labelStyle, color: "#635BFF", display: "flex", alignItems: "center", gap: 6 }}>
-                              Cost Price ($)
-                              {stone.costSource === "estimated" && (
-                                <span title="Converted from Nivoda's USD price via exchange rate — exact AUD price could not be confirmed. Verify before finalizing." style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: "#FEF9C3", color: "#92400E", border: "1px solid #FDE68A" }}>
-                                  ~ ESTIMATE
-                                </span>
-                              )}
-                              {stone.costSource === "exact" && (
-                                <span title="Exact AUD price confirmed from Nivoda" style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: "#DCFCE7", color: "#16A34A", border: "1px solid #BBF7D0" }}>
-                                  ✓ CONFIRMED
-                                </span>
-                              )}
-                            </label>
-                            {(() => {
-                              const autoCalc = stone.cost.trim() === "" ? calcStoneBaseCost(stone, stonePricing, ndData) : 0;
-                              const isNd = stone.origin === "Natural" && autoCalc > 0 && ndData && ndData.prices.length > 0 && calcNdCost(stone, ndData) > 0;
-                              const ph = autoCalc > 0 ? `$${autoCalc.toFixed(2)} ${isNd ? '(Rap avg)' : '(auto)'}` : "$0.00";
-                              return (
-                                <input style={{ ...inputStyle, width: 130, borderColor: "#C4BFFE" }} type="number" min="0" step="0.01" value={stone.cost} onChange={e => set("stoneOptions", item.stoneOptions.map(o => o.id === opt.id ? { ...o, stones: o.stones.map(s => s.id === stone.id ? { ...s, cost: e.target.value, costSource: undefined } : s) } : o))} onFocus={onFocus} onBlur={onBlurField} placeholder={ph} />
-                              );
-                            })()}
-                          </div>
-                        )}
                       </div>
                     ))}
 

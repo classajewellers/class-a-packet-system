@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
-import { generateQuoteHTML, BankDetails } from "@/lib/quoteGenerator";
+import { generateQuoteHTML, BankDetails, BrandSettings } from "@/lib/quoteGenerator";
 import { Quote } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -23,12 +23,27 @@ async function generatePDF(
   const quote = data as Quote;
   const isA5 = size === "a5";
 
-  // Fetch bank details from the tenant record
+  // Resolve tenant: prefer the staff-request header, but fall back to the
+  // quote's own tenant_id — a customer's unauthenticated fetch of their own
+  // PDF (no x-tenant-id header) still needs bank/branding details resolved.
+  const resolvedTenantId = tenantId || quote.tenant_id || "";
+
+  // Fetch bank details and branding from the tenant record
   let bankDetails: BankDetails | null = null;
-  if (tenantId) {
-    const { data: tenant } = await supabase.from("tenants").select("bank_name,account_name,bsb,account_number").eq("id", tenantId).single();
-    if (tenant && (tenant.bank_name || tenant.bsb || tenant.account_number)) {
-      bankDetails = tenant as BankDetails;
+  let brandSettings: BrandSettings | null = null;
+  if (resolvedTenantId) {
+    const { data: tenant } = await supabase
+      .from("tenants")
+      .select("bank_name,account_name,bsb,account_number,brand_logo_url,brand_primary_colour")
+      .eq("id", resolvedTenantId)
+      .single();
+    if (tenant) {
+      if (tenant.bank_name || tenant.bsb || tenant.account_number) {
+        bankDetails = tenant as BankDetails;
+      }
+      if (tenant.brand_logo_url || tenant.brand_primary_colour) {
+        brandSettings = tenant as BrandSettings;
+      }
     }
   }
 
@@ -37,6 +52,7 @@ async function generatePDF(
     deposit_amount: quote.deposit_amount ?? null,
     hidePayment: isA5,
     bankDetails,
+    brandSettings,
   });
 
   const refNum = (quote.reference_number ?? "QUOTE").replace(/[^A-Za-z0-9_-]/g, "_");

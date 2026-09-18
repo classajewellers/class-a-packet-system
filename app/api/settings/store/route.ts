@@ -10,7 +10,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     const { data, error } = await supabase
       .from("tenants")
-      .select("bank_name, account_name, bsb, account_number")
+      .select("bank_name, account_name, bsb, account_number, deposit_percentage, terms_and_conditions, brand_logo_url, brand_primary_colour")
       .eq("id", tenantId)
       .maybeSingle();
 
@@ -22,6 +22,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         account_name: data?.account_name ?? null,
         bsb: data?.bsb ?? null,
         account_number: data?.account_number ?? null,
+        deposit_percentage: data?.deposit_percentage ?? 30,
+        terms_and_conditions: data?.terms_and_conditions ?? null,
+        brand_logo_url: data?.brand_logo_url ?? null,
+        brand_primary_colour: data?.brand_primary_colour ?? null,
       },
     });
   } catch (err) {
@@ -36,10 +40,18 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     const tenantId = req.headers.get("x-tenant-id") ?? "";
     const supabase = await createTenantSupabaseClient(tenantId);
 
-    const allowedFields = ["bank_name", "account_name", "bsb", "account_number"] as const;
+    const allowedFields = ["bank_name", "account_name", "bsb", "account_number", "deposit_percentage", "terms_and_conditions", "brand_logo_url", "brand_primary_colour"] as const;
     const updateFields: Record<string, unknown> = {};
     for (const field of allowedFields) {
       if (field in body) updateFields[field] = body[field];
+    }
+
+    if ("deposit_percentage" in updateFields) {
+      const pct = Number(updateFields.deposit_percentage);
+      if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+        return NextResponse.json({ error: "deposit_percentage must be a number between 0 and 100" }, { status: 400 });
+      }
+      updateFields.deposit_percentage = pct;
     }
 
     if (Object.keys(updateFields).length === 0) {
@@ -56,7 +68,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     // Return the updated settings
     const { data, error: fetchError } = await supabase
       .from("tenants")
-      .select("bank_name, account_name, bsb, account_number")
+      .select("bank_name, account_name, bsb, account_number, deposit_percentage, terms_and_conditions, brand_logo_url, brand_primary_colour")
       .eq("id", tenantId)
       .maybeSingle();
 
@@ -68,6 +80,10 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
         account_name: data?.account_name ?? null,
         bsb: data?.bsb ?? null,
         account_number: data?.account_number ?? null,
+        deposit_percentage: data?.deposit_percentage ?? 30,
+        terms_and_conditions: data?.terms_and_conditions ?? null,
+        brand_logo_url: data?.brand_logo_url ?? null,
+        brand_primary_colour: data?.brand_primary_colour ?? null,
       },
     });
   } catch (err) {

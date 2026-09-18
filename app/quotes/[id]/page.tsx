@@ -42,17 +42,21 @@ const STATUS_LABELS: Record<string, string> = {
   pending: "Pending",
   follow_up_1: "Follow Up 1",
   follow_up_2: "Follow Up 2",
+  awaiting_payment: "Awaiting Payment",
+  paid: "Paid",
   job_won: "Job Won",
   job_lost: "Job Lost",
   converted: "Converted",
 };
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  pending:     { bg: "#FEF3C7", text: "#92400E" },
-  follow_up_1: { bg: "#DBEAFE", text: "#1E40AF" },
-  follow_up_2: { bg: "#EDE9FE", text: "#4C1D95" },
-  job_won:     { bg: "#DCFCE7", text: "#166534" },
-  job_lost:    { bg: "#FEE2E2", text: "#991B1B" },
-  converted:   { bg: "#D1FAE5", text: "#065F46" },
+  pending:          { bg: "#FEF3C7", text: "#92400E" },
+  follow_up_1:      { bg: "#DBEAFE", text: "#1E40AF" },
+  follow_up_2:      { bg: "#EDE9FE", text: "#4C1D95" },
+  awaiting_payment: { bg: "#FFEDD5", text: "#9A3412" },
+  paid:             { bg: "#DCFCE7", text: "#166534" },
+  job_won:          { bg: "#DCFCE7", text: "#166534" },
+  job_lost:         { bg: "#FEE2E2", text: "#991B1B" },
+  converted:        { bg: "#D1FAE5", text: "#065F46" },
 };
 
 // ─── Stone option helpers ─────────────────────────────────────────────────────
