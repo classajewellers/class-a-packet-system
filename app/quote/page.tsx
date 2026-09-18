@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { QuoteFormData, QuoteType, LineItem, Quote } from "@/lib/types";
 import { defaultFollowUpDate } from "@/lib/pipeline";
 import { useUser } from "@/context/UserContext";
@@ -44,10 +44,10 @@ function validate(data: QuoteFormData): Partial<Record<keyof QuoteFormData, stri
   return errors;
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({ title, children, color }: { title: string; children: React.ReactNode; color?: string }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="px-5 py-3 border-b border-gray-100 bg-[#635BFF]">
+      <div className="px-5 py-3 border-b border-gray-100" style={{ background: color || "#635BFF" }}>
         <h2 className="text-sm font-semibold tracking-wide text-white uppercase">{title}</h2>
       </div>
       <div className="px-5 py-5">{children}</div>
@@ -62,6 +62,18 @@ export default function QuoteFormPage() {
   const [errors, setErrors]           = useState<Partial<Record<keyof QuoteFormData, string>>>({});
   const [submitting, setSubmitting]   = useState(false);
   const [submittedQuote, setSubmittedQuote] = useState<Quote | null>(null);
+  const [brand, setBrand] = useState<{ logoUrl: string | null; colour: string | null }>({ logoUrl: null, colour: null });
+
+  useEffect(() => {
+    if (!user?.tenantId) return;
+    fetch("/api/settings/store", { headers: { "x-tenant-id": user.tenantId } })
+      .then(r => r.json())
+      .then(json => {
+        const s = json.settings ?? {};
+        setBrand({ logoUrl: s.brand_logo_url ?? null, colour: s.brand_primary_colour ?? null });
+      })
+      .catch(() => {});
+  }, [user?.tenantId]);
 
   const handleChange = useCallback(
     (field: keyof QuoteFormData, value: string) => {
@@ -125,7 +137,7 @@ export default function QuoteFormPage() {
   }
 
   if (submittedQuote) {
-    return <QuotePreviewScreen quote={submittedQuote} onNew={handleNew} />;
+    return <QuotePreviewScreen quote={submittedQuote} onNew={handleNew} brandLogoUrl={brand.logoUrl} />;
   }
 
   return (
@@ -135,7 +147,7 @@ export default function QuoteFormPage() {
       <main className="max-w-3xl mx-auto px-4 py-6 pb-32 space-y-4">
 
         {/* Step 1 — Quote Type */}
-        <Card title="Step 1 — Quote Type">
+        <Card title="Step 1 — Quote Type" color={brand.colour ?? undefined}>
           <QuoteTypeSelector value={formData.quote_type} onChange={handleTypeChange} />
           {errors.quote_type && (
             <p className="mt-2 text-xs text-red-600">{errors.quote_type}</p>
@@ -145,7 +157,7 @@ export default function QuoteFormPage() {
         {formData.quote_type && (
           <>
             {/* Customer & Staff */}
-            <Card title="Customer & Staff">
+            <Card title="Customer & Staff" color={brand.colour ?? undefined}>
               <QuoteCustomerSection
                 data={formData}
                 onChange={handleChange}
@@ -154,7 +166,7 @@ export default function QuoteFormPage() {
             </Card>
 
             {/* Line Items */}
-            <Card title="Line Items">
+            <Card title="Line Items" color={brand.colour ?? undefined}>
               <QuoteLineItems
                 lineItems={formData.line_items}
                 onChange={handleLineItemsChange}
@@ -163,7 +175,7 @@ export default function QuoteFormPage() {
             </Card>
 
             {/* Notes */}
-            <Card title="Notes">
+            <Card title="Notes" color={brand.colour ?? undefined}>
               <textarea
                 value={formData.notes}
                 onChange={(e) => handleChange("notes", e.target.value)}

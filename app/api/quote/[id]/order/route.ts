@@ -24,6 +24,24 @@ function stoneSpecs(stones: Array<Record<string, unknown>>): string {
     .join("; ");
 }
 
+interface StoneLink {
+  video: string | null;
+  image: string | null;
+}
+
+// Only stones actually sourced via Browse Stones (Nivoda) carry a link — a
+// manually-typed stone has neither field at all and is simply omitted, no
+// placeholder. Per-stone, not per-option, since an option can hold several
+// stones (main + accents).
+function stoneLinks(stones: Array<Record<string, unknown>>): StoneLink[] {
+  return stones
+    .map(s => ({
+      video: typeof s.nivoda_video === "string" ? s.nivoda_video : null,
+      image: typeof s.nivoda_image === "string" ? s.nivoda_image : null,
+    }))
+    .filter(l => l.video || l.image);
+}
+
 // Public, unauthenticated by design — same "possession of the link is the
 // credential" model already used by app/api/quotes/[id]/pdf/route.ts. No
 // x-tenant-id header is sent by a customer's browser; the quote's own UUID
@@ -55,6 +73,7 @@ export async function GET(
     index: i,
     label: typeof opt.label === "string" ? opt.label : `Option ${i + 1}`,
     specs: Array.isArray(opt.stones) ? stoneSpecs(opt.stones as Array<Record<string, unknown>>) : "",
+    stone_links: Array.isArray(opt.stones) ? stoneLinks(opt.stones as Array<Record<string, unknown>>) : [],
     quoted_price: typeof opt.quoted_price === "number" ? opt.quoted_price : (quote.quoted_price ?? quote.total ?? null),
   }));
 
@@ -66,18 +85,21 @@ export async function GET(
       index: 0,
       label: "Your Order",
       specs: typeof item?.design === "string" ? item.design : "",
+      stone_links: [],
       quoted_price: quote.quoted_price ?? quote.total ?? null,
     });
   }
 
   let termsAndConditions: string | null = null;
+  let brandPrimaryColour: string | null = null;
   if (quote.tenant_id) {
     const { data: tenantRow } = await supabase
       .from("tenants")
-      .select("terms_and_conditions")
+      .select("terms_and_conditions, brand_primary_colour")
       .eq("id", quote.tenant_id)
       .maybeSingle();
     termsAndConditions = tenantRow?.terms_and_conditions ?? null;
+    brandPrimaryColour = tenantRow?.brand_primary_colour ?? null;
   }
 
   return NextResponse.json({
@@ -87,6 +109,7 @@ export async function GET(
     already_confirmed: quote.accepted_option != null,
     payment_link_url: quote.stripe_payment_link_url ?? null,
     terms_and_conditions: termsAndConditions,
+    brand_primary_colour: brandPrimaryColour,
   });
 }
 

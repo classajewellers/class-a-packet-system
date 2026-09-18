@@ -5,10 +5,16 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 
+interface StoneLink {
+  video: string | null;
+  image: string | null;
+}
+
 interface OrderOption {
   index: number;
   label: string;
   specs: string;
+  stone_links: StoneLink[];
   quoted_price: number | null;
 }
 
@@ -19,6 +25,7 @@ interface OrderData {
   already_confirmed: boolean;
   payment_link_url: string | null;
   terms_and_conditions: string | null;
+  brand_primary_colour: string | null;
 }
 
 const AU_STATES = ["NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT"];
@@ -58,6 +65,7 @@ export default function PlaceOrderPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
+  const brandColor = data?.brand_primary_colour || "#635BFF";
   const requiresTerms = !!data?.terms_and_conditions;
   const addressComplete = street.trim() && suburb.trim() && state.trim() && /^\d{4}$/.test(postcode.trim());
   const canSubmit = !!addressComplete && (!requiresTerms || termsChecked) && !submitting;
@@ -128,7 +136,7 @@ export default function PlaceOrderPage() {
             <a
               href={data.payment_link_url}
               style={{
-                display: "inline-block", padding: "10px 20px", background: "#635BFF", color: "#fff",
+                display: "inline-block", padding: "10px 20px", background: brandColor, color: "#fff",
                 borderRadius: 8, fontSize: 14, fontWeight: 600, textDecoration: "none",
               }}
             >
@@ -158,7 +166,7 @@ export default function PlaceOrderPage() {
               style={{
                 display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
                 padding: "12px 14px", borderRadius: 8, cursor: multiOption ? "pointer" : "default",
-                border: selectedOption === opt.index ? "2px solid #635BFF" : "1px solid #E8E8F0",
+                border: selectedOption === opt.index ? `2px solid ${brandColor}` : "1px solid #E8E8F0",
                 background: selectedOption === opt.index ? "#EEF2FF" : "#FAFAFA",
               }}
             >
@@ -174,9 +182,39 @@ export default function PlaceOrderPage() {
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{opt.label}</div>
                   {opt.specs && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>{opt.specs}</div>}
+                  {opt.stone_links.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 4 }}>
+                      {opt.stone_links.map((link, li) => (
+                        <span key={li} style={{ display: "flex", gap: 8 }}>
+                          {link.video && (
+                            <a
+                              href={link.video}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              style={{ fontSize: 11, fontWeight: 600, color: brandColor, textDecoration: "none" }}
+                            >
+                              ▶ View Video
+                            </a>
+                          )}
+                          {link.image && (
+                            <a
+                              href={link.image}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              style={{ fontSize: 11, fontWeight: 600, color: brandColor, textDecoration: "none" }}
+                            >
+                              🖼 View Photo
+                            </a>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "#635BFF", whiteSpace: "nowrap" }}>{money(opt.quoted_price)}</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: brandColor, whiteSpace: "nowrap" }}>{money(opt.quoted_price)}</div>
             </label>
           ))}
         </div>
@@ -243,7 +281,7 @@ export default function PlaceOrderPage() {
         disabled={!canSubmit}
         style={{
           width: "100%", padding: "14px 20px", borderRadius: 10, border: "none",
-          background: canSubmit ? "#635BFF" : "#E8E8F0", color: canSubmit ? "#fff" : "#9CA3AF",
+          background: canSubmit ? brandColor : "#E8E8F0", color: canSubmit ? "#fff" : "#9CA3AF",
           fontSize: 15, fontWeight: 700, cursor: canSubmit ? "pointer" : "not-allowed",
         }}
       >

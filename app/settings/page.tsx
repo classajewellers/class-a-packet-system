@@ -11,7 +11,7 @@ interface MetalRate { id: string; metal_type: string; price_per_gram: number; up
 interface FixedCost { id: string; key: string; label: string; amount: number; updated_at: string; }
 interface MarginBracket { id: string; cost_min: number; cost_max: number | null; multiplier: number; stone_type: string | null; }
 interface MeleeStone { id: string; size_label: string; stone_type: string; price_per_stone: number; updated_at: string; }
-interface StoreDetails { bank_name: string; account_name: string; bsb: string; account_number: string; deposit_percentage: string; terms_and_conditions: string; }
+interface StoreDetails { bank_name: string; account_name: string; bsb: string; account_number: string; deposit_percentage: string; terms_and_conditions: string; brand_logo_url: string; brand_primary_colour: string; }
 type SaveState = Record<string, 'saving' | 'saved' | 'error'>;
 interface ShopifyConnection {
   connected: boolean;
@@ -69,7 +69,7 @@ export default function SettingsPage() {
   const [saveStates, setSaveStates] = useState<SaveState>({});
 
   /* Store state */
-  const [store, setStore] = useState<StoreDetails>({ bank_name: '', account_name: '', bsb: '', account_number: '', deposit_percentage: '30', terms_and_conditions: '' });
+  const [store, setStore] = useState<StoreDetails>({ bank_name: '', account_name: '', bsb: '', account_number: '', deposit_percentage: '30', terms_and_conditions: '', brand_logo_url: '', brand_primary_colour: '' });
   const [storeLoading, setStoreLoading] = useState(false);
   const [storeLoaded, setStoreLoaded] = useState(false);
   const [storeSaving, setStoreSaving] = useState(false);
@@ -160,6 +160,8 @@ export default function SettingsPage() {
             account_number: s.account_number ?? '',
             deposit_percentage: s.deposit_percentage != null ? String(s.deposit_percentage) : '30',
             terms_and_conditions: s.terms_and_conditions ?? '',
+            brand_logo_url: s.brand_logo_url ?? '',
+            brand_primary_colour: s.brand_primary_colour ?? '',
           });
           setStoreLoaded(true);
         })
@@ -659,6 +661,58 @@ export default function SettingsPage() {
                   </div>
                 </div>
               )}
+
+              <div style={{ borderTop: '1px solid #E8E8F0', paddingTop: 16, marginTop: 4, marginBottom: 28 }}>
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A1760', marginBottom: 4 }}>Branding</h2>
+                <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 16 }}>Shown on customer-facing quotes and order pages. Leave blank to use Vault&apos;s default look.</p>
+
+                {storeLoading ? (
+                  <div style={{ color: '#9CA3AF', fontSize: 14 }}>Loading…</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 6 }}>Logo URL</label>
+                      <input
+                        type="text"
+                        value={store.brand_logo_url}
+                        placeholder="https://.../logo.png"
+                        onChange={e => setStore(prev => ({ ...prev, brand_logo_url: e.target.value }))}
+                        style={{
+                          width: '100%', boxSizing: 'border-box',
+                          border: '1px solid #E8E8F0', borderRadius: 8,
+                          padding: '9px 12px', fontSize: 14, color: '#1A1A2E',
+                          outline: 'none', transition: 'border-color .15s',
+                        }}
+                        onFocus={e => (e.target.style.borderColor = '#635BFF')}
+                        onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
+                      />
+                      {store.brand_logo_url && (
+                        <img src={store.brand_logo_url} alt="Logo preview" style={{ maxHeight: 40, marginTop: 8, display: 'block' }} />
+                      )}
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 6 }}>Primary Colour</label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <input
+                          type="text"
+                          value={store.brand_primary_colour}
+                          placeholder="#635BFF"
+                          onChange={e => setStore(prev => ({ ...prev, brand_primary_colour: e.target.value }))}
+                          style={{
+                            width: 160, boxSizing: 'border-box',
+                            border: '1px solid #E8E8F0', borderRadius: 8,
+                            padding: '9px 12px', fontSize: 14, color: '#1A1A2E',
+                            outline: 'none', transition: 'border-color .15s',
+                          }}
+                          onFocus={e => (e.target.style.borderColor = '#635BFF')}
+                          onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
+                        />
+                        <div style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #E8E8F0', background: store.brand_primary_colour || '#635BFF' }} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A1760', marginBottom: 4 }}>Bank Details</h2>
               <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 24 }}>Shown on quote PDFs sent to customers.</p>

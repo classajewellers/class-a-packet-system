@@ -15,7 +15,7 @@ const MIN_ROWS = 8;
 
 // ── component ─────────────────────────────────────────────────────────────────
 
-export default function QuoteDocument({ quote }: { quote: Quote }) {
+export default function QuoteDocument({ quote, brandLogoUrl }: { quote: Quote; brandLogoUrl?: string | null }) {
   const customerName = [quote.customer_first_name, quote.customer_last_name]
     .filter(Boolean)
     .join(" ");
@@ -54,8 +54,8 @@ export default function QuoteDocument({ quote }: { quote: Quote }) {
         }}
       >
         <img
-          src={BLACK_LOGO_DATA_URI}
-          alt="Vault"
+          src={brandLogoUrl || BLACK_LOGO_DATA_URI}
+          alt="Logo"
           style={{ maxHeight: "60px", width: "auto", display: "block" }}
         />
         <div style={{ textAlign: "right" }}>
