@@ -4,20 +4,24 @@ import { createTenantSupabaseClient } from "@/lib/supabase-server";
 export const dynamic = "force-dynamic";
 
 // Authoritative stone retail estimator for the Browse Stones modal.
-// Reads pricing_component_rules from the database — same source as calculate_price().
-// The modal calls this once per search batch; no pricing logic lives in client TypeScript.
+// Reads pricing_component_rules from the database — same source and same
+// cost-based tier lookup as calculate_price() (migration 133): tiers are
+// selected by the stone's own wholesale cost, not its carat weight. A stone
+// whose cost falls above the highest priced tier gets no entry in the
+// response (frontend already treats a missing id as retailAud: null) rather
+// than a silently guessed multiplier - same "explicit no_price status,
+// never a hardcoded fallback" policy calculate_price() uses.
 
 interface StoneInput {
   id: string;
   wholesale_aud: number;
-  carats: number;
   labgrown: boolean;
 }
 
 interface ComponentRule {
   component_type: string;
-  carat_min: number;
-  carat_max: number | null;
+  cost_min: number | null;
+  cost_max: number | null;
   multiplier: number;
 }
 
@@ -39,11 +43,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const db = await createTenantSupabaseClient(tenantId);
   const { data: rules, error } = await db
     .from("pricing_component_rules")
-    .select("component_type, carat_min, carat_max, multiplier")
+    .select("component_type, cost_min, cost_max, multiplier")
     .eq("tenant_id", tenantId)
     .in("component_type", ["lab_stone", "natural_stone"])
+    .not("cost_min", "is", null)
     .order("component_type")
-    .order("carat_min");
+    .order("cost_min");
 
   if (error) {
     console.error(`[estimate-stone-retail] pricing_component_rules query failed: ${error.message}`);
@@ -52,31 +57,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const componentRules = (rules ?? []) as ComponentRule[];
 
+  // Sorted by cost_min descending so .find() below picks the same tier
+  // calculate_price()'s "ORDER BY cost_min DESC LIMIT 1" would - the highest
+  // cost_min whose range still contains this stone's wholesale cost.
   const labTiers = componentRules
     .filter(r => r.component_type === "lab_stone")
-    .sort((a, b) => b.carat_min - a.carat_min);
+    .sort((a, b) => (b.cost_min ?? 0) - (a.cost_min ?? 0));
 
   const naturalTiers = componentRules
     .filter(r => r.component_type === "natural_stone")
-    .sort((a, b) => b.carat_min - a.carat_min);
+    .sort((a, b) => (b.cost_min ?? 0) - (a.cost_min ?? 0));
 
   const retail: Record<string, number> = {};
 
   for (const stone of stones) {
     if (stone.wholesale_aud <= 0) continue;
-    let mult: number;
-    if (stone.labgrown) {
-      const tier = labTiers.find(
-        r => stone.carats >= r.carat_min && (r.carat_max == null || stone.carats < r.carat_max)
-      );
-      mult = tier?.multiplier ?? labTiers[labTiers.length - 1]?.multiplier ?? 10.5;
-    } else {
-      const tier = naturalTiers.find(
-        r => stone.carats >= r.carat_min && (r.carat_max == null || stone.carats < r.carat_max)
-      );
-      mult = tier?.multiplier ?? naturalTiers[naturalTiers.length - 1]?.multiplier ?? 2.5;
-    }
-    retail[stone.id] = Math.round(stone.wholesale_aud * mult);
+    const tiers = stone.labgrown ? labTiers : naturalTiers;
+    const tier = tiers.find(
+      r => r.cost_min != null && stone.wholesale_aud >= r.cost_min && (r.cost_max == null || stone.wholesale_aud < r.cost_max)
+    );
+    // No matching tier (above the highest priced bracket) - omit this stone
+    // rather than guess. The modal already renders a missing id as "—".
+    if (!tier) continue;
+    retail[stone.id] = Math.round(stone.wholesale_aud * tier.multiplier);
   }
 
   // One consolidated line — shows exactly what ids came in, what wholesale figure each

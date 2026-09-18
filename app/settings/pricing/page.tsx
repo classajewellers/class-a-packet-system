@@ -37,8 +37,37 @@ interface ComponentRule {
   component_type: string;
   carat_min: number;
   carat_max: number | null;
+  // lab_stone/natural_stone tiers are cost-based only (migration 133) -
+  // carat_min/carat_max are vestigial for those two types. Every other
+  // component_type (metal/labour/melee) keeps using carat_min/carat_max.
+  cost_min: number | null;
+  cost_max: number | null;
   multiplier: number;
   notes: string | null;
+}
+
+// A stone can only ever fall into one tier - true for the same reason
+// calculate_price() itself requires it: overlapping ranges make pricing
+// ambiguous. A gap is allowed (calculate_price() reports no_price there,
+// which may be intentional - see the "Request a price" policy direction) so
+// this only warns, never blocks, on gaps.
+function tiersOverlap(aMin: number, aMax: number | null, bMin: number, bMax: number | null): boolean {
+  const aEnd = aMax ?? Infinity;
+  const bEnd = bMax ?? Infinity;
+  return aMin < bEnd && bMin < aEnd;
+}
+
+function findTierGaps(tiers: ComponentRule[]): string[] {
+  const sorted = [...tiers].sort((a, b) => (a.cost_min ?? 0) - (b.cost_min ?? 0));
+  const gaps: string[] = [];
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const currentMax = sorted[i].cost_max;
+    const nextMin = sorted[i + 1].cost_min;
+    if (currentMax != null && nextMin != null && currentMax < nextMin) {
+      gaps.push(`$${currentMax.toLocaleString()} – $${nextMin.toLocaleString()}`);
+    }
+  }
+  return gaps;
 }
 interface Birthstone {
   id: string;
@@ -117,9 +146,10 @@ export default function PricingMarginsPage() {
 
   // Inline editing state
   const [editingRule, setEditingRule] = useState<string | null>(null);
-  const [ruleBuf, setRuleBuf] = useState<{ multiplier: string; carat_min: string; carat_max: string }>({ multiplier: "", carat_min: "", carat_max: "" });
+  const [ruleBuf, setRuleBuf] = useState<{ multiplier: string; cost_min: string; cost_max: string }>({ multiplier: "", cost_min: "", cost_max: "" });
   const [ruleSaving, setRuleSaving] = useState(false);
   const [ruleSaved, setRuleSaved] = useState<string | null>(null);
+  const [ruleError, setRuleError] = useState<string | null>(null);
 
   const [editingBs, setEditingBs] = useState<string | null>(null);
   const [bsBuf, setBsBuf] = useState<{ stone_name: string; price_per_stone: string; fitting_fee: string }>({ stone_name: "", price_per_stone: "", fitting_fee: "" });
@@ -131,12 +161,14 @@ export default function PricingMarginsPage() {
 
   // Add forms
   const [showAddTier, setShowAddTier] = useState(false);
-  const [newTier, setNewTier] = useState({ carat_min: "", carat_max: "", multiplier: "" });
+  const [newTier, setNewTier] = useState({ cost_min: "", cost_max: "", multiplier: "" });
   const [addTierSaving, setAddTierSaving] = useState(false);
+  const [addTierError, setAddTierError] = useState<string | null>(null);
 
   const [showAddLabTier, setShowAddLabTier] = useState(false);
-  const [newLabTier, setNewLabTier] = useState({ carat_min: "", carat_max: "", multiplier: "" });
+  const [newLabTier, setNewLabTier] = useState({ cost_min: "", cost_max: "", multiplier: "" });
   const [addLabTierSaving, setAddLabTierSaving] = useState(false);
+  const [addLabTierError, setAddLabTierError] = useState<string | null>(null);
 
   const [showAddBs, setShowAddBs] = useState(false);
   const [newBs, setNewBs] = useState({ month_number: "1", stone_name: "", price_per_stone: "", fitting_fee: "0" });
@@ -222,18 +254,40 @@ export default function PricingMarginsPage() {
 
   // ── Component rule handlers ───────────────────────────────────────────────
 
-  async function saveRule(id: string) {
-    setRuleSaving(true);
+  async function saveRule(id: string, tierType?: "lab_stone" | "natural_stone") {
+    setRuleError(null);
     const update: Record<string, unknown> = { multiplier: parseFloat(ruleBuf.multiplier) };
-    if (ruleBuf.carat_min !== "") update.carat_min = parseFloat(ruleBuf.carat_min);
-    if (ruleBuf.carat_max !== "") update.carat_max = parseFloat(ruleBuf.carat_max);
-    else if ("carat_max" in ruleBuf) update.carat_max = null;
-    await fetch(`/api/pricing-hub/component-rules/${id}`, {
+    if (tierType) {
+      // Cost-based tiers: validate the new range against its siblings before
+      // sending. A blank cost_min/cost_max in the buffer means "no change to
+      // boundaries" - only check overlap when a boundary is actually changing.
+      if (ruleBuf.cost_min !== "" || ruleBuf.cost_max !== "") {
+        const current = rules.find(r => r.id === id);
+        const newMin = ruleBuf.cost_min !== "" ? parseFloat(ruleBuf.cost_min) : current?.cost_min ?? 0;
+        const newMax = ruleBuf.cost_max !== "" ? parseFloat(ruleBuf.cost_max) : current?.cost_max ?? null;
+        const siblings = (tierType === "lab_stone" ? labTiers : stoneTiers).filter(t => t.id !== id);
+        if (siblings.some(t => tiersOverlap(newMin, newMax, t.cost_min ?? 0, t.cost_max))) {
+          setRuleError("This range overlaps an existing tier.");
+          return;
+        }
+        if (ruleBuf.cost_min !== "") update.cost_min = newMin;
+        if (ruleBuf.cost_max !== "") update.cost_max = newMax;
+      }
+    }
+    // Flat rules (metal/labour/melee) only ever edit multiplier - their
+    // carat_min/carat_max are untouched here, same as before this change.
+    setRuleSaving(true);
+    const res = await fetch(`/api/pricing-hub/component-rules/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", "x-tenant-id": tid },
       body: JSON.stringify(update),
     });
     setRuleSaving(false);
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      setRuleError(json.error ?? "Failed to save");
+      return;
+    }
     setEditingRule(null);
     setRuleSaved(id);
     setTimeout(() => setRuleSaved(null), 2000);
@@ -247,40 +301,64 @@ export default function PricingMarginsPage() {
   }
 
   async function addLabTier() {
-    if (!newLabTier.carat_min || !newLabTier.multiplier) return;
+    setAddLabTierError(null);
+    if (!newLabTier.cost_min || !newLabTier.multiplier) return;
+    const newMin = parseFloat(newLabTier.cost_min);
+    const newMax = newLabTier.cost_max ? parseFloat(newLabTier.cost_max) : null;
+    if (labTiers.some(t => tiersOverlap(newMin, newMax, t.cost_min ?? 0, t.cost_max))) {
+      setAddLabTierError("This range overlaps an existing tier.");
+      return;
+    }
     setAddLabTierSaving(true);
-    await fetch("/api/pricing-hub/component-rules", {
+    const res = await fetch("/api/pricing-hub/component-rules", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-tenant-id": tid },
       body: JSON.stringify({
         component_type: "lab_stone",
-        carat_min: parseFloat(newLabTier.carat_min),
-        carat_max: newLabTier.carat_max ? parseFloat(newLabTier.carat_max) : null,
+        cost_min: newMin,
+        cost_max: newMax,
         multiplier: parseFloat(newLabTier.multiplier),
       }),
     });
     setAddLabTierSaving(false);
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      setAddLabTierError(json.error ?? "Failed to add tier");
+      return;
+    }
     setShowAddLabTier(false);
-    setNewLabTier({ carat_min: "", carat_max: "", multiplier: "" });
+    setNewLabTier({ cost_min: "", cost_max: "", multiplier: "" });
     loadEngine();
   }
 
   async function addNaturalTier() {
-    if (!newTier.carat_min || !newTier.multiplier) return;
+    setAddTierError(null);
+    if (!newTier.cost_min || !newTier.multiplier) return;
+    const newMin = parseFloat(newTier.cost_min);
+    const newMax = newTier.cost_max ? parseFloat(newTier.cost_max) : null;
+    if (stoneTiers.some(t => tiersOverlap(newMin, newMax, t.cost_min ?? 0, t.cost_max))) {
+      setAddTierError("This range overlaps an existing tier.");
+      return;
+    }
     setAddTierSaving(true);
-    await fetch("/api/pricing-hub/component-rules", {
+    const res = await fetch("/api/pricing-hub/component-rules", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-tenant-id": tid },
       body: JSON.stringify({
         component_type: "natural_stone",
-        carat_min: parseFloat(newTier.carat_min),
-        carat_max: newTier.carat_max ? parseFloat(newTier.carat_max) : null,
+        cost_min: newMin,
+        cost_max: newMax,
         multiplier: parseFloat(newTier.multiplier),
       }),
     });
     setAddTierSaving(false);
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      setAddTierError(json.error ?? "Failed to add tier");
+      return;
+    }
     setShowAddTier(false);
-    setNewTier({ carat_min: "", carat_max: "", multiplier: "" });
+    setNewTier({ cost_min: "", cost_max: "", multiplier: "" });
     loadEngine();
   }
 
@@ -368,8 +446,10 @@ export default function PricingMarginsPage() {
   // ── Derived ───────────────────────────────────────────────────────────────
 
   const flatRules  = rules.filter(r => r.component_type !== "natural_stone" && r.component_type !== "lab_stone");
-  const labTiers   = rules.filter(r => r.component_type === "lab_stone").sort((a, b) => a.carat_min - b.carat_min);
-  const stoneTiers = rules.filter(r => r.component_type === "natural_stone").sort((a, b) => a.carat_min - b.carat_min);
+  const labTiers   = rules.filter(r => r.component_type === "lab_stone").sort((a, b) => (a.cost_min ?? 0) - (b.cost_min ?? 0));
+  const stoneTiers = rules.filter(r => r.component_type === "natural_stone").sort((a, b) => (a.cost_min ?? 0) - (b.cost_min ?? 0));
+  const labTierGaps = findTierGaps(labTiers);
+  const stoneTierGaps = findTierGaps(stoneTiers);
 
   const FLAT_LABELS: Record<string, string> = {
     metal:     "Metal markup",
@@ -531,7 +611,7 @@ export default function PricingMarginsPage() {
                                 <button onClick={() => setEditingRule(null)} style={{ padding: "4px 8px", background: "transparent", color: "#6B7280", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>✕</button>
                               </div>
                             ) : (
-                              <IconBtn onClick={() => { setEditingRule(rule.id); setRuleBuf({ multiplier: String(rule.multiplier), carat_min: "", carat_max: "" }); }} icon="✎" />
+                              <IconBtn onClick={() => { setEditingRule(rule.id); setRuleBuf({ multiplier: String(rule.multiplier), cost_min: "", cost_max: "" }); }} icon="✎" />
                             )}
                           </td>
                         </tr>
@@ -547,10 +627,10 @@ export default function PricingMarginsPage() {
                   <div>
                     <h2 style={{ fontSize: 15, fontWeight: 700, color: "#1A1A2E", margin: 0 }}>Lab Stone Tiers</h2>
                     <p style={{ fontSize: 13, color: "#6B7280", marginTop: 3, marginBottom: 0 }}>
-                      Tiered markup by carat weight. Ranges are {">"}= min and {"<"} max.
+                      Tiered markup by the stone&apos;s wholesale cost. Ranges are {">"}= min and {"<"} max.
                     </p>
                   </div>
-                  <button onClick={() => setShowAddLabTier(v => !v)} style={{
+                  <button onClick={() => { setShowAddLabTier(v => !v); setAddLabTierError(null); }} style={{
                     background: showAddLabTier ? "#F3F4F6" : PRIMARY, color: showAddLabTier ? "#6B7280" : "#fff",
                     border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 13, fontWeight: 600,
                     cursor: "pointer", fontFamily: "inherit",
@@ -559,39 +639,48 @@ export default function PricingMarginsPage() {
                   </button>
                 </div>
 
+                {labTierGaps.length > 0 && (
+                  <div style={{ padding: "10px 20px", background: "#FFFBEB", borderBottom: "1px solid #FDE68A", fontSize: 12, color: "#92400E" }}>
+                    ⚠ Gap in coverage: {labTierGaps.join(", ")}. Stones in this range will get no_price, not a guessed multiplier.
+                  </div>
+                )}
+
                 {showAddLabTier && (
-                  <div style={{ padding: "14px 20px", background: "#F9FAFB", borderBottom: "1px solid #E8E8F0", display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" as const }}>
-                    <div>
-                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Min ct (incl.)</label>
-                      <input type="number" min="0" step="0.01" placeholder="0.00" value={newLabTier.carat_min}
-                        onChange={e => setNewLabTier(t => ({ ...t, carat_min: e.target.value }))}
-                        style={{ ...inp, width: 90 }} />
+                  <div style={{ padding: "14px 20px", background: "#F9FAFB", borderBottom: "1px solid #E8E8F0" }}>
+                    <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" as const }}>
+                      <div>
+                        <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Min cost $ (incl.)</label>
+                        <input type="number" min="0" step="0.01" placeholder="0.00" value={newLabTier.cost_min}
+                          onChange={e => setNewLabTier(t => ({ ...t, cost_min: e.target.value }))}
+                          style={{ ...inp, width: 100 }} />
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Max cost $ (excl.) — blank = no limit</label>
+                        <input type="number" min="0" step="0.01" placeholder="none" value={newLabTier.cost_max}
+                          onChange={e => setNewLabTier(t => ({ ...t, cost_max: e.target.value }))}
+                          style={{ ...inp, width: 100 }} />
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Multiplier</label>
+                        <input type="number" min="1" step="0.01" placeholder="10.50" value={newLabTier.multiplier}
+                          onChange={e => setNewLabTier(t => ({ ...t, multiplier: e.target.value }))}
+                          style={{ ...inp, width: 90 }} />
+                      </div>
+                      <button onClick={addLabTier} disabled={addLabTierSaving} style={{
+                        background: PRIMARY, color: "#fff", border: "none", borderRadius: 8,
+                        padding: "7px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+                      }}>
+                        {addLabTierSaving ? "Adding…" : "Add"}
+                      </button>
                     </div>
-                    <div>
-                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Max ct (excl.) — blank = no limit</label>
-                      <input type="number" min="0" step="0.01" placeholder="none" value={newLabTier.carat_max}
-                        onChange={e => setNewLabTier(t => ({ ...t, carat_max: e.target.value }))}
-                        style={{ ...inp, width: 90 }} />
-                    </div>
-                    <div>
-                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Multiplier</label>
-                      <input type="number" min="1" step="0.01" placeholder="10.50" value={newLabTier.multiplier}
-                        onChange={e => setNewLabTier(t => ({ ...t, multiplier: e.target.value }))}
-                        style={{ ...inp, width: 90 }} />
-                    </div>
-                    <button onClick={addLabTier} disabled={addLabTierSaving} style={{
-                      background: PRIMARY, color: "#fff", border: "none", borderRadius: 8,
-                      padding: "7px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
-                    }}>
-                      {addLabTierSaving ? "Adding…" : "Add"}
-                    </button>
+                    {addLabTierError && <div style={{ marginTop: 8, fontSize: 12, color: "#DC2626" }}>{addLabTierError}</div>}
                   </div>
                 )}
 
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr>
-                      <th style={th}>Carat range</th>
+                      <th style={th}>Cost range</th>
                       <th style={{ ...th, textAlign: "center" }}>Multiplier</th>
                       <th style={{ ...th, width: 80 }}></th>
                     </tr>
@@ -602,22 +691,22 @@ export default function PricingMarginsPage() {
                     )}
                     {labTiers.map(tier => {
                       const isEditing = editingRule === tier.id;
-                      const rangeLabel = tier.carat_max != null
-                        ? `${tier.carat_min}ct – ${tier.carat_max}ct`
-                        : `${tier.carat_min}ct+`;
+                      const rangeLabel = tier.cost_max != null
+                        ? `$${(tier.cost_min ?? 0).toLocaleString()} – $${tier.cost_max.toLocaleString()}`
+                        : `$${(tier.cost_min ?? 0).toLocaleString()}+`;
                       return (
                         <tr key={tier.id}>
                           <td style={td}>
                             {isEditing ? (
                               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" as const }}>
-                                <input type="number" min="0" step="0.01" placeholder="min" value={ruleBuf.carat_min}
-                                  onChange={e => setRuleBuf(b => ({ ...b, carat_min: e.target.value }))}
-                                  style={{ ...inpFocus, width: 70 }} />
+                                <input type="number" min="0" step="0.01" placeholder="min" value={ruleBuf.cost_min}
+                                  onChange={e => setRuleBuf(b => ({ ...b, cost_min: e.target.value }))}
+                                  style={{ ...inpFocus, width: 80 }} />
                                 <span style={{ color: "#9CA3AF" }}>–</span>
-                                <input type="number" min="0" step="0.01" placeholder="max" value={ruleBuf.carat_max}
-                                  onChange={e => setRuleBuf(b => ({ ...b, carat_max: e.target.value }))}
-                                  style={{ ...inpFocus, width: 70 }} />
-                                <span style={{ fontSize: 12, color: "#9CA3AF" }}>ct (blank = ∞)</span>
+                                <input type="number" min="0" step="0.01" placeholder="max" value={ruleBuf.cost_max}
+                                  onChange={e => setRuleBuf(b => ({ ...b, cost_max: e.target.value }))}
+                                  style={{ ...inpFocus, width: 80 }} />
+                                <span style={{ fontSize: 12, color: "#9CA3AF" }}>$ (blank = ∞)</span>
                               </div>
                             ) : (
                               <span style={{ fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{rangeLabel}</span>
@@ -637,12 +726,12 @@ export default function PricingMarginsPage() {
                           <td style={{ ...td, textAlign: "right" }}>
                             {isEditing ? (
                               <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
-                                <SaveBtn onClick={() => saveRule(tier.id)} saving={ruleSaving} saved={ruleSaved === tier.id} />
-                                <button onClick={() => setEditingRule(null)} style={{ padding: "4px 8px", background: "transparent", color: "#6B7280", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>✕</button>
+                                <SaveBtn onClick={() => saveRule(tier.id, "lab_stone")} saving={ruleSaving} saved={ruleSaved === tier.id} />
+                                <button onClick={() => { setEditingRule(null); setRuleError(null); }} style={{ padding: "4px 8px", background: "transparent", color: "#6B7280", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>✕</button>
                               </div>
                             ) : (
                               <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                                <IconBtn onClick={() => { setEditingRule(tier.id); setRuleBuf({ multiplier: String(tier.multiplier), carat_min: String(tier.carat_min), carat_max: tier.carat_max != null ? String(tier.carat_max) : "" }); }} icon="✎" />
+                                <IconBtn onClick={() => { setEditingRule(tier.id); setRuleError(null); setRuleBuf({ multiplier: String(tier.multiplier), cost_min: String(tier.cost_min ?? 0), cost_max: tier.cost_max != null ? String(tier.cost_max) : "" }); }} icon="✎" />
                                 <IconBtn onClick={() => deleteRule(tier.id)} icon="✕" danger />
                               </div>
                             )}
@@ -650,6 +739,9 @@ export default function PricingMarginsPage() {
                         </tr>
                       );
                     })}
+                    {editingRule && labTiers.some(t => t.id === editingRule) && ruleError && (
+                      <tr><td colSpan={3} style={{ ...td, color: "#DC2626", fontSize: 12 }}>{ruleError}</td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -660,10 +752,10 @@ export default function PricingMarginsPage() {
                   <div>
                     <h2 style={{ fontSize: 15, fontWeight: 700, color: "#1A1A2E", margin: 0 }}>Natural Stone Tiers</h2>
                     <p style={{ fontSize: 13, color: "#6B7280", marginTop: 3, marginBottom: 0 }}>
-                      Tiered markup by carat weight. Ranges are {">"}= min and {"<"} max.
+                      Tiered markup by the stone&apos;s wholesale cost. Ranges are {">"}= min and {"<"} max.
                     </p>
                   </div>
-                  <button onClick={() => setShowAddTier(v => !v)} style={{
+                  <button onClick={() => { setShowAddTier(v => !v); setAddTierError(null); }} style={{
                     background: showAddTier ? "#F3F4F6" : PRIMARY, color: showAddTier ? "#6B7280" : "#fff",
                     border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 13, fontWeight: 600,
                     cursor: "pointer", fontFamily: "inherit",
@@ -672,39 +764,48 @@ export default function PricingMarginsPage() {
                   </button>
                 </div>
 
+                {stoneTierGaps.length > 0 && (
+                  <div style={{ padding: "10px 20px", background: "#FFFBEB", borderBottom: "1px solid #FDE68A", fontSize: 12, color: "#92400E" }}>
+                    ⚠ Gap in coverage: {stoneTierGaps.join(", ")}. Stones in this range will get no_price, not a guessed multiplier.
+                  </div>
+                )}
+
                 {showAddTier && (
-                  <div style={{ padding: "14px 20px", background: "#F9FAFB", borderBottom: "1px solid #E8E8F0", display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" as const }}>
-                    <div>
-                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Min ct (incl.)</label>
-                      <input type="number" min="0" step="0.01" placeholder="0.00" value={newTier.carat_min}
-                        onChange={e => setNewTier(t => ({ ...t, carat_min: e.target.value }))}
-                        style={{ ...inp, width: 90 }} />
+                  <div style={{ padding: "14px 20px", background: "#F9FAFB", borderBottom: "1px solid #E8E8F0" }}>
+                    <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" as const }}>
+                      <div>
+                        <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Min cost $ (incl.)</label>
+                        <input type="number" min="0" step="0.01" placeholder="0.00" value={newTier.cost_min}
+                          onChange={e => setNewTier(t => ({ ...t, cost_min: e.target.value }))}
+                          style={{ ...inp, width: 100 }} />
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Max cost $ (excl.) — blank = no limit</label>
+                        <input type="number" min="0" step="0.01" placeholder="none" value={newTier.cost_max}
+                          onChange={e => setNewTier(t => ({ ...t, cost_max: e.target.value }))}
+                          style={{ ...inp, width: 100 }} />
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Multiplier</label>
+                        <input type="number" min="1" step="0.01" placeholder="2.50" value={newTier.multiplier}
+                          onChange={e => setNewTier(t => ({ ...t, multiplier: e.target.value }))}
+                          style={{ ...inp, width: 90 }} />
+                      </div>
+                      <button onClick={addNaturalTier} disabled={addTierSaving} style={{
+                        background: PRIMARY, color: "#fff", border: "none", borderRadius: 8,
+                        padding: "7px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+                      }}>
+                        {addTierSaving ? "Adding…" : "Add"}
+                      </button>
                     </div>
-                    <div>
-                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Max ct (excl.) — blank = no limit</label>
-                      <input type="number" min="0" step="0.01" placeholder="none" value={newTier.carat_max}
-                        onChange={e => setNewTier(t => ({ ...t, carat_max: e.target.value }))}
-                        style={{ ...inp, width: 90 }} />
-                    </div>
-                    <div>
-                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Multiplier</label>
-                      <input type="number" min="1" step="0.01" placeholder="2.50" value={newTier.multiplier}
-                        onChange={e => setNewTier(t => ({ ...t, multiplier: e.target.value }))}
-                        style={{ ...inp, width: 90 }} />
-                    </div>
-                    <button onClick={addNaturalTier} disabled={addTierSaving} style={{
-                      background: PRIMARY, color: "#fff", border: "none", borderRadius: 8,
-                      padding: "7px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
-                    }}>
-                      {addTierSaving ? "Adding…" : "Add"}
-                    </button>
+                    {addTierError && <div style={{ marginTop: 8, fontSize: 12, color: "#DC2626" }}>{addTierError}</div>}
                   </div>
                 )}
 
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr>
-                      <th style={th}>Carat range</th>
+                      <th style={th}>Cost range</th>
                       <th style={{ ...th, textAlign: "center" }}>Multiplier</th>
                       <th style={{ ...th, width: 80 }}></th>
                     </tr>
@@ -715,22 +816,22 @@ export default function PricingMarginsPage() {
                     )}
                     {stoneTiers.map(tier => {
                       const isEditing = editingRule === tier.id;
-                      const rangeLabel = tier.carat_max != null
-                        ? `${tier.carat_min}ct – ${tier.carat_max}ct`
-                        : `${tier.carat_min}ct+`;
+                      const rangeLabel = tier.cost_max != null
+                        ? `$${(tier.cost_min ?? 0).toLocaleString()} – $${tier.cost_max.toLocaleString()}`
+                        : `$${(tier.cost_min ?? 0).toLocaleString()}+`;
                       return (
                         <tr key={tier.id}>
                           <td style={td}>
                             {isEditing ? (
                               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" as const }}>
-                                <input type="number" min="0" step="0.01" placeholder="min" value={ruleBuf.carat_min}
-                                  onChange={e => setRuleBuf(b => ({ ...b, carat_min: e.target.value }))}
-                                  style={{ ...inpFocus, width: 70 }} />
+                                <input type="number" min="0" step="0.01" placeholder="min" value={ruleBuf.cost_min}
+                                  onChange={e => setRuleBuf(b => ({ ...b, cost_min: e.target.value }))}
+                                  style={{ ...inpFocus, width: 80 }} />
                                 <span style={{ color: "#9CA3AF" }}>–</span>
-                                <input type="number" min="0" step="0.01" placeholder="max" value={ruleBuf.carat_max}
-                                  onChange={e => setRuleBuf(b => ({ ...b, carat_max: e.target.value }))}
-                                  style={{ ...inpFocus, width: 70 }} />
-                                <span style={{ fontSize: 12, color: "#9CA3AF" }}>ct (blank = ∞)</span>
+                                <input type="number" min="0" step="0.01" placeholder="max" value={ruleBuf.cost_max}
+                                  onChange={e => setRuleBuf(b => ({ ...b, cost_max: e.target.value }))}
+                                  style={{ ...inpFocus, width: 80 }} />
+                                <span style={{ fontSize: 12, color: "#9CA3AF" }}>$ (blank = ∞)</span>
                               </div>
                             ) : (
                               <span style={{ fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{rangeLabel}</span>
@@ -750,12 +851,12 @@ export default function PricingMarginsPage() {
                           <td style={{ ...td, textAlign: "right" }}>
                             {isEditing ? (
                               <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
-                                <SaveBtn onClick={() => saveRule(tier.id)} saving={ruleSaving} saved={ruleSaved === tier.id} />
-                                <button onClick={() => setEditingRule(null)} style={{ padding: "4px 8px", background: "transparent", color: "#6B7280", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>✕</button>
+                                <SaveBtn onClick={() => saveRule(tier.id, "natural_stone")} saving={ruleSaving} saved={ruleSaved === tier.id} />
+                                <button onClick={() => { setEditingRule(null); setRuleError(null); }} style={{ padding: "4px 8px", background: "transparent", color: "#6B7280", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>✕</button>
                               </div>
                             ) : (
                               <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                                <IconBtn onClick={() => { setEditingRule(tier.id); setRuleBuf({ multiplier: String(tier.multiplier), carat_min: String(tier.carat_min), carat_max: tier.carat_max != null ? String(tier.carat_max) : "" }); }} icon="✎" />
+                                <IconBtn onClick={() => { setEditingRule(tier.id); setRuleError(null); setRuleBuf({ multiplier: String(tier.multiplier), cost_min: String(tier.cost_min ?? 0), cost_max: tier.cost_max != null ? String(tier.cost_max) : "" }); }} icon="✎" />
                                 <IconBtn onClick={() => deleteRule(tier.id)} icon="✕" danger />
                               </div>
                             )}
@@ -763,6 +864,9 @@ export default function PricingMarginsPage() {
                         </tr>
                       );
                     })}
+                    {editingRule && stoneTiers.some(t => t.id === editingRule) && ruleError && (
+                      <tr><td colSpan={3} style={{ ...td, color: "#DC2626", fontSize: 12 }}>{ruleError}</td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>
