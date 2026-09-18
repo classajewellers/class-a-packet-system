@@ -91,8 +91,6 @@ interface BuilderItem {
   // Melee
   meleeRows: MeleeRow[];
   // Add-ons
-  smallSettings: boolean;
-  smallSettingsQty: string;
   handEngraving: boolean;
   handEngravingAmount: string;
   laserEngraving: boolean;
@@ -126,7 +124,6 @@ function newItem(index = 0): BuilderItem {
     includeMainStone: false,
     stoneOptions: [newStoneOption(0)],
     meleeRows: [],
-    smallSettings: false, smallSettingsQty: "1",
     handEngraving: false, handEngravingAmount: "150",
     laserEngraving: false, laserEngravingAmount: "80",
     components: [],
@@ -230,6 +227,9 @@ interface ItemPricing {
   // Stone option prices (index matches stoneOptions array)
   stoneOptionPrices: number[];
   baseWithoutMainStone: number;
+  // Small stone (melee) settings - auto-derived from meleeRows qty, not manually toggled
+  totalMeleeQty: number;
+  smallSettingsCost: number;
 }
 
 function computeItemPricing(
@@ -271,10 +271,11 @@ function computeItemPricing(
     if (fc.key === "labour") { addonsCost += Number(fc.amount); costMap.labour = Number(fc.amount); }
   }
 
-  if (item.smallSettings) {
-    const sc = (parseInt(item.smallSettingsQty) || 0) * 30;
-    addonsCost += sc; costMap.smallSettings = sc;
-  }
+  // Small stone settings are auto-derived from melee row quantities (not a
+  // manual toggle) - one setting per melee stone, same $30 rate as before.
+  const totalMeleeQty = item.meleeRows.reduce((s, r) => s + (parseInt(r.qty) || 0), 0);
+  const smallSettingsCost = totalMeleeQty * 30;
+  if (smallSettingsCost > 0) { addonsCost += smallSettingsCost; costMap.smallSettings = smallSettingsCost; }
 
   const componentsCost = item.components.reduce((s, c) => s + (parseFloat(c.cost) || 0), 0);
   addonsCost += componentsCost;
@@ -346,7 +347,7 @@ function computeItemPricing(
     metalCost, mainStoneCost, meleeCost, mainStoneSettingCost, mainStoneSettingRate,
     addonsCost, totalCost, rawPrice, quotedPrice, finalPrice, suggestedRetail, breakdown,
     mult, mColour, costMap, activeMultiplier, handEngravingCost, laserEngravingCost,
-    stoneOptionPrices, baseWithoutMainStone,
+    stoneOptionPrices, baseWithoutMainStone, totalMeleeQty, smallSettingsCost,
   };
 }
 
@@ -718,7 +719,9 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
           <div style={sectionStyle}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", ...headingStyle, marginBottom: 0, paddingBottom: 0, borderBottom: "none" }}>
               <span>Main Stone</span>
-              <button onClick={() => { setActiveOptIdx(0); onShowNivoda(item.id, item.stoneOptions[0]?.id ?? ""); }} style={{ padding: "5px 12px", borderRadius: 7, border: "1px solid #635BFF", background: "#EEF2FF", color: "#635BFF", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Browse Stones</button>
+              {item.includeMainStone && (
+                <button onClick={() => { setActiveOptIdx(0); onShowNivoda(item.id, item.stoneOptions[0]?.id ?? ""); }} style={{ padding: "5px 12px", borderRadius: 7, border: "1px solid #635BFF", background: "#EEF2FF", color: "#635BFF", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Browse Stones</button>
+              )}
             </div>
             <div style={{ borderBottom: "1px solid #E8E8F0", marginBottom: 14, marginTop: 8 }} />
             <div style={{ marginBottom: item.includeMainStone ? 12 : 0 }}>
@@ -923,10 +926,12 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                   <span style={{ fontSize: 13, color: "#6B7280" }}>{item.stoneOptions[0]?.stones.length ?? 0} × ${Number(pricing.mainStoneSettingRate).toFixed(2)} = ${Number(pricing.mainStoneSettingCost).toFixed(2)}</span>
                 </div>
               )}
-              <div>
-                <Toggle on={item.smallSettings} onChange={v => set("smallSettings", v)}>Small Stone Settings</Toggle>
-                {item.smallSettings && <div style={{ marginTop: 8, paddingLeft: 50, display: "flex", alignItems: "center", gap: 8 }}><label style={{ ...labelStyle, marginBottom: 0 }}>Qty</label><input style={{ ...inputStyle, width: 80 }} type="number" min="1" value={item.smallSettingsQty} onChange={e => set("smallSettingsQty", e.target.value)} />{isManager && <span style={{ fontSize: 12, color: "#6B7280" }}>= ${Number((parseInt(item.smallSettingsQty) || 0) * 30).toFixed(2)}</span>}</div>}
-              </div>
+              {pricing.totalMeleeQty > 0 && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "#F9FAFB", borderRadius: 8, border: "1px solid #E8E8F0" }}>
+                  <span style={{ fontSize: 14, color: "#374151" }}>Small Stone Settings (auto)</span>
+                  {isManager && <span style={{ fontSize: 13, color: "#6B7280" }}>{pricing.totalMeleeQty} × $30.00 = ${Number(pricing.smallSettingsCost).toFixed(2)}</span>}
+                </div>
+              )}
 
               {/* Freeform components */}
               {item.components.map((comp, ci) => (
@@ -1029,7 +1034,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                   return <div key={r.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Melee {idx + 1}: {r.qty || 1}× {desc || "—"}</span><span style={{ fontWeight: 500 }}>${Number(t).toFixed(2)}</span></div>;
                 })}
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Labour</span><span style={{ fontWeight: 500 }}>${Number(pricing.costMap.labour ?? 0).toFixed(2)}</span></div>
-                {item.smallSettings && (parseInt(item.smallSettingsQty) || 0) > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Melee Settings: {item.smallSettingsQty} × $30.00</span><span style={{ fontWeight: 500 }}>${Number(pricing.costMap.smallSettings ?? 0).toFixed(2)}</span></div>}
+                {pricing.totalMeleeQty > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Melee Settings: {pricing.totalMeleeQty} × $30.00</span><span style={{ fontWeight: 500 }}>${Number(pricing.costMap.smallSettings ?? 0).toFixed(2)}</span></div>}
                 {item.components.filter(c => c.name).map(c => (
                   <div key={c.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>{c.name}</span><span style={{ fontWeight: 500 }}>${Number(parseFloat(c.cost) || 0).toFixed(2)}</span></div>
                 ))}
@@ -1396,7 +1401,7 @@ function QuoteBuilderPageInner() {
           })) : null,
           addons: {
             labour: fixedCosts.find(fc => fc.key === "labour")?.amount ?? 300,
-            small_settings_qty: item.smallSettings ? (parseInt(item.smallSettingsQty) || 0) : 0,
+            small_settings_qty: p.totalMeleeQty,
             small_settings_cost: p.costMap.smallSettings ?? 0,
             hand_engraving: item.handEngraving,
             hand_engraving_cost: p.handEngravingCost,
