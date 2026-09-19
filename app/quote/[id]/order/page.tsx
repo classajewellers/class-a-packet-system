@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import AddressAutocomplete from "@/components/AddressAutocomplete";
 
 interface StoneLink {
   video: string | null;
@@ -232,7 +233,18 @@ export default function PlaceOrderPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div>
             <label style={label}>Street Address</label>
-            <input style={input} type="text" value={street} onChange={e => setStreet(e.target.value)} placeholder="123 Example Street" />
+            <AddressAutocomplete
+              value={street}
+              onChange={setStreet}
+              onSelect={({ street: s, suburb: sub, state: st, postcode: pc }) => {
+                if (s) setStreet(s);
+                // Always set suburb/state/postcode even if empty so autocomplete clears stale values
+                setSuburb(sub);
+                setState(st);
+                setPostcode(pc);
+              }}
+              placeholder="123 Example Street"
+            />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10 }}>
             <div>
