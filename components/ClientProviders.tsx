@@ -14,6 +14,13 @@ export function useBillingStatus() { return useContext(BillingContext); }
 
 const NO_SHELL_PAGES = new Set(["/login", "/onboarding", "/billing", "/set-password"]);
 
+// /quote/[id]/order is the customer-facing "Place Your Order" page - same
+// treatment as /claim/ below (isPublicPage): unauthenticated, no staff shell,
+// no redirect-to-login. Matches the pattern in middleware.ts exactly (that's
+// the layer that actually gates the request; this only controls what a
+// signed-in staff member sees if they open the same link themselves).
+const PUBLIC_PAGE_PATTERN = /^\/quote\/[^/]+\/order$/;
+
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, hydrated } = useUser();
   const router = useRouter();
@@ -22,7 +29,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const isOnboarding  = pathname === "/onboarding";
   const isBillingPage = pathname === "/billing";
   const isSetPassword = pathname === "/set-password";
-  const isPublicPage  = pathname.startsWith("/claim/");
+  const isPublicPage  = pathname.startsWith("/claim/") || PUBLIC_PAGE_PATTERN.test(pathname);
   const isNoShellPage = NO_SHELL_PAGES.has(pathname);
   const [aiOpen, setAiOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);

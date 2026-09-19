@@ -16,6 +16,15 @@ const PUBLIC_ROUTES = new Set([
 // /claim/<reference> is the customer-facing packet claim page.
 const PUBLIC_PREFIXES = ["/claim/"];
 
+// Pattern-based public PAGE paths - for routes with a dynamic id segment
+// where a plain prefix would over-match. /quote/[id]/order is the
+// customer-facing "Place Your Order" page: unauthenticated by design, same
+// "possession of the link (the quote's own UUID) is the credential" model
+// as /claim/. Deliberately scoped to the exact /order sub-path only -
+// /quote and /quote/[id] (the staff quote builder/detail views) must stay
+// gated, so this can't be a plain "/quote/" prefix.
+const PUBLIC_PAGE_PATTERNS = [/^\/quote\/[^/]+\/order$/];
+
 // ── API auth allowlist (Fix 1: middleware session guard) ─────────────────────
 // These /api/* paths are the ONLY ones that may be reached without a Supabase
 // session. Everything else under /api/* requires a verified session + tenant.
@@ -63,6 +72,20 @@ const API_SELF_AUTH_PREFIXES = ["/api/rfid/bridge/", "/api/rfid/lookup/"];
 // endpoint: /api/public/leads/<public_lead_key> — the key in the path is a
 // low-privilege capability token (create-a-lead only), validated by the route.
 const API_PUBLIC_PREFIXES = ["/api/public/"];
+
+// Pattern-based public API routes - the actual data endpoints behind the
+// customer-facing pages above. Both resolve their tenant from the quote's
+// own row (never a trusted x-tenant-id header) when no session is present,
+// same "UUID in the path is the credential" model as /claim/ and the
+// /api/public/ prefix. GET /api/quote/[id]/order loads the order page's
+// data and POST submits it; GET/POST /api/quotes/[id]/pdf renders a
+// customer's own quote PDF (e.g. from an emailed link) - this one was
+// already coded to work unauthenticated but was never actually reachable
+// without a session, same gap as the order route, just never noticed.
+const API_PUBLIC_PATTERNS = [
+  /^\/api\/quote\/[^/]+\/order$/,
+  /^\/api\/quotes\/[^/]+\/pdf$/,
+];
 
 // Auth routes: 5 requests per 15 minutes per IP
 const AUTH_RATE_LIMIT_ROUTES = new Set([
@@ -276,6 +299,10 @@ export async function middleware(request: NextRequest) {
     if (API_PUBLIC_ROUTES.has(pathname)) {
       return NextResponse.next();
     }
+    // Pattern-based public API routes (customer order page + quote PDF).
+    if (API_PUBLIC_PATTERNS.some((p) => p.test(pathname))) {
+      return NextResponse.next();
+    }
     // Operator admin API — gated on the operator cookie (a separate auth
     // domain, not a Supabase tenant session). This closes the fully-open hole;
     // hardening the operator cookie itself is tracked separately (C4).
@@ -294,7 +321,8 @@ export async function middleware(request: NextRequest) {
   // 3. Completely public — return immediately, no Supabase client created
   if (
     PUBLIC_ROUTES.has(pathname) ||
-    PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))
+    PUBLIC_PREFIXES.some((p) => pathname.startsWith(p)) ||
+    PUBLIC_PAGE_PATTERNS.some((p) => p.test(pathname))
   ) {
     return NextResponse.next();
   }
