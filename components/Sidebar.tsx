@@ -53,6 +53,15 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
   const [settingsOpen, setSettingsOpen]   = useState(
     pathname.startsWith("/settings") || pathname.startsWith("/pricing") || pathname.startsWith("/admin/users") || pathname.startsWith("/workshop/settings") || pathname.startsWith("/quotes/settings") || pathname.startsWith("/inventory/settings")
   );
+  // The four pricing-adjacent settings pages (Pricing, Pricing Margins, Melee
+  // Pricing, Charm Builder) are real, separate, actively-used features - not
+  // duplicates - but having them as four flat top-level entries under
+  // Settings was the actual source of "too many confusing tabs". Nested
+  // under one "Pricing" group instead; nothing about the pages themselves
+  // changed, only where their links live.
+  const [pricingGroupOpen, setPricingGroupOpen] = useState(
+    pathname.startsWith("/pricing") || pathname.startsWith("/settings/pricing") || pathname.startsWith("/settings/melee")
+  );
 
   // Auto-expand the relevant section when navigating directly to a sub-route
   useEffect(() => {
@@ -140,6 +149,56 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
           background: active ? ACTIVE_BG : "transparent",
           color: active ? ACTIVE_COLOR : DEFAULT_COLOR,
           fontWeight: active ? 500 : 400, fontSize: 13,
+          transition: "background .15s, color .15s",
+        }}
+        onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = ACTIVE_BG; (e.currentTarget as HTMLAnchorElement).style.color = ACTIVE_COLOR; } }}
+        onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = "transparent"; (e.currentTarget as HTMLAnchorElement).style.color = DEFAULT_COLOR; } }}
+      >
+        {label}
+      </Link>
+    );
+  }
+
+  // Nested one level deeper than SubLink (extra left padding) - used for a
+  // sub-group's expand/collapse row, e.g. "Pricing" nested under "Settings".
+  function SubExpandLink({
+    label, expanded, onClick,
+  }: { label: string; expanded: boolean; onClick: () => void }) {
+    return (
+      <div
+        role="button" tabIndex={0}
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "8px 16px 8px 46px", borderRadius: 8, cursor: "pointer",
+          background: expanded ? ACTIVE_BG : "transparent",
+          color: expanded ? ACTIVE_COLOR : DEFAULT_COLOR,
+          fontWeight: expanded ? 500 : 400, fontSize: 13,
+          transition: "background .15s, color .15s",
+        }}
+        onClick={onClick}
+        onMouseEnter={e => { if (!expanded) { (e.currentTarget as HTMLDivElement).style.background = ACTIVE_BG; (e.currentTarget as HTMLDivElement).style.color = ACTIVE_COLOR; } }}
+        onMouseLeave={e => { if (!expanded) { (e.currentTarget as HTMLDivElement).style.background = "transparent"; (e.currentTarget as HTMLDivElement).style.color = DEFAULT_COLOR; } }}
+        onKeyDown={e => { if (e.key === "Enter") onClick(); }}
+      >
+        <span>{label}</span>
+        <ChevronDown size={12} strokeWidth={2} style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform .2s", opacity: 0.6 }} />
+      </div>
+    );
+  }
+
+  // A SubLink nested one level deeper still (under a SubExpandLink group).
+  function SubSubLink({ href, label }: { href: string; label: string }) {
+    const active = pathname === href || pathname.startsWith(href + "/");
+    return (
+      <Link
+        href={href}
+        onClick={onClose}
+        style={{
+          display: "flex", alignItems: "center",
+          padding: "7px 16px 7px 66px", borderRadius: 8, textDecoration: "none",
+          background: active ? ACTIVE_BG : "transparent",
+          color: active ? ACTIVE_COLOR : DEFAULT_COLOR,
+          fontWeight: active ? 500 : 400, fontSize: 12.5,
           transition: "background .15s, color .15s",
         }}
         onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = ACTIVE_BG; (e.currentTarget as HTMLAnchorElement).style.color = ACTIVE_COLOR; } }}
@@ -324,10 +383,22 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
               {settingsOpen && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
                   {can("settings") && isManager && <SubLink href="/settings"           label="Integrations" />}
-                  {can("pricing")  && <SubLink href="/pricing"                      label="Pricing" />}
-                  {can("pricing")  && <SubLink href="/settings/pricing"           label="Pricing Margins" />}
-                  {can("pricing")  && <SubLink href="/settings/melee"             label="Melee Pricing" />}
-                  {can("pricing")  && <SubLink href="/pricing/charm-builder"      label="Charm Builder" />}
+                  {can("pricing") && (
+                    <div>
+                      <SubExpandLink
+                        label="Pricing" expanded={pricingGroupOpen}
+                        onClick={() => setPricingGroupOpen(v => !v)}
+                      />
+                      {pricingGroupOpen && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                          <SubSubLink href="/pricing"                 label="Rates & Lookups" />
+                          <SubSubLink href="/settings/pricing"        label="Pricing Margins" />
+                          <SubSubLink href="/settings/melee"          label="Melee Pricing" />
+                          <SubSubLink href="/pricing/charm-builder"   label="Charm Builder" />
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {can("settings") && <SubLink href="/settings/users"     label="Users" />}
                   {can("settings") && <SubLink href="/settings/staff"     label="Staff" />}
                   {can("settings") && <SubLink href="/settings/vip-tiers" label="VIP Tiers" />}
