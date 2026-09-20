@@ -79,16 +79,13 @@ export default function AIAssistant({ open, onClose }: Props) {
       />
 
       {/* Panel */}
-      <div className="fixed right-0 top-0 h-screen w-full max-w-sm z-50 bg-white shadow-2xl border-l border-gray-200 flex flex-col">
+      <div className="fixed right-0 top-0 h-screen w-full max-w-sm z-50 shadow-2xl flex flex-col" style={{ background: "var(--vault-canvas)", borderLeft: "1px solid var(--vault-border)" }}>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 bg-[#1B1F2E] text-white flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">🤖</span>
-            <div>
-              <p className="text-sm font-bold">Class A Assistant</p>
-              <p className="text-xs text-white/60">Ask about SOPs & processes</p>
-            </div>
+        <div className="flex items-center justify-between px-4 py-3 flex-shrink-0" style={{ background: "var(--vault-graphite)", color: "#fff" }}>
+          <div>
+            <p className="text-sm font-semibold">Vault AI Assistant</p>
+            <p className="text-xs" style={{ color: "var(--vault-graphite-text)" }}>Ask about SOPs & processes</p>
           </div>
           <div className="flex items-center gap-2">
             {messages.length > 0 && (
@@ -114,7 +111,6 @@ export default function AIAssistant({ open, onClose }: Props) {
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
           {messages.length === 0 && (
             <div className="text-center py-10">
-              <p className="text-4xl mb-3">💎</p>
               <p className="text-sm font-semibold text-gray-700">How can I help?</p>
               <p className="text-xs text-gray-400 mt-1">Ask about repairs, custom orders,<br />workshop stages, or store processes.</p>
               <div className="mt-4 space-y-2">
@@ -140,9 +136,10 @@ export default function AIAssistant({ open, onClose }: Props) {
               <div
                 className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
                   msg.role === "user"
-                    ? "bg-[#635BFF] text-white rounded-br-sm"
+                    ? "text-white rounded-br-sm"
                     : "bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm"
                 }`}
+                style={msg.role === "user" ? { background: "var(--vault-text)" } : undefined}
               >
                 {msg.role === "user" ? (
                   msg.content.split("\n").map((line, j) => (
@@ -199,13 +196,14 @@ export default function AIAssistant({ open, onClose }: Props) {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Ask a question… (Enter to send)"
-              className="flex-1 resize-none rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-[#635BFF] focus:bg-white transition-colors max-h-32 overflow-y-auto"
+              className="flex-1 resize-none rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-[var(--vault-violet)] focus:bg-white transition-colors max-h-32 overflow-y-auto"
               style={{ minHeight: "42px" }}
             />
             <button
               onClick={sendMessage}
               disabled={!input.trim() || loading}
-              className="flex-shrink-0 w-10 h-10 rounded-xl bg-[#635BFF] hover:bg-[#4F46E5] text-white flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex-shrink-0 w-10 h-10 rounded-xl text-white flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ background: "var(--vault-text)" }}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
