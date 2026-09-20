@@ -74,7 +74,7 @@ function startOfYearISO() {
   return `${new Date().getFullYear()}-01-01`;
 }
 
-const COLORS = ["#635BFF", "#06B6D4", "#F59E0B", "#10B981", "#EF4444", "#8B5CF6"];
+const COLORS = ["var(--vault-text)", "#06B6D4", "#F59E0B", "var(--vault-status-success)", "var(--vault-status-error)", "#8B5CF6"];
 
 const PACKET_TYPE_LABELS: Record<string, string> = {
   repair: "Repair",
@@ -108,34 +108,34 @@ function KpiCard({
   return (
     <div
       style={{
-        background: "#fff",
-        border: "1px solid #E8E8F0",
-        borderLeft: "3px solid #635BFF",
+        background: "var(--vault-canvas)",
+        border: "1px solid var(--vault-border)",
+        borderLeft: "3px solid var(--vault-text)",
         borderRadius: 12,
         padding: 20,
         flex: 1,
         minWidth: 0,
       }}
     >
-      <div style={{ fontSize: 11, fontWeight: 500, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+      <div style={{ fontSize: 11, fontWeight: 500, color: "var(--vault-text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
         {label}
       </div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: "#1A1A2E", lineHeight: 1 }}>{value}</div>
+      <div style={{ fontSize: 26, fontWeight: 700, color: "var(--vault-text)", lineHeight: 1 }}>{value}</div>
       {delta != null && (
-        <div style={{ marginTop: 6, fontSize: 12, color: delta >= 0 ? "#10B981" : "#EF4444", display: "flex", alignItems: "center", gap: 2 }}>
+        <div style={{ marginTop: 6, fontSize: 12, color: delta >= 0 ? "var(--vault-status-success)" : "var(--vault-status-error)", display: "flex", alignItems: "center", gap: 2 }}>
           <span>{delta >= 0 ? "▲" : "▼"}</span>
           <span>{Number(Math.abs(delta)).toFixed(1)}% vs prior period</span>
         </div>
       )}
-      {sub && <div style={{ marginTop: 4, fontSize: 12, color: "#9CA3AF" }}>{sub}</div>}
+      {sub && <div style={{ marginTop: 4, fontSize: 12, color: "var(--vault-text-muted)" }}>{sub}</div>}
     </div>
   );
 }
 
 function ChartCard({ title, children, height = 240 }: { title: string; children: ReactNode; height?: number }) {
   return (
-    <div style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, padding: 20 }}>
-      <div style={{ fontSize: 15, fontWeight: 600, color: "#1A1A2E", marginBottom: 16 }}>{title}</div>
+    <div style={{ background: "var(--vault-canvas)", border: "1px solid var(--vault-border)", borderRadius: 12, padding: 20 }}>
+      <div style={{ fontSize: 15, fontWeight: 600, color: "var(--vault-text)", marginBottom: 16 }}>{title}</div>
       <ResponsiveContainer width="100%" height={height}>
         {children as React.ReactElement}
       </ResponsiveContainer>
@@ -157,20 +157,20 @@ function SectionTable({
   renderCell?: (val: string | number | null | undefined, colIdx: number, rowIdx: number) => ReactNode;
 }) {
   return (
-    <div style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: "1px solid #E8E8F0" }}>
-        <span style={{ fontSize: 15, fontWeight: 600, color: "#1A1A2E" }}>{title}</span>
+    <div style={{ background: "var(--vault-canvas)", border: "1px solid var(--vault-border)", borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: "1px solid var(--vault-border)" }}>
+        <span style={{ fontSize: 15, fontWeight: 600, color: "var(--vault-text)" }}>{title}</span>
         {onExport && (
           <button
             onClick={onExport}
             style={{
               padding: "6px 14px",
-              background: "#F9FAFB",
-              border: "1px solid #E8E8F0",
+              background: "var(--vault-surface)",
+              border: "1px solid var(--vault-border)",
               borderRadius: 8,
               fontSize: 12,
               fontWeight: 500,
-              color: "#6B7280",
+              color: "var(--vault-text-secondary)",
               cursor: "pointer",
             }}
           >
@@ -179,7 +179,7 @@ function SectionTable({
         )}
       </div>
       {rows.length === 0 ? (
-        <div style={{ padding: "32px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>No data</div>
+        <div style={{ padding: "32px 0", textAlign: "center", color: "var(--vault-text-muted)", fontSize: 13 }}>No data</div>
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -192,12 +192,12 @@ function SectionTable({
                       padding: "10px 16px",
                       fontSize: 12,
                       fontWeight: 500,
-                      color: "#6B7280",
+                      color: "var(--vault-text-secondary)",
                       textTransform: "uppercase",
                       letterSpacing: "0.05em",
-                      background: "#F9FAFB",
+                      background: "var(--vault-surface)",
                       textAlign: "left",
-                      borderBottom: "1px solid #E8E8F0",
+                      borderBottom: "1px solid var(--vault-border)",
                       whiteSpace: "nowrap",
                     }}
                   >
@@ -210,12 +210,12 @@ function SectionTable({
               {rows.map((row, ri) => (
                 <tr
                   key={ri}
-                  style={{ background: ri % 2 === 0 ? "#fff" : "#F9FAFB" }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = "#EEF2FF"; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = ri % 2 === 0 ? "#fff" : "#F9FAFB"; }}
+                  style={{ background: ri % 2 === 0 ? "#fff" : "var(--vault-surface)" }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = "var(--vault-surface-selected)"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = ri % 2 === 0 ? "#fff" : "var(--vault-surface)"; }}
                 >
                   {row.map((cell, ci) => (
-                    <td key={ci} style={{ padding: "11px 16px", fontSize: 14, color: "#1A1A2E", borderBottom: "1px solid #E8E8F0" }}>
+                    <td key={ci} style={{ padding: "11px 16px", fontSize: 14, color: "var(--vault-text)", borderBottom: "1px solid var(--vault-border)" }}>
                       {renderCell ? renderCell(cell, ci, ri) : String(cell ?? "—")}
                     </td>
                   ))}
@@ -234,8 +234,8 @@ function LoadingState() {
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 64 }}>
       <svg style={{ width: 32, height: 32, animation: "spin 1s linear infinite" }} fill="none" viewBox="0 0 24 24">
         <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-        <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="#635BFF" strokeWidth="4" />
-        <path style={{ opacity: 0.75 }} fill="#635BFF" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="var(--vault-text)" strokeWidth="4" />
+        <path style={{ opacity: 0.75 }} fill="var(--vault-text)" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
       </svg>
     </div>
   );
@@ -243,7 +243,7 @@ function LoadingState() {
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div style={{ padding: 64, textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>{message}</div>
+    <div style={{ padding: 64, textAlign: "center", color: "var(--vault-text-muted)", fontSize: 14 }}>{message}</div>
   );
 }
 
@@ -342,11 +342,11 @@ class SectionErrorBoundary extends Component<
     if (this.state.error) {
       return (
         <div style={{ padding: 40, textAlign: "center", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12 }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: "#DC2626", marginBottom: 8 }}>Section failed to render</div>
-          <div style={{ fontSize: 12, color: "#DC2626", marginBottom: 16, fontFamily: "monospace" }}>{String(this.state.error)}</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--vault-status-error)", marginBottom: 8 }}>Section failed to render</div>
+          <div style={{ fontSize: 12, color: "var(--vault-status-error)", marginBottom: 16, fontFamily: "monospace" }}>{String(this.state.error)}</div>
           <button
             onClick={() => { this.setState({ error: null }); this.props.onRetry(); }}
-            style={{ padding: "8px 20px", background: "#EF4444", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600 }}
+            style={{ padding: "8px 20px", background: "var(--vault-status-error)", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600 }}
           >
             Retry
           </button>
@@ -387,7 +387,7 @@ function SalesSection({ data, start, end }: { data: any; start: string; end: str
       {daily.length > 0 && (
         <ChartCard title="Revenue by Day">
           <BarChart data={daily} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--vault-border)" />
             <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fontSize: 11 }} interval="preserveStartEnd" />
             <YAxis
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -402,7 +402,7 @@ function SalesSection({ data, start, end }: { data: any; start: string; end: str
               labelFormatter={(label: any) => fmtDate(String(label ?? ""))}
               contentStyle={{ fontSize: 12 }}
             />
-            <Bar dataKey="revenue" fill="#635BFF" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="revenue" fill="var(--vault-text)" radius={[3, 3, 0, 0]} />
           </BarChart>
         </ChartCard>
       )}
@@ -434,7 +434,7 @@ function SalesSection({ data, start, end }: { data: any; start: string; end: str
         {byStaff.length > 0 && (
           <ChartCard title="Revenue by Staff" height={260}>
             <BarChart data={byStaff} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--vault-border)" />
               <YAxis dataKey="staff" type="category" width={100} tick={{ fontSize: 11 }} />
               <XAxis type="number" tick={{ fontSize: 11 }} />
               <Tooltip
@@ -442,7 +442,7 @@ function SalesSection({ data, start, end }: { data: any; start: string; end: str
                 formatter={(value: any) => [fmtCurrency(Number(value ?? 0)), "Revenue"]}
                 contentStyle={{ fontSize: 12 }}
               />
-              <Bar dataKey="revenue" fill="#635BFF" radius={[0, 3, 3, 0]} />
+              <Bar dataKey="revenue" fill="var(--vault-text)" radius={[0, 3, 3, 0]} />
             </BarChart>
           </ChartCard>
         )}
@@ -500,7 +500,7 @@ function OrdersSection({ data, start, end }: { data: any; start: string; end: st
         {daily.length > 0 && (
           <ChartCard title="Orders by Day">
             <LineChart data={daily} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--vault-border)" />
               <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fontSize: 11 }} interval="preserveStartEnd" />
               <YAxis tick={{ fontSize: 11 }} width={32} />
               <Tooltip
@@ -508,14 +508,14 @@ function OrdersSection({ data, start, end }: { data: any; start: string; end: st
                 labelFormatter={(label: any) => fmtDate(String(label ?? ""))}
                 contentStyle={{ fontSize: 12 }}
               />
-              <Line type="monotone" dataKey="count" stroke="#635BFF" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="count" stroke="var(--vault-text)" strokeWidth={2} dot={false} />
             </LineChart>
           </ChartCard>
         )}
         {byType.length > 0 && (
           <ChartCard title="Orders by Type">
             <BarChart data={byType} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--vault-border)" />
               <XAxis
                 dataKey="type"
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -530,7 +530,7 @@ function OrdersSection({ data, start, end }: { data: any; start: string; end: st
                 labelFormatter={(label: any) => PACKET_TYPE_LABELS[label] ?? label}
                 contentStyle={{ fontSize: 12 }}
               />
-              <Bar dataKey="count" fill="#635BFF" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="count" fill="var(--vault-text)" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ChartCard>
         )}
@@ -549,7 +549,7 @@ function OrdersSection({ data, start, end }: { data: any; start: string; end: st
         renderCell={(val, ci) => {
           if (ci === 4) {
             const n = Number(val);
-            const color = n > 7 ? "#EF4444" : n > 3 ? "#F59E0B" : "#1A1A2E";
+            const color = n > 7 ? "var(--vault-status-error)" : n > 3 ? "#F59E0B" : "var(--vault-text)";
             return <span style={{ color, fontWeight: n > 3 ? 600 : 400 }}>{n}</span>;
           }
           return String(val ?? "—");
@@ -590,18 +590,18 @@ function WorkshopSection({ data, start, end }: { data: any; start: string; end: 
         {byJeweller?.length > 0 && (
           <ChartCard title="Active Jobs per Jeweller">
             <BarChart data={byJeweller} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--vault-border)" />
               <XAxis dataKey="jeweller" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} width={32} />
               <Tooltip contentStyle={{ fontSize: 12 }} />
-              <Bar dataKey="count" fill="#635BFF" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="count" fill="var(--vault-text)" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ChartCard>
         )}
         {byStage?.length > 0 && (
           <ChartCard title="Jobs by Stage" height={Math.max(200, (byStage?.length ?? 0) * 44)}>
             <BarChart data={byStage} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--vault-border)" />
               <YAxis dataKey="stage" type="category" width={110} tick={{ fontSize: 11 }} />
               <XAxis type="number" tick={{ fontSize: 11 }} />
               <Tooltip contentStyle={{ fontSize: 12 }} />
@@ -685,7 +685,7 @@ function QuotesSection({ data, start, end }: { data: any; start: string; end: st
       {byStaff?.length > 0 && (
         <ChartCard title="Conversion Rate by Staff" height={Math.max(200, (byStaff?.length ?? 0) * 50)}>
           <BarChart data={byStaff} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--vault-border)" />
             <YAxis dataKey="staff" type="category" width={100} tick={{ fontSize: 11 }} />
             <XAxis type="number" tick={{ fontSize: 11 }} unit="%" domain={[0, 100]} />
             <Tooltip
@@ -693,7 +693,7 @@ function QuotesSection({ data, start, end }: { data: any; start: string; end: st
               formatter={(value: any) => [fmtPct(Number(value ?? 0)), "Conversion Rate"]}
               contentStyle={{ fontSize: 12 }}
             />
-            <Bar dataKey="rate" fill="#10B981" radius={[0, 3, 3, 0]} />
+            <Bar dataKey="rate" fill="var(--vault-status-success)" radius={[0, 3, 3, 0]} />
           </BarChart>
         </ChartCard>
       )}
@@ -780,9 +780,9 @@ function CustomersSection({ data, start, end }: { data: any; start: string; end:
       />
 
       {/* Inactive tabs */}
-      <div style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: "1px solid #E8E8F0" }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: "#1A1A2E" }}>Inactive Customers</span>
+      <div style={{ background: "var(--vault-canvas)", border: "1px solid var(--vault-border)", borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: "1px solid var(--vault-border)" }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: "var(--vault-text)" }}>Inactive Customers</span>
           <div style={{ display: "flex", gap: 4 }}>
             {(["90", "180", "365"] as const).map((t) => (
               <button
@@ -791,12 +791,12 @@ function CustomersSection({ data, start, end }: { data: any; start: string; end:
                 style={{
                   padding: "5px 12px",
                   borderRadius: 8,
-                  border: "1px solid #E8E8F0",
+                  border: "1px solid var(--vault-border)",
                   fontSize: 12,
                   fontWeight: 500,
                   cursor: "pointer",
-                  background: inactiveTab === t ? "#635BFF" : "#F9FAFB",
-                  color: inactiveTab === t ? "#fff" : "#6B7280",
+                  background: inactiveTab === t ? "var(--vault-text)" : "var(--vault-surface)",
+                  color: inactiveTab === t ? "#fff" : "var(--vault-text-secondary)",
                 }}
               >
                 {t}d
@@ -805,7 +805,7 @@ function CustomersSection({ data, start, end }: { data: any; start: string; end:
           </div>
         </div>
         {inactiveData.length === 0 ? (
-          <div style={{ padding: "32px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>No inactive customers ({inactiveLabel})</div>
+          <div style={{ padding: "32px 0", textAlign: "center", color: "var(--vault-text-muted)", fontSize: 13 }}>No inactive customers ({inactiveLabel})</div>
         ) : (
           <>
             <div style={{ overflowX: "auto" }}>
@@ -819,12 +819,12 @@ function CustomersSection({ data, start, end }: { data: any; start: string; end:
                           padding: "10px 16px",
                           fontSize: 12,
                           fontWeight: 500,
-                          color: "#6B7280",
+                          color: "var(--vault-text-secondary)",
                           textTransform: "uppercase",
                           letterSpacing: "0.05em",
-                          background: "#F9FAFB",
+                          background: "var(--vault-surface)",
                           textAlign: "left",
-                          borderBottom: "1px solid #E8E8F0",
+                          borderBottom: "1px solid var(--vault-border)",
                         }}
                       >
                         {h}
@@ -836,21 +836,21 @@ function CustomersSection({ data, start, end }: { data: any; start: string; end:
                   {(inactiveData as { name: string; email: string; phone: string; last_visit_date: string; total_spend: number }[]).map((c, ri) => (
                     <tr
                       key={ri}
-                      style={{ background: ri % 2 === 0 ? "#fff" : "#F9FAFB" }}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = "#EEF2FF"; }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = ri % 2 === 0 ? "#fff" : "#F9FAFB"; }}
+                      style={{ background: ri % 2 === 0 ? "#fff" : "var(--vault-surface)" }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = "var(--vault-surface-selected)"; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = ri % 2 === 0 ? "#fff" : "var(--vault-surface)"; }}
                     >
-                      <td style={{ padding: "11px 16px", fontSize: 14, color: "#1A1A2E", borderBottom: "1px solid #E8E8F0" }}>{c.name}</td>
-                      <td style={{ padding: "11px 16px", fontSize: 14, color: "#1A1A2E", borderBottom: "1px solid #E8E8F0" }}>{c.email ?? "—"}</td>
-                      <td style={{ padding: "11px 16px", fontSize: 14, color: "#1A1A2E", borderBottom: "1px solid #E8E8F0" }}>{c.phone ?? "—"}</td>
-                      <td style={{ padding: "11px 16px", fontSize: 14, color: "#1A1A2E", borderBottom: "1px solid #E8E8F0" }}>{c.last_visit_date ?? "—"}</td>
-                      <td style={{ padding: "11px 16px", fontSize: 14, color: "#1A1A2E", borderBottom: "1px solid #E8E8F0" }}>{fmtCurrency(c.total_spend ?? 0)}</td>
+                      <td style={{ padding: "11px 16px", fontSize: 14, color: "var(--vault-text)", borderBottom: "1px solid var(--vault-border)" }}>{c.name}</td>
+                      <td style={{ padding: "11px 16px", fontSize: 14, color: "var(--vault-text)", borderBottom: "1px solid var(--vault-border)" }}>{c.email ?? "—"}</td>
+                      <td style={{ padding: "11px 16px", fontSize: 14, color: "var(--vault-text)", borderBottom: "1px solid var(--vault-border)" }}>{c.phone ?? "—"}</td>
+                      <td style={{ padding: "11px 16px", fontSize: 14, color: "var(--vault-text)", borderBottom: "1px solid var(--vault-border)" }}>{c.last_visit_date ?? "—"}</td>
+                      <td style={{ padding: "11px 16px", fontSize: 14, color: "var(--vault-text)", borderBottom: "1px solid var(--vault-border)" }}>{fmtCurrency(c.total_spend ?? 0)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <div style={{ padding: "10px 20px", borderTop: "1px solid #E8E8F0", display: "flex", justifyContent: "flex-end" }}>
+            <div style={{ padding: "10px 20px", borderTop: "1px solid var(--vault-border)", display: "flex", justifyContent: "flex-end" }}>
               <button
                 onClick={() =>
                   downloadCSV(
@@ -867,12 +867,12 @@ function CustomersSection({ data, start, end }: { data: any; start: string; end:
                 }
                 style={{
                   padding: "6px 14px",
-                  background: "#F9FAFB",
-                  border: "1px solid #E8E8F0",
+                  background: "var(--vault-surface)",
+                  border: "1px solid var(--vault-border)",
                   borderRadius: 8,
                   fontSize: 12,
                   fontWeight: 500,
-                  color: "#6B7280",
+                  color: "var(--vault-text-secondary)",
                   cursor: "pointer",
                 }}
               >
@@ -901,7 +901,7 @@ function StaffSection({ data, start, end }: { data: any; start: string; end: str
       {performance.length > 0 && (
         <ChartCard title="Revenue by Staff">
           <BarChart data={performance} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--vault-border)" />
             <XAxis dataKey="staff" tick={{ fontSize: 11 }} />
             <YAxis
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -914,7 +914,7 @@ function StaffSection({ data, start, end }: { data: any; start: string; end: str
               formatter={(value: any) => [fmtCurrency(Number(value ?? 0)), "Revenue"]}
               contentStyle={{ fontSize: 12 }}
             />
-            <Bar dataKey="revenueGenerated" fill="#635BFF" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="revenueGenerated" fill="var(--vault-text)" radius={[3, 3, 0, 0]} />
           </BarChart>
         </ChartCard>
       )}
@@ -955,8 +955,8 @@ function InventorySection() {
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 64 }}>
       <div
         style={{
-          background: "#fff",
-          border: "1px solid #E8E8F0",
+          background: "var(--vault-canvas)",
+          border: "1px solid var(--vault-border)",
           borderRadius: 16,
           padding: 48,
           textAlign: "center",
@@ -967,7 +967,7 @@ function InventorySection() {
           style={{
             width: 64,
             height: 64,
-            background: "#F3F4F6",
+            background: "var(--vault-surface)",
             borderRadius: 12,
             display: "flex",
             alignItems: "center",
@@ -975,15 +975,15 @@ function InventorySection() {
             margin: "0 auto 16px",
           }}
         >
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.5">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--vault-text-muted)" strokeWidth="1.5">
             <rect x="2" y="7" width="20" height="14" rx="2" />
             <path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2" />
             <line x1="12" y1="12" x2="12" y2="16" />
             <line x1="10" y1="14" x2="14" y2="14" />
           </svg>
         </div>
-        <div style={{ fontSize: 15, fontWeight: 600, color: "#1A1A2E", marginBottom: 8 }}>Inventory Reporting</div>
-        <div style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.6 }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--vault-text)", marginBottom: 8 }}>Inventory Reporting</div>
+        <div style={{ fontSize: 13, color: "var(--vault-text-secondary)", lineHeight: 1.6 }}>
           Inventory reporting will be available once stock management is connected.
         </div>
       </div>
@@ -1013,11 +1013,11 @@ function fmtWeekLabel(start: string, end: string): string {
 function PoCashflowWidget({ data }: { data: CashflowData | null | "loading" }) {
   if (data === "loading") {
     return (
-      <div style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, overflow: "hidden" }}>
-        <div style={{ padding: "14px 20px", borderBottom: "1px solid #E8E8F0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontWeight: 600, fontSize: 15, color: "#1A1A2E" }}>Purchase Cashflow Forecast</span>
+      <div style={{ background: "var(--vault-canvas)", border: "1px solid var(--vault-border)", borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--vault-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span style={{ fontWeight: 600, fontSize: 15, color: "var(--vault-text)" }}>Purchase Cashflow Forecast</span>
         </div>
-        <div style={{ padding: "24px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Loading…</div>
+        <div style={{ padding: "24px", textAlign: "center", color: "var(--vault-text-muted)", fontSize: 13 }}>Loading…</div>
       </div>
     );
   }
@@ -1047,19 +1047,19 @@ function PoCashflowWidget({ data }: { data: CashflowData | null | "loading" }) {
   const grandTotal = rows.reduce((s, r) => s + r.total, 0);
 
   return (
-    <div style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, overflow: "hidden" }}>
-      <div style={{ padding: "14px 20px", borderBottom: "1px solid #E8E8F0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+    <div style={{ background: "var(--vault-canvas)", border: "1px solid var(--vault-border)", borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--vault-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
-          <span style={{ fontWeight: 600, fontSize: 15, color: "#1A1A2E" }}>Purchase Cashflow Forecast</span>
-          <span style={{ marginLeft: 10, fontSize: 12, color: "#9CA3AF" }}>pending uninvoiced lines by PO expected date</span>
+          <span style={{ fontWeight: 600, fontSize: 15, color: "var(--vault-text)" }}>Purchase Cashflow Forecast</span>
+          <span style={{ marginLeft: 10, fontSize: 12, color: "var(--vault-text-muted)" }}>pending uninvoiced lines by PO expected date</span>
         </div>
-        <Link href="/inventory/purchase-orders" style={{ textDecoration: "none", color: "#635BFF", fontSize: 13, fontWeight: 500 }}>
+        <Link href="/inventory/purchase-orders" style={{ textDecoration: "none", color: "var(--vault-text)", fontSize: 13, fontWeight: 500 }}>
           View POs →
         </Link>
       </div>
 
       {!hasPendingSpend ? (
-        <div style={{ padding: "24px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>No pending purchase spend</div>
+        <div style={{ padding: "24px", textAlign: "center", color: "var(--vault-text-muted)", fontSize: 13 }}>No pending purchase spend</div>
       ) : (
         <>
           {unscheduledPct >= 50 && (
@@ -1070,10 +1070,10 @@ function PoCashflowWidget({ data }: { data: CashflowData | null | "loading" }) {
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
-                <tr style={{ background: "#F9FAFB" }}>
-                  <th style={{ padding: "8px 20px", textAlign: "left", fontWeight: 600, color: "#6B7280", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", whiteSpace: "nowrap" }}>Period</th>
-                  <th style={{ padding: "8px 16px", textAlign: "right", fontWeight: 600, color: "#6B7280", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", whiteSpace: "nowrap" }}>Lines</th>
-                  <th style={{ padding: "8px 20px", textAlign: "right", fontWeight: 600, color: "#6B7280", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", whiteSpace: "nowrap" }}>Est. Amount</th>
+                <tr style={{ background: "var(--vault-surface)" }}>
+                  <th style={{ padding: "8px 20px", textAlign: "left", fontWeight: 600, color: "var(--vault-text-secondary)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", whiteSpace: "nowrap" }}>Period</th>
+                  <th style={{ padding: "8px 16px", textAlign: "right", fontWeight: 600, color: "var(--vault-text-secondary)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", whiteSpace: "nowrap" }}>Lines</th>
+                  <th style={{ padding: "8px 20px", textAlign: "right", fontWeight: 600, color: "var(--vault-text-secondary)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", whiteSpace: "nowrap" }}>Est. Amount</th>
                 </tr>
               </thead>
               <tbody>
@@ -1082,24 +1082,24 @@ function PoCashflowWidget({ data }: { data: CashflowData | null | "loading" }) {
                     key={row.label}
                     style={{ borderTop: "1px solid #F3F4F6", background: row.alert ? "#FEF2F2" : "transparent" }}
                   >
-                    <td style={{ padding: "10px 20px", color: row.muted ? "#D1D5DB" : row.alert ? "#7F1D1D" : "#1A1A2E" }}>
+                    <td style={{ padding: "10px 20px", color: row.muted ? "var(--vault-border-strong)" : row.alert ? "#7F1D1D" : "var(--vault-text)" }}>
                       {row.label}
-                      {row.sublabel && <span style={{ fontSize: 11, color: row.alert ? "#EF4444" : "#9CA3AF", marginLeft: 6 }}>{row.sublabel}</span>}
+                      {row.sublabel && <span style={{ fontSize: 11, color: row.alert ? "var(--vault-status-error)" : "var(--vault-text-muted)", marginLeft: 6 }}>{row.sublabel}</span>}
                     </td>
-                    <td style={{ padding: "10px 16px", textAlign: "right", color: row.muted ? "#D1D5DB" : "#6B7280" }}>
+                    <td style={{ padding: "10px 16px", textAlign: "right", color: row.muted ? "var(--vault-border-strong)" : "var(--vault-text-secondary)" }}>
                       {row.count > 0 ? row.count : "—"}
                     </td>
-                    <td style={{ padding: "10px 20px", textAlign: "right", fontFamily: "monospace", fontWeight: row.count > 0 ? 600 : 400, color: row.muted ? "#D1D5DB" : row.alert ? "#DC2626" : "#111827" }}>
+                    <td style={{ padding: "10px 20px", textAlign: "right", fontFamily: "monospace", fontWeight: row.count > 0 ? 600 : 400, color: row.muted ? "var(--vault-border-strong)" : row.alert ? "var(--vault-status-error)" : "var(--vault-text)" }}>
                       {row.count > 0 ? fmtCcy(row.total) : "—"}
                     </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr style={{ borderTop: "2px solid #E8E8F0", background: "#F9FAFB" }}>
-                  <td style={{ padding: "10px 20px", fontWeight: 700, color: "#1A1A2E", fontSize: 13 }}>Total pending</td>
-                  <td style={{ padding: "10px 16px", textAlign: "right", fontWeight: 600, color: "#374151", fontSize: 13 }}>{coverage.total_pending_lines}</td>
-                  <td style={{ padding: "10px 20px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: "#111827", fontSize: 14 }}>{fmtCcy(grandTotal)}</td>
+                <tr style={{ borderTop: "2px solid var(--vault-border)", background: "var(--vault-surface)" }}>
+                  <td style={{ padding: "10px 20px", fontWeight: 700, color: "var(--vault-text)", fontSize: 13 }}>Total pending</td>
+                  <td style={{ padding: "10px 16px", textAlign: "right", fontWeight: 600, color: "var(--vault-text)", fontSize: 13 }}>{coverage.total_pending_lines}</td>
+                  <td style={{ padding: "10px 20px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: "var(--vault-text)", fontSize: 14 }}>{fmtCcy(grandTotal)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -1207,8 +1207,8 @@ export default function ReportingPage() {
     <div style={{ padding: 24, maxWidth: 1300, margin: "0 auto" }}>
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: "#1A1A2E", margin: 0 }}>Reporting</h1>
-        <p style={{ fontSize: 13, color: "#6B7280", marginTop: 4 }}>Business insights and analytics</p>
+        <h1 style={{ fontSize: "var(--vault-text-page-title)", fontWeight: 600, color: "var(--vault-text)", margin: 0 }}>Reports</h1>
+        <p style={{ fontSize: 13, color: "var(--vault-text-secondary)", marginTop: 4 }}>Business insights and analytics</p>
       </div>
 
       <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
@@ -1217,8 +1217,8 @@ export default function ReportingPage() {
           style={{
             width: 200,
             minWidth: 200,
-            background: "#fff",
-            border: "1px solid #E8E8F0",
+            background: "var(--vault-canvas)",
+            border: "1px solid var(--vault-border)",
             borderRadius: 12,
             overflow: "hidden",
             padding: "8px 0",
@@ -1236,13 +1236,13 @@ export default function ReportingPage() {
                   width: "100%",
                   textAlign: "left",
                   padding: "10px 16px",
-                  background: active ? "#EEF2FF" : "transparent",
-                  borderLeft: active ? "3px solid #635BFF" : "3px solid transparent",
+                  background: active ? "var(--vault-surface-selected)" : "transparent",
+                  borderLeft: active ? "3px solid var(--vault-text)" : "3px solid transparent",
                   border: "none",
                   borderLeftWidth: 3,
                   borderLeftStyle: "solid",
-                  borderLeftColor: active ? "#635BFF" : "transparent",
-                  color: item.disabled ? "#9CA3AF" : active ? "#635BFF" : "#1A1A2E",
+                  borderLeftColor: active ? "var(--vault-text)" : "transparent",
+                  color: item.disabled ? "var(--vault-text-muted)" : active ? "var(--vault-text)" : "var(--vault-text)",
                   fontSize: 14,
                   fontWeight: active ? 600 : 400,
                   cursor: item.disabled ? "not-allowed" : "pointer",
@@ -1250,7 +1250,7 @@ export default function ReportingPage() {
                   transition: "background .15s",
                 }}
                 onMouseEnter={(e) => {
-                  if (!item.disabled && !active) (e.currentTarget as HTMLButtonElement).style.background = "#F9FAFB";
+                  if (!item.disabled && !active) (e.currentTarget as HTMLButtonElement).style.background = "var(--vault-surface)";
                 }}
                 onMouseLeave={(e) => {
                   if (!item.disabled && !active) (e.currentTarget as HTMLButtonElement).style.background = "transparent";
@@ -1267,8 +1267,8 @@ export default function ReportingPage() {
           {/* Date range selector — not shown for sections with no date context */}
           {section !== "cashflow" && <div
             style={{
-              background: "#fff",
-              border: "1px solid #E8E8F0",
+              background: "var(--vault-canvas)",
+              border: "1px solid var(--vault-border)",
               borderRadius: 12,
               padding: "14px 16px",
               display: "flex",
@@ -1287,18 +1287,18 @@ export default function ReportingPage() {
                     borderRadius: 8,
                     fontSize: 12,
                     fontWeight: 500,
-                    background: "#F9FAFB",
-                    color: "#6B7280",
-                    border: "1px solid #E8E8F0",
+                    background: "var(--vault-surface)",
+                    color: "var(--vault-text-secondary)",
+                    border: "1px solid var(--vault-border)",
                     cursor: "pointer",
                   }}
                   onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.background = "#EEF2FF";
-                    (e.currentTarget as HTMLButtonElement).style.color = "#635BFF";
+                    (e.currentTarget as HTMLButtonElement).style.background = "var(--vault-surface-selected)";
+                    (e.currentTarget as HTMLButtonElement).style.color = "var(--vault-text)";
                   }}
                   onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.background = "#F9FAFB";
-                    (e.currentTarget as HTMLButtonElement).style.color = "#6B7280";
+                    (e.currentTarget as HTMLButtonElement).style.background = "var(--vault-surface)";
+                    (e.currentTarget as HTMLButtonElement).style.color = "var(--vault-text-secondary)";
                   }}
                 >
                   {label}
@@ -1310,14 +1310,14 @@ export default function ReportingPage() {
                 type="date"
                 value={start}
                 onChange={(e) => setStart(e.target.value)}
-                style={{ border: "1px solid #E8E8F0", borderRadius: 8, background: "#fff", height: 36, fontSize: 13, padding: "0 10px", color: "#1A1A2E", outline: "none" }}
+                style={{ border: "1px solid var(--vault-border)", borderRadius: 8, background: "var(--vault-canvas)", height: 36, fontSize: 13, padding: "0 10px", color: "var(--vault-text)", outline: "none" }}
               />
-              <span style={{ color: "#6B7280", fontSize: 12 }}>to</span>
+              <span style={{ color: "var(--vault-text-secondary)", fontSize: 12 }}>to</span>
               <input
                 type="date"
                 value={end}
                 onChange={(e) => setEnd(e.target.value)}
-                style={{ border: "1px solid #E8E8F0", borderRadius: 8, background: "#fff", height: 36, fontSize: 13, padding: "0 10px", color: "#1A1A2E", outline: "none" }}
+                style={{ border: "1px solid var(--vault-border)", borderRadius: 8, background: "var(--vault-canvas)", height: 36, fontSize: 13, padding: "0 10px", color: "var(--vault-text)", outline: "none" }}
               />
             </div>
           </div>}
@@ -1325,9 +1325,9 @@ export default function ReportingPage() {
           {/* Section content */}
           {loading && <LoadingState />}
           {error && !loading && (
-            <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12, padding: 16, color: "#DC2626", fontSize: 14 }}>
+            <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12, padding: 16, color: "var(--vault-status-error)", fontSize: 14 }}>
               <strong>Error loading {section}:</strong> {error}
-              <div style={{ marginTop: 8, fontSize: 12, color: "#9CA3AF" }}>
+              <div style={{ marginTop: 8, fontSize: 12, color: "var(--vault-text-muted)" }}>
                 Check the server terminal for detailed logs.
               </div>
             </div>
@@ -1341,7 +1341,7 @@ export default function ReportingPage() {
               borderRadius: 10,
               padding: "8px 14px",
               fontSize: 12,
-              color: (data._meta?.recordCount ?? 0) === 0 ? "#92400E" : "#166534",
+              color: (data._meta?.recordCount ?? 0) === 0 ? "#92400E" : "var(--vault-status-success)",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
