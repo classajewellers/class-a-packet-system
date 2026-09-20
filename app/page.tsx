@@ -15,7 +15,7 @@ const MOVEMENT_BADGE: Record<InventoryMovementType, { bg: string; fg: string; la
   transfer:     { bg: "#DBEAFE", fg: "#1E40AF", label: "Transfer" },
   sale:         { bg: "#EEF2FF", fg: "#635BFF", label: "Sale" },
   return:       { bg: "#FEF3C7", fg: "#92400E", label: "Return" },
-  adjustment:   { bg: "#F3F4F6", fg: "#374151", label: "Adjustment" },
+  adjustment:   { bg: "var(--vault-surface)", fg: "var(--vault-text)", label: "Adjustment" },
   workshop_in:  { bg: "#FDF4FF", fg: "#7E22CE", label: "Workshop In" },
   workshop_out: { bg: "#FFF7ED", fg: "#9A3412", label: "Workshop Out" },
   stocktake:    { bg: "#F0FDF4", fg: "#166534", label: "Stocktake" },
@@ -38,7 +38,7 @@ const TYPE_BADGE_STYLE: Record<string, React.CSSProperties> = {
   repair_job:    { background: "#DBEAFE", color: "#1E40AF" },
   custom_order:  { background: "#EEF2FF", color: "#635BFF" },
   layby:         { background: "#FEF3C7", color: "#92400E" },
-  client_intake: { background: "#F3F4F6", color: "#374151" },
+  client_intake: { background: "var(--vault-surface)", color: "var(--vault-text)" },
 };
 
 const BADGE_BASE: React.CSSProperties = {
@@ -62,21 +62,21 @@ function StatCard({
   const inner = (
     <div
       style={{
-        background: "#fff",
-        border: "1px solid #E8E8F0",
-        borderRadius: 12,
+        background: "var(--vault-canvas)",
+        border: "1px solid var(--vault-border)",
+        borderRadius: "var(--vault-radius-md)",
         padding: 20,
         transition: "box-shadow .15s",
         cursor: href ? "pointer" : "default",
       }}
-      onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 2px 8px rgba(0,0,0,0.06)"; }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = "var(--vault-shadow-elevated)"; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = "none"; }}
     >
-      <div style={{ fontSize: 12, fontWeight: 500, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
+      <div style={{ fontSize: 12, fontWeight: 500, color: "var(--vault-text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
         {label}
       </div>
-      <div style={{ fontSize: 32, fontWeight: 700, color: "#1A1A2E", lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ marginTop: 6, fontSize: 12, color: "#9CA3AF" }}>{sub}</div>}
+      <div style={{ fontSize: 32, fontWeight: 700, color: "var(--vault-text)", lineHeight: 1 }}>{value}</div>
+      {sub && <div style={{ marginTop: 6, fontSize: 12, color: "var(--vault-text-muted)" }}>{sub}</div>}
     </div>
   );
   if (href) return <Link href={href} style={{ textDecoration: "none" }}>{inner}</Link>;
@@ -85,7 +85,7 @@ function StatCard({
 
 function SkeletonCard() {
   return (
-    <div style={{ height: 96, borderRadius: 12, background: "#F3F4F6", animation: "pulse 1.5s infinite" }} />
+    <div style={{ height: 96, borderRadius: 12, background: "var(--vault-surface)", animation: "pulse 1.5s infinite" }} />
   );
 }
 
@@ -167,9 +167,9 @@ export default function DashboardPage() {
 
   // ── Shared styles ──────────────────────────────────────────────────────────
   const card: React.CSSProperties = {
-    background: "#fff",
-    border: "1px solid #E8E8F0",
-    borderRadius: 12,
+    background: "var(--vault-canvas)",
+    border: "1px solid var(--vault-border)",
+    borderRadius: "var(--vault-radius-md)",
     overflow: "hidden",
   };
 
@@ -177,19 +177,19 @@ export default function DashboardPage() {
     padding: "10px 16px",
     fontSize: 12,
     fontWeight: 500,
-    color: "#6B7280",
+    color: "var(--vault-text-secondary)",
     textTransform: "uppercase",
     letterSpacing: "0.05em",
-    background: "#F9FAFB",
+    background: "var(--vault-surface)",
     textAlign: "left",
-    borderBottom: "1px solid #E8E8F0",
+    borderBottom: "1px solid var(--vault-border)",
   };
 
   const tdStyle: React.CSSProperties = {
     padding: "12px 16px",
     fontSize: 14,
-    color: "#1A1A2E",
-    borderBottom: "1px solid #E8E8F0",
+    color: "var(--vault-text)",
+    borderBottom: "1px solid var(--vault-border)",
   };
 
   return (
@@ -199,13 +199,15 @@ export default function DashboardPage() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, marginBottom: 20 }}>
         <Link
           href="/quotes/builder"
-          style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "#635BFF", color: "#fff", height: 38, padding: "0 18px", borderRadius: 8, fontWeight: 500, fontSize: 14 }}
+          className="vault-btn vault-btn-primary"
+          style={{ textDecoration: "none", height: 38, padding: "0 18px" }}
         >
           New Quote
         </Link>
         <Link
           href="/orders/new"
-          style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "#fff", color: "#1A1A2E", height: 38, padding: "0 18px", borderRadius: 8, fontWeight: 500, fontSize: 14, border: "1px solid #E8E8F0" }}
+          className="vault-btn vault-btn-secondary"
+          style={{ textDecoration: "none", height: 38, padding: "0 18px" }}
         >
           New Order
         </Link>
@@ -241,23 +243,23 @@ export default function DashboardPage() {
 
         {/* Recent Orders */}
         <div style={card}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid #E8E8F0" }}>
-            <span style={{ fontWeight: 600, fontSize: 15, color: "#1A1A2E" }}>Recent Orders</span>
-            <Link href="/orders" style={{ textDecoration: "none", color: "#635BFF", fontSize: 13, fontWeight: 500 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--vault-border)" }}>
+            <span style={{ fontWeight: 600, fontSize: 15, color: "var(--vault-text)" }}>Recent Orders</span>
+            <Link href="/orders" style={{ textDecoration: "none", color: "var(--vault-text)", fontSize: 13, fontWeight: 500 }}>
               View all →
             </Link>
           </div>
           {loading ? (
-            <div style={{ padding: "32px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Loading…</div>
+            <div style={{ padding: "32px 0", textAlign: "center", color: "var(--vault-text-muted)", fontSize: 13 }}>Loading…</div>
           ) : recentOrders.length === 0 ? (
-            <div style={{ padding: "32px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>No orders yet</div>
+            <div style={{ padding: "32px 0", textAlign: "center", color: "var(--vault-text-muted)", fontSize: 13 }}>No orders yet</div>
           ) : (
             <>
               {/* Mobile: stacked cards */}
               <div className="md:hidden divide-y divide-gray-100">
                 {recentOrders.map((p) => {
                   const customerName = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
-                  const badgeStyle = { ...BADGE_BASE, ...(TYPE_BADGE_STYLE[p.packet_type] ?? { background: "#F3F4F6", color: "#374151" }) };
+                  const badgeStyle = { ...BADGE_BASE, ...(TYPE_BADGE_STYLE[p.packet_type] ?? { background: "var(--vault-surface)", color: "var(--vault-text)" }) };
                   return (
                     <div
                       key={p.id}
@@ -266,13 +268,13 @@ export default function DashboardPage() {
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <div style={{ fontWeight: 500, color: "#1A1A2E", fontSize: 14 }}>{customerName}</div>
+                          <div style={{ fontWeight: 500, color: "var(--vault-text)", fontSize: 14 }}>{customerName}</div>
                           <div className="flex items-center gap-2 mt-1">
                             <span style={badgeStyle}>{packetTypeLabel(p.packet_type)}</span>
-                            <span style={{ fontFamily: "monospace", fontSize: 11, color: "#9CA3AF" }}>{p.reference_number}</span>
+                            <span style={{ fontFamily: "monospace", fontSize: 11, color: "var(--vault-text-muted)" }}>{p.reference_number}</span>
                           </div>
                         </div>
-                        <div style={{ fontSize: 12, color: "#6B7280", textAlign: "right", flexShrink: 0 }}>
+                        <div style={{ fontSize: 12, color: "var(--vault-text-secondary)", textAlign: "right", flexShrink: 0 }}>
                           <div>{formatDateAU(p.due_date) || "—"}</div>
                         </div>
                       </div>
@@ -295,22 +297,22 @@ export default function DashboardPage() {
                 <tbody>
                   {recentOrders.map((p) => {
                     const customerName = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
-                    const badgeStyle = { ...BADGE_BASE, ...(TYPE_BADGE_STYLE[p.packet_type] ?? { background: "#F3F4F6", color: "#374151" }) };
+                    const badgeStyle = { ...BADGE_BASE, ...(TYPE_BADGE_STYLE[p.packet_type] ?? { background: "var(--vault-surface)", color: "var(--vault-text)" }) };
                     return (
                       <tr
                         key={p.id}
                         onClick={() => router.push(`/orders?open=${encodeURIComponent(p.reference_number)}`)}
                         style={{ cursor: "pointer" }}
-                        onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = "#F9FAFB"; }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = "var(--vault-surface)"; }}
                         onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = ""; }}
                       >
-                        <td style={{ ...tdStyle, fontFamily: "monospace", fontSize: 12, color: "#6B7280" }}>{p.reference_number}</td>
+                        <td style={{ ...tdStyle, fontFamily: "monospace", fontSize: 12, color: "var(--vault-text-secondary)" }}>{p.reference_number}</td>
                         <td style={tdStyle}>
                           <span style={badgeStyle}>{packetTypeLabel(p.packet_type)}</span>
                         </td>
                         <td style={{ ...tdStyle, fontWeight: 500 }}>{customerName}</td>
-                        <td style={{ ...tdStyle, color: "#6B7280" }}>{formatDateAU(p.due_date) || "—"}</td>
-                        <td style={{ ...tdStyle, fontSize: 12, color: "#9CA3AF" }}>{formatDateAU(p.created_at?.split("T")[0]) || "—"}</td>
+                        <td style={{ ...tdStyle, color: "var(--vault-text-secondary)" }}>{formatDateAU(p.due_date) || "—"}</td>
+                        <td style={{ ...tdStyle, fontSize: 12, color: "var(--vault-text-muted)" }}>{formatDateAU(p.created_at?.split("T")[0]) || "—"}</td>
                       </tr>
                     );
                   })}
@@ -325,26 +327,26 @@ export default function DashboardPage() {
 
           {/* Due This Week */}
           <div style={card}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: "1px solid #E8E8F0" }}>
-              <span style={{ fontWeight: 600, fontSize: 14, color: "#1A1A2E" }}>Due This Week</span>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: "1px solid var(--vault-border)" }}>
+              <span style={{ fontWeight: 600, fontSize: 14, color: "var(--vault-text)" }}>Due This Week</span>
               {upcoming.length > 0 && (
                 <span style={{ ...BADGE_BASE, background: "#FEF3C7", color: "#92400E" }}>{upcoming.length}</span>
               )}
             </div>
             {loading ? (
-              <div style={{ padding: "24px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Loading…</div>
+              <div style={{ padding: "24px 0", textAlign: "center", color: "var(--vault-text-muted)", fontSize: 13 }}>Loading…</div>
             ) : upcoming.length === 0 ? (
-              <div style={{ padding: "24px 16px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Nothing due this week ✓</div>
+              <div style={{ padding: "24px 16px", textAlign: "center", color: "var(--vault-text-muted)", fontSize: 13 }}>Nothing due this week ✓</div>
             ) : (
               <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
                 {upcoming.map((p) => {
                   const name = [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
                   return (
-                    <li key={p.id} style={{ padding: "10px 16px", borderBottom: "1px solid #E8E8F0" }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1A1A2E" }}>{name}</div>
-                      <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>
+                    <li key={p.id} style={{ padding: "10px 16px", borderBottom: "1px solid var(--vault-border)" }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--vault-text)" }}>{name}</div>
+                      <div style={{ fontSize: 12, color: "var(--vault-text-secondary)", marginTop: 2 }}>
                         {packetTypeLabel(p.packet_type)} ·{" "}
-                        <span style={{ color: "#EF4444" }}>Due {formatDateAU(p.due_date)}</span>
+                        <span style={{ color: "var(--vault-status-error)" }}>Due {formatDateAU(p.due_date)}</span>
                       </div>
                     </li>
                   );
@@ -355,30 +357,30 @@ export default function DashboardPage() {
 
           {/* Recent Stock Movements */}
           <div style={card}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: "1px solid #E8E8F0" }}>
-              <span style={{ fontWeight: 600, fontSize: 14, color: "#1A1A2E" }}>Recent Movements</span>
-              <Link href="/inventory" style={{ textDecoration: "none", color: "#635BFF", fontSize: 12, fontWeight: 500 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: "1px solid var(--vault-border)" }}>
+              <span style={{ fontWeight: 600, fontSize: 14, color: "var(--vault-text)" }}>Recent Movements</span>
+              <Link href="/inventory" style={{ textDecoration: "none", color: "var(--vault-text)", fontSize: 12, fontWeight: 500 }}>
                 View all →
               </Link>
             </div>
             {recentMovements.length === 0 ? (
-              <div style={{ padding: "20px 16px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>No movements yet</div>
+              <div style={{ padding: "20px 16px", textAlign: "center", color: "var(--vault-text-muted)", fontSize: 13 }}>No movements yet</div>
             ) : (
               <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
                 {recentMovements.map((m) => {
-                  const cfg = (m.movement_type ? MOVEMENT_BADGE[m.movement_type] : null) ?? { bg: "#F3F4F6", fg: "#374151", label: m.movement_type ?? "move" };
+                  const cfg = (m.movement_type ? MOVEMENT_BADGE[m.movement_type] : null) ?? { bg: "var(--vault-surface)", fg: "var(--vault-text)", label: m.movement_type ?? "move" };
                   return (
-                    <li key={m.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: "1px solid #E8E8F0" }}>
+                    <li key={m.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: "1px solid var(--vault-border)" }}>
                       <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: cfg.bg, color: cfg.fg, whiteSpace: "nowrap" }}>
                         {cfg.label}
                       </span>
-                      <span style={{ flex: 1, fontSize: 13, color: "#1A1A2E", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <span style={{ flex: 1, fontSize: 13, color: "var(--vault-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {m.item?.name ?? "—"}
                       </span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: "#374151", whiteSpace: "nowrap" }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--vault-text)", whiteSpace: "nowrap" }}>
                         {(m.quantity ?? 0) > 0 ? `+${m.quantity}` : m.quantity ?? ""}
                       </span>
-                      <span style={{ fontSize: 11, color: "#9CA3AF", whiteSpace: "nowrap" }}>
+                      <span style={{ fontSize: 11, color: "var(--vault-text-muted)", whiteSpace: "nowrap" }}>
                         {timeAgo(m.created_at ?? m.moved_at ?? "")}
                       </span>
                     </li>
@@ -390,19 +392,21 @@ export default function DashboardPage() {
 
           {/* Quick Actions */}
           <div style={{ ...card, padding: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 500, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 500, color: "var(--vault-text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>
               Quick Actions
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <Link
                 href="/orders/new"
-                style={{ textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center", background: "#635BFF", color: "#fff", height: 36, borderRadius: 8, fontWeight: 500, fontSize: 14 }}
+                className="vault-btn vault-btn-primary"
+                style={{ textDecoration: "none", height: 36 }}
               >
                 New Order
               </Link>
               <Link
                 href="/quote"
-                style={{ textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center", background: "#EEF2FF", color: "#635BFF", height: 36, borderRadius: 8, fontWeight: 500, fontSize: 14 }}
+                className="vault-btn vault-btn-secondary"
+                style={{ textDecoration: "none", height: 36 }}
               >
                 New Quote
               </Link>
