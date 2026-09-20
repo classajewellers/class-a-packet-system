@@ -199,9 +199,9 @@ function OrdersPageInner() {
         {/* Page header */}
         <div className="ds-page-h">
           <div>
-            <h1>Orders</h1>
+            <h1>Jobs</h1>
             <p>
-              {loading ? "Loading…" : `${filteredPackets.length} order${filteredPackets.length !== 1 ? "s" : ""}`}
+              {loading ? "Loading…" : `${filteredPackets.length} job${filteredPackets.length !== 1 ? "s" : ""}`}
             </p>
           </div>
           <div className="ds-page-h-actions">
@@ -218,7 +218,7 @@ function OrdersPageInner() {
               <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" viewBox="0 0 24 24">
                 <path d="M12 5v14M5 12h14" />
               </svg>
-              New Order
+              New job
             </button>
           </div>
         </div>
@@ -227,13 +227,13 @@ function OrdersPageInner() {
         {urlFilter && (
           <div style={{
             display: "flex", alignItems: "center", justifyContent: "space-between",
-            background: "rgba(124,106,254,0.08)", border: "1px solid rgba(124,106,254,0.25)",
+            background: "var(--vault-surface-selected)", border: "1px solid var(--vault-border)",
             borderRadius: 10, padding: "10px 16px", marginBottom: 16,
           }}>
-            <p style={{ fontSize: 13, fontWeight: 500, color: "var(--text-2)", margin: 0 }}>
-              {urlFilter === "today"     && "Showing: Orders created today"}
-              {urlFilter === "due_today" && "Showing: Orders due today"}
-              {urlFilter === "overdue"   && "Showing: Overdue repairs & custom orders"}
+            <p style={{ fontSize: 13, fontWeight: 500, color: "var(--vault-text)", margin: 0 }}>
+              {urlFilter === "today"     && "Showing: jobs created today"}
+              {urlFilter === "due_today" && "Showing: jobs due today"}
+              {urlFilter === "overdue"   && "Showing: overdue repairs & custom orders"}
             </p>
             <button onClick={() => setUrlFilter(null)} className="ds-btn ds-btn-ghost ds-btn-sm">
               Clear ×
@@ -300,12 +300,12 @@ function OrdersPageInner() {
           {selectedIds.size > 0 && canDelete && (
             <div style={{
               padding: "10px 16px",
-              borderBottom: "1px solid rgba(239,68,68,0.2)",
-              background: "rgba(239,68,68,0.06)",
+              borderBottom: "1px solid var(--vault-border)",
+              background: "#FEF2F2",
               display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
             }}>
-              <span style={{ fontSize: 13, fontWeight: 500, color: "#FCA5A5" }}>
-                {selectedIds.size} order{selectedIds.size !== 1 ? "s" : ""} selected
+              <span style={{ fontSize: 13, fontWeight: 500, color: "var(--vault-status-error)" }}>
+                {selectedIds.size} job{selectedIds.size !== 1 ? "s" : ""} selected
               </span>
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={() => setSelectedIds(new Set())} className="ds-btn ds-btn-ghost ds-btn-sm">Clear</button>

@@ -488,76 +488,82 @@ html, body {
   margin-bottom: 24px;
 }
 .ds-page-h h1 {
-  font-size: 22px;
+  font-size: var(--vault-text-page-title);
   font-weight: 600;
   margin: 0 0 4px;
-  color: #1A1A2E;
+  color: var(--vault-text);
 }
 .ds-page-h p {
   font-size: 13px;
-  color: #6B7280;
+  color: var(--vault-text-secondary);
   margin: 0;
 }
 .ds-page-h-actions { display: flex; align-items: center; gap: 8px; }
 
-/* Buttons */
+/* Buttons — retargeted onto the vault-* tokens (redesign/vault-ui-system-v1)
+   so app/orders/page.tsx and AdminTable.tsx (the only two live consumers of
+   this otherwise-orphaned ds-* system) match the rest of the app instead of
+   compounding a fourth parallel style. Primary is dark/white text, not
+   violet - violet stays reserved for focus rings and small accents. */
 .ds-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: 8px;
-  border: none;
+  height: var(--vault-control-height);
+  padding: 0 14px;
+  border-radius: var(--vault-radius-sm);
+  border: 1px solid transparent;
   font-size: 14px;
   font-weight: 500;
   white-space: nowrap;
-  transition: background .15s;
+  transition: background var(--vault-motion-fast), border-color var(--vault-motion-fast), color var(--vault-motion-fast);
   cursor: pointer;
   font-family: inherit;
   min-height: unset;
 }
 .ds-btn:active { transform: scale(0.98); }
 .ds-btn-primary {
-  background: #635BFF;
+  background: var(--vault-text);
   color: #fff;
 }
-.ds-btn-primary:hover { background: #4F46E5; }
+.ds-btn-primary:hover { background: #27272A; }
 .ds-btn-secondary {
-  background: #EEF2FF;
-  color: #635BFF;
+  background: var(--vault-canvas);
+  color: var(--vault-text);
+  border-color: var(--vault-border);
 }
-.ds-btn-secondary:hover { background: #E0E7FF; }
-.ds-btn-ghost { background: transparent; color: #6B7280; }
-.ds-btn-ghost:hover { background: #F9FAFB; color: #1A1A2E; }
+.ds-btn-secondary:hover { background: var(--vault-surface); border-color: var(--vault-border-strong); }
+.ds-btn-ghost { background: transparent; color: var(--vault-text-secondary); }
+.ds-btn-ghost:hover { background: var(--vault-surface); color: var(--vault-text); }
 .ds-btn-danger {
-  background: #EF4444;
-  color: #fff;
+  background: var(--vault-canvas);
+  color: var(--vault-status-error);
+  border-color: var(--vault-border);
 }
-.ds-btn-danger:hover { background: #DC2626; }
-.ds-btn-sm { height: 28px; padding: 0 10px; font-size: 12px; border-radius: 7px; }
-.ds-btn-lg { height: 40px; padding: 0 16px; font-size: 14px; border-radius: 8px; }
+.ds-btn-danger:hover { background: #FEF2F2; border-color: #FCA5A5; }
+.ds-btn-sm { height: 28px; padding: 0 10px; font-size: 12px; border-radius: var(--vault-radius-sm); }
+.ds-btn-lg { height: var(--vault-control-height); padding: 0 16px; font-size: 14px; border-radius: var(--vault-radius-sm); }
 
 /* Iconbtn */
 .ds-iconbtn {
   width: 32px; height: 32px;
   display: inline-flex; align-items: center; justify-content: center;
   background: transparent;
-  border: 1px solid #E8E8F0;
-  border-radius: 8px;
-  color: #6B7280;
-  transition: all .15s;
+  border: 1px solid var(--vault-border);
+  border-radius: var(--vault-radius-sm);
+  color: var(--vault-text-secondary);
+  transition: all var(--vault-motion-fast);
   cursor: pointer;
   min-height: unset;
 }
-.ds-iconbtn:hover { background: #F9FAFB; border-color: #D1D5DB; color: #1A1A2E; }
+.ds-iconbtn:hover { background: var(--vault-surface); border-color: var(--vault-border-strong); color: var(--vault-text); }
 
 /* Cards */
 .ds-card {
-  background: #FFFFFF;
-  border: 1px solid #E8E8F0;
-  border-radius: 12px;
+  background: var(--vault-canvas);
+  border: 1px solid var(--vault-border);
+  border-radius: var(--vault-radius-md);
 }
 .ds-card-pad { padding: var(--card-pad); }
 .ds-card-h {
@@ -565,26 +571,26 @@ html, body {
   align-items: center;
   justify-content: space-between;
   padding: 14px 18px;
-  border-bottom: 1px solid #E8E8F0;
+  border-bottom: 1px solid var(--vault-border);
 }
 .ds-card-h h3 {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
-  color: #1A1A2E;
+  color: var(--vault-text);
 }
 
 /* Table */
 .ds-table-wrap {
-  background: #FFFFFF;
-  border: 1px solid #E8E8F0;
-  border-radius: 12px;
+  background: var(--vault-canvas);
+  border: 1px solid var(--vault-border);
+  border-radius: var(--vault-radius-md);
   overflow: hidden;
 }
 .ds-table-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 14px;
-  border-bottom: 1px solid #E8E8F0;
+  border-bottom: 1px solid var(--vault-border);
   gap: 10px;
 }
 .ds-filters { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
@@ -592,18 +598,21 @@ html, body {
   height: 32px;
   padding: 0 12px;
   font-size: 13px;
-  color: #6B7280;
-  border-radius: 8px;
-  border: 1px solid #E8E8F0;
-  background: #F9FAFB;
+  color: var(--vault-text-secondary);
+  border-radius: var(--vault-radius-sm);
+  border: 1px solid var(--vault-border);
+  background: var(--vault-canvas);
   display: inline-flex; align-items: center; gap: 6px;
-  transition: all .15s;
+  transition: all var(--vault-motion-fast);
   cursor: pointer;
   font-family: inherit;
   min-height: unset;
 }
-.ds-chip:hover { color: #1A1A2E; border-color: #D1D5DB; background: #F3F4F6; }
-.ds-chip.active { color: #635BFF; border-color: #635BFF; background: #EEF2FF; }
+.ds-chip:hover { color: var(--vault-text); border-color: var(--vault-border-strong); background: var(--vault-surface); }
+/* Active filter chip - dark text + subtle neutral fill, not a violet pill;
+   status colour has semantic meaning only per the design brief, and "this
+   filter is on" isn't a status. */
+.ds-chip.active { color: var(--vault-text); border-color: var(--vault-text); background: var(--vault-surface-selected); font-weight: 600; }
 
 table.ds-t {
   width: 100%;
