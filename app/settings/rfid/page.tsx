@@ -6,8 +6,8 @@ import { canManage } from "@/lib/userTypes";
 import { Wifi, WifiOff, Printer, RefreshCw, CheckCircle, XCircle, Clock, Copy, Check } from "lucide-react";
 
 const SECTION_STYLE: React.CSSProperties = {
-  background: "#fff",
-  border: "1px solid #E5E7EB",
+  background: "var(--vault-canvas)",
+  border: "1px solid var(--vault-border)",
   borderRadius: 12,
   padding: 24,
   marginBottom: 20,
@@ -16,7 +16,7 @@ const SECTION_STYLE: React.CSSProperties = {
 const LABEL_STYLE: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 700,
-  color: "#9CA3AF",
+  color: "var(--vault-text-muted)",
   textTransform: "uppercase",
   letterSpacing: "0.06em",
   marginBottom: 16,
@@ -29,7 +29,7 @@ function StatusChip({ status }: { status: "queued" | "claimed" | "printing" | "c
     printing:  { bg: "#EDE9FE", text: "#4C1D95" },
     completed: { bg: "#D1FAE5", text: "#065F46" },
     failed:    { bg: "#FEE2E2", text: "#991B1B" },
-    cancelled: { bg: "#F3F4F6", text: "#6B7280" },
+    cancelled: { bg: "var(--vault-surface)", text: "var(--vault-text-secondary)" },
   };
   const c = colours[status] ?? colours.cancelled;
   return (
@@ -45,7 +45,7 @@ function fmtDate(d: string | null | undefined) {
 }
 
 function BridgeOnline({ lastHeartbeat }: { lastHeartbeat: string | null }) {
-  if (!lastHeartbeat) return <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#9CA3AF" }}><WifiOff size={12} /> Never connected</span>;
+  if (!lastHeartbeat) return <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--vault-text-muted)" }}><WifiOff size={12} /> Never connected</span>;
   const age = Date.now() - new Date(lastHeartbeat).getTime();
   const online = age < 60_000; // within last minute
   return (
@@ -104,7 +104,7 @@ export default function RfidSettingsPage() {
   };
 
   if (!hydrated || loading) {
-    return <div style={{ padding: 32, color: "#9CA3AF", fontSize: 14 }}>Loading…</div>;
+    return <div style={{ padding: 32, color: "var(--vault-text-muted)", fontSize: 14 }}>Loading…</div>;
   }
 
   const hasPrinter = (data?.printers ?? []).length > 0;
@@ -113,8 +113,8 @@ export default function RfidSettingsPage() {
   return (
     <div style={{ maxWidth: 800, margin: "0 auto", padding: "32px 16px" }}>
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#111827" }}>RFID</h1>
-        <p style={{ margin: "4px 0 0", fontSize: 14, color: "#6B7280" }}>
+        <h1 style={{ margin: 0, fontSize: "var(--vault-text-page-title)", fontWeight: 600, color: "var(--vault-text)" }}>RFID</h1>
+        <p style={{ margin: "4px 0 0", fontSize: 14, color: "var(--vault-text-secondary)" }}>
           Configure your Zebra printer and Print Bridge for RFID tag encoding.
         </p>
       </div>
@@ -130,7 +130,7 @@ export default function RfidSettingsPage() {
             <code style={{ flex: 1, fontFamily: "monospace", fontSize: 12, background: "#D1FAE5", padding: "8px 12px", borderRadius: 8, wordBreak: "break-all" as const, color: "#047857" }}>
               {newApiKey}
             </code>
-            <button onClick={copyKey} style={{ flexShrink: 0, padding: "8px 12px", borderRadius: 8, border: "1px solid #6EE7B7", background: "#fff", color: "#065F46", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
+            <button onClick={copyKey} style={{ flexShrink: 0, padding: "8px 12px", borderRadius: 8, border: "1px solid #6EE7B7", background: "var(--vault-canvas)", color: "#065F46", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
               {copied ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
             </button>
           </div>
@@ -147,11 +147,11 @@ export default function RfidSettingsPage() {
           { label: "Bridges",  value: (data?.bridges  ?? []).filter((b: any) => b.is_active).length, icon: <Wifi size={16} /> },
           { label: "Tagged pieces", value: data?.active_tag_count ?? 0, icon: <CheckCircle size={16} /> },
         ].map(({ label, value, icon }) => (
-          <div key={label} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 16, display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ color: "#6B7280" }}>{icon}</div>
+          <div key={label} style={{ background: "var(--vault-canvas)", border: "1px solid var(--vault-border)", borderRadius: 12, padding: 16, display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ color: "var(--vault-text-secondary)" }}>{icon}</div>
             <div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: "#111827", lineHeight: 1 }}>{value}</div>
-              <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>{label}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: "var(--vault-text)", lineHeight: 1 }}>{value}</div>
+              <div style={{ fontSize: 12, color: "var(--vault-text-muted)", marginTop: 2 }}>{label}</div>
             </div>
           </div>
         ))}
@@ -162,19 +162,19 @@ export default function RfidSettingsPage() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
           <h2 style={{ ...LABEL_STYLE, margin: 0 }}>Printers</h2>
           {isManager && !hasPrinter && (
-            <button onClick={() => setShowSetup(true)} style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #D1D5DB", background: "#fff", fontSize: 13, cursor: "pointer" }}>
+            <button onClick={() => setShowSetup(true)} style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #D1D5DB", background: "var(--vault-canvas)", fontSize: 13, cursor: "pointer" }}>
               + Add printer &amp; bridge
             </button>
           )}
         </div>
         {(data?.printers ?? []).length === 0 ? (
-          <p style={{ margin: 0, fontSize: 13, color: "#9CA3AF" }}>No printers configured yet.</p>
+          <p style={{ margin: 0, fontSize: 13, color: "var(--vault-text-muted)" }}>No printers configured yet.</p>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr>
                 {["Name", "Model", "Status", "Last print"].map(h => (
-                  <th key={h} style={{ textAlign: "left", padding: "4px 8px 8px 0", fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase" as const }}>{h}</th>
+                  <th key={h} style={{ textAlign: "left", padding: "4px 8px 8px 0", fontSize: 11, fontWeight: 600, color: "var(--vault-text-muted)", textTransform: "uppercase" as const }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -182,13 +182,13 @@ export default function RfidSettingsPage() {
               {(data?.printers ?? []).map((p: any) => (
                 <tr key={p.id} style={{ borderTop: "1px solid #F3F4F6" }}>
                   <td style={{ padding: "10px 0" }}>{p.display_name}</td>
-                  <td style={{ padding: "10px 0", color: "#6B7280" }}>{p.model}</td>
+                  <td style={{ padding: "10px 0", color: "var(--vault-text-secondary)" }}>{p.model}</td>
                   <td style={{ padding: "10px 0" }}>
-                    <span style={{ color: p.is_active ? "#10B981" : "#9CA3AF", fontSize: 12 }}>
+                    <span style={{ color: p.is_active ? "#10B981" : "var(--vault-text-muted)", fontSize: 12 }}>
                       {p.is_active ? "Active" : "Inactive"}
                     </span>
                   </td>
-                  <td style={{ padding: "10px 0", color: "#9CA3AF" }}>{fmtDate(p.last_print_at)}</td>
+                  <td style={{ padding: "10px 0", color: "var(--vault-text-muted)" }}>{fmtDate(p.last_print_at)}</td>
                 </tr>
               ))}
             </tbody>
@@ -196,7 +196,7 @@ export default function RfidSettingsPage() {
         )}
         {!hasPrinter && isManager && (
           <div style={{ marginTop: 16 }}>
-            <button onClick={() => setShowSetup(true)} style={{ padding: "8px 16px", borderRadius: 8, background: "#111827", color: "#fff", border: "none", fontSize: 13, cursor: "pointer" }}>
+            <button onClick={() => setShowSetup(true)} style={{ padding: "8px 16px", borderRadius: 8, background: "var(--vault-text)", color: "var(--vault-canvas)", border: "none", fontSize: 13, cursor: "pointer" }}>
               Set up printer &amp; bridge
             </button>
           </div>
@@ -207,13 +207,13 @@ export default function RfidSettingsPage() {
       <div style={SECTION_STYLE}>
         <h2 style={LABEL_STYLE}>Bridge installations</h2>
         {(data?.bridges ?? []).length === 0 ? (
-          <p style={{ margin: 0, fontSize: 13, color: "#9CA3AF" }}>No bridge configured. Add one using the setup form above.</p>
+          <p style={{ margin: 0, fontSize: 13, color: "var(--vault-text-muted)" }}>No bridge configured. Add one using the setup form above.</p>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr>
                 {["Name", "Status", "Version", "Last heartbeat"].map(h => (
-                  <th key={h} style={{ textAlign: "left", padding: "4px 8px 8px 0", fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase" as const }}>{h}</th>
+                  <th key={h} style={{ textAlign: "left", padding: "4px 8px 8px 0", fontSize: 11, fontWeight: 600, color: "var(--vault-text-muted)", textTransform: "uppercase" as const }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -222,8 +222,8 @@ export default function RfidSettingsPage() {
                 <tr key={b.id} style={{ borderTop: "1px solid #F3F4F6" }}>
                   <td style={{ padding: "10px 0" }}>{b.display_name}</td>
                   <td style={{ padding: "10px 0" }}><BridgeOnline lastHeartbeat={b.last_heartbeat_at} /></td>
-                  <td style={{ padding: "10px 0", color: "#9CA3AF", fontFamily: "monospace", fontSize: 11 }}>{b.bridge_version ?? "—"}</td>
-                  <td style={{ padding: "10px 0", color: "#9CA3AF" }}>{fmtDate(b.last_heartbeat_at)}</td>
+                  <td style={{ padding: "10px 0", color: "var(--vault-text-muted)", fontFamily: "monospace", fontSize: 11 }}>{b.bridge_version ?? "—"}</td>
+                  <td style={{ padding: "10px 0", color: "var(--vault-text-muted)" }}>{fmtDate(b.last_heartbeat_at)}</td>
                 </tr>
               ))}
             </tbody>
@@ -235,18 +235,18 @@ export default function RfidSettingsPage() {
       <div style={SECTION_STYLE}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
           <h2 style={{ ...LABEL_STYLE, margin: 0 }}>Recent print jobs</h2>
-          <button onClick={fetchData} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 6, border: "1px solid #E5E7EB", background: "#F9FAFB", fontSize: 12, color: "#6B7280", cursor: "pointer" }}>
+          <button onClick={fetchData} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 6, border: "1px solid var(--vault-border)", background: "var(--vault-surface)", fontSize: 12, color: "var(--vault-text-secondary)", cursor: "pointer" }}>
             <RefreshCw size={11} /> Refresh
           </button>
         </div>
         {(data?.recent_jobs ?? []).length === 0 ? (
-          <p style={{ margin: 0, fontSize: 13, color: "#9CA3AF" }}>No print jobs yet.</p>
+          <p style={{ margin: 0, fontSize: 13, color: "var(--vault-text-muted)" }}>No print jobs yet.</p>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr>
                 {["Status", "Requested", "Completed", "Error"].map(h => (
-                  <th key={h} style={{ textAlign: "left", padding: "4px 8px 8px 0", fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase" as const }}>{h}</th>
+                  <th key={h} style={{ textAlign: "left", padding: "4px 8px 8px 0", fontSize: 11, fontWeight: 600, color: "var(--vault-text-muted)", textTransform: "uppercase" as const }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -254,8 +254,8 @@ export default function RfidSettingsPage() {
               {(data?.recent_jobs ?? []).map((j: any) => (
                 <tr key={j.id} style={{ borderTop: "1px solid #F3F4F6" }}>
                   <td style={{ padding: "10px 0" }}><StatusChip status={j.status} /></td>
-                  <td style={{ padding: "10px 0", color: "#6B7280" }}>{fmtDate(j.requested_at)}</td>
-                  <td style={{ padding: "10px 0", color: "#9CA3AF" }}>{fmtDate(j.completed_at)}</td>
+                  <td style={{ padding: "10px 0", color: "var(--vault-text-secondary)" }}>{fmtDate(j.requested_at)}</td>
+                  <td style={{ padding: "10px 0", color: "var(--vault-text-muted)" }}>{fmtDate(j.completed_at)}</td>
                   <td style={{ padding: "10px 0", color: "#DC2626", fontSize: 12 }}>{j.last_error ?? "—"}</td>
                 </tr>
               ))}
@@ -266,9 +266,9 @@ export default function RfidSettingsPage() {
 
       {/* Bridge configuration reference */}
       {hasBridge && (
-        <div style={{ background: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20, marginBottom: 20 }}>
+        <div style={{ background: "#F8FAFC", border: "1px solid var(--vault-border)", borderRadius: 12, padding: 20, marginBottom: 20 }}>
           <h3 style={{ ...LABEL_STYLE, margin: "0 0 12px" }}>Bridge config reference</h3>
-          <pre style={{ margin: 0, fontSize: 12, color: "#374151", overflowX: "auto" }}>{JSON.stringify({
+          <pre style={{ margin: 0, fontSize: 12, color: "var(--vault-text)", overflowX: "auto" }}>{JSON.stringify({
             vaultApiUrl: "https://yourdomain.com",
             bridgeApiKey: "<your-api-key>",
             pollIntervalMs: 3000,
@@ -281,16 +281,16 @@ export default function RfidSettingsPage() {
       {/* Setup modal */}
       {showSetup && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 32, width: "100%", maxWidth: 440, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
-            <h2 style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 700, color: "#111827" }}>Set up printer &amp; bridge</h2>
-            <p style={{ margin: "0 0 20px", fontSize: 13, color: "#6B7280" }}>Creates a printer record and generates a secure API key for your bridge to authenticate with Vault.</p>
+          <div style={{ background: "var(--vault-canvas)", borderRadius: 16, padding: 32, width: "100%", maxWidth: 440, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+            <h2 style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 700, color: "var(--vault-text)" }}>Set up printer &amp; bridge</h2>
+            <p style={{ margin: "0 0 20px", fontSize: 13, color: "var(--vault-text-secondary)" }}>Creates a printer record and generates a secure API key for your bridge to authenticate with Vault.</p>
 
             {[
               { key: "printer_display_name", label: "Printer name", placeholder: "Zebra ZD621R" },
               { key: "bridge_display_name",  label: "Bridge name",  placeholder: "Store Bridge" },
             ].map(({ key, label, placeholder }) => (
               <div key={key} style={{ marginBottom: 14 }}>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 4 }}>{label}</label>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--vault-text)", marginBottom: 4 }}>{label}</label>
                 <input
                   value={(setupForm as any)[key]}
                   onChange={e => setSetupForm(f => ({ ...f, [key]: e.target.value }))}
@@ -303,10 +303,10 @@ export default function RfidSettingsPage() {
             {setupError && <p style={{ margin: "0 0 14px", fontSize: 13, color: "#DC2626" }}>{setupError}</p>}
 
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button onClick={() => { setShowSetup(false); setSetupError(""); }} style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #D1D5DB", background: "#fff", fontSize: 13, cursor: "pointer" }}>
+              <button onClick={() => { setShowSetup(false); setSetupError(""); }} style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #D1D5DB", background: "var(--vault-canvas)", fontSize: 13, cursor: "pointer" }}>
                 Cancel
               </button>
-              <button onClick={handleSetup} disabled={setupSaving} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: "#111827", color: "#fff", fontSize: 13, cursor: setupSaving ? "not-allowed" : "pointer" }}>
+              <button onClick={handleSetup} disabled={setupSaving} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: "var(--vault-text)", color: "var(--vault-canvas)", fontSize: 13, cursor: setupSaving ? "not-allowed" : "pointer" }}>
                 {setupSaving ? "Creating…" : "Create"}
               </button>
             </div>

@@ -40,14 +40,14 @@ interface MeleeImportPreview {
 // entirely — no rows are parsed in that case.
 interface MeleeImportColumnError { error: string; missing: string[] }
 
-const th: React.CSSProperties = { textAlign: "left", padding: "8px 10px", fontSize: 11, fontWeight: 700, color: "#6B7099", textTransform: "uppercase", letterSpacing: 0.4, borderBottom: "1px solid #E8E8F0", position: "sticky", top: 0, background: "#F9FAFB" };
-const td: React.CSSProperties = { padding: "7px 10px", fontSize: 13, color: "#1B1F3B", borderBottom: "1px solid #F1F1F6", whiteSpace: "nowrap" };
+const th: React.CSSProperties = { textAlign: "left", padding: "8px 10px", fontSize: 11, fontWeight: 700, color: "#6B7099", textTransform: "uppercase", letterSpacing: 0.4, borderBottom: "1px solid var(--vault-border)", position: "sticky", top: 0, background: "var(--vault-surface)" };
+const td: React.CSSProperties = { padding: "7px 10px", fontSize: 13, color: "var(--vault-text)", borderBottom: "1px solid #F1F1F6", whiteSpace: "nowrap" };
 
 function Stat({ label, value, warn, strong }: { label: string; value: number; warn?: boolean; strong?: boolean }) {
   return (
-    <div style={{ background: "#fff", border: `1px solid ${warn ? "#FDE68A" : "#E8E8F0"}`, borderRadius: 8, padding: "8px 10px" }}>
-      <div style={{ color: "#9CA3AF", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.3 }}>{label}</div>
-      <div style={{ fontWeight: strong ? 700 : 600, color: warn ? "#B45309" : "#1B1F3B", fontSize: 15 }}>{value}</div>
+    <div style={{ background: "var(--vault-canvas)", border: `1px solid ${warn ? "#FDE68A" : "var(--vault-border)"}`, borderRadius: 8, padding: "8px 10px" }}>
+      <div style={{ color: "var(--vault-text-muted)", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.3 }}>{label}</div>
+      <div style={{ fontWeight: strong ? 700 : 600, color: warn ? "#B45309" : "var(--vault-text)", fontSize: 15 }}>{value}</div>
     </div>
   );
 }
@@ -211,7 +211,7 @@ export default function MeleePricingPage() {
           onKeyDown={(e) => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEdit(null); }}
           onBlur={saveEdit}
           disabled={saving}
-          style={{ width: 90, padding: "4px 6px", border: "1px solid #635BFF", borderRadius: 6, fontSize: 13 }}
+          style={{ width: 90, padding: "4px 6px", border: "1px solid var(--vault-text)", borderRadius: 6, fontSize: 13 }}
         />
       );
     }
@@ -221,7 +221,7 @@ export default function MeleePricingPage() {
       <button
         onClick={() => setEdit({ id: r.id, field, value: val != null ? String(val) : "" })}
         title="Edit price (manager)"
-        style={{ background: "none", border: "none", cursor: "pointer", color: "#1B1F3B", fontSize: 13, padding: 0, borderBottom: "1px dashed #C4BFFE" }}
+        style={{ background: "none", border: "none", cursor: "pointer", color: "var(--vault-text)", fontSize: 13, padding: 0, borderBottom: "1px dashed var(--vault-border-strong)" }}
       >
         {display}
       </button>
@@ -232,7 +232,7 @@ export default function MeleePricingPage() {
     <div style={{ padding: "28px 32px", maxWidth: 1100, margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1B1F3B", margin: 0 }}>Melee Pricing</h1>
+          <h1 style={{ fontSize: "var(--vault-text-page-title)", fontWeight: 600, color: "var(--vault-text)", margin: 0 }}>Melee Pricing</h1>
           <p style={{ fontSize: 13, color: "#6B7099", marginTop: 4 }}>
             Live melee price list — priced by origin, shape, carat, mm and quality.
             {isManager ? " Click a price to edit." : " View only — ask a manager to edit prices."}
@@ -241,12 +241,12 @@ export default function MeleePricingPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ fontSize: 12, color: "#6B7099", textAlign: "right" }}>
             <div>{loading ? "Loading…" : `${rows.length} rows`}</div>
-            <div>Last import: <strong style={{ color: "#1B1F3B" }}>{lastImport ? new Date(lastImport).toLocaleString() : "—"}</strong></div>
+            <div>Last import: <strong style={{ color: "var(--vault-text)" }}>{lastImport ? new Date(lastImport).toLocaleString() : "—"}</strong></div>
           </div>
           <button
             onClick={handleExport}
             disabled={exporting || rows.length === 0}
-            style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid #E8E8F0", background: "#fff", color: "#374151", fontSize: 13, fontWeight: 600, cursor: exporting ? "wait" : "pointer", whiteSpace: "nowrap" }}
+            style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid var(--vault-border)", background: "var(--vault-canvas)", color: "var(--vault-text)", fontSize: 13, fontWeight: 600, cursor: exporting ? "wait" : "pointer", whiteSpace: "nowrap" }}
           >
             {exporting ? "Exporting…" : "Export CSV"}
           </button>
@@ -254,8 +254,8 @@ export default function MeleePricingPage() {
       </div>
 
       {isManager && (
-        <div style={{ marginTop: 16, padding: 16, border: "1px solid #E8E8F0", borderRadius: 10, background: "#F9FAFB" }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: "#1B1F3B", marginBottom: 4 }}>Monthly price-list refresh</div>
+        <div style={{ marginTop: 16, padding: 16, border: "1px solid var(--vault-border)", borderRadius: 10, background: "var(--vault-surface)" }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "var(--vault-text)", marginBottom: 4 }}>Monthly price-list refresh</div>
           <p style={{ fontSize: 12, color: "#6B7099", margin: "0 0 10px" }}>
             Upload a CSV with columns: <strong>Origin, Shape, Quality, Carat, mm, $/carat, $/stone</strong>.
             This REPLACES the entire melee price list for this tenant — review the preview below before confirming.
@@ -280,8 +280,8 @@ export default function MeleePricingPage() {
           )}
 
           {preview && (
-            <div style={{ marginTop: 14, borderTop: "1px solid #E8E8F0", paddingTop: 14 }}>
-              <div style={{ fontWeight: 600, fontSize: 13, color: "#1B1F3B", marginBottom: 8 }}>
+            <div style={{ marginTop: 14, borderTop: "1px solid var(--vault-border)", paddingTop: 14 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: "var(--vault-text)", marginBottom: 8 }}>
                 Preview — {preview.filename}
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8, fontSize: 12, marginBottom: 10 }}>
@@ -323,7 +323,7 @@ export default function MeleePricingPage() {
                 if (!sample || sample.length === 0) return null;
                 return (
                   <div key={origin} style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", textTransform: "capitalize" }}>{origin} sample rows</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--vault-text)", textTransform: "capitalize" }}>{origin} sample rows</div>
                     <div style={{ fontSize: 12, color: "#6B7099", fontFamily: "monospace" }}>
                       {sample.map((r, i) => (
                         <div key={i}>
@@ -339,14 +339,14 @@ export default function MeleePricingPage() {
                 <button
                   onClick={confirmImport}
                   disabled={importing || preview.stats.rowsToStore === 0}
-                  style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "#635BFF", color: "#fff", fontSize: 13, fontWeight: 600, cursor: importing ? "wait" : "pointer" }}
+                  style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "var(--vault-text)", color: "var(--vault-canvas)", fontSize: 13, fontWeight: 600, cursor: importing ? "wait" : "pointer" }}
                 >
                   {importing ? "Importing…" : `Confirm — replace melee list with ${preview.stats.rowsToStore} rows`}
                 </button>
                 <button
                   onClick={() => setPreview(null)}
                   disabled={importing}
-                  style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #E8E8F0", background: "#fff", color: "#374151", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                  style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid var(--vault-border)", background: "var(--vault-canvas)", color: "var(--vault-text)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
                 >
                   Cancel
                 </button>
@@ -360,17 +360,17 @@ export default function MeleePricingPage() {
         <input
           value={q} onChange={(e) => setQ(e.target.value)}
           placeholder="Search shape, quality, mm, carat…"
-          style={{ flex: 1, minWidth: 220, padding: "8px 12px", border: "1px solid #E8E8F0", borderRadius: 8, fontSize: 14 }}
+          style={{ flex: 1, minWidth: 220, padding: "8px 12px", border: "1px solid var(--vault-border)", borderRadius: 8, fontSize: 14 }}
         />
         <select value={originFilter} onChange={(e) => setOriginFilter(e.target.value as "all" | "natural" | "lab")}
-          style={{ padding: "8px 12px", border: "1px solid #E8E8F0", borderRadius: 8, fontSize: 14 }}>
+          style={{ padding: "8px 12px", border: "1px solid var(--vault-border)", borderRadius: 8, fontSize: 14 }}>
           <option value="all">All origins</option>
           <option value="natural">Natural</option>
           <option value="lab">Lab</option>
         </select>
       </div>
 
-      <div style={{ overflowX: "auto", border: "1px solid #E8E8F0", borderRadius: 10, maxHeight: "70vh", overflowY: "auto" }}>
+      <div style={{ overflowX: "auto", border: "1px solid var(--vault-border)", borderRadius: 10, maxHeight: "70vh", overflowY: "auto" }}>
         <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 720 }}>
           <thead>
             <tr>
@@ -391,17 +391,17 @@ export default function MeleePricingPage() {
               </tr>
             ))}
             {!loading && shown.length === 0 && (
-              <tr><td style={{ ...td, textAlign: "center", color: "#9CA3AF" }} colSpan={7}>No melee prices found.</td></tr>
+              <tr><td style={{ ...td, textAlign: "center", color: "var(--vault-text-muted)" }} colSpan={7}>No melee prices found.</td></tr>
             )}
           </tbody>
         </table>
       </div>
       {filtered.length > CAP && (
-        <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 8 }}>Showing first {CAP} of {filtered.length} — narrow with search.</p>
+        <p style={{ fontSize: 12, color: "var(--vault-text-muted)", marginTop: 8 }}>Showing first {CAP} of {filtered.length} — narrow with search.</p>
       )}
 
       {toast && (
-        <div onClick={() => setToast(null)} style={{ position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", background: "#1B1F3B", color: "#fff", padding: "10px 18px", borderRadius: 8, fontSize: 13, cursor: "pointer", zIndex: 100 }}>
+        <div onClick={() => setToast(null)} style={{ position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", background: "var(--vault-text)", color: "var(--vault-canvas)", padding: "10px 18px", borderRadius: 8, fontSize: 13, cursor: "pointer", zIndex: 100 }}>
           {toast}
         </div>
       )}

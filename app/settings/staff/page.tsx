@@ -29,15 +29,15 @@ const SPECIALITIES = [
   "Management",
 ];
 
-const CARD: React.CSSProperties = { background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, padding: 24 };
-const INPUT: React.CSSProperties = { border: "1px solid #E8E8F0", borderRadius: 8, padding: "7px 10px", fontSize: 13, color: "#1A1A2E", outline: "none", background: "#fff", width: "100%" };
-const BTN: React.CSSProperties = { background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" };
-const SEC: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.06em" };
+const CARD: React.CSSProperties = { background: "var(--vault-canvas)", border: "1px solid var(--vault-border)", borderRadius: 12, padding: 24 };
+const INPUT: React.CSSProperties = { border: "1px solid var(--vault-border)", borderRadius: 8, padding: "7px 10px", fontSize: 13, color: "var(--vault-text)", outline: "none", background: "var(--vault-canvas)", width: "100%" };
+const BTN: React.CSSProperties = { background: "var(--vault-text)", color: "var(--vault-canvas)", border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" };
+const SEC: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: "var(--vault-text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em" };
 
 const ROLE_BADGE: Record<string, { bg: string; text: string }> = {
   admin:   { bg: "#EDE9FE", text: "#5B21B6" },
   manager: { bg: "#DBEAFE", text: "#1E40AF" },
-  staff:   { bg: "#F3F4F6", text: "#374151" },
+  staff:   { bg: "var(--vault-surface)", text: "var(--vault-text)" },
 };
 
 export default function StaffSettingsPage() {
@@ -97,10 +97,10 @@ export default function StaffSettingsPage() {
       {/* Header */}
       <div>
         <div style={{ marginBottom: 4 }}>
-          <Link href="/settings" style={{ fontSize: 13, color: "#9CA3AF", textDecoration: "none" }}>← Settings</Link>
+          <Link href="/settings" style={{ fontSize: 13, color: "var(--vault-text-muted)", textDecoration: "none" }}>← Settings</Link>
         </div>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1A1A2E", margin: 0 }}>Staff</h1>
-        <p style={{ fontSize: 13, color: "#6B7280", marginTop: 4 }}>
+        <h1 style={{ fontSize: "var(--vault-text-page-title)", fontWeight: 600, color: "var(--vault-text)", margin: 0 }}>Staff</h1>
+        <p style={{ fontSize: 13, color: "var(--vault-text-secondary)", marginTop: 4 }}>
           Manage staff display names and specialities. These appear in workshop assignment dropdowns.
         </p>
       </div>
@@ -108,14 +108,14 @@ export default function StaffSettingsPage() {
       {/* Table */}
       <div style={CARD}>
         {loading ? (
-          <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>Loading…</div>
+          <div style={{ padding: "40px 0", textAlign: "center", color: "var(--vault-text-muted)", fontSize: 14 }}>Loading…</div>
         ) : profiles.length === 0 ? (
-          <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>No staff found.</div>
+          <div style={{ padding: "40px 0", textAlign: "center", color: "var(--vault-text-muted)", fontSize: 14 }}>No staff found.</div>
         ) : (
           <div className="overflow-x-auto">
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
-                <tr style={{ borderBottom: "1px solid #E8E8F0" }}>
+                <tr style={{ borderBottom: "1px solid var(--vault-border)" }}>
                   {["Display Name", "Email", "Role", "Speciality", ""].map(h => (
                     <th key={h} style={{ ...SEC, padding: "0 12px 10px", textAlign: "left", whiteSpace: "nowrap" }}>{h}</th>
                   ))}
@@ -141,7 +141,7 @@ export default function StaffSettingsPage() {
                       </td>
                       {/* Email (read-only) */}
                       <td style={{ padding: "10px 12px", minWidth: 160 }}>
-                        <span style={{ fontSize: 13, color: "#6B7280" }}>{p.email ?? "—"}</span>
+                        <span style={{ fontSize: 13, color: "var(--vault-text-secondary)" }}>{p.email ?? "—"}</span>
                       </td>
                       {/* Role badge */}
                       <td style={{ padding: "10px 12px", width: 100 }}>
@@ -181,9 +181,9 @@ export default function StaffSettingsPage() {
       </div>
 
       {/* Help */}
-      <div style={{ ...CARD, background: "#F9FAFB", padding: "14px 20px" }}>
-        <p style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.7, margin: 0 }}>
-          <strong style={{ color: "#1A1A2E" }}>Speciality</strong> tags help identify which staff member to assign for different job types in the workshop. Staff appear in the &quot;Assigned To&quot; dropdown when creating or editing workshop jobs.
+      <div style={{ ...CARD, background: "var(--vault-surface)", padding: "14px 20px" }}>
+        <p style={{ fontSize: 12, color: "var(--vault-text-secondary)", lineHeight: 1.7, margin: 0 }}>
+          <strong style={{ color: "var(--vault-text)" }}>Speciality</strong> tags help identify which staff member to assign for different job types in the workshop. Staff appear in the &quot;Assigned To&quot; dropdown when creating or editing workshop jobs.
         </p>
       </div>
     </div>

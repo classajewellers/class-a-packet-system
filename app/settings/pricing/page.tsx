@@ -64,18 +64,18 @@ type ActiveTab = "quote_builder" | "pricing_engine";
 
 // ── Shared styles ────────────────────────────────────────────────────────────
 
-const card: React.CSSProperties = { background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, overflow: "hidden" };
-const th: React.CSSProperties = { padding: "10px 16px", fontSize: 12, fontWeight: 600, color: "#6B7280", textTransform: "uppercase" as const, letterSpacing: "0.05em", background: "#F9FAFB", textAlign: "left" as const, borderBottom: "1px solid #E8E8F0" };
-const td: React.CSSProperties = { padding: "12px 16px", fontSize: 14, color: "#1A1A2E", borderBottom: "1px solid #E8E8F0" };
+const card: React.CSSProperties = { background: "var(--vault-canvas)", border: "1px solid var(--vault-border)", borderRadius: 12, overflow: "hidden" };
+const th: React.CSSProperties = { padding: "10px 16px", fontSize: 12, fontWeight: 600, color: "var(--vault-text-secondary)", textTransform: "uppercase" as const, letterSpacing: "0.05em", background: "var(--vault-surface)", textAlign: "left" as const, borderBottom: "1px solid var(--vault-border)" };
+const td: React.CSSProperties = { padding: "12px 16px", fontSize: 14, color: "var(--vault-text)", borderBottom: "1px solid var(--vault-border)" };
 const inp: React.CSSProperties = { border: "1px solid #D1D5DB", borderRadius: 6, padding: "5px 8px", fontSize: 14, outline: "none", fontFamily: "inherit" };
-const inpFocus: React.CSSProperties = { ...inp, border: "1px solid #635BFF" };
-const PRIMARY = "#635BFF";
+const inpFocus: React.CSSProperties = { ...inp, border: "1px solid var(--vault-text)" };
+const PRIMARY = "var(--vault-text)";
 
 function SaveBtn({ onClick, saving, saved }: { onClick: () => void; saving: boolean; saved?: boolean }) {
   return (
     <button onClick={onClick} disabled={saving} style={{
       padding: "4px 14px", background: saved ? "#10B981" : PRIMARY,
-      color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600,
+      color: "var(--vault-canvas)", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600,
       cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit",
       transition: "background 0.2s",
     }}>
@@ -89,7 +89,7 @@ function IconBtn({ onClick, icon, danger }: { onClick: () => void; icon: string;
   return (
     <button onClick={onClick} style={{
       background: "transparent", border: "none", cursor: "pointer", padding: "2px 6px",
-      color: hover ? (danger ? "#DC2626" : PRIMARY) : "#9CA3AF", fontSize: 15, transition: "color 0.15s",
+      color: hover ? (danger ? "#DC2626" : PRIMARY) : "var(--vault-text-muted)", fontSize: 15, transition: "color 0.15s",
     }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       {icon}
@@ -382,18 +382,18 @@ export default function PricingMarginsPage() {
 
   return (
     <div style={{ padding: "32px 24px", fontFamily: "Inter, system-ui, sans-serif", maxWidth: 840 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: "#1A1A2E", margin: "0 0 4px" }}>Pricing</h1>
-      <p style={{ fontSize: 14, color: "#6B7280", margin: "0 0 24px" }}>
+      <h1 style={{ fontSize: "var(--vault-text-page-title)", fontWeight: 600, color: "var(--vault-text)", margin: "0 0 4px" }}>Pricing</h1>
+      <p style={{ fontSize: 14, color: "var(--vault-text-secondary)", margin: "0 0 24px" }}>
         Configure markup multipliers, birthstone prices, and personalisation fees.
       </p>
 
       {/* Tabs */}
-      <div style={{ display: "flex", gap: 4, borderBottom: "2px solid #E8E8F0", marginBottom: 24 }}>
+      <div style={{ display: "flex", gap: 4, borderBottom: "2px solid var(--vault-border)", marginBottom: 24 }}>
         {(["quote_builder", "pricing_engine"] as ActiveTab[]).map(t => (
           <button key={t} onClick={() => setActiveTab(t)} style={{
             padding: "8px 18px", background: "transparent", border: "none", cursor: "pointer",
             fontSize: 14, fontWeight: activeTab === t ? 700 : 400,
-            color: activeTab === t ? PRIMARY : "#6B7280",
+            color: activeTab === t ? PRIMARY : "var(--vault-text-secondary)",
             borderBottom: activeTab === t ? `2px solid ${PRIMARY}` : "2px solid transparent",
             marginBottom: -2, fontFamily: "inherit",
           }}>
@@ -412,7 +412,7 @@ export default function PricingMarginsPage() {
               </span>
             )}
             <button onClick={saveQb} disabled={qbSaving} style={{
-              background: qbSaving ? "#9CA3AF" : PRIMARY, color: "#fff", border: "none",
+              background: qbSaving ? "var(--vault-text-muted)" : PRIMARY, color: "var(--vault-canvas)", border: "none",
               borderRadius: 8, padding: "9px 20px", fontSize: 14, fontWeight: 600,
               cursor: qbSaving ? "not-allowed" : "pointer", fontFamily: "inherit",
             }}>
@@ -421,7 +421,7 @@ export default function PricingMarginsPage() {
           </div>
 
           {qbLoading ? (
-            <div style={{ color: "#9CA3AF", fontSize: 14 }}>Loading…</div>
+            <div style={{ color: "var(--vault-text-muted)", fontSize: 14 }}>Loading…</div>
           ) : (
             <div style={card}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -443,20 +443,20 @@ export default function PricingMarginsPage() {
                             <input type="number" min="0" max="999" step="0.1" value={row.margin_percent ?? 0}
                               onChange={e => updateRow(cat.key, "margin_percent", e.target.value)}
                               style={{ ...inpFocus, width: 80, textAlign: "right" }} />
-                            <span style={{ fontSize: 13, color: "#6B7280" }}>%</span>
+                            <span style={{ fontSize: 13, color: "var(--vault-text-secondary)" }}>%</span>
                           </div>
                         </td>
                         <td style={{ ...td, textAlign: "right" }}>
                           {cat.hasRate ? (
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4 }}>
-                              <span style={{ fontSize: 13, color: "#6B7280" }}>$</span>
+                              <span style={{ fontSize: 13, color: "var(--vault-text-secondary)" }}>$</span>
                               <input type="number" min="0" step="0.5" value={row.hourly_rate ?? ""}
                                 onChange={e => updateRow(cat.key, "hourly_rate", e.target.value)}
                                 style={{ ...inpFocus, width: 80, textAlign: "right" }} />
-                              <span style={{ fontSize: 12, color: "#9CA3AF" }}>/hr</span>
+                              <span style={{ fontSize: 12, color: "var(--vault-text-muted)" }}>/hr</span>
                             </div>
                           ) : (
-                            <span style={{ color: "#D1D5DB" }}>—</span>
+                            <span style={{ color: "var(--vault-border-strong)" }}>—</span>
                           )}
                         </td>
                       </tr>
@@ -481,15 +481,15 @@ export default function PricingMarginsPage() {
       {activeTab === "pricing_engine" && (
         <>
           {engLoading ? (
-            <div style={{ color: "#9CA3AF", fontSize: 14 }}>Loading…</div>
+            <div style={{ color: "var(--vault-text-muted)", fontSize: 14 }}>Loading…</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
 
               {/* Flat multipliers */}
               <div style={card}>
-                <div style={{ padding: "14px 20px", borderBottom: "1px solid #E8E8F0" }}>
-                  <h2 style={{ fontSize: 15, fontWeight: 700, color: "#1A1A2E", margin: 0 }}>Multipliers</h2>
-                  <p style={{ fontSize: 13, color: "#6B7280", marginTop: 3, marginBottom: 0 }}>
+                <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--vault-border)" }}>
+                  <h2 style={{ fontSize: 15, fontWeight: 700, color: "var(--vault-text)", margin: 0 }}>Multipliers</h2>
+                  <p style={{ fontSize: 13, color: "var(--vault-text-secondary)", marginTop: 3, marginBottom: 0 }}>
                     Applied by <code>calculate_price()</code>. Each retail price = wholesale cost × multiplier.
                   </p>
                 </div>
@@ -528,7 +528,7 @@ export default function PricingMarginsPage() {
                             {isEditing ? (
                               <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
                                 <SaveBtn onClick={() => saveRule(rule.id)} saving={ruleSaving} saved={ruleSaved === rule.id} />
-                                <button onClick={() => setEditingRule(null)} style={{ padding: "4px 8px", background: "transparent", color: "#6B7280", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>✕</button>
+                                <button onClick={() => setEditingRule(null)} style={{ padding: "4px 8px", background: "transparent", color: "var(--vault-text-secondary)", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>✕</button>
                               </div>
                             ) : (
                               <IconBtn onClick={() => { setEditingRule(rule.id); setRuleBuf({ multiplier: String(rule.multiplier), carat_min: "", carat_max: "" }); }} icon="✎" />
@@ -543,15 +543,15 @@ export default function PricingMarginsPage() {
 
               {/* Lab stone tiers */}
               <div style={card}>
-                <div style={{ padding: "14px 20px", borderBottom: "1px solid #E8E8F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--vault-border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
-                    <h2 style={{ fontSize: 15, fontWeight: 700, color: "#1A1A2E", margin: 0 }}>Lab Stone Tiers</h2>
-                    <p style={{ fontSize: 13, color: "#6B7280", marginTop: 3, marginBottom: 0 }}>
+                    <h2 style={{ fontSize: 15, fontWeight: 700, color: "var(--vault-text)", margin: 0 }}>Lab Stone Tiers</h2>
+                    <p style={{ fontSize: 13, color: "var(--vault-text-secondary)", marginTop: 3, marginBottom: 0 }}>
                       Tiered markup by carat weight. Ranges are {">"}= min and {"<"} max.
                     </p>
                   </div>
                   <button onClick={() => setShowAddLabTier(v => !v)} style={{
-                    background: showAddLabTier ? "#F3F4F6" : PRIMARY, color: showAddLabTier ? "#6B7280" : "#fff",
+                    background: showAddLabTier ? "var(--vault-surface)" : PRIMARY, color: showAddLabTier ? "var(--vault-text-secondary)" : "var(--vault-canvas)",
                     border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 13, fontWeight: 600,
                     cursor: "pointer", fontFamily: "inherit",
                   }}>
@@ -560,27 +560,27 @@ export default function PricingMarginsPage() {
                 </div>
 
                 {showAddLabTier && (
-                  <div style={{ padding: "14px 20px", background: "#F9FAFB", borderBottom: "1px solid #E8E8F0", display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" as const }}>
+                  <div style={{ padding: "14px 20px", background: "var(--vault-surface)", borderBottom: "1px solid var(--vault-border)", display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" as const }}>
                     <div>
-                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Min ct (incl.)</label>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--vault-text-secondary)", marginBottom: 4 }}>Min ct (incl.)</label>
                       <input type="number" min="0" step="0.01" placeholder="0.00" value={newLabTier.carat_min}
                         onChange={e => setNewLabTier(t => ({ ...t, carat_min: e.target.value }))}
                         style={{ ...inp, width: 90 }} />
                     </div>
                     <div>
-                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Max ct (excl.) — blank = no limit</label>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--vault-text-secondary)", marginBottom: 4 }}>Max ct (excl.) — blank = no limit</label>
                       <input type="number" min="0" step="0.01" placeholder="none" value={newLabTier.carat_max}
                         onChange={e => setNewLabTier(t => ({ ...t, carat_max: e.target.value }))}
                         style={{ ...inp, width: 90 }} />
                     </div>
                     <div>
-                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Multiplier</label>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--vault-text-secondary)", marginBottom: 4 }}>Multiplier</label>
                       <input type="number" min="1" step="0.01" placeholder="10.50" value={newLabTier.multiplier}
                         onChange={e => setNewLabTier(t => ({ ...t, multiplier: e.target.value }))}
                         style={{ ...inp, width: 90 }} />
                     </div>
                     <button onClick={addLabTier} disabled={addLabTierSaving} style={{
-                      background: PRIMARY, color: "#fff", border: "none", borderRadius: 8,
+                      background: PRIMARY, color: "var(--vault-canvas)", border: "none", borderRadius: 8,
                       padding: "7px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
                     }}>
                       {addLabTierSaving ? "Adding…" : "Add"}
@@ -598,7 +598,7 @@ export default function PricingMarginsPage() {
                   </thead>
                   <tbody>
                     {labTiers.length === 0 && (
-                      <tr><td colSpan={3} style={{ ...td, color: "#9CA3AF", textAlign: "center" }}>No tiers configured.</td></tr>
+                      <tr><td colSpan={3} style={{ ...td, color: "var(--vault-text-muted)", textAlign: "center" }}>No tiers configured.</td></tr>
                     )}
                     {labTiers.map(tier => {
                       const isEditing = editingRule === tier.id;
@@ -613,11 +613,11 @@ export default function PricingMarginsPage() {
                                 <input type="number" min="0" step="0.01" placeholder="min" value={ruleBuf.carat_min}
                                   onChange={e => setRuleBuf(b => ({ ...b, carat_min: e.target.value }))}
                                   style={{ ...inpFocus, width: 70 }} />
-                                <span style={{ color: "#9CA3AF" }}>–</span>
+                                <span style={{ color: "var(--vault-text-muted)" }}>–</span>
                                 <input type="number" min="0" step="0.01" placeholder="max" value={ruleBuf.carat_max}
                                   onChange={e => setRuleBuf(b => ({ ...b, carat_max: e.target.value }))}
                                   style={{ ...inpFocus, width: 70 }} />
-                                <span style={{ fontSize: 12, color: "#9CA3AF" }}>ct (blank = ∞)</span>
+                                <span style={{ fontSize: 12, color: "var(--vault-text-muted)" }}>ct (blank = ∞)</span>
                               </div>
                             ) : (
                               <span style={{ fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{rangeLabel}</span>
@@ -638,7 +638,7 @@ export default function PricingMarginsPage() {
                             {isEditing ? (
                               <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
                                 <SaveBtn onClick={() => saveRule(tier.id)} saving={ruleSaving} saved={ruleSaved === tier.id} />
-                                <button onClick={() => setEditingRule(null)} style={{ padding: "4px 8px", background: "transparent", color: "#6B7280", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>✕</button>
+                                <button onClick={() => setEditingRule(null)} style={{ padding: "4px 8px", background: "transparent", color: "var(--vault-text-secondary)", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>✕</button>
                               </div>
                             ) : (
                               <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -656,15 +656,15 @@ export default function PricingMarginsPage() {
 
               {/* Natural stone tiers */}
               <div style={card}>
-                <div style={{ padding: "14px 20px", borderBottom: "1px solid #E8E8F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--vault-border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
-                    <h2 style={{ fontSize: 15, fontWeight: 700, color: "#1A1A2E", margin: 0 }}>Natural Stone Tiers</h2>
-                    <p style={{ fontSize: 13, color: "#6B7280", marginTop: 3, marginBottom: 0 }}>
+                    <h2 style={{ fontSize: 15, fontWeight: 700, color: "var(--vault-text)", margin: 0 }}>Natural Stone Tiers</h2>
+                    <p style={{ fontSize: 13, color: "var(--vault-text-secondary)", marginTop: 3, marginBottom: 0 }}>
                       Tiered markup by carat weight. Ranges are {">"}= min and {"<"} max.
                     </p>
                   </div>
                   <button onClick={() => setShowAddTier(v => !v)} style={{
-                    background: showAddTier ? "#F3F4F6" : PRIMARY, color: showAddTier ? "#6B7280" : "#fff",
+                    background: showAddTier ? "var(--vault-surface)" : PRIMARY, color: showAddTier ? "var(--vault-text-secondary)" : "var(--vault-canvas)",
                     border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 13, fontWeight: 600,
                     cursor: "pointer", fontFamily: "inherit",
                   }}>
@@ -673,27 +673,27 @@ export default function PricingMarginsPage() {
                 </div>
 
                 {showAddTier && (
-                  <div style={{ padding: "14px 20px", background: "#F9FAFB", borderBottom: "1px solid #E8E8F0", display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" as const }}>
+                  <div style={{ padding: "14px 20px", background: "var(--vault-surface)", borderBottom: "1px solid var(--vault-border)", display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" as const }}>
                     <div>
-                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Min ct (incl.)</label>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--vault-text-secondary)", marginBottom: 4 }}>Min ct (incl.)</label>
                       <input type="number" min="0" step="0.01" placeholder="0.00" value={newTier.carat_min}
                         onChange={e => setNewTier(t => ({ ...t, carat_min: e.target.value }))}
                         style={{ ...inp, width: 90 }} />
                     </div>
                     <div>
-                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Max ct (excl.) — blank = no limit</label>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--vault-text-secondary)", marginBottom: 4 }}>Max ct (excl.) — blank = no limit</label>
                       <input type="number" min="0" step="0.01" placeholder="none" value={newTier.carat_max}
                         onChange={e => setNewTier(t => ({ ...t, carat_max: e.target.value }))}
                         style={{ ...inp, width: 90 }} />
                     </div>
                     <div>
-                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Multiplier</label>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--vault-text-secondary)", marginBottom: 4 }}>Multiplier</label>
                       <input type="number" min="1" step="0.01" placeholder="2.50" value={newTier.multiplier}
                         onChange={e => setNewTier(t => ({ ...t, multiplier: e.target.value }))}
                         style={{ ...inp, width: 90 }} />
                     </div>
                     <button onClick={addNaturalTier} disabled={addTierSaving} style={{
-                      background: PRIMARY, color: "#fff", border: "none", borderRadius: 8,
+                      background: PRIMARY, color: "var(--vault-canvas)", border: "none", borderRadius: 8,
                       padding: "7px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
                     }}>
                       {addTierSaving ? "Adding…" : "Add"}
@@ -711,7 +711,7 @@ export default function PricingMarginsPage() {
                   </thead>
                   <tbody>
                     {stoneTiers.length === 0 && (
-                      <tr><td colSpan={3} style={{ ...td, color: "#9CA3AF", textAlign: "center" }}>No tiers configured.</td></tr>
+                      <tr><td colSpan={3} style={{ ...td, color: "var(--vault-text-muted)", textAlign: "center" }}>No tiers configured.</td></tr>
                     )}
                     {stoneTiers.map(tier => {
                       const isEditing = editingRule === tier.id;
@@ -726,11 +726,11 @@ export default function PricingMarginsPage() {
                                 <input type="number" min="0" step="0.01" placeholder="min" value={ruleBuf.carat_min}
                                   onChange={e => setRuleBuf(b => ({ ...b, carat_min: e.target.value }))}
                                   style={{ ...inpFocus, width: 70 }} />
-                                <span style={{ color: "#9CA3AF" }}>–</span>
+                                <span style={{ color: "var(--vault-text-muted)" }}>–</span>
                                 <input type="number" min="0" step="0.01" placeholder="max" value={ruleBuf.carat_max}
                                   onChange={e => setRuleBuf(b => ({ ...b, carat_max: e.target.value }))}
                                   style={{ ...inpFocus, width: 70 }} />
-                                <span style={{ fontSize: 12, color: "#9CA3AF" }}>ct (blank = ∞)</span>
+                                <span style={{ fontSize: 12, color: "var(--vault-text-muted)" }}>ct (blank = ∞)</span>
                               </div>
                             ) : (
                               <span style={{ fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{rangeLabel}</span>
@@ -751,7 +751,7 @@ export default function PricingMarginsPage() {
                             {isEditing ? (
                               <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
                                 <SaveBtn onClick={() => saveRule(tier.id)} saving={ruleSaving} saved={ruleSaved === tier.id} />
-                                <button onClick={() => setEditingRule(null)} style={{ padding: "4px 8px", background: "transparent", color: "#6B7280", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>✕</button>
+                                <button onClick={() => setEditingRule(null)} style={{ padding: "4px 8px", background: "transparent", color: "var(--vault-text-secondary)", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>✕</button>
                               </div>
                             ) : (
                               <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -769,15 +769,15 @@ export default function PricingMarginsPage() {
 
               {/* Birthstones */}
               <div style={card}>
-                <div style={{ padding: "14px 20px", borderBottom: "1px solid #E8E8F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--vault-border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
-                    <h2 style={{ fontSize: 15, fontWeight: 700, color: "#1A1A2E", margin: 0 }}>Birthstone Prices</h2>
-                    <p style={{ fontSize: 13, color: "#6B7280", marginTop: 3, marginBottom: 0 }}>
+                    <h2 style={{ fontSize: 15, fontWeight: 700, color: "var(--vault-text)", margin: 0 }}>Birthstone Prices</h2>
+                    <p style={{ fontSize: 13, color: "var(--vault-text-secondary)", marginTop: 3, marginBottom: 0 }}>
                       Retail price per stone (passed through to quotes, no additional markup applied).
                     </p>
                   </div>
                   <button onClick={() => setShowAddBs(v => !v)} style={{
-                    background: showAddBs ? "#F3F4F6" : PRIMARY, color: showAddBs ? "#6B7280" : "#fff",
+                    background: showAddBs ? "var(--vault-surface)" : PRIMARY, color: showAddBs ? "var(--vault-text-secondary)" : "var(--vault-canvas)",
                     border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 13, fontWeight: 600,
                     cursor: "pointer", fontFamily: "inherit",
                   }}>
@@ -786,34 +786,34 @@ export default function PricingMarginsPage() {
                 </div>
 
                 {showAddBs && (
-                  <div style={{ padding: "14px 20px", background: "#F9FAFB", borderBottom: "1px solid #E8E8F0", display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" as const }}>
+                  <div style={{ padding: "14px 20px", background: "var(--vault-surface)", borderBottom: "1px solid var(--vault-border)", display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" as const }}>
                     <div>
-                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Month</label>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--vault-text-secondary)", marginBottom: 4 }}>Month</label>
                       <select value={newBs.month_number} onChange={e => setNewBs(b => ({ ...b, month_number: e.target.value }))}
                         style={{ ...inp, width: 130 }}>
                         {MONTHS.map((m, i) => <option key={i + 1} value={String(i + 1)}>{m}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Stone name</label>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--vault-text-secondary)", marginBottom: 4 }}>Stone name</label>
                       <input type="text" placeholder="e.g. Garnet" value={newBs.stone_name}
                         onChange={e => setNewBs(b => ({ ...b, stone_name: e.target.value }))}
                         style={{ ...inp, width: 120 }} />
                     </div>
                     <div>
-                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Price/stone ($)</label>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--vault-text-secondary)", marginBottom: 4 }}>Price/stone ($)</label>
                       <input type="number" min="0" step="0.01" placeholder="45.00" value={newBs.price_per_stone}
                         onChange={e => setNewBs(b => ({ ...b, price_per_stone: e.target.value }))}
                         style={{ ...inp, width: 90 }} />
                     </div>
                     <div>
-                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Fitting fee ($)</label>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--vault-text-secondary)", marginBottom: 4 }}>Fitting fee ($)</label>
                       <input type="number" min="0" step="0.01" placeholder="25.00" value={newBs.fitting_fee}
                         onChange={e => setNewBs(b => ({ ...b, fitting_fee: e.target.value }))}
                         style={{ ...inp, width: 90 }} />
                     </div>
                     <button onClick={addBs} disabled={addBsSaving} style={{
-                      background: PRIMARY, color: "#fff", border: "none", borderRadius: 8,
+                      background: PRIMARY, color: "var(--vault-canvas)", border: "none", borderRadius: 8,
                       padding: "7px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
                     }}>
                       {addBsSaving ? "Adding…" : "Add"}
@@ -833,7 +833,7 @@ export default function PricingMarginsPage() {
                   </thead>
                   <tbody>
                     {birthstones.length === 0 && (
-                      <tr><td colSpan={5} style={{ ...td, color: "#9CA3AF", textAlign: "center" }}>No birthstones configured.</td></tr>
+                      <tr><td colSpan={5} style={{ ...td, color: "var(--vault-text-muted)", textAlign: "center" }}>No birthstones configured.</td></tr>
                     )}
                     {birthstones.map(bs => {
                       const isEditing = editingBs === bs.id;
@@ -859,7 +859,7 @@ export default function PricingMarginsPage() {
                             {isEditing ? (
                               <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
                                 <SaveBtn onClick={() => saveBs(bs.id)} saving={bsSaving} />
-                                <button onClick={() => setEditingBs(null)} style={{ padding: "4px 8px", background: "transparent", color: "#6B7280", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>✕</button>
+                                <button onClick={() => setEditingBs(null)} style={{ padding: "4px 8px", background: "transparent", color: "var(--vault-text-secondary)", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>✕</button>
                               </div>
                             ) : (
                               <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -877,15 +877,15 @@ export default function PricingMarginsPage() {
 
               {/* Personalisation fees */}
               <div style={card}>
-                <div style={{ padding: "14px 20px", borderBottom: "1px solid #E8E8F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--vault-border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
-                    <h2 style={{ fontSize: 15, fontWeight: 700, color: "#1A1A2E", margin: 0 }}>Personalisation Fees</h2>
-                    <p style={{ fontSize: 13, color: "#6B7280", marginTop: 3, marginBottom: 0 }}>
+                    <h2 style={{ fontSize: 15, fontWeight: 700, color: "var(--vault-text)", margin: 0 }}>Personalisation Fees</h2>
+                    <p style={{ fontSize: 13, color: "var(--vault-text-secondary)", marginTop: 3, marginBottom: 0 }}>
                       Fixed fees added to the total retail price (engraving, custom design, rush, etc.).
                     </p>
                   </div>
                   <button onClick={() => setShowAddFee(v => !v)} style={{
-                    background: showAddFee ? "#F3F4F6" : PRIMARY, color: showAddFee ? "#6B7280" : "#fff",
+                    background: showAddFee ? "var(--vault-surface)" : PRIMARY, color: showAddFee ? "var(--vault-text-secondary)" : "var(--vault-canvas)",
                     border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 13, fontWeight: 600,
                     cursor: "pointer", fontFamily: "inherit",
                   }}>
@@ -894,27 +894,27 @@ export default function PricingMarginsPage() {
                 </div>
 
                 {showAddFee && (
-                  <div style={{ padding: "14px 20px", background: "#F9FAFB", borderBottom: "1px solid #E8E8F0", display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" as const }}>
+                  <div style={{ padding: "14px 20px", background: "var(--vault-surface)", borderBottom: "1px solid var(--vault-border)", display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" as const }}>
                     <div>
-                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Fee type (ID)</label>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--vault-text-secondary)", marginBottom: 4 }}>Fee type (ID)</label>
                       <input type="text" placeholder="e.g. engraving" value={newFee.fee_type}
                         onChange={e => setNewFee(f => ({ ...f, fee_type: e.target.value }))}
                         style={{ ...inp, width: 140 }} />
                     </div>
                     <div>
-                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Description</label>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--vault-text-secondary)", marginBottom: 4 }}>Description</label>
                       <input type="text" placeholder="Shown on quote line" value={newFee.description}
                         onChange={e => setNewFee(f => ({ ...f, description: e.target.value }))}
                         style={{ ...inp, width: 200 }} />
                     </div>
                     <div>
-                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Amount ($)</label>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--vault-text-secondary)", marginBottom: 4 }}>Amount ($)</label>
                       <input type="number" min="0" step="0.01" placeholder="45.00" value={newFee.amount}
                         onChange={e => setNewFee(f => ({ ...f, amount: e.target.value }))}
                         style={{ ...inp, width: 90 }} />
                     </div>
                     <button onClick={addFee} disabled={addFeeSaving} style={{
-                      background: PRIMARY, color: "#fff", border: "none", borderRadius: 8,
+                      background: PRIMARY, color: "var(--vault-canvas)", border: "none", borderRadius: 8,
                       padding: "7px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
                     }}>
                       {addFeeSaving ? "Adding…" : "Add"}
@@ -933,17 +933,17 @@ export default function PricingMarginsPage() {
                   </thead>
                   <tbody>
                     {fees.length === 0 && (
-                      <tr><td colSpan={4} style={{ ...td, color: "#9CA3AF", textAlign: "center" }}>No personalisation fees configured.</td></tr>
+                      <tr><td colSpan={4} style={{ ...td, color: "var(--vault-text-muted)", textAlign: "center" }}>No personalisation fees configured.</td></tr>
                     )}
                     {fees.map(fee => {
                       const isEditing = editingFee === fee.id;
                       return (
                         <tr key={fee.id}>
-                          <td style={td}><code style={{ fontSize: 12, background: "#F3F4F6", padding: "2px 6px", borderRadius: 4 }}>{fee.fee_type}</code></td>
+                          <td style={td}><code style={{ fontSize: 12, background: "var(--vault-surface)", padding: "2px 6px", borderRadius: 4 }}>{fee.fee_type}</code></td>
                           <td style={td}>
                             {isEditing
                               ? <input type="text" value={feeBuf.description} onChange={e => setFeeBuf(b => ({ ...b, description: e.target.value }))} style={{ ...inpFocus, width: 200 }} autoFocus />
-                              : fee.description ?? <span style={{ color: "#9CA3AF" }}>—</span>}
+                              : fee.description ?? <span style={{ color: "var(--vault-text-muted)" }}>—</span>}
                           </td>
                           <td style={{ ...td, textAlign: "right" }}>
                             {isEditing
@@ -954,7 +954,7 @@ export default function PricingMarginsPage() {
                             {isEditing ? (
                               <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
                                 <SaveBtn onClick={() => saveFee(fee.id)} saving={feeSaving} />
-                                <button onClick={() => setEditingFee(null)} style={{ padding: "4px 8px", background: "transparent", color: "#6B7280", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>✕</button>
+                                <button onClick={() => setEditingFee(null)} style={{ padding: "4px 8px", background: "transparent", color: "var(--vault-text-secondary)", border: "1px solid #D1D5DB", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>✕</button>
                               </div>
                             ) : (
                               <div style={{ display: "flex", justifyContent: "flex-end" }}>
