@@ -5,18 +5,16 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import {
-  LayoutDashboard,
-  ShoppingBag,
+  LayoutGrid,
+  Briefcase,
   Wrench,
-  FileText,
+  TrendingUp,
   Users,
   BarChart2,
   Settings,
   Sparkles,
   ChevronDown,
-  Brain,
   Package,
-  UserPlus,
   X,
   Eye,
 } from "lucide-react";
@@ -29,9 +27,13 @@ interface Props {
   onClose: () => void;
 }
 
-const ACTIVE_BG      = "rgba(99, 91, 255, 0.15)";
-const DEFAULT_COLOR  = "#8B8FC8";
-const ACTIVE_COLOR   = "#FFFFFF";
+// ── Vault design system v1 ────────────────────────────────────────────────
+// Dark graphite, not navy/purple. Selection is a subtle lighter-graphite
+// background + a thin violet indicator bar, never a large violet block.
+const SIDEBAR_BG      = "var(--vault-graphite)";
+const HOVER_BG        = "var(--vault-graphite-hover)";
+const DEFAULT_COLOR   = "var(--vault-graphite-text)";
+const ACTIVE_COLOR    = "var(--vault-graphite-text-active)";
 
 export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
   const pathname = usePathname();
@@ -48,15 +50,18 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
   // Settings group is visible if user has pricing OR settings permission
   const showSettings = can("pricing") || can("settings") || isManager;
 
-  const [quotesOpen, setQuotesOpen]       = useState(pathname.startsWith("/quotes"));
+  const [salesOpen, setSalesOpen]         = useState(pathname.startsWith("/quotes") || pathname.startsWith("/leads"));
   const [inventoryOpen, setInventoryOpen] = useState(pathname.startsWith("/inventory"));
+  const [pricingGroupOpen, setPricingGroupOpen] = useState(
+    pathname.startsWith("/pricing") || pathname.startsWith("/settings/pricing") || pathname.startsWith("/settings/melee")
+  );
   const [settingsOpen, setSettingsOpen]   = useState(
     pathname.startsWith("/settings") || pathname.startsWith("/pricing") || pathname.startsWith("/admin/users") || pathname.startsWith("/workshop/settings") || pathname.startsWith("/quotes/settings") || pathname.startsWith("/inventory/settings")
   );
 
   // Auto-expand the relevant section when navigating directly to a sub-route
   useEffect(() => {
-    if (pathname.startsWith("/quotes"))    setQuotesOpen(true);
+    if (pathname.startsWith("/quotes") || pathname.startsWith("/leads")) setSalesOpen(true);
     if (pathname.startsWith("/inventory")) setInventoryOpen(true);
     if (pathname.startsWith("/settings") || pathname.startsWith("/pricing") || pathname.startsWith("/admin/users") || pathname.startsWith("/workshop/settings") || pathname.startsWith("/quotes/settings") || pathname.startsWith("/inventory/settings")) setSettingsOpen(true);
   }, [pathname]);
@@ -104,6 +109,9 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
   };
 
   // ── Sub-components ──────────────────────────────────────────────────────────
+  // A thin violet indicator bar (not a violet background block) marks the
+  // active item - Vault Violet stays a rare, small accent per the design
+  // system, never the default navigation fill colour.
 
   function NavLink({ href, icon: Icon, label }: { href: string; icon: React.ElementType; label: string }) {
     const active = isActive(href);
@@ -112,17 +120,19 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
         href={href}
         onClick={onClose}
         style={{
+          position: "relative",
           display: "flex", alignItems: "center", gap: 10,
-          padding: "10px 16px", borderRadius: 8, textDecoration: "none",
-          background: active ? ACTIVE_BG : "transparent",
+          padding: "9px 16px 9px 19px", borderRadius: 6, textDecoration: "none",
+          background: active ? HOVER_BG : "transparent",
           color: active ? ACTIVE_COLOR : DEFAULT_COLOR,
-          fontWeight: active ? 500 : 400, fontSize: 14,
-          transition: "background .15s, color .15s",
+          fontWeight: active ? 600 : 400, fontSize: 14,
+          transition: "background var(--vault-motion-fast), color var(--vault-motion-fast)",
         }}
-        onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = ACTIVE_BG; (e.currentTarget as HTMLAnchorElement).style.color = ACTIVE_COLOR; } }}
+        onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = HOVER_BG; (e.currentTarget as HTMLAnchorElement).style.color = ACTIVE_COLOR; } }}
         onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = "transparent"; (e.currentTarget as HTMLAnchorElement).style.color = DEFAULT_COLOR; } }}
       >
-        <Icon size={20} strokeWidth={1.75} />
+        {active && <span style={{ position: "absolute", left: 0, top: "50%", transform: "translateY(-50%)", width: 3, height: 16, borderRadius: 2, background: "var(--vault-violet)" }} />}
+        <Icon size={17} strokeWidth={1.75} />
         <span>{label}</span>
       </Link>
     );
@@ -136,13 +146,56 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
         onClick={onClose}
         style={{
           display: "flex", alignItems: "center",
-          padding: "8px 16px 8px 46px", borderRadius: 8, textDecoration: "none",
-          background: active ? ACTIVE_BG : "transparent",
+          padding: "7px 16px 7px 45px", borderRadius: 6, textDecoration: "none",
+          background: active ? HOVER_BG : "transparent",
           color: active ? ACTIVE_COLOR : DEFAULT_COLOR,
           fontWeight: active ? 500 : 400, fontSize: 13,
-          transition: "background .15s, color .15s",
+          transition: "background var(--vault-motion-fast), color var(--vault-motion-fast)",
         }}
-        onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = ACTIVE_BG; (e.currentTarget as HTMLAnchorElement).style.color = ACTIVE_COLOR; } }}
+        onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = HOVER_BG; (e.currentTarget as HTMLAnchorElement).style.color = ACTIVE_COLOR; } }}
+        onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = "transparent"; (e.currentTarget as HTMLAnchorElement).style.color = DEFAULT_COLOR; } }}
+      >
+        {label}
+      </Link>
+    );
+  }
+
+  function SubExpandLink({ label, expanded, onClick }: { label: string; expanded: boolean; onClick: () => void }) {
+    return (
+      <div
+        role="button" tabIndex={0}
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "7px 16px 7px 45px", borderRadius: 6, cursor: "pointer",
+          background: expanded ? HOVER_BG : "transparent",
+          color: expanded ? ACTIVE_COLOR : DEFAULT_COLOR,
+          fontWeight: expanded ? 500 : 400, fontSize: 13,
+          transition: "background var(--vault-motion-fast), color var(--vault-motion-fast)",
+        }}
+        onClick={onClick}
+        onKeyDown={e => { if (e.key === "Enter") onClick(); }}
+      >
+        <span>{label}</span>
+        <ChevronDown size={12} strokeWidth={2} style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform .2s", opacity: 0.6 }} />
+      </div>
+    );
+  }
+
+  function SubSubLink({ href, label }: { href: string; label: string }) {
+    const active = pathname === href || pathname.startsWith(href + "/");
+    return (
+      <Link
+        href={href}
+        onClick={onClose}
+        style={{
+          display: "flex", alignItems: "center",
+          padding: "6px 16px 6px 62px", borderRadius: 6, textDecoration: "none",
+          background: active ? HOVER_BG : "transparent",
+          color: active ? ACTIVE_COLOR : DEFAULT_COLOR,
+          fontWeight: active ? 500 : 400, fontSize: 12.5,
+          transition: "background var(--vault-motion-fast), color var(--vault-motion-fast)",
+        }}
+        onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = HOVER_BG; (e.currentTarget as HTMLAnchorElement).style.color = ACTIVE_COLOR; } }}
         onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = "transparent"; (e.currentTarget as HTMLAnchorElement).style.color = DEFAULT_COLOR; } }}
       >
         {label}
@@ -158,22 +211,22 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
         role="button" tabIndex={0}
         style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "10px 16px", borderRadius: 8, cursor: "pointer",
-          background: expanded ? ACTIVE_BG : "transparent",
+          padding: "9px 16px 9px 19px", borderRadius: 6, cursor: "pointer",
+          background: expanded ? HOVER_BG : "transparent",
           color: expanded ? ACTIVE_COLOR : DEFAULT_COLOR,
-          fontWeight: expanded ? 500 : 400, fontSize: 14,
-          transition: "background .15s, color .15s",
+          fontWeight: expanded ? 600 : 400, fontSize: 14,
+          transition: "background var(--vault-motion-fast), color var(--vault-motion-fast)",
         }}
         onClick={onClick}
-        onMouseEnter={e => { if (!expanded) { (e.currentTarget as HTMLDivElement).style.background = ACTIVE_BG; (e.currentTarget as HTMLDivElement).style.color = ACTIVE_COLOR; } }}
+        onMouseEnter={e => { if (!expanded) { (e.currentTarget as HTMLDivElement).style.background = HOVER_BG; (e.currentTarget as HTMLDivElement).style.color = ACTIVE_COLOR; } }}
         onMouseLeave={e => { if (!expanded) { (e.currentTarget as HTMLDivElement).style.background = "transparent"; (e.currentTarget as HTMLDivElement).style.color = DEFAULT_COLOR; } }}
         onKeyDown={e => { if (e.key === "Enter") onClick(); }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <Icon size={20} strokeWidth={1.75} />
+          <Icon size={17} strokeWidth={1.75} />
           <span>{label}</span>
         </div>
-        <ChevronDown size={14} strokeWidth={2} style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform .2s", opacity: 0.6 }} />
+        <ChevronDown size={13} strokeWidth={2} style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform .2s", opacity: 0.6 }} />
       </div>
     );
   }
@@ -197,36 +250,36 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
           "md:static md:translate-x-0 md:transition-none",
         ].join(" ")}
         style={{
-          background: "#1A1760",
-          width: 220, minWidth: 220,
+          background: SIDEBAR_BG,
+          width: 224, minWidth: 224,
           height: "100vh",
           display: "flex", flexDirection: "column",
           overflow: "hidden",
           // Loud, persistent indicator that a downgraded view is active.
-          borderLeft: isViewingAs ? "4px solid #F59E0B" : undefined,
+          borderLeft: isViewingAs ? "4px solid var(--vault-status-warning)" : undefined,
         }}
       >
         {isViewingAs && (
           <div
             style={{
-              background: "#F59E0B", color: "#1A1760",
-              fontSize: 11, fontWeight: 700,
+              background: "var(--vault-status-warning)", color: "#FFFFFF",
+              fontSize: 11, fontWeight: 600,
               display: "flex", alignItems: "center", justifyContent: "space-between",
               gap: 8, padding: "6px 12px",
             }}
           >
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-              <Eye size={13} strokeWidth={2.5} />
-              Viewing as {String(user?.role).toUpperCase()}
+              <Eye size={13} strokeWidth={2.25} />
+              Viewing as {String(user?.role).toLowerCase()}
             </span>
             <button
               type="button"
               disabled={switching}
               onClick={() => switchView(user?.realRole ?? null)}
               style={{
-                background: "rgba(26,23,96,0.15)", border: "1px solid rgba(26,23,96,0.35)",
-                color: "#1A1760", cursor: switching ? "wait" : "pointer",
-                borderRadius: 5, padding: "2px 8px", fontSize: 10, fontWeight: 700,
+                background: "rgba(255,255,255,0.18)", border: "1px solid rgba(255,255,255,0.3)",
+                color: "#FFFFFF", cursor: switching ? "wait" : "pointer",
+                borderRadius: 5, padding: "2px 8px", fontSize: 10, fontWeight: 600,
               }}
             >
               Exit view
@@ -234,59 +287,54 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
           </div>
         )}
 
-        {/* Brand + mobile close */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "24px 20px 20px" }}>
-          <span style={{ width: 40, height: 40, borderRadius: 10, background: "#635BFF", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6 3h12l4 6-10 12L2 9z" />
-              <path d="M2 9h20" />
-              <path d="M6 3l4 6m4 0l4-6" />
-            </svg>
-          </span>
-          <div style={{ fontFamily: "Inter, sans-serif", flex: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: "0.1em", color: "#FFFFFF", lineHeight: 1 }}>VAULT</div>
-            <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.08em", color: "rgba(255,255,255,0.5)", marginTop: 3, textTransform: "uppercase" as const }}>Jewellery Management</div>
+        {/* Brand + mobile close — normal controlled spacing, no decorative
+            imagery, no tagline. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "20px 20px 18px" }}>
+          <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: "0.01em", color: "#FFFFFF", flex: 1 }}>
+            Vault
           </div>
           <button
             onClick={onClose}
             className="md:hidden flex items-center justify-center rounded-lg"
-            style={{ background: "rgba(255,255,255,0.08)", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.6)", width: 32, height: 32, flexShrink: 0 }}
+            style={{ background: "rgba(255,255,255,0.06)", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.6)", width: 30, height: 30, flexShrink: 0 }}
             aria-label="Close menu"
           >
-            <X size={16} strokeWidth={2} />
+            <X size={15} strokeWidth={2} />
           </button>
         </div>
 
-        {/* Nav */}
-        <nav style={{ display: "flex", flexDirection: "column", gap: 2, padding: "4px 10px", flex: 1, overflowY: "auto" }}>
+        {/* Nav — Home / Jobs / Sales / Workshop / Customers / Inventory is the
+            core hierarchy; Vault AI / Reports / Settings are secondary
+            utilities near the bottom. Existing routes/permissions are
+            unchanged - only labels and grouping moved. */}
+        <nav style={{ display: "flex", flexDirection: "column", gap: 1, padding: "6px 10px", flex: 1, overflowY: "auto" }}>
 
-          <NavLink href="/" icon={LayoutDashboard} label="Dashboard" />
+          <NavLink href="/" icon={LayoutGrid} label="Home" />
 
-          {can("orders")    && <NavLink href="/orders"    icon={ShoppingBag} label="Orders" />}
-
-          <NavLink href="/leads" icon={UserPlus} label="Leads" />
+          {can("orders") && <NavLink href="/orders" icon={Briefcase} label="Jobs" />}
 
           {can("quotes") && (
             <div>
               <ExpandLink
-                icon={FileText} label="Quotes" expanded={quotesOpen}
+                icon={TrendingUp} label="Sales" expanded={salesOpen}
                 onClick={() => {
-                  if (quotesOpen) { setQuotesOpen(false); }
-                  else { setQuotesOpen(true); router.push("/quotes"); onClose(); }
+                  if (salesOpen) { setSalesOpen(false); }
+                  else { setSalesOpen(true); router.push("/quotes"); onClose(); }
                 }}
               />
-              {quotesOpen && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
-                  <SubLink href="/quotes"               label="Quotes Pipeline" />
-                  <SubLink href="/quotes/builder"       label="Build Quote" />
+              {salesOpen && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 1 }}>
+                  <SubLink href="/quotes"               label="Pipeline" />
+                  <SubLink href="/leads"                label="Leads" />
+                  <SubLink href="/quotes/builder"       label="New Quote" />
                   <SubLink href="/quotes/charm-builder" label="Charm Builder" />
                 </div>
               )}
             </div>
           )}
 
-          {can("customers")  && <NavLink href="/customers"  icon={Users}    label="Customers" />}
-          {can("workshop") && <NavLink href="/workshop" icon={Wrench} label="Workshop" />}
+          {can("workshop")  && <NavLink href="/workshop"  icon={Wrench} label="Workshop" />}
+          {can("customers") && <NavLink href="/customers" icon={Users}  label="Customers" />}
 
           {can("inventory") && (
             <div>
@@ -298,7 +346,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
                 }}
               />
               {inventoryOpen && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 1 }}>
                   <SubLink href="/inventory"                         label="Stock" />
                   <SubLink href="/inventory/products"                label="Products" />
                   {isManager && <SubLink href="/inventory/purchase-orders" label="Purchasing" />}
@@ -309,8 +357,28 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
             </div>
           )}
 
-          {can("vault_brain") && <NavLink href="/vault/brain" icon={Brain}    label="Vault Brain" />}
-          {can("reporting")  && <NavLink href="/reporting"  icon={BarChart2} label="Reporting" />}
+          {/* ── Secondary utilities ─────────────────────────────────────── */}
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", margin: "10px 6px 6px" }} />
+
+          <button
+            onClick={() => { onOpenAI(); onClose(); }}
+            style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "9px 16px 9px 19px", borderRadius: 6,
+              background: "transparent", border: "none", cursor: "pointer",
+              color: DEFAULT_COLOR, fontWeight: 400, fontSize: 14,
+              textAlign: "left", width: "100%",
+              transition: "background var(--vault-motion-fast), color var(--vault-motion-fast)",
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = HOVER_BG; (e.currentTarget as HTMLButtonElement).style.color = ACTIVE_COLOR; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; (e.currentTarget as HTMLButtonElement).style.color = DEFAULT_COLOR; }}
+          >
+            <Sparkles size={17} strokeWidth={1.75} style={{ color: "var(--vault-violet)" }} />
+            <span>Vault AI</span>
+          </button>
+
+          {can("vault_brain") && <NavLink href="/vault/brain" icon={Sparkles} label="Vault Brain" />}
+          {can("reporting")   && <NavLink href="/reporting"  icon={BarChart2} label="Reports" />}
 
           {showSettings && (
             <div>
@@ -322,12 +390,24 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
                 }}
               />
               {settingsOpen && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 1 }}>
                   {can("settings") && isManager && <SubLink href="/settings"           label="Integrations" />}
-                  {can("pricing")  && <SubLink href="/pricing"                      label="Pricing" />}
-                  {can("pricing")  && <SubLink href="/settings/pricing"           label="Pricing Margins" />}
-                  {can("pricing")  && <SubLink href="/settings/melee"             label="Melee Pricing" />}
-                  {can("pricing")  && <SubLink href="/pricing/charm-builder"      label="Charm Builder" />}
+                  {can("pricing") && (
+                    <div>
+                      <SubExpandLink
+                        label="Pricing" expanded={pricingGroupOpen}
+                        onClick={() => setPricingGroupOpen(v => !v)}
+                      />
+                      {pricingGroupOpen && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                          <SubSubLink href="/pricing"                 label="Rates & Lookups" />
+                          <SubSubLink href="/settings/pricing"        label="Pricing Margins" />
+                          <SubSubLink href="/settings/melee"          label="Melee Pricing" />
+                          <SubSubLink href="/pricing/charm-builder"   label="Charm Builder" />
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {can("settings") && <SubLink href="/settings/users"     label="Users" />}
                   {can("settings") && <SubLink href="/settings/staff"     label="Staff" />}
                   {can("settings") && <SubLink href="/settings/vip-tiers" label="VIP Tiers" />}
@@ -340,30 +420,13 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
               )}
             </div>
           )}
-
-          <button
-            onClick={() => { onOpenAI(); onClose(); }}
-            style={{
-              display: "flex", alignItems: "center", gap: 10,
-              padding: "10px 16px", borderRadius: 8,
-              background: "transparent", border: "none", cursor: "pointer",
-              color: DEFAULT_COLOR, fontWeight: 400, fontSize: 14,
-              textAlign: "left", width: "100%",
-              transition: "background .15s, color .15s",
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = ACTIVE_BG; (e.currentTarget as HTMLButtonElement).style.color = ACTIVE_COLOR; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; (e.currentTarget as HTMLButtonElement).style.color = DEFAULT_COLOR; }}
-          >
-            <Sparkles size={20} strokeWidth={1.75} />
-            <span>AI Assistant</span>
-          </button>
         </nav>
 
-        {/* Footer */}
+        {/* Footer — user identity, no decorative avatar colour block. */}
         <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", padding: "12px 16px 16px" }}>
           {user && (
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-              <span style={{ width: 34, height: 34, borderRadius: "50%", background: "#635BFF", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
+              <span style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--vault-graphite-hover)", color: "#FFFFFF", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, flexShrink: 0, border: "1px solid rgba(255,255,255,0.1)" }}>
                 {initials(user.name)}
               </span>
               <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
@@ -376,30 +439,29 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
                       onClick={() => setSwitchMenuOpen(o => !o)}
                       title="Switch view"
                       style={{
-                        display: "inline-flex", alignItems: "center", gap: 4, marginTop: 2,
-                        border: "none", cursor: "pointer", borderRadius: 6, padding: "2px 7px",
-                        fontSize: 11, fontWeight: 600, lineHeight: 1.4,
-                        ...(isViewingAs
-                          ? { background: "rgba(245,158,11,0.18)", color: "#FbbF24" }   // amber when downgraded
-                          : { background: "transparent", color: DEFAULT_COLOR }),
+                        display: "inline-flex", alignItems: "center", gap: 4, marginTop: 1,
+                        border: "none", cursor: "pointer", borderRadius: 5, padding: "1px 6px 1px 0",
+                        fontSize: 11, fontWeight: 500, lineHeight: 1.4,
+                        background: "transparent",
+                        color: isViewingAs ? "var(--vault-status-warning)" : DEFAULT_COLOR,
                       }}
                     >
-                      {isViewingAs && <Eye size={12} strokeWidth={2.25} />}
+                      {isViewingAs && <Eye size={11} strokeWidth={2.25} />}
                       <span style={{ textTransform: isViewingAs ? "none" : "capitalize" }}>
-                        {isViewingAs ? `Viewing as ${String(user.role).toUpperCase()}` : (user.role ?? "…")}
+                        {isViewingAs ? `Viewing as ${String(user.role).toLowerCase()}` : (user.role ?? "…")}
                       </span>
-                      <ChevronDown size={12} strokeWidth={2.25} />
+                      <ChevronDown size={11} strokeWidth={2.25} />
                     </button>
 
                     {switchMenuOpen && (
                       <div
                         style={{
                           position: "absolute", bottom: "calc(100% + 6px)", left: 0, zIndex: 50,
-                          minWidth: 150, background: "#1B1F3B", border: "1px solid rgba(255,255,255,0.12)",
-                          borderRadius: 8, padding: 4, boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+                          minWidth: 150, background: "var(--vault-graphite-hover)", border: "1px solid rgba(255,255,255,0.12)",
+                          borderRadius: "var(--vault-radius-sm)", padding: 4, boxShadow: "var(--vault-shadow-elevated)",
                         }}
                       >
-                        <div style={{ fontSize: 10, color: "#6B7099", padding: "4px 8px 6px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                        <div style={{ fontSize: 10, color: DEFAULT_COLOR, padding: "4px 8px 6px", textTransform: "uppercase", letterSpacing: 0.4 }}>
                           View Vault as
                         </div>
                         {roleOptions.map((r) => {
@@ -414,14 +476,14 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
                               style={{
                                 display: "flex", alignItems: "center", justifyContent: "space-between",
                                 width: "100%", border: "none", cursor: switching ? "wait" : "pointer",
-                                background: active ? ACTIVE_BG : "transparent",
+                                background: active ? "rgba(255,255,255,0.08)" : "transparent",
                                 color: active ? "#FFFFFF" : DEFAULT_COLOR,
-                                borderRadius: 6, padding: "7px 8px", fontSize: 12, fontWeight: 500,
+                                borderRadius: 5, padding: "6px 8px", fontSize: 12, fontWeight: 500,
                                 textAlign: "left", textTransform: "capitalize",
                               }}
                             >
                               <span>{r}{isReal ? " (your role)" : ""}</span>
-                              {active && <span style={{ fontSize: 10 }}>●</span>}
+                              {active && <span style={{ fontSize: 9, color: "var(--vault-violet)" }}>●</span>}
                             </button>
                           );
                         })}
@@ -435,15 +497,14 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
               <button
                 onClick={logout}
                 title="Sign out"
-                style={{ background: "rgba(99,91,255,0.2)", border: "none", color: "#A5B4FC", cursor: "pointer", padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 500, flexShrink: 0, transition: "background .15s" }}
-                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = "rgba(99,91,255,0.35)")}
-                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = "rgba(99,91,255,0.2)")}
+                style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: DEFAULT_COLOR, cursor: "pointer", padding: "4px 10px", borderRadius: "var(--vault-radius-sm)", fontSize: 11, fontWeight: 500, flexShrink: 0, transition: "background var(--vault-motion-fast)" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)"; (e.currentTarget as HTMLButtonElement).style.color = "#FFFFFF"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; (e.currentTarget as HTMLButtonElement).style.color = DEFAULT_COLOR; }}
               >
                 Sign out
               </button>
             </div>
           )}
-          <div style={{ fontSize: 11, color: "#4A4A8A", textAlign: "center", paddingTop: 4 }}>© 2026 Vault</div>
         </div>
       </aside>
     </>
