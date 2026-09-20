@@ -41,21 +41,22 @@ function LeadsInner() {
     <div style={{ padding: "24px 20px", maxWidth: 1100, margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: "#1A1760" }}>Leads &amp; Enquiries</h1>
-          <p style={{ margin: "4px 0 0", fontSize: 13, color: "#6B7280" }}>
+          <h1 style={{ margin: 0, fontSize: "var(--vault-text-page-title)", fontWeight: 600, color: "var(--vault-text)" }}>Leads</h1>
+          <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--vault-text-secondary)" }}>
             Capture every enquiry with a next action so nothing falls behind.
           </p>
         </div>
-        <div style={{ display: "flex", gap: 4, background: "#EEF2FF", borderRadius: 10, padding: 4 }}>
+        <div style={{ display: "flex", gap: 2, background: "var(--vault-surface)", border: "1px solid var(--vault-border)", borderRadius: "var(--vault-radius-sm)", padding: 3 }}>
           {(["capture", "board"] as const).map((v) => (
             <button
               key={v}
               onClick={() => setView(v)}
               style={{
-                padding: "8px 16px", borderRadius: 8, border: "none", cursor: "pointer",
+                padding: "7px 16px", borderRadius: 6, border: "none", cursor: "pointer",
                 fontSize: 13, fontWeight: 600,
-                background: view === v ? "#635BFF" : "transparent",
-                color: view === v ? "#fff" : "#4B5563",
+                background: view === v ? "var(--vault-canvas)" : "transparent",
+                color: view === v ? "var(--vault-text)" : "var(--vault-text-secondary)",
+                boxShadow: view === v ? "var(--vault-shadow-elevated)" : "none",
               }}
             >
               {v === "capture" ? "Capture" : "Board"}
@@ -153,12 +154,12 @@ function CaptureForm({ onCreated }: { onCreated: () => void }) {
     setSuccess(customerId ? "Linked to existing customer." : null);
   }
 
-  const label: React.CSSProperties = { display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 5 };
-  const input: React.CSSProperties = { width: "100%", padding: "11px 12px", borderRadius: 9, border: "1px solid #D1D5DB", fontSize: 15, background: "#fff" };
+  const label: React.CSSProperties = { display: "block", fontSize: 12, fontWeight: 600, color: "var(--vault-text-secondary)", marginBottom: 5 };
+  const input: React.CSSProperties = { width: "100%", padding: "11px 12px", borderRadius: "var(--vault-radius-sm)", border: "1px solid var(--vault-border)", fontSize: 15, background: "var(--vault-canvas)" };
 
   return (
     <div style={{ maxWidth: 560 }}>
-      <div style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 14, padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ background: "var(--vault-canvas)", border: "1px solid var(--vault-border)", borderRadius: "var(--vault-radius-md)", padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
         <div>
           <label style={label}>Name *</label>
           <input style={input} value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Customer name" />
@@ -174,7 +175,7 @@ function CaptureForm({ onCreated }: { onCreated: () => void }) {
             <input style={input} inputMode="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="name@example.com" />
           </div>
         </div>
-        <p style={{ margin: "-6px 0 0", fontSize: 12, color: "#9CA3AF" }}>At least one of phone or email is required.</p>
+        <p style={{ margin: "-6px 0 0", fontSize: 12, color: "var(--vault-text-muted)" }}>At least one of phone or email is required.</p>
 
         <div>
           <label style={label}>Interested in *</label>
@@ -196,24 +197,24 @@ function CaptureForm({ onCreated }: { onCreated: () => void }) {
           </div>
         </div>
 
-        {error && <p style={{ margin: 0, fontSize: 13, color: "#DC2626", fontWeight: 500 }}>{error}</p>}
-        {success && <p style={{ margin: 0, fontSize: 13, color: "#059669", fontWeight: 500 }}>{success}</p>}
+        {error && <p style={{ margin: 0, fontSize: 13, color: "var(--vault-status-error)", fontWeight: 500 }}>{error}</p>}
+        {success && <p style={{ margin: 0, fontSize: 13, color: "var(--vault-status-success)", fontWeight: 500 }}>{success}</p>}
 
         {matches.length > 0 && (
-          <div style={{ border: "1px solid #FCD34D", background: "#FFFBEB", borderRadius: 10, padding: 12 }}>
-            <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: "#92400E" }}>Possible existing customers</p>
+          <div style={{ border: "1px solid #FCD34D", background: "#FFFBEB", borderRadius: "var(--vault-radius-sm)", padding: 12 }}>
+            <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: "var(--vault-status-warning)" }}>Possible existing customers</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {matches.map((m) => (
                 <button
                   key={m.id}
                   onClick={() => linkCustomer(m.id)}
-                  style={{ textAlign: "left", padding: "8px 10px", borderRadius: 8, border: "1px solid #FCD34D", background: "#fff", cursor: "pointer", fontSize: 13 }}
+                  style={{ textAlign: "left", padding: "8px 10px", borderRadius: 8, border: "1px solid #FCD34D", background: "var(--vault-canvas)", cursor: "pointer", fontSize: 13 }}
                 >
                   Link to <strong>{[m.first_name, m.last_name].filter(Boolean).join(" ") || "customer"}</strong>
                   {m.email ? ` · ${m.email}` : ""}{m.phone ? ` · ${m.phone}` : ""}
                 </button>
               ))}
-              <button onClick={() => linkCustomer(null)} style={{ textAlign: "left", padding: "8px 10px", borderRadius: 8, border: "1px dashed #D1D5DB", background: "transparent", cursor: "pointer", fontSize: 13, color: "#6B7280" }}>
+              <button onClick={() => linkCustomer(null)} style={{ textAlign: "left", padding: "8px 10px", borderRadius: 8, border: "1px dashed var(--vault-border-strong)", background: "transparent", cursor: "pointer", fontSize: 13, color: "var(--vault-text-secondary)" }}>
                 Skip — don&apos;t link
               </button>
             </div>
@@ -223,10 +224,10 @@ function CaptureForm({ onCreated }: { onCreated: () => void }) {
         <button
           onClick={submit}
           disabled={submitting}
+          className="vault-btn vault-btn-primary"
           style={{
-            marginTop: 4, padding: "12px 16px", borderRadius: 10, border: "none",
-            background: "#635BFF", color: "#fff", fontWeight: 700, fontSize: 15,
-            cursor: submitting ? "default" : "pointer", opacity: submitting ? 0.7 : 1,
+            marginTop: 4, height: 44, fontSize: 15,
+            opacity: submitting ? 0.7 : 1,
           }}
         >
           {submitting ? "Saving…" : "Save enquiry"}
@@ -304,11 +305,11 @@ function LeadBoard({ refreshKey, onChanged }: { refreshKey: number; onChanged: (
     }
   }
 
-  if (loading) return <p style={{ color: "#6B7280", fontSize: 14 }}>Loading leads…</p>;
+  if (loading) return <p style={{ color: "var(--vault-text-secondary)", fontSize: 14 }}>Loading leads…</p>;
 
   return (
     <div>
-      {error && <p style={{ fontSize: 13, color: "#DC2626", fontWeight: 500, marginTop: 0 }}>{error}</p>}
+      {error && <p style={{ fontSize: 13, color: "var(--vault-status-error)", fontWeight: 500, marginTop: 0 }}>{error}</p>}
       <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 12, alignItems: "flex-start" }}>
         {LEAD_STATUSES.map((status) => {
           const config = LEAD_STATUS_CONFIG[status];
@@ -316,36 +317,36 @@ function LeadBoard({ refreshKey, onChanged }: { refreshKey: number; onChanged: (
             .filter((l) => l.status === status)
             .sort((a, b) => a.next_action_date.localeCompare(b.next_action_date));
           return (
-            <div key={status} style={{ flexShrink: 0, width: 270, display: "flex", flexDirection: "column", borderRadius: 12, overflow: "hidden", border: "1px solid #E8E8F0" }}>
-              <div style={{ padding: "10px 12px", background: config.color, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ color: "#fff", fontWeight: 600, fontSize: 13 }}>{config.label}</span>
-                <span style={{ background: "rgba(255,255,255,0.25)", color: "#fff", fontSize: 11, fontWeight: 700, borderRadius: 999, padding: "1px 8px" }}>{cards.length}</span>
+            <div key={status} style={{ flexShrink: 0, width: 270, display: "flex", flexDirection: "column", borderRadius: "var(--vault-radius-md)", overflow: "hidden", border: "1px solid var(--vault-border)", borderTop: `3px solid ${config.color}` }}>
+              <div style={{ padding: "10px 12px", background: "var(--vault-surface)", borderBottom: "1px solid var(--vault-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ color: "var(--vault-text)", fontWeight: 600, fontSize: 13 }}>{config.label}</span>
+                <span style={{ background: "var(--vault-surface-selected)", color: "var(--vault-text-secondary)", fontSize: 11, fontWeight: 700, borderRadius: 999, padding: "1px 8px" }}>{cards.length}</span>
               </div>
-              <div style={{ flex: 1, padding: 8, display: "flex", flexDirection: "column", gap: 8, minHeight: 120, background: "#F9FAFB" }}>
-                {cards.length === 0 && <p style={{ fontSize: 12, color: "#D1D5DB", textAlign: "center", paddingTop: 16, fontStyle: "italic" }}>None</p>}
+              <div style={{ flex: 1, padding: 8, display: "flex", flexDirection: "column", gap: 8, minHeight: 120, background: "var(--vault-surface)" }}>
+                {cards.length === 0 && <p style={{ fontSize: 12, color: "var(--vault-text-muted)", textAlign: "center", paddingTop: 16, fontStyle: "italic" }}>None</p>}
                 {cards.map((lead) => {
                   const overdue = isLeadOverdue(lead);
                   return (
                     <div
                       key={lead.id}
                       style={{
-                        background: "#fff", borderRadius: 10, padding: 10,
-                        border: overdue ? "1px solid #FCA5A5" : "1px solid #E5E7EB",
-                        borderLeft: overdue ? "3px solid #EF4444" : "1px solid #E5E7EB",
+                        background: "var(--vault-canvas)", borderRadius: "var(--vault-radius-sm)", padding: 10,
+                        border: overdue ? "1px solid #FCA5A5" : "1px solid var(--vault-border)",
+                        borderLeft: overdue ? "3px solid var(--vault-status-error)" : "1px solid var(--vault-border)",
                         opacity: busyId === lead.id ? 0.6 : 1,
                       }}
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
-                        <span style={{ fontWeight: 600, fontSize: 14, color: "#111827" }}>{lead.name}</span>
-                        {lead.linked_customer_id && <span title="Linked to a customer" style={{ fontSize: 11, color: "#059669", fontWeight: 600 }}>Linked</span>}
+                        <span style={{ fontWeight: 600, fontSize: 14, color: "var(--vault-text)" }}>{lead.name}</span>
+                        {lead.linked_customer_id && <span title="Linked to a customer" style={{ fontSize: 11, color: "var(--vault-status-success)", fontWeight: 600 }}>Linked</span>}
                       </div>
-                      <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>
+                      <div style={{ fontSize: 12, color: "var(--vault-text-secondary)", marginTop: 2 }}>
                         {lead.phone || lead.email || "—"}
                       </div>
-                      <div style={{ fontSize: 12, color: "#374151", marginTop: 4 }}>{lead.interested_in}</div>
+                      <div style={{ fontSize: 12, color: "var(--vault-text)", marginTop: 4 }}>{lead.interested_in}</div>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
-                        <span style={{ fontSize: 11, color: "#9CA3AF" }}>{leadSourceLabel(lead.source)}</span>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: overdue ? "#DC2626" : "#6B7280" }}>
+                        <span style={{ fontSize: 11, color: "var(--vault-text-muted)" }}>{leadSourceLabel(lead.source)}</span>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: overdue ? "var(--vault-status-error)" : "var(--vault-text-secondary)" }}>
                           {overdue ? "Overdue " : "Next "}{lead.next_action_date}
                         </span>
                       </div>
@@ -353,14 +354,14 @@ function LeadBoard({ refreshKey, onChanged }: { refreshKey: number; onChanged: (
                       {(status === "new" || status === "contacted") && (
                         <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
                           {status === "new" && (
-                            <button onClick={() => changeStatus(lead, "contacted")} disabled={busyId === lead.id} style={miniBtn("#F59E0B")}>Mark contacted</button>
+                            <button onClick={() => changeStatus(lead, "contacted")} disabled={busyId === lead.id} style={miniBtn("secondary")}>Mark contacted</button>
                           )}
-                          <button onClick={() => convert(lead)} disabled={busyId === lead.id} style={miniBtn("#635BFF")}>Convert to Quote</button>
-                          <button onClick={() => changeStatus(lead, "dead")} disabled={busyId === lead.id} style={miniBtn("#9CA3AF")}>Dead</button>
+                          <button onClick={() => convert(lead)} disabled={busyId === lead.id} style={miniBtn("primary")}>Convert to Quote</button>
+                          <button onClick={() => changeStatus(lead, "dead")} disabled={busyId === lead.id} style={miniBtn("secondary")}>Dead</button>
                         </div>
                       )}
                       {status === "quoted" && lead.converted_quote_id && (
-                        <div style={{ marginTop: 8, fontSize: 11, color: "#059669", fontWeight: 600 }}>Converted to quote ✓</div>
+                        <div style={{ marginTop: 8, fontSize: 11, color: "var(--vault-status-success)", fontWeight: 600 }}>Converted to quote ✓</div>
                       )}
                     </div>
                   );
@@ -374,9 +375,8 @@ function LeadBoard({ refreshKey, onChanged }: { refreshKey: number; onChanged: (
   );
 }
 
-function miniBtn(bg: string): React.CSSProperties {
-  return {
-    padding: "6px 10px", borderRadius: 7, border: "none", background: bg,
-    color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer",
-  };
+function miniBtn(variant: "primary" | "secondary"): React.CSSProperties {
+  return variant === "primary"
+    ? { padding: "6px 10px", borderRadius: 7, border: "none", background: "var(--vault-text)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer" }
+    : { padding: "6px 10px", borderRadius: 7, border: "1px solid var(--vault-border)", background: "var(--vault-canvas)", color: "var(--vault-text-secondary)", fontSize: 12, fontWeight: 600, cursor: "pointer" };
 }

@@ -111,6 +111,7 @@ body { background: #F9FAFB; color: #1A1A2E; font-size: 14px; }
 
 .vault-btn-icon { width: var(--vault-control-height); height: var(--vault-control-height); padding: 0; background: transparent; color: var(--vault-text-secondary); }
 .vault-btn-icon:hover:not(:disabled) { background: var(--vault-surface); color: var(--vault-text); }
+.vault-btn-sm { height: 28px; padding: 0 10px; font-size: 12px; border-radius: var(--vault-radius-sm); }
 
 .vault-input {
   width: 100%;

@@ -151,13 +151,8 @@ export default function QuotesPage() {
       <div className="max-w-7xl mx-auto space-y-4">
         {/* Page header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>Quotes</h1>
-          <Link
-            href="/quotes/builder"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#635BFF', color: '#fff', borderRadius: 8, padding: '9px 18px', fontWeight: 500, fontSize: 14, textDecoration: 'none' }}
-            onMouseEnter={e => (e.currentTarget as HTMLAnchorElement).style.background = '#4F46E5'}
-            onMouseLeave={e => (e.currentTarget as HTMLAnchorElement).style.background = '#635BFF'}
-          >
+          <h1 style={{ fontSize: 'var(--vault-text-page-title)', fontWeight: 600, color: 'var(--vault-text)', margin: 0 }}>Sales — Quotes</h1>
+          <Link href="/quotes/builder" className="vault-btn vault-btn-primary" style={{ textDecoration: 'none' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
             Build Quote
           </Link>
@@ -167,16 +162,16 @@ export default function QuotesPage() {
         {!loading && quotes.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             {[
-              { label: 'Active Quotes', value: activeQuotes.length, color: '#1A1A2E' },
-              { label: 'Follow Up Today', value: followUpDueToday.length, color: followUpDueToday.length > 0 ? '#EF4444' : '#1A1A2E' },
-              { label: 'Won This Month', value: wonThisMonth.length, color: '#10B981' },
-              { label: 'Lost This Month', value: lostThisMonth.length, color: lostThisMonth.length > 0 ? '#EF4444' : '#1A1A2E' },
-              { label: 'Conversion Rate', value: `${conversionRate}%`, color: conversionRate >= 50 ? '#10B981' : '#1A1A2E' },
-              { label: 'Overdue Follow-ups', value: overdueFollowUps, color: overdueFollowUps > 0 ? '#EF4444' : '#1A1A2E' },
-            ].map(({ label, value, color }) => (
-              <div key={label} style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, padding: '16px 16px 14px', borderLeft: '3px solid #635BFF' }}>
-                <p style={{ fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>{label}</p>
-                <p style={{ fontSize: 28, fontWeight: 700, color, lineHeight: 1 }}>{value}</p>
+              { label: 'Active Quotes', value: activeQuotes.length, warn: false },
+              { label: 'Follow Up Today', value: followUpDueToday.length, warn: followUpDueToday.length > 0 },
+              { label: 'Won This Month', value: wonThisMonth.length, good: true },
+              { label: 'Lost This Month', value: lostThisMonth.length, warn: lostThisMonth.length > 0 },
+              { label: 'Conversion Rate', value: `${conversionRate}%`, good: conversionRate >= 50 },
+              { label: 'Overdue Follow-ups', value: overdueFollowUps, warn: overdueFollowUps > 0 },
+            ].map(({ label, value, warn, good }) => (
+              <div key={label} style={{ background: 'var(--vault-canvas)', border: '1px solid var(--vault-border)', borderRadius: 'var(--vault-radius-md)', padding: '16px 16px 14px' }}>
+                <p style={{ fontSize: 11, fontWeight: 500, color: 'var(--vault-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>{label}</p>
+                <p style={{ fontSize: 28, fontWeight: 700, color: warn ? 'var(--vault-status-error)' : good ? 'var(--vault-status-success)' : 'var(--vault-text)', lineHeight: 1 }}>{value}</p>
               </div>
             ))}
           </div>
@@ -186,11 +181,12 @@ export default function QuotesPage() {
         {!loading && quotes.length > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3 flex-wrap">
-              <label style={{ fontSize: 11, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filter by Staff</label>
+              <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--vault-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filter by Staff</label>
               <select
                 value={quoteStaffFilter}
                 onChange={(e) => setQuoteStaffFilter(e.target.value)}
-                style={{ border: '1px solid #E8E8F0', borderRadius: 8, background: '#fff', height: 36, fontSize: 14, padding: '0 12px', color: '#1A1A2E', outline: 'none' }}
+                className="vault-input"
+                style={{ height: 36, width: 'auto', padding: '0 12px' }}
               >
                 <option value="all">All Staff</option>
                 {Object.keys(STAFF_EMAIL_MAP).map((name) => (
@@ -200,7 +196,7 @@ export default function QuotesPage() {
                 ))}
               </select>
               {quoteStaffFilter !== "all" && (
-                <button onClick={() => setQuoteStaffFilter("all")} style={{ fontSize: 12, color: '#6B7280', background: 'transparent', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+                <button onClick={() => setQuoteStaffFilter("all")} style={{ fontSize: 12, color: 'var(--vault-text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
                   Clear
                 </button>
               )}
@@ -208,9 +204,9 @@ export default function QuotesPage() {
               {quoteView === "board" && (
                 <button
                   onClick={() => setShowConverted((v) => !v)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 8, border: `1px solid ${showConverted ? '#635BFF' : '#E8E8F0'}`, padding: '6px 12px', fontSize: 12, fontWeight: 600, background: showConverted ? '#EEF2FF' : '#fff', color: showConverted ? '#635BFF' : '#6B7280', cursor: 'pointer', transition: 'all .15s' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--vault-radius-sm)', border: `1px solid ${showConverted ? 'var(--vault-text)' : 'var(--vault-border)'}`, padding: '6px 12px', fontSize: 12, fontWeight: 600, background: showConverted ? 'var(--vault-surface-selected)' : 'var(--vault-canvas)', color: 'var(--vault-text)', cursor: 'pointer', transition: 'all .15s' }}
                 >
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: showConverted ? '#635BFF' : '#D1D5DB', display: 'inline-block' }} />
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: showConverted ? 'var(--vault-text)' : 'var(--vault-border-strong)', display: 'inline-block' }} />
                   {showConverted ? "Hiding converted" : "Show converted"}
                 </button>
               )}
@@ -221,7 +217,7 @@ export default function QuotesPage() {
                     <button
                       key={f}
                       onClick={() => setQuoteListFilter(f)}
-                      style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: quoteListFilter === f ? '#635BFF' : '#F9FAFB', color: quoteListFilter === f ? '#fff' : '#6B7280', border: `1px solid ${quoteListFilter === f ? '#635BFF' : '#E8E8F0'}`, cursor: 'pointer', transition: 'all .15s' }}
+                      style={{ padding: '6px 12px', borderRadius: 'var(--vault-radius-sm)', fontSize: 12, fontWeight: 600, background: quoteListFilter === f ? 'var(--vault-text)' : 'var(--vault-canvas)', color: quoteListFilter === f ? '#fff' : 'var(--vault-text-secondary)', border: `1px solid ${quoteListFilter === f ? 'var(--vault-text)' : 'var(--vault-border)'}`, cursor: 'pointer', transition: 'all .15s' }}
                     >
                       {f === "active" ? "Active" : f === "all" ? "All" : "Converted"}
                     </button>
@@ -229,14 +225,14 @@ export default function QuotesPage() {
                 </div>
               )}
             </div>
-            <div style={{ display: 'flex', borderRadius: 8, border: '1px solid #E8E8F0', overflow: 'hidden', fontSize: 14, fontWeight: 600 }}>
+            <div style={{ display: 'flex', borderRadius: 'var(--vault-radius-sm)', border: '1px solid var(--vault-border)', overflow: 'hidden', fontSize: 14, fontWeight: 600 }}>
               <button
                 onClick={() => setQuoteView("board")}
-                style={{ padding: '8px 16px', background: quoteView === "board" ? '#635BFF' : '#fff', color: quoteView === "board" ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', transition: 'all .15s' }}
+                style={{ padding: '8px 16px', background: quoteView === "board" ? 'var(--vault-text)' : 'var(--vault-canvas)', color: quoteView === "board" ? '#fff' : 'var(--vault-text-secondary)', border: 'none', cursor: 'pointer', transition: 'all .15s' }}
               >Board</button>
               <button
                 onClick={() => setQuoteView("list")}
-                style={{ padding: '8px 16px', background: quoteView === "list" ? '#635BFF' : '#fff', color: quoteView === "list" ? '#fff' : '#6B7280', border: 'none', borderLeft: '1px solid #E8E8F0', cursor: 'pointer', transition: 'all .15s' }}
+                style={{ padding: '8px 16px', background: quoteView === "list" ? 'var(--vault-text)' : 'var(--vault-canvas)', color: quoteView === "list" ? '#fff' : 'var(--vault-text-secondary)', border: 'none', borderLeft: '1px solid var(--vault-border)', cursor: 'pointer', transition: 'all .15s' }}
               >List</button>
             </div>
           </div>
@@ -263,13 +259,13 @@ export default function QuotesPage() {
             tierMap={tierMap}
           />
         ) : (
-          <div style={{ background: '#FFFFFF', border: '1px solid #E8E8F0', borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ background: 'var(--vault-canvas)', border: '1px solid var(--vault-border)', borderRadius: 'var(--vault-radius-md)', overflow: 'hidden' }}>
             {selectedIds.size > 0 && (
-              <div style={{ padding: '10px 16px', background: '#FEE2E2', borderBottom: '1px solid #FECACA', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <span style={{ fontSize: 14, fontWeight: 500, color: '#991B1B' }}>{selectedIds.size} quote{selectedIds.size !== 1 ? "s" : ""} selected</span>
+              <div style={{ padding: '10px 16px', background: '#FEF2F2', borderBottom: '1px solid var(--vault-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--vault-status-error)' }}>{selectedIds.size} quote{selectedIds.size !== 1 ? "s" : ""} selected</span>
                 <div className="flex gap-2">
-                  <button onClick={() => setSelectedIds(new Set())} style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', padding: '6px 12px', borderRadius: 8, border: '1px solid #E8E8F0', background: '#fff', cursor: 'pointer' }}>Clear</button>
-                  <button onClick={handleBulkDelete} style={{ fontSize: 12, fontWeight: 600, color: '#fff', background: '#EF4444', padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer' }}>Delete ({selectedIds.size})</button>
+                  <button onClick={() => setSelectedIds(new Set())} className="vault-btn vault-btn-secondary vault-btn-sm">Clear</button>
+                  <button onClick={handleBulkDelete} className="vault-btn vault-btn-destructive vault-btn-sm">Delete ({selectedIds.size})</button>
                 </div>
               </div>
             )}
@@ -287,24 +283,24 @@ export default function QuotesPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <span style={{ fontWeight: 600, color: '#1A1A2E', fontSize: 14 }}>{name}</span>
+                          <span style={{ fontWeight: 600, color: 'var(--vault-text)', fontSize: 14 }}>{name}</span>
                           {tierInfo && (
                             <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: `${tierInfo.colour}22`, color: tierInfo.colour, letterSpacing: '0.05em', textTransform: 'uppercase', lineHeight: 1.6 }}>
                               {tierInfo.tier_name}
                             </span>
                           )}
                         </div>
-                        <div style={{ fontFamily: 'monospace', fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>{q.reference_number}</div>
+                        <div style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--vault-text-muted)', marginTop: 2 }}>{q.reference_number}</div>
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
-                          <span style={{ fontSize: 12, color: '#374151', textTransform: 'capitalize' }}>{q.status?.replace(/_/g, " ") || "—"}</span>
-                          {q.assigned_to && <span style={{ fontSize: 12, color: '#9CA3AF' }}>· {q.assigned_to}</span>}
+                          <span style={{ fontSize: 12, color: 'var(--vault-text)', textTransform: 'capitalize' }}>{q.status?.replace(/_/g, " ") || "—"}</span>
+                          {q.assigned_to && <span style={{ fontSize: 12, color: 'var(--vault-text-muted)' }}>· {q.assigned_to}</span>}
                         </div>
                       </div>
                       <div className="text-right shrink-0">
                         {q.follow_up_date && (
-                          <div style={{ fontSize: 12, color: '#6B7280' }}>{formatDateAU(q.follow_up_date)}</div>
+                          <div style={{ fontSize: 12, color: 'var(--vault-text-secondary)' }}>{formatDateAU(q.follow_up_date)}</div>
                         )}
-                        <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{formatDateAU(q.created_at?.split("T")[0]) || "—"}</div>
+                        <div style={{ fontSize: 11, color: 'var(--vault-text-muted)', marginTop: 2 }}>{formatDateAU(q.created_at?.split("T")[0]) || "—"}</div>
                       </div>
                     </div>
                   </div>
@@ -316,7 +312,7 @@ export default function QuotesPage() {
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr style={{ borderBottom: '1px solid #E8E8F0', textAlign: 'left', background: '#F9FAFB' }}>
+                  <tr style={{ borderBottom: '1px solid var(--vault-border)', textAlign: 'left', background: 'var(--vault-surface)' }}>
                     <th style={{ padding: '12px 16px', width: 32 }}>
                       <input
                         type="checkbox"
@@ -328,11 +324,11 @@ export default function QuotesPage() {
                           if (e.target.checked) setSelectedIds(new Set(filteredListQuotes.map((q) => q.id)));
                           else setSelectedIds(new Set());
                         }}
-                        style={{ accentColor: '#635BFF', cursor: 'pointer' }}
+                        style={{ cursor: 'pointer' }}
                       />
                     </th>
                     {['Reference No.','Customer','Assigned To','Stage','Follow Up Date',...(quoteListFilter === "converted" ? ['Order'] : []),'Created At'].map(h => (
-                      <th key={h} style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                      <th key={h} style={{ padding: '12px 16px', fontSize: 12, fontWeight: 500, color: 'var(--vault-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -344,8 +340,8 @@ export default function QuotesPage() {
                       <tr
                         key={q.id}
                         onClick={() => router.push(`/quotes/${q.id}`)}
-                        style={{ borderBottom: '1px solid #E8E8F0', cursor: 'pointer', transition: 'background .12s' }}
-                        onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = '#F9FAFB'}
+                        style={{ borderBottom: '1px solid var(--vault-border)', cursor: 'pointer', transition: 'background .12s' }}
+                        onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = 'var(--vault-surface)'}
                         onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}
                       >
                         <td style={{ padding: '12px 16px' }} onClick={(e) => e.stopPropagation()}>
@@ -359,13 +355,13 @@ export default function QuotesPage() {
                                 return n;
                               });
                             }}
-                            style={{ accentColor: '#635BFF', cursor: 'pointer' }}
+                            style={{ cursor: 'pointer' }}
                           />
                         </td>
-                        <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: 12, color: '#6B7280' }}>{q.reference_number}</td>
+                        <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: 12, color: 'var(--vault-text-secondary)' }}>{q.reference_number}</td>
                         <td style={{ padding: '12px 16px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ fontWeight: 500, color: '#1A1A2E' }}>{name}</span>
+                            <span style={{ fontWeight: 500, color: 'var(--vault-text)' }}>{name}</span>
                             {rowTier && (
                               <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: `${rowTier.colour}22`, color: rowTier.colour, letterSpacing: '0.05em', textTransform: 'uppercase', lineHeight: 1.6 }}>
                                 {rowTier.tier_name}
@@ -373,13 +369,13 @@ export default function QuotesPage() {
                             )}
                           </div>
                         </td>
-                        <td style={{ padding: '12px 16px', color: '#374151' }} className="capitalize">{q.assigned_to || "—"}</td>
-                        <td style={{ padding: '12px 16px', color: '#374151' }} className="capitalize">{q.status?.replace(/_/g, " ") || "—"}</td>
-                        <td style={{ padding: '12px 16px', color: '#6B7280' }}>{formatDateAU(q.follow_up_date) || "—"}</td>
+                        <td style={{ padding: '12px 16px', color: 'var(--vault-text)' }} className="capitalize">{q.assigned_to || "—"}</td>
+                        <td style={{ padding: '12px 16px', color: 'var(--vault-text)' }} className="capitalize">{q.status?.replace(/_/g, " ") || "—"}</td>
+                        <td style={{ padding: '12px 16px', color: 'var(--vault-text-secondary)' }}>{formatDateAU(q.follow_up_date) || "—"}</td>
                         {quoteListFilter === "converted" && (
-                          <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: 12, color: '#6B7280' }}>{q.packet_reference || "—"}</td>
+                          <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: 12, color: 'var(--vault-text-secondary)' }}>{q.packet_reference || "—"}</td>
                         )}
-                        <td style={{ padding: '12px 16px', color: '#9CA3AF', fontSize: 12 }}>{formatDateAU(q.created_at?.split("T")[0]) || "—"}</td>
+                        <td style={{ padding: '12px 16px', color: 'var(--vault-text-muted)', fontSize: 12 }}>{formatDateAU(q.created_at?.split("T")[0]) || "—"}</td>
                       </tr>
                     );
                   })}
