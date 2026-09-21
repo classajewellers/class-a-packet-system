@@ -12,6 +12,7 @@ import { generateValuationCertificate } from "@/lib/valuationCertificateGenerato
 import { useStaff } from "@/lib/useStaff";
 import AttachmentsSection from "./AttachmentsSection";
 import AddressAutocomplete from "./AddressAutocomplete";
+import Toggle from "./ui/Toggle";
 
 interface Props {
   packet: Packet;
@@ -540,25 +541,14 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
             <div style={{ background: "#F9FAFB", border: "1px solid #E8E8F0", borderRadius: 12, padding: "14px 16px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: "#1A1A2E" }}>Workshop Required?</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = !local.workshop_required;
+                <Toggle
+                  checked={!!local.workshop_required}
+                  onChange={(next) => {
                     set("workshop_required", next);
                     saveOnBlur("workshop_required", next);
                   }}
-                  style={{
-                    width: 40, height: 22, borderRadius: 999, border: "none", cursor: "pointer",
-                    background: local.workshop_required ? "#635BFF" : "#D1D5DB",
-                    position: "relative", transition: "background .15s",
-                  }}
-                >
-                  <span style={{
-                    position: "absolute", top: 3, left: local.workshop_required ? 20 : 3,
-                    width: 16, height: 16, borderRadius: "50%", background: "#fff",
-                    transition: "left .15s", display: "block",
-                  }} />
-                </button>
+                  aria-label="Workshop Required?"
+                />
               </div>
             </div>
           )}

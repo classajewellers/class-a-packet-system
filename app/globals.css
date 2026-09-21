@@ -113,6 +113,38 @@ body { background: #F9FAFB; color: #1A1A2E; font-size: 14px; }
 .vault-btn-icon:hover:not(:disabled) { background: var(--vault-surface); color: var(--vault-text); }
 .vault-btn-sm { height: 28px; padding: 0 10px; font-size: 12px; border-radius: var(--vault-radius-sm); }
 
+/* Standard iOS/macOS-style switch — pill track, sliding circular knob.
+   Off = neutral border-strong grey, on = vault-violet accent. Controlled via
+   components/ui/Toggle.tsx; caller owns the checked state. */
+.vault-toggle {
+  width: 40px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--vault-border-strong);
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--vault-motion-base);
+}
+.vault-toggle[data-checked="true"] { background: var(--vault-violet); }
+.vault-toggle:disabled { opacity: 0.5; cursor: not-allowed; }
+.vault-toggle:focus-visible { outline: 2px solid var(--vault-violet); outline-offset: 2px; }
+.vault-toggle-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: transform var(--vault-motion-base);
+  display: block;
+}
+.vault-toggle[data-checked="true"] .vault-toggle-knob { transform: translateX(18px); }
+
 .vault-input {
   width: 100%;
   height: var(--vault-control-height);
