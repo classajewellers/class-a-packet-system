@@ -6,6 +6,7 @@ import { waitUntil } from "@vercel/functions";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { generateReferenceNumber } from "@/lib/referenceNumber";
 import { todayISO } from "@/lib/formatters";
+import { fileVaultBrainSystemReport } from "@/lib/vaultBrainSystemReport";
 import {
   buildArticles,
   parseLineItems,
@@ -21,9 +22,14 @@ const CLASSA_TENANT_ID = "00000000-0000-0000-0000-000000000001";
  * Native Shopify webhooks carry X-Shopify-Shop-Domain — look it up in
  * tenant_shopify_connections. Zapier webhooks don't have this header,
  * so fall back to the Class A hardcode.
+ *
+ * `fallbackUsed` is recorded on the webhook_events row (see migration 136) —
+ * previously this fallback was completely invisible; now it's at least
+ * queryable, since a wrong-tenant misroute would otherwise look identical
+ * to "order missing" from the affected tenant's point of view.
  */
-async function resolveTenantId(shopDomain: string | null): Promise<string> {
-  if (!shopDomain) return CLASSA_TENANT_ID;
+async function resolveTenantId(shopDomain: string | null): Promise<{ tenantId: string; fallbackUsed: boolean }> {
+  if (!shopDomain) return { tenantId: CLASSA_TENANT_ID, fallbackUsed: true };
   try {
     const supabase = createServerSupabaseClient();
     const { data } = await supabase
@@ -31,11 +37,48 @@ async function resolveTenantId(shopDomain: string | null): Promise<string> {
       .select("tenant_id")
       .eq("shop_domain", shopDomain.toLowerCase())
       .maybeSingle();
-    if (data?.tenant_id) return data.tenant_id;
+    if (data?.tenant_id) return { tenantId: data.tenant_id, fallbackUsed: false };
   } catch (err) {
     console.warn("[shopify/webhook] tenant lookup failed, falling back to Class A:", err);
   }
-  return CLASSA_TENANT_ID;
+  return { tenantId: CLASSA_TENANT_ID, fallbackUsed: true };
+}
+
+// ── webhook_events helpers ────────────────────────────────────────────────────
+// Best-effort status updates on the durable staging row created in POST().
+// These must never throw into the caller — a failure to update the audit
+// row is logged but must not prevent (or appear to prevent) real processing.
+async function markWebhookEvent(
+  webhookEventId: string,
+  fields: Record<string, unknown>
+): Promise<void> {
+  try {
+    const supabase = createServerSupabaseClient();
+    const { error } = await supabase.from("webhook_events").update(fields).eq("id", webhookEventId);
+    if (error) console.error("[shopify/webhook] failed to update webhook_events row:", webhookEventId, error.message);
+  } catch (err) {
+    console.error("[shopify/webhook] unexpected error updating webhook_events row:", webhookEventId, err instanceof Error ? err.message : err);
+  }
+}
+
+// Best-effort order label for report titles/logging — works before format-
+// specific parsing runs, and tolerates either payload shape.
+function orderLabelFromRawBody(rawBody: Record<string, unknown>): string | null {
+  const label = (rawBody as any).name ?? (rawBody as any).orderNumber ?? null;
+  return label ? String(label) : null;
+}
+
+async function markFailed(webhookEventId: string, tenantId: string, orderLabel: string | null, errorMessage: string): Promise<void> {
+  await markWebhookEvent(webhookEventId, { status: "failed", error_message: errorMessage, processed_at: new Date().toISOString() });
+  await fileVaultBrainSystemReport({
+    tenantId,
+    title: `Shopify order sync failed${orderLabel ? ` — ${orderLabel}` : ""}`,
+    summary: errorMessage,
+    area: "Orders",
+    priority: "Critical",
+    tags: ["shopify", "webhook", "auto-filed"],
+    source: "system:shopify-webhook",
+  });
 }
 
 export const dynamic = "force-dynamic";
@@ -331,8 +374,9 @@ function extractDispatchDateZapier(raw: any): string | null {
 // ═══════════════════════════════════════════════════════════════════════════════
 // Called via waitUntil() so the 200 is already sent before any DB work begins.
 
-async function processOrder(rawBody: Record<string, unknown>, tenantId: string): Promise<void> {
+async function processOrder(rawBody: Record<string, unknown>, tenantId: string, webhookEventId: string): Promise<void> {
   console.log("[shopify/webhook] processOrder started — tenant_id:", tenantId);
+  await markWebhookEvent(webhookEventId, { status: "processing" });
   try {
   // ── A. Generate reference number ──────────────────────────────────────────
   let referenceNumber: string;
@@ -340,8 +384,10 @@ async function processOrder(rawBody: Record<string, unknown>, tenantId: string):
     referenceNumber = await generateReferenceNumber(tenantId, new Date(), "online_order");
     console.log("[shopify/webhook] Reference:", referenceNumber);
   } catch (err) {
-    console.error("[shopify/webhook] Reference generation failed:", err instanceof Error ? err.message : err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[shopify/webhook] Reference generation failed:", msg);
     console.error("[shopify/webhook] Reference generation stack:", err instanceof Error ? err.stack : String(err));
+    await markFailed(webhookEventId, tenantId, orderLabelFromRawBody(rawBody), `Reference generation failed: ${msg}`);
     return;
   }
 
@@ -471,6 +517,33 @@ async function processOrder(rawBody: Record<string, unknown>, tenantId: string):
     ? (String((rawBody as ShopifyOrder).id ?? "") || null)
     : (String((rawBody as ZapierFlatOrder).id ?? "") || null);
 
+  // ── Idempotency guard ──────────────────────────────────────────────────────
+  // A retried/duplicated webhook delivery (Shopify sends orders/create,
+  // orders/updated, orders/paid as separate events for the same order; a
+  // manual replay of a missed delivery would also land here) must never
+  // create a second packet. packets_tenant_shopify_order_id_unique (136)
+  // backs this at the DB level too — this check just avoids the failed-
+  // insert round-trip and lets the duplicate resolve as "processed", not
+  // "failed", since nothing actually went wrong.
+  if (shopifyOrderId) {
+    const supabaseCheck = createServerSupabaseClient();
+    const { data: existing } = await supabaseCheck
+      .from("packets")
+      .select("id, reference_number")
+      .eq("tenant_id", tenantId)
+      .eq("shopify_order_id", shopifyOrderId)
+      .maybeSingle();
+    if (existing) {
+      console.log("[shopify/webhook] duplicate delivery — packet already exists:", existing.reference_number, "id:", existing.id);
+      await markWebhookEvent(webhookEventId, {
+        status: "processed",
+        packet_id: existing.id,
+        processed_at: new Date().toISOString(),
+      });
+      return;
+    }
+  }
+
   const insertData = {
     reference_number:      referenceNumber,
     packet_type:           "online_order",
@@ -527,14 +600,22 @@ async function processOrder(rawBody: Record<string, unknown>, tenantId: string):
 
   if (error) {
     console.error("[shopify/webhook] INSERT FAILED — code:", error.code, "| message:", error.message, "| details:", error.details, "| hint:", error.hint);
+    await markFailed(webhookEventId, tenantId, orderNum ?? orderLabelFromRawBody(rawBody), `Packet insert failed: ${error.message}`);
     return;
   }
 
   console.log("[shopify/webhook] Packet saved successfully:", data?.reference_number, "id:", data?.id);
+  await markWebhookEvent(webhookEventId, {
+    status: "processed",
+    packet_id: data?.id ?? null,
+    processed_at: new Date().toISOString(),
+  });
 
   } catch (unexpectedErr) {
-    console.error("[shopify/webhook] UNEXPECTED ERROR in processOrder:", unexpectedErr instanceof Error ? unexpectedErr.message : String(unexpectedErr));
+    const msg = unexpectedErr instanceof Error ? unexpectedErr.message : String(unexpectedErr);
+    console.error("[shopify/webhook] UNEXPECTED ERROR in processOrder:", msg);
     console.error("[shopify/webhook] UNEXPECTED ERROR stack:", unexpectedErr instanceof Error ? unexpectedErr.stack : "(no stack)");
+    await markFailed(webhookEventId, tenantId, orderLabelFromRawBody(rawBody), `Unexpected error: ${msg}`);
   }
 }
 
@@ -551,33 +632,86 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Shopify native webhooks send X-Shopify-Shop-Domain on every request.
   // Zapier webhooks do not — they fall back to the Class A hardcoded tenant.
   const shopDomain = req.headers.get("x-shopify-shop-domain") ?? null;
+  const topic      = req.headers.get("x-shopify-topic") ?? null;
   console.log("[shopify/webhook] shop domain:", shopDomain ?? "(none — Zapier)");
 
-  // Parse body first — the request stream can only be read once, and we must
-  // do it before handing off to waitUntil.
-  let rawBody: Record<string, unknown>;
+  // Read the raw text FIRST — the request stream can only be consumed once,
+  // and we need the verbatim body even if it turns out not to be valid JSON,
+  // so a malformed delivery still leaves a durable trace instead of vanishing.
+  const rawText = await req.text();
+
+  let rawBody: Record<string, unknown> | null = null;
+  let parseError: string | null = null;
   try {
-    rawBody = (await req.json()) as Record<string, unknown>;
-  } catch {
-    // Return 200 even on parse failure so Shopify/Zapier doesn't mark the hook as broken.
-    console.error("[shopify/webhook] Failed to parse JSON body — returning 200 to prevent retry loop");
+    rawBody = JSON.parse(rawText) as Record<string, unknown>;
+  } catch (err) {
+    parseError = err instanceof Error ? err.message : String(err);
+  }
+
+  const { tenantId, fallbackUsed } = await resolveTenantId(shopDomain);
+  console.log("[shopify/webhook] resolved tenant_id:", tenantId, "fallback used:", fallbackUsed);
+
+  const externalId = rawBody ? orderLabelFromRawBody(rawBody) : null;
+
+  // ── Durable receipt — the entire point of this rework ─────────────────────
+  // Insert the row BEFORE responding to Shopify. This is the one place where
+  // returning 200 without having actually recorded anything would be worse
+  // than making Shopify retry: if this insert itself fails, we return an
+  // error so Shopify retries the delivery, because at that point we have no
+  // record of it ever having arrived at all.
+  const supabase = createServerSupabaseClient();
+  const { data: webhookEvent, error: insertErr } = await supabase
+    .from("webhook_events")
+    .insert({
+      tenant_id: tenantId,
+      source: "shopify",
+      topic,
+      external_id: externalId,
+      shop_domain: shopDomain,
+      raw_body: rawText,
+      status: rawBody ? "received" : "parse_failed",
+      error_message: parseError,
+      tenant_fallback_used: fallbackUsed,
+    })
+    .select("id")
+    .single();
+
+  if (insertErr || !webhookEvent) {
+    console.error("[shopify/webhook] FAILED to durably record incoming webhook — returning 500 so Shopify retries:", insertErr?.message);
+    return NextResponse.json({ error: "failed to record webhook" }, { status: 500 });
+  }
+
+  if (!rawBody) {
+    // Malformed body: durably recorded above as parse_failed. Still return
+    // 200 — a genuinely malformed delivery isn't something a Shopify retry
+    // would fix, and we no longer need the retry to avoid losing the record.
+    console.error("[shopify/webhook] Failed to parse JSON body:", parseError);
+    await fileVaultBrainSystemReport({
+      tenantId,
+      title: "Shopify webhook body could not be parsed",
+      summary: parseError ?? "Unknown parse error",
+      area: "Orders",
+      priority: "Critical",
+      tags: ["shopify", "webhook", "auto-filed", "parse-failure"],
+      source: "system:shopify-webhook",
+    });
     return NextResponse.json({ received: true }, { status: 200 });
   }
 
   console.log("[shopify/webhook] body keys:", Object.keys(rawBody));
-  console.log("[shopify/webhook] orderNumber:", rawBody.name ?? rawBody.orderNumber);
+  console.log("[shopify/webhook] orderNumber:", externalId);
 
-  // Resolve tenant before handing off — resolveTenantId is fast (single indexed lookup).
-  const tenantId = await resolveTenantId(shopDomain);
-  console.log("[shopify/webhook] resolved tenant_id:", tenantId);
-
-  // Register background processing — runs after response is sent.
+  // Register background processing — runs after response is sent. Any
+  // exception processOrder() doesn't already catch internally still marks
+  // the row failed here, as a last line of defence — but processOrder()
+  // itself is expected to own every real status transition.
   waitUntil(
-    processOrder(rawBody, tenantId).catch((err) =>
-      console.error("[shopify/webhook] processOrder threw:", err)
+    processOrder(rawBody, tenantId, webhookEvent.id).catch((err) =>
+      markFailed(webhookEvent.id, tenantId, externalId, `processOrder threw: ${err instanceof Error ? err.message : String(err)}`)
     )
   );
 
-  // Return 200 immediately so Shopify/Zapier doesn't timeout.
+  // Return 200 immediately — the durable record above is what makes this
+  // safe now, not just convenient.
   return NextResponse.json({ received: true }, { status: 200 });
 }
