@@ -196,6 +196,11 @@ export interface Packet {
   /** Set true on packets auto-created from a paid quote; blocks workshop
    * pipeline progression until a manager clears it. */
   pending_customer_approval?: boolean;
+  /** Online orders only — staff opt-in for whether this order needs a
+   * Workshop job. Defaults false; the Workshop queue only shows
+   * online_order packets where this is true (other job types are
+   * unaffected). See migration 137. */
+  workshop_required?: boolean;
 
   // Online order fields
   order_number: string | null;
