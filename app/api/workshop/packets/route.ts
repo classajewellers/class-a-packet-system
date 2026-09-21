@@ -27,6 +27,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         "*, workshop_subcontractor_name, workshop_pathway_id, workshop_step_index, workshop_intake_substatus, workshop_needs_valuation, workshop_valuer, workshop_supplier, workshop_po_number, customer_id"
       )
       .in("job_type", WORKSHOP_JOB_TYPES)
+      // Online orders don't go to Workshop by default — only once staff have
+      // explicitly ticked "Workshop Required?" on the order (packets.
+      // workshop_required, migration 137). Every other job type in
+      // WORKSHOP_JOB_TYPES (repair/custom_order/stock_work/collection_order)
+      // is unaffected by this flag and keeps showing up as before.
+      .or("job_type.neq.online_order,workshop_required.eq.true")
       .order("due_date", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: false });
 

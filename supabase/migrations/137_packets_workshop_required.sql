@@ -1,0 +1,29 @@
+-- 137: packets.workshop_required
+--
+-- Root cause context (2026-09-21/22 investigation): the "Workshop Required?"
+-- toggle on the online-order detail panel (components/PacketDetailDrawer.tsx)
+-- was never wired to a real column — it was local UI state that, when
+-- flipped on, opened a "Generate Workshop Packet" modal calling
+-- POST /api/workshop/packets, an unconditional INSERT with no dedupe guard.
+-- That created a second, real packets row (packet_type: 'online_order',
+-- but always reference_number LIKE 'CA-%' since the insert hardcoded
+-- generateReferenceNumber(..., "repair") regardless of packet_type) for
+-- every use of the toggle - the "duplicate order" symptom. Separately, the
+-- Workshop queue's query never referenced any workshop-required flag at
+-- all (none existed), so every online_order packet appeared in Workshop
+-- unconditionally regardless of the toggle - the "everything shows up in
+-- Workshop" symptom. 84 such duplicates were found and removed from
+-- production on 2026-09-21/22 (real orders they were spawned from had this
+-- new column set true as part of that cleanup, done via direct SQL - see
+-- session history, not part of this migration).
+--
+-- This migration adds the real, persisted flag the toggle should have had
+-- from the start. Online orders only; other job types (repair, custom_order,
+-- stock_work, collection_order) are unaffected by this column - see the
+-- Workshop queue query change in app/api/workshop/packets/route.ts.
+--
+-- Defaults false: per Josh's explicit design decision, online orders do NOT
+-- go to Workshop by default - only once staff explicitly opt in. (Future
+-- work: this will eventually be inventory-sync-derived rather than manual.)
+
+ALTER TABLE packets ADD COLUMN IF NOT EXISTS workshop_required BOOLEAN NOT NULL DEFAULT false;
