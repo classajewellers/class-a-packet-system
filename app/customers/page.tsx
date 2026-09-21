@@ -180,21 +180,23 @@ export default function CustomersPage() {
   const sortedTiers = [...tiers].sort((a, b) => a.tier_order - b.tier_order);
 
   // Shared styles
-  const CARD: React.CSSProperties = { background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12 };
+  const CARD: React.CSSProperties = { background: "var(--vault-canvas)", border: "1px solid var(--vault-border)", borderRadius: "var(--vault-radius-md)" };
   const TAB_BTN = (active: boolean): React.CSSProperties => ({
-    padding: "8px 18px", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer",
-    background: active ? "#635BFF" : "transparent", color: active ? "#fff" : "#6B7280", transition: "all .15s",
+    padding: "8px 18px", border: "none", borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: "pointer",
+    background: active ? "var(--vault-canvas)" : "transparent", color: active ? "var(--vault-text)" : "var(--vault-text-secondary)",
+    boxShadow: active ? "var(--vault-shadow-elevated)" : "none", transition: "all .15s",
   });
 
   return (
     <div className="max-w-7xl mx-auto space-y-4">
+      <h1 style={{ fontSize: "var(--vault-text-page-title)", fontWeight: 600, color: "var(--vault-text)", margin: 0 }}>Customers</h1>
 
       {/* ── Page tab bar ────────────────────────────────────────────────────── */}
-      <div style={{ display: "flex", gap: 4, background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, padding: 4, alignSelf: "flex-start", width: "fit-content" }}>
+      <div style={{ display: "flex", gap: 2, background: "var(--vault-surface)", border: "1px solid var(--vault-border)", borderRadius: "var(--vault-radius-sm)", padding: 3, alignSelf: "flex-start", width: "fit-content" }}>
         <button style={TAB_BTN(pageTab === "customers")} onClick={() => setPageTab("customers")}>
-          Customers
+          Directory
           {Object.values(smsUnreadMap).reduce((s, n) => s + n, 0) > 0 && (
-            <span style={{ marginLeft: 6, fontSize: 11, background: "#EF4444", color: "#fff", borderRadius: 999, padding: "1px 6px", fontWeight: 700 }}>
+            <span style={{ marginLeft: 6, fontSize: 11, background: "var(--vault-status-error)", color: "#fff", borderRadius: 999, padding: "1px 6px", fontWeight: 700 }}>
               {Object.values(smsUnreadMap).reduce((s, n) => s + n, 0)} SMS
             </span>
           )}
@@ -202,7 +204,7 @@ export default function CustomersPage() {
         <button style={TAB_BTN(pageTab === "appointments")} onClick={() => setPageTab("appointments")}>
           Appointments
           {appointments.filter(a => a.status === "upcoming").length > 0 && (
-            <span style={{ marginLeft: 6, fontSize: 11, background: "#EEF2FF", color: "#635BFF", borderRadius: 999, padding: "1px 6px", fontWeight: 700 }}>
+            <span style={{ marginLeft: 6, fontSize: 11, background: "var(--vault-surface-selected)", color: "var(--vault-text)", borderRadius: 999, padding: "1px 6px", fontWeight: 700 }}>
               {appointments.filter(a => a.status === "upcoming").length}
             </span>
           )}
@@ -217,7 +219,7 @@ export default function CustomersPage() {
             <div style={{ padding: 16, borderBottom: tiers.length > 0 ? "1px solid #F0F0F5" : undefined }}>
               <div className="flex items-center gap-3">
                 <div className="flex-1 relative">
-                  <svg style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <svg style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--vault-text-muted)" }} className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                   </svg>
                   <input
@@ -225,16 +227,16 @@ export default function CustomersPage() {
                     placeholder="Search by name, maiden name, email, phone, or item description…"
                     value={search}
                     onChange={e => setSearch(e.target.value)}
-                    style={{ width: "100%", paddingLeft: 36, paddingRight: 12, border: "1px solid #E8E8F0", borderRadius: 8, background: "#fff", height: 40, fontSize: 14, color: "#1A1A2E", outline: "none" }}
+                    style={{ width: "100%", paddingLeft: 36, paddingRight: 12, border: "1px solid var(--vault-border)", borderRadius: 8, background: "var(--vault-canvas)", height: 40, fontSize: 14, color: "var(--vault-text)", outline: "none" }}
                   />
                 </div>
                 {search && (
-                  <button onClick={() => setSearch("")} style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", background: "transparent", border: "none", cursor: "pointer" }}>
+                  <button onClick={() => setSearch("")} style={{ fontSize: 12, fontWeight: 600, color: "var(--vault-text-secondary)", background: "transparent", border: "none", cursor: "pointer" }}>
                     Clear
                   </button>
                 )}
               </div>
-              <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 8 }}>
+              <p style={{ fontSize: 12, color: "var(--vault-text-muted)", marginTop: 8 }}>
                 Aggregated live from all orders and quotes. Search also matches item descriptions.
               </p>
             </div>
@@ -246,9 +248,9 @@ export default function CustomersPage() {
                   onClick={() => setSelectedTier(null)}
                   style={{
                     padding: "5px 14px", borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                    border: "1px solid #E8E8F0",
-                    background: selectedTier === null ? "#635BFF" : "transparent",
-                    color: selectedTier === null ? "#fff" : "#6B7280",
+                    border: "1px solid var(--vault-border)",
+                    background: selectedTier === null ? "var(--vault-text)" : "transparent",
+                    color: selectedTier === null ? "#fff" : "var(--vault-text-secondary)",
                   }}
                 >
                   All
@@ -277,8 +279,8 @@ export default function CustomersPage() {
 
           {/* Customer list */}
           <div style={CARD}>
-            <div style={{ padding: "12px 20px", borderBottom: "1px solid #E8E8F0" }}>
-              <h2 style={{ fontSize: 14, fontWeight: 600, color: "#1A1A2E", margin: 0 }}>
+            <div style={{ padding: "12px 20px", borderBottom: "1px solid var(--vault-border)" }}>
+              <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--vault-text)", margin: 0 }}>
                 {loading
                   ? "Loading…"
                   : `${filteredCustomers.length} customer${filteredCustomers.length !== 1 ? "s" : ""}${search ? ` matching "${search}"` : ""}${selectedTier ? ` · ${selectedTier} tier` : ""}`}
@@ -288,9 +290,9 @@ export default function CustomersPage() {
             {/* Mobile cards */}
             <div className="md:hidden divide-y divide-gray-100">
               {loading ? (
-                <div style={{ padding: "48px 20px", textAlign: "center", color: "#6B7280", fontSize: 14 }}>Loading…</div>
+                <div style={{ padding: "48px 20px", textAlign: "center", color: "var(--vault-text-secondary)", fontSize: 14 }}>Loading…</div>
               ) : filteredCustomers.length === 0 ? (
-                <div style={{ padding: "48px 20px", textAlign: "center", color: "#6B7280", fontSize: 14 }}>
+                <div style={{ padding: "48px 20px", textAlign: "center", color: "var(--vault-text-secondary)", fontSize: 14 }}>
                   {search ? `No customers matching "${search}"` : selectedTier ? `No ${selectedTier} tier customers` : "No customer records yet."}
                 </div>
               ) : filteredCustomers.map(c => {
@@ -300,24 +302,24 @@ export default function CustomersPage() {
                   <div key={c.email} onClick={() => openProfile(c.email)} className="flex items-center justify-between gap-3 px-4 py-3 cursor-pointer active:bg-gray-50">
                     <div className="min-w-0">
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ fontWeight: 600, color: "#1A1A2E", fontSize: 14 }}>{name}</span>
+                        <span style={{ fontWeight: 600, color: "var(--vault-text)", fontSize: 14 }}>{name}</span>
                         {mTier && (
                           <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: `${mTier.colour}22`, color: mTier.colour, letterSpacing: "0.05em", textTransform: "uppercase" }}>
                             {mTier.tier_name}
                           </span>
                         )}
                       </div>
-                      <div style={{ color: "#6B7280", fontSize: 13, marginTop: 2 }}>{c.phone || c.email || "—"}</div>
-                      <div style={{ color: "#9CA3AF", fontSize: 12, marginTop: 2 }}>Last visit: {formatDateAU(c.last_visit?.split("T")[0]) || "—"}</div>
+                      <div style={{ color: "var(--vault-text-secondary)", fontSize: 13, marginTop: 2 }}>{c.phone || c.email || "—"}</div>
+                      <div style={{ color: "var(--vault-text-muted)", fontSize: 12, marginTop: 2 }}>Last visit: {formatDateAU(c.last_visit?.split("T")[0]) || "—"}</div>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
                       {(smsUnreadMap[c.email] ?? 0) > 0 && (
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 999, background: "#EF4444", color: "#fff", whiteSpace: "nowrap" }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 999, background: "var(--vault-status-error)", color: "#fff", whiteSpace: "nowrap" }}>
                           {smsUnreadMap[c.email]} SMS
                         </span>
                       )}
-                      {c.total_spend > 0 && <span style={{ fontWeight: 600, color: "#1A1A2E", fontSize: 14 }}>{formatCurrency(c.total_spend)}</span>}
-                      <svg className="w-4 h-4" fill="none" stroke="#D1D5DB" strokeWidth={2} viewBox="0 0 24 24">
+                      {c.total_spend > 0 && <span style={{ fontWeight: 600, color: "var(--vault-text)", fontSize: 14 }}>{formatCurrency(c.total_spend)}</span>}
+                      <svg className="w-4 h-4" fill="none" stroke="var(--vault-border-strong)" strokeWidth={2} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                       </svg>
                     </div>
@@ -330,9 +332,9 @@ export default function CustomersPage() {
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr style={{ textAlign: "left", borderBottom: "1px solid #E8E8F0", background: "#F9FAFB" }}>
+                  <tr style={{ textAlign: "left", borderBottom: "1px solid var(--vault-border)", background: "var(--vault-surface)" }}>
                     {["Name", "Phone", "Email", "Orders", "Quotes", "Last Visit", "Total Spend", ""].map((h, i) => (
-                      <th key={i} style={{ padding: "12px 20px", fontSize: 12, fontWeight: 500, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: ["Orders", "Quotes"].includes(h) ? "center" : "left" }}>{h}</th>
+                      <th key={i} style={{ padding: "12px 20px", fontSize: 12, fontWeight: 500, color: "var(--vault-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: ["Orders", "Quotes"].includes(h) ? "center" : "left" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -341,7 +343,7 @@ export default function CustomersPage() {
                     Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} />)
                   ) : filteredCustomers.length === 0 ? (
                     <tr>
-                      <td colSpan={8} style={{ padding: "48px 20px", textAlign: "center", color: "#6B7280", fontSize: 14 }}>
+                      <td colSpan={8} style={{ padding: "48px 20px", textAlign: "center", color: "var(--vault-text-secondary)", fontSize: 14 }}>
                         {search ? `No customers matching "${search}"` : selectedTier ? `No ${selectedTier} tier customers.` : "No customer records yet. Submit an order or quote to create customer records."}
                       </td>
                     </tr>
@@ -352,11 +354,11 @@ export default function CustomersPage() {
                       <tr
                         key={c.email}
                         onClick={() => openProfile(c.email)}
-                        style={{ borderBottom: "1px solid #E8E8F0", cursor: "pointer", transition: "background .12s" }}
-                        onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = "#F9FAFB"}
+                        style={{ borderBottom: "1px solid var(--vault-border)", cursor: "pointer", transition: "background .12s" }}
+                        onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = "var(--vault-surface)"}
                         onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = "transparent"}
                       >
-                        <td style={{ padding: "12px 20px", fontWeight: 600, color: "#1A1A2E" }}>
+                        <td style={{ padding: "12px 20px", fontWeight: 600, color: "var(--vault-text)" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             {name}
                             {dTier && (
@@ -366,32 +368,32 @@ export default function CustomersPage() {
                             )}
                           </div>
                         </td>
-                        <td style={{ padding: "12px 20px", color: "#6B7280" }}>{c.phone || "—"}</td>
-                        <td style={{ padding: "12px 20px", color: "#6B7280", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.email || "—"}</td>
+                        <td style={{ padding: "12px 20px", color: "var(--vault-text-secondary)" }}>{c.phone || "—"}</td>
+                        <td style={{ padding: "12px 20px", color: "var(--vault-text-secondary)", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.email || "—"}</td>
                         <td style={{ padding: "12px 20px", textAlign: "center" }}>
                           {c.total_orders > 0 ? (
-                            <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, borderRadius: "50%", background: "#635BFF", color: "#fff", fontSize: 12, fontWeight: 700 }}>
+                            <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, borderRadius: "50%", background: "var(--vault-text)", color: "#fff", fontSize: 12, fontWeight: 700 }}>
                               {c.total_orders}
                             </span>
-                          ) : <span style={{ color: "#D1D5DB" }}>—</span>}
+                          ) : <span style={{ color: "var(--vault-border-strong)" }}>—</span>}
                         </td>
                         <td style={{ padding: "12px 20px", textAlign: "center" }}>
                           {c.total_quotes > 0 ? (
-                            <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, borderRadius: "50%", background: "#EEF2FF", color: "#635BFF", fontSize: 12, fontWeight: 700 }}>
+                            <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, borderRadius: "50%", background: "var(--vault-surface-selected)", color: "var(--vault-text)", fontSize: 12, fontWeight: 700 }}>
                               {c.total_quotes}
                             </span>
-                          ) : <span style={{ color: "#D1D5DB" }}>—</span>}
+                          ) : <span style={{ color: "var(--vault-border-strong)" }}>—</span>}
                         </td>
-                        <td style={{ padding: "12px 20px", color: "#6B7280" }}>{formatDateAU(c.last_visit?.split("T")[0]) || "—"}</td>
-                        <td style={{ padding: "12px 20px", fontWeight: 600, color: "#1A1A2E" }}>{c.total_spend > 0 ? formatCurrency(c.total_spend) : "—"}</td>
+                        <td style={{ padding: "12px 20px", color: "var(--vault-text-secondary)" }}>{formatDateAU(c.last_visit?.split("T")[0]) || "—"}</td>
+                        <td style={{ padding: "12px 20px", fontWeight: 600, color: "var(--vault-text)" }}>{c.total_spend > 0 ? formatCurrency(c.total_spend) : "—"}</td>
                         <td style={{ padding: "12px 20px" }}>
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
                             {(smsUnreadMap[c.email] ?? 0) > 0 && (
-                              <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 999, background: "#EF4444", color: "#fff", whiteSpace: "nowrap" }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 999, background: "var(--vault-status-error)", color: "#fff", whiteSpace: "nowrap" }}>
                                 {smsUnreadMap[c.email]} SMS
                               </span>
                             )}
-                            <svg className="w-4 h-4" fill="none" stroke="#D1D5DB" strokeWidth={2} viewBox="0 0 24 24">
+                            <svg className="w-4 h-4" fill="none" stroke="var(--vault-border-strong)" strokeWidth={2} viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                             </svg>
                           </div>
@@ -410,13 +412,13 @@ export default function CustomersPage() {
       {pageTab === "appointments" && (
         <div style={CARD}>
           {/* Header row */}
-          <div style={{ padding: "12px 20px", borderBottom: "1px solid #E8E8F0", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-            <h2 style={{ fontSize: 14, fontWeight: 600, color: "#1A1A2E", margin: 0 }}>
+          <div style={{ padding: "12px 20px", borderBottom: "1px solid var(--vault-border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--vault-text)", margin: 0 }}>
               {!appointmentsLoaded ? "Loading…" : `${filteredAppointments.length} appointment${filteredAppointments.length !== 1 ? "s" : ""}${showCompleted ? "" : " upcoming"}`}
             </h2>
             <button
               onClick={() => setShowCompleted(v => !v)}
-              style={{ fontSize: 12, fontWeight: 600, color: showCompleted ? "#635BFF" : "#6B7280", background: showCompleted ? "#EEF2FF" : "transparent", border: "1px solid #E8E8F0", borderRadius: 8, padding: "5px 12px", cursor: "pointer" }}
+              style={{ fontSize: 12, fontWeight: 600, color: showCompleted ? "var(--vault-text)" : "var(--vault-text-secondary)", background: showCompleted ? "var(--vault-surface-selected)" : "transparent", border: "1px solid var(--vault-border)", borderRadius: 8, padding: "5px 12px", cursor: "pointer" }}
             >
               {showCompleted ? "Upcoming only" : "Show completed"}
             </button>
@@ -425,24 +427,24 @@ export default function CustomersPage() {
           {/* Mobile */}
           <div className="md:hidden divide-y divide-gray-100">
             {!appointmentsLoaded ? (
-              <div style={{ padding: "48px 20px", textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>Loading…</div>
+              <div style={{ padding: "48px 20px", textAlign: "center", color: "var(--vault-text-muted)", fontSize: 14 }}>Loading…</div>
             ) : filteredAppointments.length === 0 ? (
-              <div style={{ padding: "48px 20px", textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>No upcoming appointments.</div>
+              <div style={{ padding: "48px 20px", textAlign: "center", color: "var(--vault-text-muted)", fontSize: 14 }}>No upcoming appointments.</div>
             ) : filteredAppointments.map(a => {
               const custName = [a.customer_first_name, a.customer_last_name].filter(Boolean).join(" ") || a.customer_email;
               return (
                 <div key={a.id} style={{ padding: "12px 16px" }}>
                   <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
                     <div>
-                      <div style={{ fontWeight: 600, color: "#1A1A2E", fontSize: 14 }}>
+                      <div style={{ fontWeight: 600, color: "var(--vault-text)", fontSize: 14 }}>
                         {formatDateAU(a.appointment_date)}{a.appointment_time ? ` at ${String(a.appointment_time).slice(0, 5)}` : ""}
                       </div>
-                      <Link href={`/customers/${encodeURIComponent(a.customer_email)}`} style={{ fontSize: 13, color: "#635BFF", textDecoration: "none", fontWeight: 500 }}>
+                      <Link href={`/customers/${encodeURIComponent(a.customer_email)}`} style={{ fontSize: 13, color: "var(--vault-text)", textDecoration: "none", fontWeight: 500 }}>
                         {custName}
                       </Link>
-                      {a.notes && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>{a.notes}</div>}
+                      {a.notes && <div style={{ fontSize: 12, color: "var(--vault-text-secondary)", marginTop: 2 }}>{a.notes}</div>}
                     </div>
-                    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: a.status === "upcoming" ? "#DCFCE7" : "#F3F4F6", color: a.status === "upcoming" ? "#166534" : "#6B7280", whiteSpace: "nowrap", flexShrink: 0 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: a.status === "upcoming" ? "#DCFCE7" : "var(--vault-surface)", color: a.status === "upcoming" ? "var(--vault-status-success)" : "var(--vault-text-secondary)", whiteSpace: "nowrap", flexShrink: 0 }}>
                       {a.status}
                     </span>
                   </div>
@@ -455,35 +457,35 @@ export default function CustomersPage() {
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr style={{ textAlign: "left", borderBottom: "1px solid #E8E8F0", background: "#F9FAFB" }}>
+                <tr style={{ textAlign: "left", borderBottom: "1px solid var(--vault-border)", background: "var(--vault-surface)" }}>
                   {["Date", "Time", "Customer", "Notes", "Status"].map(h => (
-                    <th key={h} style={{ padding: "12px 20px", fontSize: 12, fontWeight: 500, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
+                    <th key={h} style={{ padding: "12px 20px", fontSize: 12, fontWeight: 500, color: "var(--vault-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {!appointmentsLoaded ? (
-                  <tr><td colSpan={5} style={{ padding: "48px 20px", textAlign: "center", color: "#9CA3AF" }}>Loading…</td></tr>
+                  <tr><td colSpan={5} style={{ padding: "48px 20px", textAlign: "center", color: "var(--vault-text-muted)" }}>Loading…</td></tr>
                 ) : filteredAppointments.length === 0 ? (
-                  <tr><td colSpan={5} style={{ padding: "48px 20px", textAlign: "center", color: "#9CA3AF" }}>No upcoming appointments. All clear!</td></tr>
+                  <tr><td colSpan={5} style={{ padding: "48px 20px", textAlign: "center", color: "var(--vault-text-muted)" }}>No upcoming appointments. All clear!</td></tr>
                 ) : filteredAppointments.map(a => {
                   const custName = [a.customer_first_name, a.customer_last_name].filter(Boolean).join(" ") || a.customer_email;
                   return (
-                    <tr key={a.id} style={{ borderBottom: "1px solid #E8E8F0" }}
-                      onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = "#F9FAFB"}
+                    <tr key={a.id} style={{ borderBottom: "1px solid var(--vault-border)" }}
+                      onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = "var(--vault-surface)"}
                       onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = "transparent"}
                     >
-                      <td style={{ padding: "12px 20px", fontWeight: 600, color: "#1A1A2E", whiteSpace: "nowrap" }}>{formatDateAU(a.appointment_date)}</td>
-                      <td style={{ padding: "12px 20px", color: "#6B7280" }}>{a.appointment_time ? String(a.appointment_time).slice(0, 5) : "—"}</td>
+                      <td style={{ padding: "12px 20px", fontWeight: 600, color: "var(--vault-text)", whiteSpace: "nowrap" }}>{formatDateAU(a.appointment_date)}</td>
+                      <td style={{ padding: "12px 20px", color: "var(--vault-text-secondary)" }}>{a.appointment_time ? String(a.appointment_time).slice(0, 5) : "—"}</td>
                       <td style={{ padding: "12px 20px" }}>
-                        <Link href={`/customers/${encodeURIComponent(a.customer_email)}`} style={{ color: "#635BFF", textDecoration: "none", fontWeight: 500, fontSize: 14 }}>
+                        <Link href={`/customers/${encodeURIComponent(a.customer_email)}`} style={{ color: "var(--vault-text)", textDecoration: "none", fontWeight: 500, fontSize: 14 }}>
                           {custName}
                         </Link>
-                        <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 1 }}>{a.customer_email}</div>
+                        <div style={{ fontSize: 11, color: "var(--vault-text-muted)", marginTop: 1 }}>{a.customer_email}</div>
                       </td>
-                      <td style={{ padding: "12px 20px", color: "#6B7280", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.notes || "—"}</td>
+                      <td style={{ padding: "12px 20px", color: "var(--vault-text-secondary)", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.notes || "—"}</td>
                       <td style={{ padding: "12px 20px" }}>
-                        <span style={{ display: "inline-flex", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: a.status === "upcoming" ? "#DCFCE7" : "#F3F4F6", color: a.status === "upcoming" ? "#166534" : "#6B7280" }}>
+                        <span style={{ display: "inline-flex", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: a.status === "upcoming" ? "#DCFCE7" : "var(--vault-surface)", color: a.status === "upcoming" ? "var(--vault-status-success)" : "var(--vault-text-secondary)" }}>
                           {a.status}
                         </span>
                       </td>

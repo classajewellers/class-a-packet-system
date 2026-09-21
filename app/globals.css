@@ -5,14 +5,181 @@
 @tailwind utilities;
 
 :root {
+  /* Legacy tokens - kept so unmigrated screens don't break during the
+     staged redesign (redesign/vault-ui-system-v1). Do not use these in
+     new/redesigned components - use the --vault-* tokens below instead. */
   --primary: #635BFF;
   --accent: #000000;
   --red: #CC0000;
   --bg: #F9FAFB;
+
+  /* ── Vault design system v1 (redesign/vault-ui-system-v1) ──────────────
+     "Premium because it's precise" - typography/spacing/alignment carry
+     the feel, not decoration. Vault Violet is a rare accent, never a
+     background. See CLAUDE.md / redesign report for the full rationale. */
+
+  /* Surfaces */
+  --vault-canvas:      #FFFFFF; /* main page background */
+  --vault-surface:     #FAFAF9; /* secondary surface - hover, subtle panels */
+  --vault-surface-selected: #F2F1EE; /* selected row / active neutral surface */
+
+  /* Text */
+  --vault-text:         #18181B; /* primary text */
+  --vault-text-secondary: #71717A;
+  --vault-text-muted:   #A1A1AA;
+  --vault-text-inverse: #FFFFFF; /* on dark surfaces (sidebar, primary buttons) */
+
+  /* Borders */
+  --vault-border:       #E7E5E4; /* hairline */
+  --vault-border-strong: #D4D2CF;
+
+  /* Accent - use sparingly: focus rings, selected controls, links, Vault AI */
+  --vault-violet:       #635BFF;
+  --vault-violet-subtle: rgba(99, 91, 255, 0.12);
+
+  /* Dark surface (sidebar / inverse contexts) */
+  --vault-graphite:       #18181B;
+  --vault-graphite-hover: #26262B;
+  --vault-graphite-text:  #A1A1AA;
+  --vault-graphite-text-active: #FFFFFF;
+
+  /* Semantic status - meaning only, never decoration */
+  --vault-status-success: #16A34A; /* ready / completed */
+  --vault-status-warning: #B45309; /* restrained rust - in production / waiting */
+  --vault-status-error:   #DC2626; /* overdue / blocked / destructive */
+  --vault-status-neutral: #71717A; /* not started / archived */
+
+  /* Shape */
+  --vault-radius-sm: 6px;  /* inputs, buttons, dropdowns */
+  --vault-radius-md: 8px;  /* modals, large panels */
+  --vault-radius-lg: 10px; /* modal max */
+
+  /* Control sizing */
+  --vault-control-height: 40px;
+
+  /* Elevation - reserved for dropdown/popover/modal/floating menu only */
+  --vault-shadow-elevated: 0 4px 16px rgba(24, 24, 27, 0.10), 0 1px 2px rgba(24, 24, 27, 0.06);
+
+  /* Motion */
+  --vault-motion-fast: 120ms ease;
+  --vault-motion-base: 160ms ease;
+
+  /* Typography scale */
+  --vault-text-page-title: 28px;
+  --vault-text-section-title: 18px;
+  --vault-text-object-title: 15px;
+  --vault-text-body: 14px;
+  --vault-text-label: 13px;
+  --vault-text-meta: 12px;
+  --vault-text-tiny: 11px;
 }
 
 * { font-family: 'Inter', sans-serif; }
 body { background: #F9FAFB; color: #1A1A2E; font-size: 14px; }
+
+/* ── Vault design system v1 utility classes ──────────────────────────────
+   Small, composable primitives so redesigned screens share one source of
+   truth instead of re-declaring inline styles per page. */
+
+.vault-canvas { background: var(--vault-canvas); }
+
+.vault-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: var(--vault-control-height);
+  padding: 0 16px;
+  border-radius: var(--vault-radius-sm);
+  font-size: 14px; font-weight: 500;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background var(--vault-motion-fast), border-color var(--vault-motion-fast), color var(--vault-motion-fast);
+  white-space: nowrap;
+}
+.vault-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.vault-btn:focus-visible { outline: 2px solid var(--vault-violet); outline-offset: 2px; }
+
+.vault-btn-primary { background: var(--vault-text); color: var(--vault-text-inverse); }
+.vault-btn-primary:hover:not(:disabled) { background: #27272A; }
+
+.vault-btn-secondary { background: var(--vault-canvas); color: var(--vault-text); border-color: var(--vault-border); }
+.vault-btn-secondary:hover:not(:disabled) { background: var(--vault-surface); border-color: var(--vault-border-strong); }
+
+.vault-btn-tertiary { background: transparent; color: var(--vault-text-secondary); height: auto; padding: 4px 6px; }
+.vault-btn-tertiary:hover:not(:disabled) { color: var(--vault-text); background: var(--vault-surface); }
+
+.vault-btn-destructive { background: var(--vault-canvas); color: var(--vault-status-error); border-color: var(--vault-border); }
+.vault-btn-destructive:hover:not(:disabled) { background: #FEF2F2; border-color: #FCA5A5; }
+
+.vault-btn-icon { width: var(--vault-control-height); height: var(--vault-control-height); padding: 0; background: transparent; color: var(--vault-text-secondary); }
+.vault-btn-icon:hover:not(:disabled) { background: var(--vault-surface); color: var(--vault-text); }
+.vault-btn-sm { height: 28px; padding: 0 10px; font-size: 12px; border-radius: var(--vault-radius-sm); }
+
+.vault-input {
+  width: 100%;
+  height: var(--vault-control-height);
+  min-height: 0; /* override the legacy 44px min-height rule below */
+  padding: 0 12px;
+  font-size: 14px;
+  color: var(--vault-text);
+  background: var(--vault-canvas);
+  border: 1px solid var(--vault-border);
+  border-radius: var(--vault-radius-sm);
+  outline: none;
+  transition: border-color var(--vault-motion-fast), box-shadow var(--vault-motion-fast);
+}
+.vault-input:focus {
+  border-color: var(--vault-violet);
+  box-shadow: 0 0 0 3px var(--vault-violet-subtle);
+}
+.vault-input:disabled { background: var(--vault-surface); color: var(--vault-text-muted); cursor: not-allowed; }
+.vault-input.vault-input-error { border-color: var(--vault-status-error); }
+
+.vault-label {
+  display: block;
+  font-size: var(--vault-text-label);
+  font-weight: 500;
+  color: var(--vault-text-secondary);
+  margin-bottom: 4px;
+}
+
+.vault-section-title {
+  font-size: var(--vault-text-section-title);
+  font-weight: 600;
+  color: var(--vault-text);
+}
+
+.vault-section-meta {
+  font-size: var(--vault-text-meta);
+  color: var(--vault-text-secondary);
+}
+
+.vault-divider { border: none; border-top: 1px solid var(--vault-border); margin: 20px 0; }
+
+.vault-status-dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0;
+}
+.vault-status-dot-success { background: var(--vault-status-success); }
+.vault-status-dot-warning { background: var(--vault-status-warning); }
+.vault-status-dot-error   { background: var(--vault-status-error); }
+.vault-status-dot-neutral { background: var(--vault-status-neutral); }
+
+.vault-tab {
+  font-size: 14px; font-weight: 500; color: var(--vault-text-secondary);
+  padding: 10px 2px; border-bottom: 2px solid transparent;
+  cursor: pointer; background: none; border-left: none; border-right: none; border-top: none;
+  transition: color var(--vault-motion-fast), border-color var(--vault-motion-fast);
+}
+.vault-tab:hover { color: var(--vault-text); }
+.vault-tab-active { color: var(--vault-text); border-bottom-color: var(--vault-text); }
+
+.vault-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.vault-table th {
+  text-align: left; font-size: var(--vault-text-meta); font-weight: 500; color: var(--vault-text-secondary);
+  padding: 10px 12px; border-bottom: 1px solid var(--vault-border);
+}
+.vault-table td { padding: 10px 12px; border-bottom: 1px solid var(--vault-border); color: var(--vault-text); }
+.vault-table tbody tr { transition: background var(--vault-motion-fast); }
+.vault-table tbody tr:hover { background: var(--vault-surface); }
+.vault-table tbody tr[data-selected="true"] { background: var(--vault-surface-selected); font-weight: 500; }
 
 /* Touch targets */
 button, input, select, textarea {
@@ -322,76 +489,82 @@ html, body {
   margin-bottom: 24px;
 }
 .ds-page-h h1 {
-  font-size: 22px;
+  font-size: var(--vault-text-page-title);
   font-weight: 600;
   margin: 0 0 4px;
-  color: #1A1A2E;
+  color: var(--vault-text);
 }
 .ds-page-h p {
   font-size: 13px;
-  color: #6B7280;
+  color: var(--vault-text-secondary);
   margin: 0;
 }
 .ds-page-h-actions { display: flex; align-items: center; gap: 8px; }
 
-/* Buttons */
+/* Buttons — retargeted onto the vault-* tokens (redesign/vault-ui-system-v1)
+   so app/orders/page.tsx and AdminTable.tsx (the only two live consumers of
+   this otherwise-orphaned ds-* system) match the rest of the app instead of
+   compounding a fourth parallel style. Primary is dark/white text, not
+   violet - violet stays reserved for focus rings and small accents. */
 .ds-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: 8px;
-  border: none;
+  height: var(--vault-control-height);
+  padding: 0 14px;
+  border-radius: var(--vault-radius-sm);
+  border: 1px solid transparent;
   font-size: 14px;
   font-weight: 500;
   white-space: nowrap;
-  transition: background .15s;
+  transition: background var(--vault-motion-fast), border-color var(--vault-motion-fast), color var(--vault-motion-fast);
   cursor: pointer;
   font-family: inherit;
   min-height: unset;
 }
 .ds-btn:active { transform: scale(0.98); }
 .ds-btn-primary {
-  background: #635BFF;
+  background: var(--vault-text);
   color: #fff;
 }
-.ds-btn-primary:hover { background: #4F46E5; }
+.ds-btn-primary:hover { background: #27272A; }
 .ds-btn-secondary {
-  background: #EEF2FF;
-  color: #635BFF;
+  background: var(--vault-canvas);
+  color: var(--vault-text);
+  border-color: var(--vault-border);
 }
-.ds-btn-secondary:hover { background: #E0E7FF; }
-.ds-btn-ghost { background: transparent; color: #6B7280; }
-.ds-btn-ghost:hover { background: #F9FAFB; color: #1A1A2E; }
+.ds-btn-secondary:hover { background: var(--vault-surface); border-color: var(--vault-border-strong); }
+.ds-btn-ghost { background: transparent; color: var(--vault-text-secondary); }
+.ds-btn-ghost:hover { background: var(--vault-surface); color: var(--vault-text); }
 .ds-btn-danger {
-  background: #EF4444;
-  color: #fff;
+  background: var(--vault-canvas);
+  color: var(--vault-status-error);
+  border-color: var(--vault-border);
 }
-.ds-btn-danger:hover { background: #DC2626; }
-.ds-btn-sm { height: 28px; padding: 0 10px; font-size: 12px; border-radius: 7px; }
-.ds-btn-lg { height: 40px; padding: 0 16px; font-size: 14px; border-radius: 8px; }
+.ds-btn-danger:hover { background: #FEF2F2; border-color: #FCA5A5; }
+.ds-btn-sm { height: 28px; padding: 0 10px; font-size: 12px; border-radius: var(--vault-radius-sm); }
+.ds-btn-lg { height: var(--vault-control-height); padding: 0 16px; font-size: 14px; border-radius: var(--vault-radius-sm); }
 
 /* Iconbtn */
 .ds-iconbtn {
   width: 32px; height: 32px;
   display: inline-flex; align-items: center; justify-content: center;
   background: transparent;
-  border: 1px solid #E8E8F0;
-  border-radius: 8px;
-  color: #6B7280;
-  transition: all .15s;
+  border: 1px solid var(--vault-border);
+  border-radius: var(--vault-radius-sm);
+  color: var(--vault-text-secondary);
+  transition: all var(--vault-motion-fast);
   cursor: pointer;
   min-height: unset;
 }
-.ds-iconbtn:hover { background: #F9FAFB; border-color: #D1D5DB; color: #1A1A2E; }
+.ds-iconbtn:hover { background: var(--vault-surface); border-color: var(--vault-border-strong); color: var(--vault-text); }
 
 /* Cards */
 .ds-card {
-  background: #FFFFFF;
-  border: 1px solid #E8E8F0;
-  border-radius: 12px;
+  background: var(--vault-canvas);
+  border: 1px solid var(--vault-border);
+  border-radius: var(--vault-radius-md);
 }
 .ds-card-pad { padding: var(--card-pad); }
 .ds-card-h {
@@ -399,26 +572,26 @@ html, body {
   align-items: center;
   justify-content: space-between;
   padding: 14px 18px;
-  border-bottom: 1px solid #E8E8F0;
+  border-bottom: 1px solid var(--vault-border);
 }
 .ds-card-h h3 {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
-  color: #1A1A2E;
+  color: var(--vault-text);
 }
 
 /* Table */
 .ds-table-wrap {
-  background: #FFFFFF;
-  border: 1px solid #E8E8F0;
-  border-radius: 12px;
+  background: var(--vault-canvas);
+  border: 1px solid var(--vault-border);
+  border-radius: var(--vault-radius-md);
   overflow: hidden;
 }
 .ds-table-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 14px;
-  border-bottom: 1px solid #E8E8F0;
+  border-bottom: 1px solid var(--vault-border);
   gap: 10px;
 }
 .ds-filters { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
@@ -426,18 +599,21 @@ html, body {
   height: 32px;
   padding: 0 12px;
   font-size: 13px;
-  color: #6B7280;
-  border-radius: 8px;
-  border: 1px solid #E8E8F0;
-  background: #F9FAFB;
+  color: var(--vault-text-secondary);
+  border-radius: var(--vault-radius-sm);
+  border: 1px solid var(--vault-border);
+  background: var(--vault-canvas);
   display: inline-flex; align-items: center; gap: 6px;
-  transition: all .15s;
+  transition: all var(--vault-motion-fast);
   cursor: pointer;
   font-family: inherit;
   min-height: unset;
 }
-.ds-chip:hover { color: #1A1A2E; border-color: #D1D5DB; background: #F3F4F6; }
-.ds-chip.active { color: #635BFF; border-color: #635BFF; background: #EEF2FF; }
+.ds-chip:hover { color: var(--vault-text); border-color: var(--vault-border-strong); background: var(--vault-surface); }
+/* Active filter chip - dark text + subtle neutral fill, not a violet pill;
+   status colour has semantic meaning only per the design brief, and "this
+   filter is on" isn't a status. */
+.ds-chip.active { color: var(--vault-text); border-color: var(--vault-text); background: var(--vault-surface-selected); font-weight: 600; }
 
 table.ds-t {
   width: 100%;

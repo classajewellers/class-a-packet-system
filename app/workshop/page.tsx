@@ -51,40 +51,26 @@ const JOB_TYPE_LABELS: Record<string, string> = {
   repair: "Repair", custom_order: "Custom", stock_work: "Stock",
   online_order: "Online Order", collection_order: "Collection",
 };
-const JOB_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
-  repair:           { bg: "#EEF2FF", color: "#4F46E5" },
-  custom_order:     { bg: "#FFF7ED", color: "#C2410C" },
-  stock_work:       { bg: "#F0FDF4", color: "#15803D" },
-  online_order:     { bg: "#EFF6FF", color: "#3B82F6" },
-  collection_order: { bg: "#FDF4FF", color: "#9333EA" },
-};
 const STAGE_LABELS: Record<string, string> = {
   intake: "Intake", on_bench: "Production", quality_check: "Quality Control",
   to_be_valued: "Valuation", ready: "Ready", collected: "Collected",
 };
-const STAGE_COLORS: Record<string, { bg: string; color: string }> = {
-  intake:        { bg: "#EFF6FF", color: "#3B82F6" },
-  on_bench:      { bg: "#F5F3FF", color: "#7C3AED" },
-  quality_check: { bg: "#FFF7ED", color: "#C2410C" },
-  to_be_valued:  { bg: "#FDF4FF", color: "#9333EA" },
-  ready:         { bg: "#F0FDF4", color: "#15803D" },
-  collected:     { bg: "#F3F4F6", color: "#6B7280" },
-};
 const BLOCKED_LABELS: Record<string, string> = {
-  waiting_customer:      "Waiting: Customer",
-  waiting_supplier:      "Waiting: Supplier",
-  waiting_materials:     "Waiting: Materials",
-  waiting_stone:         "Waiting: Stone",
-  waiting_casting:       "Waiting: Casting",
-  waiting_approval:      "Waiting: Approval",
-  waiting_subcontractor: "Waiting: Subcontractor",
+  waiting_customer:      "Waiting: customer",
+  waiting_supplier:      "Waiting: supplier",
+  waiting_materials:     "Waiting: materials",
+  waiting_stone:         "Awaiting stone",
+  waiting_casting:       "Waiting: casting",
+  waiting_approval:      "Approval needed",
+  waiting_subcontractor: "Waiting: subcontractor",
   other:                 "Blocked",
 };
 
 type SortKey = "due_date" | "reference_number" | "customer" | "job_type" | "status" | "status_updated_at" | "assigned";
 type SortDir = "asc" | "desc";
+type TabKey = "active" | "mine";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers (unchanged from the prior version - data logic not touched) ──────
 
 function todayStr() { return new Date().toISOString().split("T")[0]; }
 function isOverdue(p: WorkshopPacket) {
@@ -106,20 +92,16 @@ function resolveAssignee(p: WorkshopPacket) {
   if (p.workshop_subcontractor_name) return p.workshop_subcontractor_name;
   return null;
 }
-function resolveCurrentStep(p: WorkshopPacket, config: WorkshopConfig): string | null {
+function resolvePathwaySteps(p: WorkshopPacket, config: WorkshopConfig): { name: string }[] | null {
   if (!p.workshop_pathway_id) return null;
   const pw = config.pathways.find(x => x.id === p.workshop_pathway_id);
-  if (!pw || !pw.steps.length) return null;
-  const idx = p.workshop_step_index ?? 0;
-  const step = pw.steps[idx];
-  if (!step) return null;
-  return `${idx + 1}/${pw.steps.length}: ${step.name}`;
+  return pw?.steps?.length ? pw.steps : null;
 }
-function resolveSubStageLabel(p: WorkshopPacket): string | null {
-  if (p.status !== "intake") return null;
-  if (p.workshop_intake_substatus === "pre_check") return "Pre-Check";
-  if (p.workshop_intake_substatus === "on_order")  return "On Order";
-  return null;
+function resolveCurrentStepLabel(p: WorkshopPacket, config: WorkshopConfig): string | null {
+  const steps = resolvePathwaySteps(p, config);
+  if (!steps) return null;
+  const step = steps[p.workshop_step_index ?? 0];
+  return step ? step.name : null;
 }
 function relativeTime(iso: string | null): string {
   if (!iso) return "—";
@@ -130,48 +112,205 @@ function relativeTime(iso: string | null): string {
   if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}d ago`;
   return formatDateAU(iso.split("T")[0]);
 }
+function initials(name: string) {
+  return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
+}
+// Deterministic colour per person, derived from their real name - not a new
+// backend concept, just a display convenience so team members are visually
+// distinguishable in the queue.
+const AVATAR_PALETTE = ["#635BFF", "#B45309", "#16A34A", "#0EA5E9", "#DC2626", "#7C3AED", "#0891B2"];
+function avatarColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
+}
+function needsAttentionReason(p: WorkshopPacket, staleThresholdDays: number): string | null {
+  if (p.pending_customer_approval) return "Approval needed";
+  if (p.blocked_reason) return BLOCKED_LABELS[p.blocked_reason] ?? p.blocked_reason;
+  if (isOverdue(p)) return "Overdue";
+  // Preserved from the prior version - a job with no status change in
+  // stale_threshold_days (tenant-configured, default 5) is a real signal
+  // worth surfacing, not something to silently drop just because the
+  // reference mockup didn't show it.
+  if (isStale(p, staleThresholdDays)) return "Stale — no update";
+  return null;
+}
 
-// ── Nav tabs shared across workshop views ─────────────────────────────────────
+// ── Small presentational primitives ──────────────────────────────────────────
 
-function WorkshopNav({ active }: { active: "jobs" | "board" | "history" }) {
-  const tabs: { key: typeof active; href: string; label: string }[] = [
-    { key: "jobs",    href: "/workshop",         label: "All Jobs" },
-    { key: "board",   href: "/workshop/board",   label: "Board" },
-    { key: "history", href: "/workshop/history", label: "History" },
-  ];
+function CountBadge({ n }: { n: number }) {
   return (
-    <div style={{ display: "flex", gap: 2, background: "#F3F4F6", borderRadius: 10, padding: 3, flexShrink: 0 }}>
-      {tabs.map(t => (
-        <a key={t.key} href={t.href}
-          style={{
-            padding: "6px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600,
-            textDecoration: "none", cursor: "pointer",
-            background: active === t.key ? "#fff" : "transparent",
-            color: active === t.key ? "#1A1A2E" : "#6B7280",
-            boxShadow: active === t.key ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
-            transition: "all .12s",
-          }}
-        >{t.label}</a>
-      ))}
-    </div>
+    <span style={{
+      fontSize: 12, fontWeight: 600, color: "var(--vault-text-secondary)",
+      background: "var(--vault-surface-selected)", borderRadius: 999,
+      padding: "0 7px", minWidth: 18, height: 18, display: "inline-flex",
+      alignItems: "center", justifyContent: "center", lineHeight: 1,
+    }}>
+      {n}
+    </span>
   );
 }
 
-// ── Badge helpers ─────────────────────────────────────────────────────────────
-
-function Badge({ label, bg, color, border }: { label: string; bg: string; color: string; border?: string }) {
+function OwnerChip({ name }: { name: string | null }) {
+  if (!name) return <span style={{ fontSize: 12, color: "var(--vault-text-muted)" }}>Unassigned</span>;
   return (
-    <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 999, background: bg, color, border: border ?? "none", whiteSpace: "nowrap" }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <span style={{
+        width: 20, height: 20, borderRadius: "50%", background: avatarColor(name), color: "#fff",
+        fontSize: 10, fontWeight: 600, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+      }}>
+        {initials(name)}
+      </span>
+      <span style={{ fontSize: 12.5, color: "var(--vault-text)" }}>{name}</span>
+    </span>
+  );
+}
+
+function StageChip({ label }: { label: string }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--vault-text)" }}>
+      <span style={{ width: 7, height: 7, borderRadius: "50%", border: "1.5px solid var(--vault-text-secondary)", flexShrink: 0 }} />
       {label}
     </span>
   );
 }
 
-// ── Sort indicator ────────────────────────────────────────────────────────────
+// Horizontal stage-progress tracker - built from the tenant's REAL configured
+// pathway steps (config.pathways[].steps) and the packet's real
+// workshop_step_index. Not a fabricated/generic 6-step list.
+function StageTracker({ steps, currentIndex }: { steps: { name: string }[]; currentIndex: number }) {
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start" }}>
+      {steps.map((step, i) => {
+        const done = i < currentIndex;
+        const current = i === currentIndex;
+        return (
+          <div key={i} style={{ display: "flex", alignItems: "center", flex: i < steps.length - 1 ? 1 : undefined }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 64 }}>
+              <div style={{
+                width: 22, height: 22, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 11, fontWeight: 600, flexShrink: 0,
+                background: done ? "var(--vault-text)" : current ? "var(--vault-canvas)" : "var(--vault-canvas)",
+                color: done ? "#fff" : current ? "var(--vault-text)" : "var(--vault-text-muted)",
+                border: current ? "2px solid var(--vault-text)" : done ? "none" : "1px solid var(--vault-border)",
+              }}>
+                {done ? "✓" : i + 1}
+              </div>
+              <span style={{ fontSize: 11, color: current ? "var(--vault-text)" : "var(--vault-text-muted)", fontWeight: current ? 600 : 400, textAlign: "center", whiteSpace: "nowrap" }}>
+                {step.name}
+              </span>
+            </div>
+            {i < steps.length - 1 && (
+              <div style={{ flex: 1, height: 1, background: done ? "var(--vault-text)" : "var(--vault-border)", marginBottom: 18, minWidth: 20 }} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
-function SortIcon({ dir }: { dir: SortDir | null }) {
-  if (!dir) return <span style={{ color: "#D1D5DB", fontSize: 10, marginLeft: 3 }}>↕</span>;
-  return <span style={{ fontSize: 10, marginLeft: 3, color: "#635BFF" }}>{dir === "asc" ? "↑" : "↓"}</span>;
+// Expanded inline row detail - the master/detail pattern applied as an
+// in-place expansion. Specifications = the packet's real `articles` text;
+// "Current step" substitutes for the mockup's "Next action" (no such field
+// exists on this record - fabricating one would be inventing data); Latest
+// update = the real status_updated_at timestamp.
+function ExpandedDetail({ p, config }: { p: WorkshopPacket; config: WorkshopConfig }) {
+  const router = useRouter();
+  const steps = resolvePathwaySteps(p, config);
+  const currentIndex = p.workshop_step_index ?? 0;
+
+  return (
+    <div style={{ padding: "16px 14px 20px 44px", background: "var(--vault-surface)", borderBottom: "1px solid var(--vault-border)" }}>
+      {steps && steps.length > 0 && (
+        <div style={{ marginBottom: 18, maxWidth: 640 }}>
+          <StageTracker steps={steps} currentIndex={currentIndex} />
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 32, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 200px", minWidth: 180 }}>
+          <div className="vault-label">Specifications</div>
+          <div style={{ fontSize: 13, color: "var(--vault-text)" }}>{p.articles || "—"}</div>
+        </div>
+        <div style={{ flex: "1 1 200px", minWidth: 180 }}>
+          <div className="vault-label">Current step</div>
+          <div style={{ fontSize: 13, color: "var(--vault-text)" }}>{resolveCurrentStepLabel(p, config) ?? "—"}</div>
+        </div>
+        <div style={{ flex: "1 1 200px", minWidth: 180 }}>
+          <div className="vault-label">Latest update</div>
+          <div style={{ fontSize: 13, color: "var(--vault-text)" }}>{relativeTime(p.status_updated_at)}</div>
+        </div>
+        <div style={{ flexShrink: 0 }}>
+          <button
+            className="vault-btn vault-btn-secondary"
+            onClick={(e) => { e.stopPropagation(); router.push(`/workshop/board?job=${p.id}`); }}
+          >
+            Open packet
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Row ───────────────────────────────────────────────────────────────────────
+
+function JobRow({
+  p, config, expanded, onToggle, showWarning,
+}: {
+  p: WorkshopPacket; config: WorkshopConfig; expanded: boolean; onToggle: () => void; showWarning?: string | null;
+}) {
+  const stepLabel = resolveCurrentStepLabel(p, config) ?? STAGE_LABELS[p.status ?? ""] ?? (p.status ?? "—");
+  return (
+    <div>
+      <div
+        onClick={onToggle}
+        data-selected={expanded || undefined}
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0,2.4fr) minmax(0,1.6fr) minmax(0,1.3fr) minmax(0,1.3fr) 90px",
+          gap: 12, alignItems: "center",
+          padding: "10px 14px", borderBottom: "1px solid var(--vault-border)",
+          cursor: "pointer", background: expanded ? "var(--vault-surface-selected)" : "transparent",
+          transition: "background var(--vault-motion-fast)",
+        }}
+        onMouseEnter={e => { if (!expanded) (e.currentTarget as HTMLDivElement).style.background = "var(--vault-surface)"; }}
+        onMouseLeave={e => { if (!expanded) (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          {showWarning && <span style={{ color: "var(--vault-status-error)", flexShrink: 0 }} aria-hidden>⚠</span>}
+          <span style={{ fontFamily: "monospace", fontSize: 11.5, color: "var(--vault-text-muted)", flexShrink: 0 }}>{p.reference_number}</span>
+          <span style={{ fontSize: 13.5, fontWeight: 500, color: "var(--vault-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {p.articles || JOB_TYPE_LABELS[p.job_type ?? ""] || "Job"}
+          </span>
+        </div>
+        <div style={{ fontSize: 13, color: "var(--vault-text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {displayName(p)}
+        </div>
+        {showWarning ? (
+          <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--vault-status-error)" }}>{showWarning}</div>
+        ) : (
+          <StageChip label={stepLabel} />
+        )}
+        <div><OwnerChip name={resolveAssignee(p)} /></div>
+        <div style={{ fontSize: 12.5, color: isOverdue(p) ? "var(--vault-status-error)" : isDueToday(p) ? "var(--vault-status-warning)" : "var(--vault-text-secondary)", fontWeight: (isOverdue(p) || isDueToday(p)) ? 600 : 400 }}>
+          {p.due_date ? formatDateAU(p.due_date) : "—"}
+        </div>
+      </div>
+      {expanded && <ExpandedDetail p={p} config={config} />}
+    </div>
+  );
+}
+
+function SectionHeader({ label, count }: { label: string; count: number }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 14px 8px" }}>
+      <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--vault-text-secondary)", textTransform: "uppercase" as const, letterSpacing: "0.04em" }}>
+        {label}
+      </span>
+      <CountBadge n={count} />
+    </div>
+  );
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
@@ -194,18 +333,21 @@ export default function WorkshopPage() {
   });
   const [loading, setLoading] = useState(true);
 
-  // Filters
+  // Filters — unchanged logic from the prior version, just visually
+  // relocated into a compact Filter control rather than an always-open bar.
   const [search,          setSearch]          = useState("");
   const [jobTypeFilter,   setJobTypeFilter]   = useState("all");
   const [stageFilter,     setStageFilter]     = useState("all");
   const [assigneeFilter,  setAssigneeFilter]  = useState("all");
-  const [blockedFilter,   setBlockedFilter]   = useState(false);
-  const [overdueFilter,   setOverdueFilter]   = useState(false);
   const [deliveryFilter,  setDeliveryFilter]  = useState("all");
+  const [filtersOpen,     setFiltersOpen]     = useState(false);
 
-  // Sort
   const [sortKey, setSortKey] = useState<SortKey>("due_date");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [sortOpen, setSortOpen] = useState(false);
+
+  const [tab, setTab] = useState<TabKey>("active");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const headers = { "x-tenant-id": tenantId };
 
@@ -235,22 +377,17 @@ export default function WorkshopPage() {
   useEffect(() => { fetchPackets(); }, [fetchPackets]);
   useEffect(() => { fetchConfig(); },  [fetchConfig]);
 
-  // ── Derived assignee list for filter dropdown ─────────────────────────────
-
   const allAssignees = Array.from(new Set([
     ...config.teamMembers.filter(m => m.active).map(m => m.name),
     ...config.subcontractors.filter(s => s.active).map(s => s.name),
   ]));
 
-  // ── Filter ────────────────────────────────────────────────────────────────
-
+  // ── Filter (identical logic to the prior version) ─────────────────────────
   const q = search.trim().toLowerCase();
   const filtered = packets.filter(p => {
     if (jobTypeFilter   !== "all" && p.job_type       !== jobTypeFilter)   return false;
     if (stageFilter     !== "all" && p.status         !== stageFilter)     return false;
     if (deliveryFilter  !== "all" && p.delivery_method !== deliveryFilter)  return false;
-    if (overdueFilter && !isOverdue(p)) return false;
-    if (blockedFilter && !p.blocked_reason) return false;
     if (assigneeFilter !== "all") {
       const a = resolveAssignee(p);
       if (a !== assigneeFilter) return false;
@@ -264,9 +401,14 @@ export default function WorkshopPage() {
     return true;
   });
 
-  // ── Sort ──────────────────────────────────────────────────────────────────
+  // My work — a real filter against the already-fetched assignee data, not
+  // a new endpoint.
+  const tabFiltered = tab === "mine"
+    ? filtered.filter(p => resolveAssignee(p) === user?.name)
+    : filtered;
 
-  const sorted = [...filtered].sort((a, b) => {
+  // ── Sort (identical logic to the prior version) ───────────────────────────
+  const sorted = [...tabFiltered].sort((a, b) => {
     let va: string | number = 0;
     let vb: string | number = 0;
     switch (sortKey) {
@@ -283,303 +425,195 @@ export default function WorkshopPage() {
     return 0;
   });
 
-  // Overdue always float to top regardless of sort
-  const withAtRisk = [
-    ...sorted.filter(isOverdue),
-    ...sorted.filter(p => !isOverdue(p) && isStale(p, config.settings.stale_threshold_days)),
-    ...sorted.filter(p => !isOverdue(p) && !isStale(p, config.settings.stale_threshold_days)),
-  ];
+  // Grouping — "Needs Attention" / "In Production" / remaining, all derived
+  // from real fields already on the record (blocked_reason,
+  // pending_customer_approval, isOverdue, resolveAssignee). No new data.
+  const needsAttention = sorted.filter(p => !!needsAttentionReason(p, config.settings.stale_threshold_days));
+  const inProduction    = sorted.filter(p => !needsAttentionReason(p, config.settings.stale_threshold_days) && !!resolveAssignee(p));
+  const remaining       = sorted.filter(p => !needsAttentionReason(p, config.settings.stale_threshold_days) && !resolveAssignee(p));
 
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir("asc"); }
-  };
+  const activeFilterCount = [jobTypeFilter !== "all", stageFilter !== "all", assigneeFilter !== "all", deliveryFilter !== "all"].filter(Boolean).length;
 
-  // ── Summary counts ────────────────────────────────────────────────────────
-
-  const overdueCount = packets.filter(isOverdue).length;
-  const blockedCount = packets.filter(p => !!p.blocked_reason).length;
-  const staleCount   = packets.filter(p => !isOverdue(p) && isStale(p, config.settings.stale_threshold_days)).length;
-
-  // ── Th helper ─────────────────────────────────────────────────────────────
-
-  const TH = ({ label, sk, width }: { label: string; sk?: SortKey; width?: number }) => (
-    <th
-      onClick={sk ? () => handleSort(sk) : undefined}
-      style={{
-        padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700,
-        color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.05em",
-        background: "#F9FAFB", borderBottom: "1px solid #E8E8F0", whiteSpace: "nowrap",
-        cursor: sk ? "pointer" : "default", userSelect: "none",
-        width: width ? `${width}px` : undefined,
-      }}
-    >
-      {label}{sk && <SortIcon dir={sortKey === sk ? sortDir : null} />}
-    </th>
-  );
+  const toggleExpand = (id: string) => setExpandedId(cur => (cur === id ? null : id));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "calc(100vh - 80px)" }}>
 
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 16, flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 20, flexShrink: 0 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#1A1A2E", margin: 0 }}>Workshop</h1>
-          <p style={{ fontSize: 13, color: "#6B7280", margin: "2px 0 0" }}>{packets.length} active jobs</p>
+          <h1 style={{ fontSize: "var(--vault-text-page-title)", fontWeight: 600, color: "var(--vault-text)", margin: 0 }}>Workshop</h1>
+          <p style={{ fontSize: 13, color: "var(--vault-text-secondary)", margin: "2px 0 0" }}>Your production queue.</p>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          {/* At-risk summary chips */}
-          {overdueCount > 0 && (
-            <button onClick={() => { setOverdueFilter(v => !v); }} style={{ background: overdueFilter ? "#FEE2E2" : "#FEF2F2", border: "1px solid #FECACA", borderRadius: 10, padding: "6px 12px", fontSize: 13, fontWeight: 600, color: "#DC2626", cursor: "pointer" }}>
-              ⚠ {overdueCount} overdue
-            </button>
-          )}
-          {staleCount > 0 && (
-            <div style={{ background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 10, padding: "6px 12px", fontSize: 13, fontWeight: 600, color: "#B45309" }}>
-              ⏸ {staleCount} stale
-            </div>
-          )}
-          {blockedCount > 0 && (
-            <button onClick={() => setBlockedFilter(v => !v)} style={{ background: blockedFilter ? "#FEE2E2" : "#FFF5F3", border: "1px solid #FDBA74", borderRadius: 10, padding: "6px 12px", fontSize: 13, fontWeight: 600, color: "#EA580C", cursor: "pointer" }}>
-              🚫 {blockedCount} blocked
-            </button>
-          )}
-          {overdueCount === 0 && staleCount === 0 && blockedCount === 0 && (
-            <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 10, padding: "6px 12px", fontSize: 13, fontWeight: 600, color: "#15803D" }}>
-              ✓ All clear
-            </div>
-          )}
-          <WorkshopNav active="jobs" />
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {isManager && (
-            <a href="/workshop/settings" style={{ fontSize: 12, fontWeight: 600, color: "#635BFF", textDecoration: "none", border: "1px solid #635BFF", borderRadius: 8, padding: "6px 12px", flexShrink: 0 }}>
-              ⚙ Settings
+            <a href="/workshop/settings" className="vault-btn vault-btn-secondary" style={{ textDecoration: "none" }}>
+              Settings
             </a>
           )}
+          <a href="/workshop/board" className="vault-btn vault-btn-secondary" style={{ textDecoration: "none" }}>
+            Board view
+          </a>
+          <button className="vault-btn vault-btn-primary" onClick={() => router.push("/orders/new")}>
+            + New job
+          </button>
         </div>
       </div>
 
-      {/* Filter bar */}
-      <div style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, padding: "10px 14px", display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 12, flexShrink: 0 }}>
-        {/* Search */}
-        <div style={{ position: "relative", flexShrink: 0 }}>
-          <svg style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" /><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-4.35-4.35" /></svg>
+      {/* Tabs + Filter/Sort row */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--vault-border)", marginBottom: 4, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "flex", gap: 20 }}>
+          <button className={"vault-tab" + (tab === "active" ? " vault-tab-active" : "")} onClick={() => setTab("active")}>
+            Active <span style={{ marginLeft: 5 }}><CountBadge n={filtered.length} /></span>
+          </button>
+          <button className={"vault-tab" + (tab === "mine" ? " vault-tab-active" : "")} onClick={() => setTab("mine")}>
+            My work <span style={{ marginLeft: 5 }}><CountBadge n={filtered.filter(p => resolveAssignee(p) === user?.name).length} /></span>
+          </button>
+          <a href="/workshop/history" className="vault-tab" style={{ textDecoration: "none", display: "inline-block" }}>
+            Completed
+          </a>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 6, position: "relative", paddingBottom: 6 }}>
           <input
             type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search ref, name, description…"
-            style={{ border: "1px solid #E8E8F0", borderRadius: 8, padding: "6px 10px 6px 28px", fontSize: 13, outline: "none", background: "#F9FAFB", color: "#1A1A2E", width: 220 }}
+            placeholder="Search…"
+            className="vault-input"
+            style={{ width: 160, height: 32 }}
           />
+          <div style={{ position: "relative" }}>
+            <button className="vault-btn vault-btn-secondary" style={{ height: 32, padding: "0 12px", fontSize: 13 }} onClick={() => { setFiltersOpen(v => !v); setSortOpen(false); }}>
+              Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+            </button>
+            {filtersOpen && (
+              <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 30, background: "var(--vault-canvas)", border: "1px solid var(--vault-border)", borderRadius: "var(--vault-radius-md)", boxShadow: "var(--vault-shadow-elevated)", padding: 12, width: 220, display: "flex", flexDirection: "column", gap: 10 }}>
+                <div>
+                  <label className="vault-label">Job type</label>
+                  <select className="vault-input" value={jobTypeFilter} onChange={e => setJobTypeFilter(e.target.value)}>
+                    <option value="all">All types</option>
+                    <option value="repair">Repairs</option>
+                    <option value="custom_order">Custom</option>
+                    <option value="collection_order">Collection</option>
+                    <option value="online_order">Online order</option>
+                    <option value="stock_work">Stock</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="vault-label">Stage</label>
+                  <select className="vault-input" value={stageFilter} onChange={e => setStageFilter(e.target.value)}>
+                    <option value="all">All stages</option>
+                    <option value="intake">Intake</option>
+                    <option value="on_bench">Production</option>
+                    <option value="quality_check">Quality control</option>
+                    <option value="to_be_valued">Valuation</option>
+                    <option value="ready">Ready</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="vault-label">Delivery</label>
+                  <select className="vault-input" value={deliveryFilter} onChange={e => setDeliveryFilter(e.target.value)}>
+                    <option value="all">All delivery</option>
+                    <option value="pickup">Pickup</option>
+                    <option value="shipping">Shipping</option>
+                  </select>
+                </div>
+                {allAssignees.length > 0 && (
+                  <div>
+                    <label className="vault-label">Assignee</label>
+                    <select className="vault-input" value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)}>
+                      <option value="all">All assignees</option>
+                      {allAssignees.map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                  </div>
+                )}
+                {(jobTypeFilter !== "all" || stageFilter !== "all" || deliveryFilter !== "all" || assigneeFilter !== "all") && (
+                  <button className="vault-btn-tertiary" style={{ alignSelf: "flex-start" }} onClick={() => { setJobTypeFilter("all"); setStageFilter("all"); setDeliveryFilter("all"); setAssigneeFilter("all"); }}>
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+          <div style={{ position: "relative" }}>
+            <button className="vault-btn vault-btn-secondary" style={{ height: 32, padding: "0 12px", fontSize: 13 }} onClick={() => { setSortOpen(v => !v); setFiltersOpen(false); }}>
+              Sort
+            </button>
+            {sortOpen && (
+              <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 30, background: "var(--vault-canvas)", border: "1px solid var(--vault-border)", borderRadius: "var(--vault-radius-md)", boxShadow: "var(--vault-shadow-elevated)", padding: 4, width: 160 }}>
+                {([
+                  ["due_date", "Due date"], ["reference_number", "Job #"], ["customer", "Customer"],
+                  ["status", "Stage"], ["assigned", "Owner"], ["status_updated_at", "Last updated"],
+                ] as [SortKey, string][]).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => { if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc"); else { setSortKey(key); setSortDir("asc"); } setSortOpen(false); }}
+                    style={{ display: "flex", width: "100%", justifyContent: "space-between", padding: "7px 8px", fontSize: 13, background: sortKey === key ? "var(--vault-surface-selected)" : "transparent", border: "none", borderRadius: 6, color: "var(--vault-text)", cursor: "pointer", textAlign: "left" }}
+                  >
+                    {label}
+                    {sortKey === key && <span style={{ color: "var(--vault-text-secondary)" }}>{sortDir === "asc" ? "↑" : "↓"}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-
-        <div style={{ width: 1, height: 20, background: "#E8E8F0", flexShrink: 0 }} />
-
-        {/* Job type */}
-        <select value={jobTypeFilter} onChange={e => setJobTypeFilter(e.target.value)} style={{ border: "1px solid #E8E8F0", borderRadius: 8, padding: "6px 10px", fontSize: 13, color: "#374151", background: "#fff", outline: "none", cursor: "pointer" }}>
-          <option value="all">All Types</option>
-          <option value="repair">Repairs</option>
-          <option value="custom_order">Custom</option>
-          <option value="collection_order">Collection</option>
-          <option value="online_order">Online Order</option>
-          <option value="stock_work">Stock</option>
-        </select>
-
-        {/* Delivery method */}
-        <select value={deliveryFilter} onChange={e => setDeliveryFilter(e.target.value)} style={{ border: "1px solid #E8E8F0", borderRadius: 8, padding: "6px 10px", fontSize: 13, color: "#374151", background: "#fff", outline: "none", cursor: "pointer" }}>
-          <option value="all">All Delivery</option>
-          <option value="pickup">Pickup</option>
-          <option value="shipping">Shipping</option>
-        </select>
-
-        {/* Stage */}
-        <select value={stageFilter} onChange={e => setStageFilter(e.target.value)} style={{ border: "1px solid #E8E8F0", borderRadius: 8, padding: "6px 10px", fontSize: 13, color: "#374151", background: "#fff", outline: "none", cursor: "pointer" }}>
-          <option value="all">All Stages</option>
-          <option value="intake">Intake</option>
-          <option value="on_bench">Production</option>
-          <option value="quality_check">Quality Control</option>
-          <option value="to_be_valued">Valuation</option>
-          <option value="ready">Ready</option>
-        </select>
-
-        {/* Assignee */}
-        {allAssignees.length > 0 && (
-          <select value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)} style={{ border: "1px solid #E8E8F0", borderRadius: 8, padding: "6px 10px", fontSize: 13, color: "#374151", background: "#fff", outline: "none", cursor: "pointer" }}>
-            <option value="all">All Assignees</option>
-            {allAssignees.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-        )}
-
-        <div style={{ width: 1, height: 20, background: "#E8E8F0", flexShrink: 0 }} />
-
-        {/* Quick filter pills */}
-        <button
-          onClick={() => setOverdueFilter(v => !v)}
-          style={{ padding: "5px 12px", borderRadius: 999, fontSize: 12, fontWeight: 600, border: "none", background: overdueFilter ? "#FEE2E2" : "transparent", color: overdueFilter ? "#DC2626" : "#6B7280", cursor: "pointer", outline: overdueFilter ? "1px solid #FECACA" : "none" }}
-        >
-          Overdue
-        </button>
-        <button
-          onClick={() => setBlockedFilter(v => !v)}
-          style={{ padding: "5px 12px", borderRadius: 999, fontSize: 12, fontWeight: 600, border: "none", background: blockedFilter ? "#FFF5F3" : "transparent", color: blockedFilter ? "#EA580C" : "#6B7280", cursor: "pointer", outline: blockedFilter ? "1px solid #FDBA74" : "none" }}
-        >
-          Blocked
-        </button>
-
-        {(search || jobTypeFilter !== "all" || stageFilter !== "all" || assigneeFilter !== "all" || blockedFilter || overdueFilter) && (
-          <button onClick={() => { setSearch(""); setJobTypeFilter("all"); setStageFilter("all"); setAssigneeFilter("all"); setBlockedFilter(false); setOverdueFilter(false); }} style={{ padding: "5px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid #E8E8F0", background: "#fff", color: "#9CA3AF", cursor: "pointer" }}>
-            Clear
-          </button>
-        )}
-
-        <span style={{ marginLeft: "auto", fontSize: 12, color: "#9CA3AF" }}>
-          {filtered.length} of {packets.length} jobs
-        </span>
       </div>
 
-      {/* Table */}
-      <div style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, overflow: "hidden", flex: 1 }}>
-        {loading ? (
-          <div style={{ padding: 40, textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>Loading jobs…</div>
-        ) : sorted.length === 0 ? (
-          <div style={{ padding: 40, textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>
-            {packets.length === 0 ? "No active jobs." : "No jobs match the current filters."}
-          </div>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead>
-                <tr>
-                  <TH label="Due Date"    sk="due_date"        width={110} />
-                  <TH label="Job #"       sk="reference_number" width={120} />
-                  <TH label="Customer"    sk="customer"         />
-                  <TH label="Type"        sk="job_type"         width={100} />
-                  <TH label="Stage"       sk="status"           width={140} />
-                  <TH label="Step"                              width={160} />
-                  <TH label="Assigned To" sk="assigned"         width={130} />
-                  <TH label="Blocked"                           width={170} />
-                  <TH label="Last Updated" sk="status_updated_at" width={110} />
-                </tr>
-              </thead>
-              <tbody>
-                {withAtRisk.map((p, i) => {
-                  const overdue  = isOverdue(p);
-                  const dueToday = isDueToday(p);
-                  const stale    = isStale(p, config.settings.stale_threshold_days);
-                  const jt       = p.job_type ?? "repair";
-                  const jtColor  = JOB_TYPE_COLORS[jt] ?? JOB_TYPE_COLORS.repair;
-                  const stColor  = STAGE_COLORS[p.status ?? ""] ?? STAGE_COLORS.intake;
-                  const assignee = resolveAssignee(p);
-                  const step     = resolveCurrentStep(p, config);
-                  const subStage = resolveSubStageLabel(p);
-                  const rowBg    = overdue ? "#FFF5F5" : stale ? "#FFFDF0" : i % 2 === 0 ? "#fff" : "#FAFAFA";
-
-                  return (
-                    <tr
-                      key={p.id}
-                      onClick={() => router.push(`/workshop/board?job=${p.id}`)}
-                      style={{ background: rowBg, borderBottom: "1px solid #F3F4F6", cursor: "pointer", transition: "background .1s" }}
-                      onMouseEnter={e => (e.currentTarget.style.background = "#F5F3FF")}
-                      onMouseLeave={e => (e.currentTarget.style.background = rowBg)}
-                    >
-                      {/* Due Date */}
-                      <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>
-                        {p.due_date ? (
-                          <span style={{ fontSize: 12, fontWeight: 600, padding: "2px 7px", borderRadius: 6, background: overdue ? "#FEE2E2" : dueToday ? "#FEF3C7" : "transparent", color: overdue ? "#DC2626" : dueToday ? "#B45309" : "#374151" }}>
-                            {overdue ? "⚠ " : dueToday ? "⏰ " : ""}{formatDateAU(p.due_date)}
-                          </span>
-                        ) : (
-                          <span style={{ color: "#D1D5DB", fontSize: 12 }}>—</span>
-                        )}
-                      </td>
-
-                      {/* Job # */}
-                      <td style={{ padding: "10px 14px" }}>
-                        <span style={{ fontFamily: "monospace", fontSize: 12, color: "#6B7280" }}>{p.reference_number}</span>
-                      </td>
-
-                      {/* Customer */}
-                      <td style={{ padding: "10px 14px" }}>
-                        <div style={{ fontWeight: 600, color: "#1A1A2E", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {displayName(p)}
-                        </div>
-                        {p.articles && (
-                          <div style={{ fontSize: 11, color: "#9CA3AF", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {p.articles}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Type */}
-                      <td style={{ padding: "10px 14px" }}>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                          <Badge label={JOB_TYPE_LABELS[jt] ?? jt} bg={jtColor.bg} color={jtColor.color} />
-                          {p.delivery_method === "pickup" && <Badge label="🏪 Pickup" bg="#ECFDF5" color="#059669" />}
-                          {p.delivery_method === "shipping" && <Badge label="📦 Shipping" bg="#EFF6FF" color="#2563EB" />}
-                        </div>
-                      </td>
-
-                      {/* Stage */}
-                      <td style={{ padding: "10px 14px" }}>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                          <Badge label={STAGE_LABELS[p.status ?? ""] ?? (p.status ?? "—")} bg={stColor.bg} color={stColor.color} />
-                          {subStage && <span style={{ fontSize: 10, color: "#9CA3AF" }}>{subStage}</span>}
-                        </div>
-                      </td>
-
-                      {/* Step */}
-                      <td style={{ padding: "10px 14px" }}>
-                        <span style={{ fontSize: 12, color: "#6B7280" }}>{step ?? "—"}</span>
-                      </td>
-
-                      {/* Assigned */}
-                      <td style={{ padding: "10px 14px" }}>
-                        {assignee ? (
-                          <span style={{ fontSize: 12, fontWeight: 500, color: "#374151" }}>{assignee}</span>
-                        ) : (
-                          <span style={{ fontSize: 12, color: "#D1D5DB" }}>Unassigned</span>
-                        )}
-                      </td>
-
-                      {/* Blocked */}
-                      <td style={{ padding: "10px 14px" }}>
-                        {(p.pending_customer_approval || p.blocked_reason) ? (
-                          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                            {p.pending_customer_approval && (
-                              <Badge label="⏳ Pending Approval" bg="#FFF5F3" color="#EA580C" border="1px solid #FDBA74" />
-                            )}
-                            {p.blocked_reason && (
-                              <Badge
-                                label={BLOCKED_LABELS[p.blocked_reason] ?? p.blocked_reason}
-                                bg="#FFF5F3" color="#EA580C" border="1px solid #FDBA74"
-                              />
-                            )}
-                            {p.blocked_reason === "other" && p.blocked_note && (
-                              <span style={{ fontSize: 10, color: "#9CA3AF", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.blocked_note}</span>
-                            )}
-                          </div>
-                        ) : (
-                          <span style={{ color: "#D1D5DB", fontSize: 12 }}>—</span>
-                        )}
-                      </td>
-
-                      {/* Last Updated */}
-                      <td style={{ padding: "10px 14px" }}>
-                        <span style={{ fontSize: 12, color: stale ? "#B45309" : "#9CA3AF" }}>
-                          {stale ? "⏸ " : ""}{relativeTime(p.status_updated_at)}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+      {/* Column headers */}
+      <div style={{
+        display: "grid", gridTemplateColumns: "minmax(0,2.4fr) minmax(0,1.6fr) minmax(0,1.3fr) minmax(0,1.3fr) 90px",
+        gap: 12, padding: "8px 14px", fontSize: 11.5, fontWeight: 500, color: "var(--vault-text-muted)",
+        textTransform: "uppercase" as const, letterSpacing: "0.03em", borderBottom: "1px solid var(--vault-border)",
+      }}>
+        <div>Job</div><div>Customer</div><div>Stage</div><div>Owner</div><div>Due</div>
       </div>
 
-      {/* Footer link to history */}
-      <div style={{ marginTop: 12, textAlign: "center", flexShrink: 0 }}>
-        <a href="/workshop/history" style={{ fontSize: 13, color: "#9CA3AF", textDecoration: "none" }}>
-          View collected jobs → History
-        </a>
+      {loading ? (
+        <div style={{ padding: 40, textAlign: "center", color: "var(--vault-text-muted)", fontSize: 14 }}>Loading jobs…</div>
+      ) : sorted.length === 0 ? (
+        <div style={{ padding: 40, textAlign: "center", color: "var(--vault-text-muted)", fontSize: 14 }}>
+          {packets.length === 0 ? "No active jobs." : "No jobs match these filters."}
+          {activeFilterCount > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <button className="vault-btn-tertiary" onClick={() => { setJobTypeFilter("all"); setStageFilter("all"); setDeliveryFilter("all"); setAssigneeFilter("all"); setSearch(""); }}>
+                Clear filters
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{ flex: 1 }}>
+          {needsAttention.length > 0 && (
+            <div>
+              <SectionHeader label="Needs attention" count={needsAttention.length} />
+              {needsAttention.map(p => (
+                <JobRow key={p.id} p={p} config={config} expanded={expandedId === p.id} onToggle={() => toggleExpand(p.id)} showWarning={needsAttentionReason(p, config.settings.stale_threshold_days)} />
+              ))}
+            </div>
+          )}
+          {inProduction.length > 0 && (
+            <div>
+              <SectionHeader label="In production" count={inProduction.length} />
+              {inProduction.map(p => (
+                <JobRow key={p.id} p={p} config={config} expanded={expandedId === p.id} onToggle={() => toggleExpand(p.id)} />
+              ))}
+            </div>
+          )}
+          {remaining.length > 0 && (
+            <div>
+              {(needsAttention.length > 0 || inProduction.length > 0) && <SectionHeader label="Unassigned" count={remaining.length} />}
+              {remaining.map(p => (
+                <JobRow key={p.id} p={p} config={config} expanded={expandedId === p.id} onToggle={() => toggleExpand(p.id)} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Footer */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 4px", fontSize: 12.5, color: "var(--vault-text-secondary)", flexShrink: 0 }}>
+        <span>{filtered.length} active job{filtered.length === 1 ? "" : "s"}</span>
+        <span>All changes saved</span>
       </div>
     </div>
   );

@@ -27,10 +27,10 @@ const CARAT_SIZES = ['0.005ct', '0.01ct', '0.02ct', '0.03ct', '0.05ct', '0.10ct'
 const STONE_TYPES = ['Lab Grown', 'Natural'];
 
 /* ── Shared styles ──────────────────────────────────────── */
-const card: React.CSSProperties = { background: '#fff', border: '1px solid #E8E8F0', borderRadius: 12, overflow: 'hidden' };
-const thStyle: React.CSSProperties = { padding: '10px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', background: '#F9FAFB', textAlign: 'left', borderBottom: '1px solid #E8E8F0' };
-const tdStyle: React.CSSProperties = { padding: '12px 16px', fontSize: 14, color: '#1A1A2E', borderBottom: '1px solid #E8E8F0' };
-const inputStyle: React.CSSProperties = { border: '1px solid #635BFF', borderRadius: 6, padding: '4px 8px', fontSize: 14, width: 100, outline: 'none' };
+const card: React.CSSProperties = { background: '#fff', border: '1px solid var(--vault-border)', borderRadius: 12, overflow: 'hidden' };
+const thStyle: React.CSSProperties = { padding: '10px 16px', fontSize: 12, fontWeight: 500, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', background: '#F9FAFB', textAlign: 'left', borderBottom: '1px solid var(--vault-border)' };
+const tdStyle: React.CSSProperties = { padding: '12px 16px', fontSize: 14, color: '#1A1A2E', borderBottom: '1px solid var(--vault-border)' };
+const inputStyle: React.CSSProperties = { border: '1px solid var(--vault-text)', borderRadius: 6, padding: '4px 8px', fontSize: 14, width: 100, outline: 'none' };
 
 const formatDateAU = (iso: string) => {
   if (!iso) return '—';
@@ -257,9 +257,9 @@ export default function SettingsPage() {
               }}
             />
             <button onClick={() => pricingSave(tableName, id, field, parseFloat(editValue))}
-              style={{ background: '#635BFF', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>Save</button>
+              style={{ background: 'var(--vault-text)', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>Save</button>
             <button onClick={() => setEditingId(null)}
-              style={{ background: 'transparent', color: '#6B7280', border: '1px solid #E8E8F0', borderRadius: 6, padding: '4px 10px', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+              style={{ background: 'transparent', color: '#6B7280', border: '1px solid var(--vault-border)', borderRadius: 6, padding: '4px 10px', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -276,7 +276,7 @@ export default function SettingsPage() {
       <td style={{ ...tdStyle, width: 80 }}>
         {editingId !== id && (
           <button onClick={() => { setEditingId(id); setEditValue(String(currentValue)); }}
-            style={{ background: '#EEF2FF', color: '#635BFF', border: 'none', borderRadius: 6, padding: '5px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>Edit</button>
+            style={{ background: 'var(--vault-surface-selected)', color: 'var(--vault-text)', border: 'none', borderRadius: 6, padding: '5px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>Edit</button>
         )}
       </td>
     );
@@ -292,7 +292,7 @@ export default function SettingsPage() {
   /* ── Render ───────────────────────────────────────────── */
   return (
     <div style={{ padding: '32px 40px', maxWidth: 980 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1A1760', marginBottom: 4 }}>Settings</h1>
+      <h1 style={{ fontSize: 'var(--vault-text-page-title)', fontWeight: 600, color: 'var(--vault-text)', marginBottom: 4 }}>Settings</h1>
       <p style={{ fontSize: 14, color: '#6B7280', marginBottom: 28 }}>Manage integrations, pricing, and store configuration.</p>
 
       <div style={{ display: 'flex', gap: 28, alignItems: 'flex-start' }}>
@@ -307,8 +307,8 @@ export default function SettingsPage() {
                 padding: '9px 14px', marginBottom: 2,
                 borderRadius: 8, border: 'none', cursor: 'pointer',
                 fontSize: 14, fontWeight: section === s.key ? 600 : 400,
-                background: section === s.key ? '#EEF2FF' : 'transparent',
-                color: section === s.key ? '#635BFF' : '#374151',
+                background: section === s.key ? 'var(--vault-surface-selected)' : 'transparent',
+                color: section === s.key ? 'var(--vault-text)' : '#374151',
                 transition: 'background .12s, color .12s',
               }}
             >{s.label}</button>
@@ -336,12 +336,12 @@ export default function SettingsPage() {
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                    <div style={{ width: 32, height: 32, borderRadius: 8, background: '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="#635BFF" strokeWidth={1.8}>
+                    <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--vault-surface-selected)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="var(--vault-text)" strokeWidth={1.8}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
                     </div>
-                    <span style={{ fontSize: 15, fontWeight: 700, color: '#1A1760' }}>Sapphire Export</span>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--vault-text)' }}>Sapphire Export</span>
                   </div>
                   <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 4 }}>
                     Sync melee diamond stock (≤ 0.30ct) from Sapphire Export into the local cache.
@@ -354,7 +354,7 @@ export default function SettingsPage() {
                   disabled={syncing}
                   style={{
                     flexShrink: 0, padding: '9px 18px',
-                    background: syncing ? '#E8E8F0' : '#635BFF',
+                    background: syncing ? 'var(--vault-border)' : 'var(--vault-text)',
                     color: syncing ? '#9CA3AF' : '#fff',
                     border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600,
                     cursor: syncing ? 'wait' : 'pointer',
@@ -390,7 +390,7 @@ export default function SettingsPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                   </svg>
                 </div>
-                <span style={{ fontSize: 15, fontWeight: 700, color: '#1A1760' }}>Shopify</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--vault-text)' }}>Shopify</span>
                 {shopifyConnLoading && <span style={{ fontSize: 12, color: '#9CA3AF' }}>Loading…</span>}
                 {!shopifyConnLoading && shopifyConn?.connected && (
                   <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: '#DCFCE7', color: '#16A34A' }}>Connected</span>
@@ -416,7 +416,7 @@ export default function SettingsPage() {
                   <div style={{ display: 'flex', gap: 8 }}>
                     <a
                       href={`/api/shopify/oauth/install?shop=${shopifyConn.shop_domain}`}
-                      style={{ fontSize: 13, fontWeight: 600, color: '#635BFF', background: '#EEF2FF', border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', textDecoration: 'none' }}
+                      style={{ fontSize: 13, fontWeight: 600, color: 'var(--vault-text)', background: 'var(--vault-surface-selected)', border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', textDecoration: 'none' }}
                     >
                       Reconnect
                     </a>
@@ -435,7 +435,7 @@ export default function SettingsPage() {
                     Connect your Shopify store to automatically sync online orders into Workshop.
                   </p>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #E8E8F0', borderRadius: 8, overflow: 'hidden', background: '#F9FAFB' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--vault-border)', borderRadius: 8, overflow: 'hidden', background: '#F9FAFB' }}>
                       <input
                         type="text"
                         value={shopInput}
@@ -450,7 +450,7 @@ export default function SettingsPage() {
                       onClick={e => { if (!shopInput) e.preventDefault(); }}
                       style={{
                         fontSize: 13, fontWeight: 600, padding: '8px 16px',
-                        background: shopInput ? '#059669' : '#E5E7EB',
+                        background: shopInput ? '#059669' : 'var(--vault-border)',
                         color: shopInput ? '#fff' : '#9CA3AF',
                         borderRadius: 8, textDecoration: 'none',
                         cursor: shopInput ? 'pointer' : 'default',
@@ -558,7 +558,7 @@ export default function SettingsPage() {
                                   ) : brackets.map(r => (
                                     <tr key={r.id}>
                                       <td style={tdStyle}>${Number(r.cost_min).toLocaleString()} – {r.cost_max != null ? `$${Number(r.cost_max).toLocaleString()}` : 'above'}</td>
-                                      <td style={{ ...tdStyle, fontFamily: 'monospace', fontWeight: 600, color: '#635BFF' }}>×{Number(r.multiplier).toFixed(3)}</td>
+                                      <td style={{ ...tdStyle, fontFamily: 'monospace', fontWeight: 600, color: 'var(--vault-text)' }}>×{Number(r.multiplier).toFixed(3)}</td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -602,7 +602,7 @@ export default function SettingsPage() {
                                           }}
                                         />
                                         <button onClick={() => pricingSave('pricing_melee_stones', row.id, 'price_per_stone', parseFloat(editValue))}
-                                          style={{ background: '#635BFF', color: '#fff', border: 'none', borderRadius: 6, padding: '3px 8px', fontSize: 12, cursor: 'pointer' }}>✓</button>
+                                          style={{ background: 'var(--vault-text)', color: '#fff', border: 'none', borderRadius: 6, padding: '3px 8px', fontSize: 12, cursor: 'pointer' }}>✓</button>
                                         <button onClick={() => setEditingId(null)}
                                           style={{ background: 'transparent', color: '#9CA3AF', border: 'none', borderRadius: 6, padding: '3px 6px', fontSize: 12, cursor: 'pointer' }}>✕</button>
                                       </div>
@@ -632,7 +632,7 @@ export default function SettingsPage() {
           {/* ── Store Details ── */}
           {section === 'store' && (
             <div style={{ ...card, padding: 24, maxWidth: 520 }}>
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A1760', marginBottom: 4 }}>Deposit Settings</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--vault-text)', marginBottom: 4 }}>Deposit Settings</h2>
               <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 24 }}>Default deposit percentage used when auto-generating a customer payment link. Staff can still override the amount per quote.</p>
 
               {storeLoading ? (
@@ -651,19 +651,19 @@ export default function SettingsPage() {
                       onChange={e => setStore(prev => ({ ...prev, deposit_percentage: e.target.value }))}
                       style={{
                         width: '100%', maxWidth: 160, boxSizing: 'border-box',
-                        border: '1px solid #E8E8F0', borderRadius: 8,
+                        border: '1px solid var(--vault-border)', borderRadius: 8,
                         padding: '9px 12px', fontSize: 14, color: '#1A1A2E',
                         outline: 'none', transition: 'border-color .15s',
                       }}
-                      onFocus={e => (e.target.style.borderColor = '#635BFF')}
-                      onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
+                      onFocus={e => (e.target.style.borderColor = 'var(--vault-text)')}
+                      onBlur={e => (e.target.style.borderColor = 'var(--vault-border)')}
                     />
                   </div>
                 </div>
               )}
 
-              <div style={{ borderTop: '1px solid #E8E8F0', paddingTop: 16, marginTop: 4, marginBottom: 28 }}>
-                <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A1760', marginBottom: 4 }}>Branding</h2>
+              <div style={{ borderTop: '1px solid var(--vault-border)', paddingTop: 16, marginTop: 4, marginBottom: 28 }}>
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--vault-text)', marginBottom: 4 }}>Branding</h2>
                 <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 16 }}>Shown on customer-facing quotes and order pages. Leave blank to use Vault&apos;s default look.</p>
 
                 {storeLoading ? (
@@ -679,12 +679,12 @@ export default function SettingsPage() {
                         onChange={e => setStore(prev => ({ ...prev, brand_logo_url: e.target.value }))}
                         style={{
                           width: '100%', boxSizing: 'border-box',
-                          border: '1px solid #E8E8F0', borderRadius: 8,
+                          border: '1px solid var(--vault-border)', borderRadius: 8,
                           padding: '9px 12px', fontSize: 14, color: '#1A1A2E',
                           outline: 'none', transition: 'border-color .15s',
                         }}
-                        onFocus={e => (e.target.style.borderColor = '#635BFF')}
-                        onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
+                        onFocus={e => (e.target.style.borderColor = 'var(--vault-text)')}
+                        onBlur={e => (e.target.style.borderColor = 'var(--vault-border)')}
                       />
                       {store.brand_logo_url && (
                         <img src={store.brand_logo_url} alt="Logo preview" style={{ maxHeight: 40, marginTop: 8, display: 'block' }} />
@@ -696,25 +696,25 @@ export default function SettingsPage() {
                         <input
                           type="text"
                           value={store.brand_primary_colour}
-                          placeholder="#635BFF"
+                          placeholder="var(--vault-text)"
                           onChange={e => setStore(prev => ({ ...prev, brand_primary_colour: e.target.value }))}
                           style={{
                             width: 160, boxSizing: 'border-box',
-                            border: '1px solid #E8E8F0', borderRadius: 8,
+                            border: '1px solid var(--vault-border)', borderRadius: 8,
                             padding: '9px 12px', fontSize: 14, color: '#1A1A2E',
                             outline: 'none', transition: 'border-color .15s',
                           }}
-                          onFocus={e => (e.target.style.borderColor = '#635BFF')}
-                          onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
+                          onFocus={e => (e.target.style.borderColor = 'var(--vault-text)')}
+                          onBlur={e => (e.target.style.borderColor = 'var(--vault-border)')}
                         />
-                        <div style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #E8E8F0', background: store.brand_primary_colour || '#635BFF' }} />
+                        <div style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid var(--vault-border)', background: store.brand_primary_colour || 'var(--vault-text)' }} />
                       </div>
                     </div>
                   </div>
                 )}
               </div>
 
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A1760', marginBottom: 4 }}>Bank Details</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--vault-text)', marginBottom: 4 }}>Bank Details</h2>
               <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 24 }}>Shown on quote PDFs sent to customers.</p>
 
               {storeLoading ? (
@@ -736,18 +736,18 @@ export default function SettingsPage() {
                         onChange={e => setStore(prev => ({ ...prev, [key]: e.target.value }))}
                         style={{
                           width: '100%', boxSizing: 'border-box',
-                          border: '1px solid #E8E8F0', borderRadius: 8,
+                          border: '1px solid var(--vault-border)', borderRadius: 8,
                           padding: '9px 12px', fontSize: 14, color: '#1A1A2E',
                           outline: 'none', transition: 'border-color .15s',
                         }}
-                        onFocus={e => (e.target.style.borderColor = '#635BFF')}
-                        onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
+                        onFocus={e => (e.target.style.borderColor = 'var(--vault-text)')}
+                        onBlur={e => (e.target.style.borderColor = 'var(--vault-border)')}
                       />
                     </div>
                   ))}
 
-                  <div style={{ borderTop: '1px solid #E8E8F0', paddingTop: 16, marginTop: 4 }}>
-                    <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A1760', marginBottom: 4 }}>Terms & Conditions</h2>
+                  <div style={{ borderTop: '1px solid var(--vault-border)', paddingTop: 16, marginTop: 4 }}>
+                    <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--vault-text)', marginBottom: 4 }}>Terms & Conditions</h2>
                     <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 12 }}>Shown to customers on the order confirmation page — they must tick a checkbox to agree before paying. Leave blank to skip the checkbox entirely.</p>
                     <textarea
                       value={store.terms_and_conditions}
@@ -756,13 +756,13 @@ export default function SettingsPage() {
                       onChange={e => setStore(prev => ({ ...prev, terms_and_conditions: e.target.value }))}
                       style={{
                         width: '100%', boxSizing: 'border-box',
-                        border: '1px solid #E8E8F0', borderRadius: 8,
+                        border: '1px solid var(--vault-border)', borderRadius: 8,
                         padding: '9px 12px', fontSize: 13, color: '#1A1A2E',
                         outline: 'none', transition: 'border-color .15s',
                         fontFamily: 'inherit', resize: 'vertical',
                       }}
-                      onFocus={e => (e.target.style.borderColor = '#635BFF')}
-                      onBlur={e => (e.target.style.borderColor = '#E8E8F0')}
+                      onFocus={e => (e.target.style.borderColor = 'var(--vault-text)')}
+                      onBlur={e => (e.target.style.borderColor = 'var(--vault-border)')}
                     />
                   </div>
 
@@ -772,7 +772,7 @@ export default function SettingsPage() {
                       disabled={storeSaving}
                       style={{
                         padding: '9px 20px',
-                        background: storeSaving ? '#E8E8F0' : '#635BFF',
+                        background: storeSaving ? 'var(--vault-border)' : 'var(--vault-text)',
                         color: storeSaving ? '#9CA3AF' : '#fff',
                         border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600,
                         cursor: storeSaving ? 'wait' : 'pointer',

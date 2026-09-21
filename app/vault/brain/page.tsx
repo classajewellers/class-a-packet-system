@@ -35,7 +35,7 @@ const PRIORITY_STYLES: Record<string, { bg: string; color: string }> = {
   "Critical": { bg: "#FEE2E2", color: "#991B1B" },
   "High":     { bg: "#FEF3C7", color: "#92400E" },
   "Medium":   { bg: "#E0F2FE", color: "#0369A1" },
-  "Low":      { bg: "#F3F4F6", color: "#6B7280" },
+  "Low":      { bg: "var(--vault-surface)", color: "var(--vault-text-secondary)" },
 };
 
 function timeAgo(iso: string): string {
@@ -98,8 +98,8 @@ export default function VaultBrainPage() {
     <div style={{ padding: 32, maxWidth: 800, margin: "0 auto" }}>
       {/* Header */}
       <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 26, fontWeight: 700, color: "#1A1A2E", margin: 0 }}>Vault Brain</h1>
-        <p style={{ fontSize: 14, color: "#6B7280", marginTop: 4 }}>AI-processed reports from staff — bugs, ideas, decisions, and requests.</p>
+        <h1 style={{ fontSize: "var(--vault-text-page-title)", fontWeight: 600, color: "var(--vault-text)", margin: 0 }}>Vault Brain</h1>
+        <p style={{ fontSize: 14, color: "var(--vault-text-secondary)", marginTop: 4 }}>AI-processed reports from staff — bugs, ideas, decisions, and requests.</p>
       </div>
 
       {/* Webhook health banner — only shown when something is actually stuck */}
@@ -130,13 +130,13 @@ export default function VaultBrainPage() {
               style={{
                 padding: "8px 14px", background: "none", border: "none", cursor: "pointer",
                 fontSize: 13, fontWeight: active ? 600 : 400,
-                color: active ? "#635BFF" : "#6B7280",
-                borderBottom: `2px solid ${active ? "#635BFF" : "transparent"}`,
+                color: active ? "var(--vault-text)" : "var(--vault-text-secondary)",
+                borderBottom: `2px solid ${active ? "var(--vault-text)" : "transparent"}`,
                 marginBottom: -1, fontFamily: "inherit",
                 transition: "color .15s",
               }}
             >
-              {f} {count > 0 && <span style={{ fontSize: 11, background: active ? "#EEF2FF" : "#F3F4F6", color: active ? "#635BFF" : "#9CA3AF", borderRadius: 999, padding: "1px 6px", marginLeft: 4 }}>{count}</span>}
+              {f} {count > 0 && <span style={{ fontSize: 11, background: active ? "var(--vault-surface-selected)" : "var(--vault-surface)", color: active ? "var(--vault-text)" : "var(--vault-text-muted)", borderRadius: 999, padding: "1px 6px", marginLeft: 4 }}>{count}</span>}
             </button>
           );
         })}
@@ -144,41 +144,41 @@ export default function VaultBrainPage() {
 
       {/* Feed */}
       {loading ? (
-        <div style={{ textAlign: "center", padding: 60, color: "#9CA3AF", fontSize: 14 }}>Loading…</div>
+        <div style={{ textAlign: "center", padding: 60, color: "var(--vault-text-muted)", fontSize: 14 }}>Loading…</div>
       ) : filtered.length === 0 ? (
         <div style={{ textAlign: "center", padding: 60 }}>
-          <p style={{ color: "#9CA3AF", fontSize: 15 }}>No reports yet.</p>
+          <p style={{ color: "var(--vault-text-muted)", fontSize: 15 }}>No reports yet.</p>
           <p style={{ color: "#C4C4D4", fontSize: 13, marginTop: 4 }}>Staff can submit reports using the ⚡ button in the bottom right.</p>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {filtered.map((r) => {
-            const typeStyle = TYPE_STYLES[r.type] ?? { bg: "#F3F4F6", color: "#374151", label: r.type };
+            const typeStyle = TYPE_STYLES[r.type] ?? { bg: "var(--vault-surface)", color: "var(--vault-text)", label: r.type };
             const priStyle = PRIORITY_STYLES[r.priority ?? "Medium"] ?? PRIORITY_STYLES["Medium"];
             const isExpanded = expandedId === r.id;
 
             return (
               <div
                 key={r.id}
-                style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, padding: "16px 20px", transition: "box-shadow .15s" }}
-                onMouseEnter={(e) => ((e.currentTarget as HTMLDivElement).style.boxShadow = "0 2px 12px rgba(0,0,0,0.06)")}
+                style={{ background: "var(--vault-canvas)", border: "1px solid #E8E8F0", borderRadius: 12, padding: "16px 20px", transition: "box-shadow .15s" }}
+                onMouseEnter={(e) => ((e.currentTarget as HTMLDivElement).style.boxShadow = "var(--vault-shadow-elevated)")}
                 onMouseLeave={(e) => ((e.currentTarget as HTMLDivElement).style.boxShadow = "none")}
               >
                 {/* Top row: badges + meta */}
                 <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <span style={{ background: typeStyle.bg, color: typeStyle.color, borderRadius: 999, padding: "3px 10px", fontSize: 11, fontWeight: 700, letterSpacing: "0.03em" }}>{typeStyle.label}</span>
-                    {r.area && <span style={{ background: "#F3F4F6", color: "#6B7280", borderRadius: 999, padding: "3px 10px", fontSize: 11, fontWeight: 500 }}>{r.area}</span>}
+                    {r.area && <span style={{ background: "var(--vault-surface)", color: "var(--vault-text-secondary)", borderRadius: 999, padding: "3px 10px", fontSize: 11, fontWeight: 500 }}>{r.area}</span>}
                     {r.priority && <span style={{ background: priStyle.bg, color: priStyle.color, borderRadius: 999, padding: "3px 10px", fontSize: 11, fontWeight: 600 }}>{r.priority}</span>}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                    <span style={{ fontSize: 12, color: "#9CA3AF", whiteSpace: "nowrap" }}>
+                    <span style={{ fontSize: 12, color: "var(--vault-text-muted)", whiteSpace: "nowrap" }}>
                       {r.submitted_by ? `${r.submitted_by} · ` : ""}{timeAgo(r.created_at)}
                     </span>
                     <button
                       onClick={() => setExpandedId(isExpanded ? null : r.id)}
                       title={isExpanded ? "Collapse" : "Expand"}
-                      style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", fontSize: 16, padding: "0 4px", lineHeight: 1 }}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--vault-text-muted)", fontSize: 16, padding: "0 4px", lineHeight: 1 }}
                     >
                       {isExpanded ? "▲" : "▼"}
                     </button>
@@ -186,12 +186,12 @@ export default function VaultBrainPage() {
                 </div>
 
                 {/* Title */}
-                <p style={{ fontSize: 15, fontWeight: 700, color: "#1A1A2E", margin: "10px 0 4px" }}>
+                <p style={{ fontSize: 15, fontWeight: 700, color: "var(--vault-text)", margin: "10px 0 4px" }}>
                   {r.title ?? "Untitled Report"}
                 </p>
 
                 {/* Summary */}
-                <p style={{ fontSize: 13, color: "#6B7280", margin: 0, lineHeight: 1.5 }}>
+                <p style={{ fontSize: 13, color: "var(--vault-text-secondary)", margin: 0, lineHeight: 1.5 }}>
                   {r.summary ?? r.raw_description}
                 </p>
 
@@ -199,19 +199,19 @@ export default function VaultBrainPage() {
                 {r.tags && r.tags.length > 0 && (
                   <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
                     {r.tags.map((tag) => (
-                      <span key={tag} style={{ background: "#F0EFFF", color: "#635BFF", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 500 }}>#{tag}</span>
+                      <span key={tag} style={{ background: "var(--vault-surface-selected)", color: "var(--vault-text)", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 500 }}>#{tag}</span>
                     ))}
                   </div>
                 )}
 
                 {/* Expanded: raw description + screenshot */}
                 {isExpanded && (
-                  <div style={{ marginTop: 16, padding: 16, background: "#F9FAFB", borderRadius: 8, border: "1px solid #E8E8F0" }}>
-                    <p style={{ fontSize: 12, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 8px" }}>Original Description</p>
-                    <p style={{ fontSize: 13, color: "#374151", margin: 0, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{r.raw_description}</p>
+                  <div style={{ marginTop: 16, padding: 16, background: "var(--vault-surface)", borderRadius: 8, border: "1px solid #E8E8F0" }}>
+                    <p style={{ fontSize: 12, fontWeight: 600, color: "var(--vault-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 8px" }}>Original Description</p>
+                    <p style={{ fontSize: 13, color: "var(--vault-text)", margin: 0, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{r.raw_description}</p>
                     {r.image_url && (
                       <div style={{ marginTop: 12 }}>
-                        <p style={{ fontSize: 12, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 8px" }}>Screenshot</p>
+                        <p style={{ fontSize: 12, fontWeight: 600, color: "var(--vault-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 8px" }}>Screenshot</p>
                         <img src={r.image_url} alt="Screenshot" style={{ maxWidth: "100%", borderRadius: 8, border: "1px solid #E8E8F0" }} />
                       </div>
                     )}

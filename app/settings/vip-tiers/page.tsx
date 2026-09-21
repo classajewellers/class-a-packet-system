@@ -30,23 +30,23 @@ interface EditState {
 
 // ── Style constants — match workshop/settings values exactly ──────────────────
 const CARD: React.CSSProperties = {
-  background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, overflow: "hidden",
+  background: "var(--vault-canvas)", border: "1px solid var(--vault-border)", borderRadius: 12, overflow: "hidden",
 };
 const INPUT: React.CSSProperties = {
-  border: "1px solid #E8E8F0", borderRadius: 8, padding: "6px 10px",
-  fontSize: 13, color: "#1A1A2E", outline: "none", background: "#fff",
+  border: "1px solid var(--vault-border)", borderRadius: 8, padding: "6px 10px",
+  fontSize: 13, color: "var(--vault-text)", outline: "none", background: "var(--vault-canvas)",
   width: "100%", boxSizing: "border-box",
 };
 const BTN_PRIMARY: React.CSSProperties = {
-  padding: "7px 16px", background: "#635BFF", color: "#fff", border: "none",
+  padding: "7px 16px", background: "var(--vault-text)", color: "var(--vault-canvas)", border: "none",
   borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer",
 };
 const BTN_OUTLINE: React.CSSProperties = {
-  padding: "7px 14px", background: "transparent", color: "#635BFF",
-  border: "1px solid #635BFF", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer",
+  padding: "7px 14px", background: "transparent", color: "var(--vault-text)",
+  border: "1px solid var(--vault-text)", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer",
 };
 const BTN_SAVE: React.CSSProperties = {
-  padding: "6px 14px", background: "#635BFF", color: "#fff", border: "none",
+  padding: "6px 14px", background: "var(--vault-text)", color: "var(--vault-canvas)", border: "none",
   borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", flexShrink: 0,
 };
 const BTN_DEL: React.CSSProperties = {
@@ -55,7 +55,7 @@ const BTN_DEL: React.CSSProperties = {
   cursor: "pointer", flexShrink: 0,
 };
 const SEC: React.CSSProperties = {
-  fontSize: 11, fontWeight: 600, color: "#6B7280",
+  fontSize: 11, fontWeight: 600, color: "var(--vault-text-secondary)",
   textTransform: "uppercase", letterSpacing: "0.06em",
 };
 // Tier name badge — fixed-width flex-shrink so it doesn't grow with long names
@@ -174,7 +174,7 @@ export default function VipTiersPage() {
           tier_order: maxOrder + 1,
           min_spend: manualOnly ? 999999999 : 0,
           min_orders: manualOnly ? 999999 : 0,
-          colour: manualOnly ? "#9333EA" : "#9CA3AF",
+          colour: manualOnly ? "#9333EA" : "var(--vault-text-muted)",
           discount_percent: 0,
           eligible_ownership_only: false,
           manual_only: manualOnly,
@@ -251,9 +251,9 @@ export default function VipTiersPage() {
               type="color"
               value={e.colour}
               onChange={ev => setField(t.id, "colour", ev.target.value)}
-              style={{ width: 32, height: 28, border: "1px solid #E8E8F0", borderRadius: 6, cursor: "pointer", padding: 2, background: "#fff", flexShrink: 0 }}
+              style={{ width: 32, height: 28, border: "1px solid var(--vault-border)", borderRadius: 6, cursor: "pointer", padding: 2, background: "var(--vault-canvas)", flexShrink: 0 }}
             />
-            <span style={{ fontSize: 10, color: "#9CA3AF", fontFamily: "monospace", whiteSpace: "nowrap" }}>{e.colour}</span>
+            <span style={{ fontSize: 10, color: "var(--vault-text-muted)", fontFamily: "monospace", whiteSpace: "nowrap" }}>{e.colour}</span>
           </div>
         </td>
         {/* Min Spend */}
@@ -326,9 +326,9 @@ export default function VipTiersPage() {
               type="color"
               value={e.colour}
               onChange={ev => setField(t.id, "colour", ev.target.value)}
-              style={{ width: 32, height: 28, border: "1px solid #E8E8F0", borderRadius: 6, cursor: "pointer", padding: 2, background: "#fff", flexShrink: 0 }}
+              style={{ width: 32, height: 28, border: "1px solid var(--vault-border)", borderRadius: 6, cursor: "pointer", padding: 2, background: "var(--vault-canvas)", flexShrink: 0 }}
             />
-            <span style={{ fontSize: 10, color: "#9CA3AF", fontFamily: "monospace", whiteSpace: "nowrap" }}>{e.colour}</span>
+            <span style={{ fontSize: 10, color: "var(--vault-text-muted)", fontFamily: "monospace", whiteSpace: "nowrap" }}>{e.colour}</span>
           </div>
         </td>
         {/* Discount % */}
@@ -364,24 +364,24 @@ export default function VipTiersPage() {
       {/* Page header */}
       <div>
         <div style={{ marginBottom: 4 }}>
-          <Link href="/settings" style={{ fontSize: 13, color: "#9CA3AF", textDecoration: "none" }}>← Settings</Link>
+          <Link href="/settings" style={{ fontSize: 13, color: "var(--vault-text-muted)", textDecoration: "none" }}>← Settings</Link>
         </div>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1A1A2E", margin: 0 }}>VIP Tier Configuration</h1>
-        <p style={{ fontSize: 13, color: "#6B7280", marginTop: 4 }}>
+        <h1 style={{ fontSize: "var(--vault-text-page-title)", fontWeight: 600, color: "var(--vault-text)", margin: 0 }}>VIP Tiers</h1>
+        <p style={{ fontSize: 13, color: "var(--vault-text-secondary)", marginTop: 4 }}>
           Configure automatic spend-based tiers and manual override tiers. Discount % is applied automatically in repair quotes.
         </p>
       </div>
 
       {/* Example defaults — spend-based structure reference */}
       <div>
-        <p style={{ fontSize: 12, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+        <p style={{ fontSize: 12, fontWeight: 600, color: "var(--vault-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
           Example defaults
         </p>
         <div style={{ ...CARD, opacity: 0.38, pointerEvents: "none" }}>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
-                <tr style={{ borderBottom: "1px solid #E8E8F0" }}>
+                <tr style={{ borderBottom: "1px solid var(--vault-border)" }}>
                   {["Order", "Tier Name", "Colour", "Min Spend ($)", "Min Orders", "Discount %", "Owned Only", ""].map(h => (
                     <th key={h} style={TH}>{h}</th>
                   ))}
@@ -389,7 +389,7 @@ export default function VipTiersPage() {
               </thead>
               <tbody>
                 {[
-                  { order: 1, name: "Silver",   colour: "#9CA3AF", spend: "5,000",  orders: 3,  discount: 0  },
+                  { order: 1, name: "Silver",   colour: "var(--vault-text-muted)", spend: "5,000",  orders: 3,  discount: 0  },
                   { order: 2, name: "Gold",     colour: "#F59E0B", spend: "10,000", orders: 6,  discount: 5  },
                   { order: 3, name: "Platinum", colour: "#6366F1", spend: "15,000", orders: 10, discount: 10 },
                   { order: 4, name: "Diamond",  colour: "#06B6D4", spend: "20,000", orders: 15, discount: 15 },
@@ -405,8 +405,8 @@ export default function VipTiersPage() {
                     </td>
                     <td style={TD(104)}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <div style={{ width: 32, height: 28, border: "1px solid #E8E8F0", borderRadius: 6, background: row.colour, flexShrink: 0 }} />
-                        <span style={{ fontSize: 10, color: "#9CA3AF", fontFamily: "monospace" }}>{row.colour}</span>
+                        <div style={{ width: 32, height: 28, border: "1px solid var(--vault-border)", borderRadius: 6, background: row.colour, flexShrink: 0 }} />
+                        <span style={{ fontSize: 10, color: "var(--vault-text-muted)", fontFamily: "monospace" }}>{row.colour}</span>
                       </div>
                     </td>
                     <td style={TD(110)}><div style={INPUT}>${row.spend}</div></td>
@@ -428,8 +428,8 @@ export default function VipTiersPage() {
         {/* Spend-Based Tiers — header */}
         <div style={{ padding: "20px 24px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#1A1A2E" }}>Spend-Based Tiers</div>
-            <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--vault-text)" }}>Spend-Based Tiers</div>
+            <div style={{ fontSize: 12, color: "var(--vault-text-secondary)", marginTop: 2 }}>
               Assigned automatically when a customer meets the spend or order threshold.
             </div>
           </div>
@@ -444,14 +444,14 @@ export default function VipTiersPage() {
 
         {/* Spend-Based Tiers — table */}
         {loading ? (
-          <div style={{ padding: "24px", textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>Loading…</div>
+          <div style={{ padding: "24px", textAlign: "center", color: "var(--vault-text-muted)", fontSize: 14 }}>Loading…</div>
         ) : spendTiers.length === 0 ? (
-          <div style={{ padding: "24px", textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>No spend-based tiers yet.</div>
+          <div style={{ padding: "24px", textAlign: "center", color: "var(--vault-text-muted)", fontSize: 14 }}>No spend-based tiers yet.</div>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
-                <tr style={{ borderBottom: "1px solid #E8E8F0", background: "#FAFAFA" }}>
+                <tr style={{ borderBottom: "1px solid var(--vault-border)", background: "#FAFAFA" }}>
                   <th style={TH}>Order</th>
                   <th style={TH}>Tier Name</th>
                   <th style={TH}>Colour</th>
@@ -475,8 +475,8 @@ export default function VipTiersPage() {
         {/* Manual Override Tiers — header */}
         <div style={{ padding: "20px 24px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#1A1A2E" }}>Manual Override Tiers</div>
-            <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--vault-text)" }}>Manual Override Tiers</div>
+            <div style={{ fontSize: 12, color: "var(--vault-text-secondary)", marginTop: 2 }}>
               Assigned only via manager override in a repair quote (e.g. Trade, Staff). Never auto-applied by spend.
             </div>
           </div>
@@ -491,12 +491,12 @@ export default function VipTiersPage() {
 
         {/* Manual Override Tiers — table */}
         {loading ? null : manualTiers.length === 0 ? (
-          <div style={{ padding: "24px", textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>No manual tiers yet.</div>
+          <div style={{ padding: "24px", textAlign: "center", color: "var(--vault-text-muted)", fontSize: 14 }}>No manual tiers yet.</div>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
-                <tr style={{ borderBottom: "1px solid #E8E8F0", background: "#FAFAFA" }}>
+                <tr style={{ borderBottom: "1px solid var(--vault-border)", background: "#FAFAFA" }}>
                   <th style={TH}>Tier Name</th>
                   <th style={TH}>Colour</th>
                   <th style={TH}>Discount %</th>
@@ -516,9 +516,9 @@ export default function VipTiersPage() {
       </div>
 
       {/* Help text */}
-      <div style={{ background: "#F9FAFB", border: "1px solid #E8E8F0", borderRadius: 12, padding: "14px 20px" }}>
-        <p style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.7, margin: 0 }}>
-          <strong style={{ color: "#1A1A2E" }}>How tiers work:</strong> A customer is assigned the highest-order <em>spend-based</em> tier where their lifetime spend (excluding repairs) meets the minimum spend <strong>OR</strong> their non-repair order count meets the minimum orders threshold. A <em>manual override</em> tier set by a manager takes precedence over the computed tier. Discount % is applied automatically when a repair quote is built for a customer with an active tier.
+      <div style={{ background: "var(--vault-surface)", border: "1px solid var(--vault-border)", borderRadius: 12, padding: "14px 20px" }}>
+        <p style={{ fontSize: 12, color: "var(--vault-text-secondary)", lineHeight: 1.7, margin: 0 }}>
+          <strong style={{ color: "var(--vault-text)" }}>How tiers work:</strong> A customer is assigned the highest-order <em>spend-based</em> tier where their lifetime spend (excluding repairs) meets the minimum spend <strong>OR</strong> their non-repair order count meets the minimum orders threshold. A <em>manual override</em> tier set by a manager takes precedence over the computed tier. Discount % is applied automatically when a repair quote is built for a customer with an active tier.
         </p>
       </div>
 

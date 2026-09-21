@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useCallback, useRef, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   PacketFormData,
   PacketType,
@@ -51,21 +51,28 @@ function validate(data: PacketFormData): Partial<Record<keyof PacketFormData, st
   return errors;
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+// Vault design system v1 — replaces the old purple section-header-bar card.
+// Typography and a thin divider carry the section boundary instead of a
+// coloured bar + heavy card chrome (rounded-2xl, shadow-sm, border).
+function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden" style={{ fontFamily: "Inter, sans-serif" }}>
-      <div className="px-5 py-3 border-b border-gray-100" style={{ background: "#635BFF" }}>
-        <h2 className="text-sm font-semibold tracking-wide text-white uppercase" style={{ fontFamily: "Inter, sans-serif" }}>
-          {title}
-        </h2>
-      </div>
-      <div className="px-5 py-5">{children}</div>
+    <div style={{ paddingBottom: 24, marginBottom: 24, borderBottom: "1px solid var(--vault-border)" }}>
+      <h2 style={{ fontSize: "var(--vault-text-section-title)", fontWeight: 600, color: "var(--vault-text)", margin: 0 }}>
+        {title}
+      </h2>
+      {subtitle && (
+        <p style={{ fontSize: "var(--vault-text-meta)", color: "var(--vault-text-secondary)", margin: "2px 0 0" }}>
+          {subtitle}
+        </p>
+      )}
+      <div style={{ marginTop: 16 }}>{children}</div>
     </div>
   );
 }
 
 function NewOrderPageInner() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { user } = useUser();
   const isManager = canManage(user?.role);
   const [formData, setFormData] = useState<PacketFormData>({
@@ -594,7 +601,9 @@ function NewOrderPageInner() {
           <button
             type="button"
             onClick={() => setShowPreview((v) => !v)}
-            className="text-white rounded-full shadow-lg p-3" style={{ background: "#635BFF" }}
+            className="p-3"
+            style={{ color: "#FFFFFF", background: "var(--vault-text)", borderRadius: "var(--vault-radius-md)", boxShadow: "var(--vault-shadow-elevated)", border: "none" }}
+            aria-label="Toggle label preview"
             title="Toggle label preview"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -628,14 +637,26 @@ function NewOrderPageInner() {
         </div>
       )}
 
-      {/* Fixed submit bar */}
-      <div className="fixed bottom-0 right-0 z-20 bg-white border-t border-gray-200 shadow-lg px-6 py-3" style={{ left: 0 }}>
-        <div className="max-w-5xl mx-auto">
+      {/* Action bar — separated actions instead of one giant full-width CTA.
+          Behavior unchanged: this still creates the packet and prints the
+          label in one step (handleSubmit's existing logic is untouched) -
+          only the visual treatment changed. Fully decoupling "print" into a
+          separate post-creation step would be a workflow change, not a
+          visual one, so it's deliberately out of scope for this pass. */}
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 20, background: "var(--vault-canvas)", borderTop: "1px solid var(--vault-border)" }}>
+        <div className="max-w-5xl mx-auto" style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, padding: "12px 24px" }}>
+          <button
+            type="button"
+            onClick={() => router.push("/orders")}
+            className="vault-btn vault-btn-secondary"
+          >
+            Cancel
+          </button>
           <button
             type="button"
             onClick={handleSubmit}
             disabled={submitting || !formData.packet_type}
-            className="w-full rounded-xl py-4 text-base font-bold text-white shadow-md active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed" style={{ background: "#635BFF", fontFamily: "Inter, sans-serif" }} onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = "#4F46E5"} onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = "#635BFF"}
+            className="vault-btn vault-btn-primary"
           >
             {submitting ? "Submitting…" : "Submit & Print"}
           </button>

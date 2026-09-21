@@ -88,9 +88,9 @@ function EditModal({
   };
 
   const inp: React.CSSProperties = {
-    width: "100%", border: "1px solid #E8E8F0", borderRadius: 8,
+    width: "100%", border: "1px solid var(--vault-border)", borderRadius: 8,
     padding: "9px 12px", fontSize: 14, outline: "none", boxSizing: "border-box",
-    fontFamily: "Inter, sans-serif", color: "#1A1A2E",
+    fontFamily: "Inter, sans-serif", color: "var(--vault-text)",
   };
 
   return (
@@ -98,8 +98,8 @@ function EditModal({
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div style={{ background: "#fff", borderRadius: 16, padding: 32, width: "100%", maxWidth: 520, boxShadow: "0 20px 60px rgba(0,0,0,0.18)", maxHeight: "90vh", overflowY: "auto" }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: "#1A1760", margin: "0 0 20px" }}>Edit User</h2>
+      <div style={{ background: "var(--vault-canvas)", borderRadius: 16, padding: 32, width: "100%", maxWidth: 520, boxShadow: "0 20px 60px rgba(0,0,0,0.18)", maxHeight: "90vh", overflowY: "auto" }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--vault-text)", margin: "0 0 20px" }}>Edit User</h2>
 
         {error && (
           <div style={{ background: "#fee2e2", color: "#991b1b", borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: 16 }}>
@@ -115,13 +115,13 @@ function EditModal({
           </div>
           <div>
             <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#6b7280", marginBottom: 5 }}>Email</label>
-            <input style={{ ...inp, background: "#F9FAFB", color: "#9CA3AF" }} value={profile.email ?? ""} readOnly />
+            <input style={{ ...inp, background: "var(--vault-surface)", color: "var(--vault-text-muted)" }} value={profile.email ?? ""} readOnly />
           </div>
           <div>
             <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#6b7280", marginBottom: 6 }}>Role</label>
-            <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: "1px solid #E8E8F0", width: "fit-content" }}>
+            <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: "1px solid var(--vault-border)", width: "fit-content" }}>
               {(["staff", "manager"] as const).map(r => (
-                <button key={r} onClick={() => setRole(r)} style={{ padding: "8px 20px", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 500, background: role === r ? "#635BFF" : "#fff", color: role === r ? "#fff" : "#374151", textTransform: "capitalize", transition: "all .15s" }}>{r}</button>
+                <button key={r} onClick={() => setRole(r)} style={{ padding: "8px 20px", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 500, background: role === r ? "var(--vault-text)" : "var(--vault-canvas)", color: role === r ? "var(--vault-canvas)" : "var(--vault-text)", textTransform: "capitalize", transition: "all .15s" }}>{r}</button>
               ))}
             </div>
           </div>
@@ -130,16 +130,16 @@ function EditModal({
         {/* Module permissions — staff only */}
         {isStaff && (
           <div style={{ marginBottom: 24 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#1A1760", marginBottom: 12 }}>Module Access</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--vault-text)", marginBottom: 12 }}>Module Access</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               {ALL_MODULES.map(module => (
-                <label key={module} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 8, border: `1px solid ${perms[module] ? "#C7D2FE" : "#E8E8F0"}`, background: perms[module] ? "#EEF2FF" : "#F9FAFB", cursor: "pointer", gap: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: perms[module] ? "#4338CA" : "#6B7280" }}>{MODULE_LABELS[module]}</span>
+                <label key={module} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 8, border: `1px solid ${perms[module] ? "var(--vault-border-strong)" : "var(--vault-border)"}`, background: perms[module] ? "var(--vault-surface-selected)" : "var(--vault-surface)", cursor: "pointer", gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: perms[module] ? "#4338CA" : "var(--vault-text-secondary)" }}>{MODULE_LABELS[module]}</span>
                   <div
                     onClick={() => togglePerm(module)}
-                    style={{ width: 36, height: 20, borderRadius: 10, background: perms[module] ? "#635BFF" : "#D1D5DB", position: "relative", cursor: "pointer", transition: "background .2s", flexShrink: 0 }}
+                    style={{ width: 36, height: 20, borderRadius: 10, background: perms[module] ? "var(--vault-text)" : "var(--vault-border-strong)", position: "relative", cursor: "pointer", transition: "background .2s", flexShrink: 0 }}
                   >
-                    <div style={{ position: "absolute", top: 2, left: perms[module] ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+                    <div style={{ position: "absolute", top: 2, left: perms[module] ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: "var(--vault-canvas)", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
                   </div>
                 </label>
               ))}
@@ -148,7 +148,7 @@ function EditModal({
         )}
 
         {!isStaff && (
-          <div style={{ marginBottom: 24, padding: "12px 14px", borderRadius: 8, background: "#EEF2FF", border: "1px solid #C7D2FE" }}>
+          <div style={{ marginBottom: 24, padding: "12px 14px", borderRadius: 8, background: "var(--vault-surface-selected)", border: "1px solid var(--vault-border-strong)" }}>
             <span style={{ fontSize: 13, color: "#4338CA", fontWeight: 500 }}>Managers have full access to all modules.</span>
           </div>
         )}
@@ -156,17 +156,17 @@ function EditModal({
         {/* Finance / Cost Visibility — admin-only */}
         {viewerIsAdmin && (
           <div style={{ marginBottom: 24 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#1A1760", marginBottom: 10 }}>Finance Access</div>
-            <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", borderRadius: 8, border: `1px solid ${costVisible ? "#C7D2FE" : "#E8E8F0"}`, background: costVisible ? "#EEF2FF" : "#F9FAFB", gap: 12, cursor: "pointer" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--vault-text)", marginBottom: 10 }}>Finance Access</div>
+            <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", borderRadius: 8, border: `1px solid ${costVisible ? "var(--vault-border-strong)" : "var(--vault-border)"}`, background: costVisible ? "var(--vault-surface-selected)" : "var(--vault-surface)", gap: 12, cursor: "pointer" }}>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 500, color: costVisible ? "#4338CA" : "#6B7280" }}>Finance / Cost Visibility</div>
-                <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>Purchase costs, cashflow forecast, and invoice amounts</div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: costVisible ? "#4338CA" : "var(--vault-text-secondary)" }}>Finance / Cost Visibility</div>
+                <div style={{ fontSize: 12, color: "var(--vault-text-muted)", marginTop: 2 }}>Purchase costs, cashflow forecast, and invoice amounts</div>
               </div>
               <div
                 onClick={() => setCostVisible(v => !v)}
-                style={{ width: 36, height: 20, borderRadius: 10, background: costVisible ? "#635BFF" : "#D1D5DB", position: "relative", cursor: "pointer", transition: "background .2s", flexShrink: 0 }}
+                style={{ width: 36, height: 20, borderRadius: 10, background: costVisible ? "var(--vault-text)" : "var(--vault-border-strong)", position: "relative", cursor: "pointer", transition: "background .2s", flexShrink: 0 }}
               >
-                <div style={{ position: "absolute", top: 2, left: costVisible ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+                <div style={{ position: "absolute", top: 2, left: costVisible ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: "var(--vault-canvas)", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
               </div>
             </label>
           </div>
@@ -174,7 +174,7 @@ function EditModal({
 
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
           <button onClick={onClose} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #d1d5db", background: "transparent", color: "#6b7280", fontSize: 14, cursor: "pointer" }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: saving ? "#a5b4fc" : "#635BFF", color: "#fff", fontSize: 14, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
+          <button onClick={handleSave} disabled={saving} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: saving ? "#a5b4fc" : "var(--vault-text)", color: "var(--vault-canvas)", fontSize: 14, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
             {saving ? "Saving…" : "Save Changes"}
           </button>
         </div>
@@ -237,7 +237,7 @@ function InviteModal({
   };
 
   const inp: React.CSSProperties = {
-    width: "100%", border: "1px solid #E8E8F0", borderRadius: 8,
+    width: "100%", border: "1px solid var(--vault-border)", borderRadius: 8,
     padding: "9px 12px", fontSize: 14, outline: "none", boxSizing: "border-box",
     fontFamily: "Inter, sans-serif",
   };
@@ -247,8 +247,8 @@ function InviteModal({
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div style={{ background: "#fff", borderRadius: 16, padding: 32, width: "100%", maxWidth: 520, boxShadow: "0 20px 60px rgba(0,0,0,0.18)", maxHeight: "90vh", overflowY: "auto" }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: "#1A1760", margin: "0 0 20px" }}>Invite User</h2>
+      <div style={{ background: "var(--vault-canvas)", borderRadius: 16, padding: 32, width: "100%", maxWidth: 520, boxShadow: "0 20px 60px rgba(0,0,0,0.18)", maxHeight: "90vh", overflowY: "auto" }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--vault-text)", margin: "0 0 20px" }}>Invite User</h2>
 
         {error && (
           <div style={{ background: "#fee2e2", color: "#991b1b", borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: 16 }}>
@@ -267,9 +267,9 @@ function InviteModal({
           </div>
           <div>
             <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#6b7280", marginBottom: 6 }}>Role</label>
-            <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: "1px solid #E8E8F0", width: "fit-content" }}>
+            <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: "1px solid var(--vault-border)", width: "fit-content" }}>
               {["staff", "manager"].map(r => (
-                <button key={r} onClick={() => set("role", r)} style={{ padding: "8px 20px", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 500, background: form.role === r ? "#635BFF" : "#fff", color: form.role === r ? "#fff" : "#374151", textTransform: "capitalize", transition: "all .15s" }}>{r}</button>
+                <button key={r} onClick={() => set("role", r)} style={{ padding: "8px 20px", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 500, background: form.role === r ? "var(--vault-text)" : "var(--vault-canvas)", color: form.role === r ? "var(--vault-canvas)" : "var(--vault-text)", textTransform: "capitalize", transition: "all .15s" }}>{r}</button>
               ))}
             </div>
           </div>
@@ -278,16 +278,16 @@ function InviteModal({
         {/* Permissions — staff only */}
         {isStaff && (
           <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#1A1760", marginBottom: 10 }}>Module Access</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--vault-text)", marginBottom: 10 }}>Module Access</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               {ALL_MODULES.map(module => (
-                <label key={module} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 8, border: `1px solid ${perms[module] ? "#C7D2FE" : "#E8E8F0"}`, background: perms[module] ? "#EEF2FF" : "#F9FAFB", cursor: "pointer", gap: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: perms[module] ? "#4338CA" : "#6B7280" }}>{MODULE_LABELS[module]}</span>
+                <label key={module} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 8, border: `1px solid ${perms[module] ? "var(--vault-border-strong)" : "var(--vault-border)"}`, background: perms[module] ? "var(--vault-surface-selected)" : "var(--vault-surface)", cursor: "pointer", gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: perms[module] ? "#4338CA" : "var(--vault-text-secondary)" }}>{MODULE_LABELS[module]}</span>
                   <div
                     onClick={() => togglePerm(module)}
-                    style={{ width: 36, height: 20, borderRadius: 10, background: perms[module] ? "#635BFF" : "#D1D5DB", position: "relative", cursor: "pointer", transition: "background .2s", flexShrink: 0 }}
+                    style={{ width: 36, height: 20, borderRadius: 10, background: perms[module] ? "var(--vault-text)" : "var(--vault-border-strong)", position: "relative", cursor: "pointer", transition: "background .2s", flexShrink: 0 }}
                   >
-                    <div style={{ position: "absolute", top: 2, left: perms[module] ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+                    <div style={{ position: "absolute", top: 2, left: perms[module] ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: "var(--vault-canvas)", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
                   </div>
                 </label>
               ))}
@@ -298,17 +298,17 @@ function InviteModal({
         {/* Finance / Cost Visibility — admin-only */}
         {viewerIsAdmin && (
           <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#1A1760", marginBottom: 10 }}>Finance Access</div>
-            <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", borderRadius: 8, border: `1px solid ${costVisible ? "#C7D2FE" : "#E8E8F0"}`, background: costVisible ? "#EEF2FF" : "#F9FAFB", gap: 12, cursor: "pointer" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--vault-text)", marginBottom: 10 }}>Finance Access</div>
+            <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", borderRadius: 8, border: `1px solid ${costVisible ? "var(--vault-border-strong)" : "var(--vault-border)"}`, background: costVisible ? "var(--vault-surface-selected)" : "var(--vault-surface)", gap: 12, cursor: "pointer" }}>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 500, color: costVisible ? "#4338CA" : "#6B7280" }}>Finance / Cost Visibility</div>
-                <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>Purchase costs, cashflow forecast, and invoice amounts</div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: costVisible ? "#4338CA" : "var(--vault-text-secondary)" }}>Finance / Cost Visibility</div>
+                <div style={{ fontSize: 12, color: "var(--vault-text-muted)", marginTop: 2 }}>Purchase costs, cashflow forecast, and invoice amounts</div>
               </div>
               <div
                 onClick={() => setCostVisible(v => !v)}
-                style={{ width: 36, height: 20, borderRadius: 10, background: costVisible ? "#635BFF" : "#D1D5DB", position: "relative", cursor: "pointer", transition: "background .2s", flexShrink: 0 }}
+                style={{ width: 36, height: 20, borderRadius: 10, background: costVisible ? "var(--vault-text)" : "var(--vault-border-strong)", position: "relative", cursor: "pointer", transition: "background .2s", flexShrink: 0 }}
               >
-                <div style={{ position: "absolute", top: 2, left: costVisible ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+                <div style={{ position: "absolute", top: 2, left: costVisible ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: "var(--vault-canvas)", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
               </div>
             </label>
           </div>
@@ -316,7 +316,7 @@ function InviteModal({
 
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
           <button onClick={onClose} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #d1d5db", background: "transparent", color: "#6b7280", fontSize: 14, cursor: "pointer" }}>Cancel</button>
-          <button onClick={handleSubmit} disabled={saving} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: saving ? "#a5b4fc" : "#635BFF", color: "#fff", fontSize: 14, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
+          <button onClick={handleSubmit} disabled={saving} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: saving ? "#a5b4fc" : "var(--vault-text)", color: "var(--vault-canvas)", fontSize: 14, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
             {saving ? "Sending…" : "Send Invite"}
           </button>
         </div>
@@ -390,19 +390,19 @@ export default function UsersSettingsPage() {
     padding: "11px 16px", textAlign: "left", fontSize: 11, fontWeight: 600,
     color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em",
   };
-  const tdStyle: React.CSSProperties = { padding: "13px 16px", fontSize: 14, color: "#374151", verticalAlign: "middle" };
+  const tdStyle: React.CSSProperties = { padding: "13px 16px", fontSize: 14, color: "var(--vault-text)", verticalAlign: "middle" };
 
   return (
     <div style={{ padding: "32px", maxWidth: 980, margin: "0 auto", fontFamily: "Inter, sans-serif" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: "#1A1760", margin: 0 }}>Users</h1>
+          <h1 style={{ fontSize: "var(--vault-text-page-title)", fontWeight: 600, color: "var(--vault-text)", margin: 0 }}>Users</h1>
           <p style={{ color: "#9ca3af", fontSize: 13, marginTop: 3 }}>Manage who has access to your store</p>
         </div>
         <button
           onClick={() => setShowInvite(true)}
-          style={{ background: "#635BFF", color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 600, fontSize: 14, cursor: "pointer" }}
+          style={{ background: "var(--vault-text)", color: "var(--vault-canvas)", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 600, fontSize: 14, cursor: "pointer" }}
         >
           + Invite User
         </button>
@@ -414,13 +414,13 @@ export default function UsersSettingsPage() {
           <strong>Failed to load users:</strong> {listError}
         </div>
       )}
-      <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E8E8F0", overflow: "hidden" }}>
+      <div style={{ background: "var(--vault-canvas)", borderRadius: 12, border: "1px solid var(--vault-border)", overflow: "hidden" }}>
         {loading ? (
           <p style={{ padding: 24, color: "#9ca3af", fontSize: 14 }}>Loading users…</p>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
-              <tr style={{ background: "#f9fafb", borderBottom: "1px solid #E8E8F0" }}>
+              <tr style={{ background: "#f9fafb", borderBottom: "1px solid var(--vault-border)" }}>
                 {["Name", "Email", "Role", "Status", "Permissions", "Actions"].map(h => (
                   <th key={h} style={thStyle}>{h}</th>
                 ))}
@@ -429,7 +429,7 @@ export default function UsersSettingsPage() {
             <tbody>
               {users.map((u, i) => (
                 <tr key={u.id} style={{ borderBottom: i < users.length - 1 ? "1px solid #f3f4f6" : "none" }}>
-                  <td style={{ ...tdStyle, fontWeight: 600, color: "#111827" }}>{u.full_name || "—"}</td>
+                  <td style={{ ...tdStyle, fontWeight: 600, color: "var(--vault-text)" }}>{u.full_name || "—"}</td>
                   <td style={{ ...tdStyle, color: "#6b7280" }}>{u.email || "—"}</td>
                   <td style={tdStyle}>
                     <span style={{
@@ -447,13 +447,13 @@ export default function UsersSettingsPage() {
                     }
                   </td>
                   <td style={tdStyle}>
-                    <span style={{ fontSize: 12, color: "#6B7280" }}>{permsSummary(u)}</span>
+                    <span style={{ fontSize: 12, color: "var(--vault-text-secondary)" }}>{permsSummary(u)}</span>
                   </td>
                   <td style={{ ...tdStyle, textAlign: "right" }}>
                     <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                       <button
                         onClick={() => setEditing(u)}
-                        style={{ background: "transparent", border: "1px solid #E8E8F0", color: "#635BFF", borderRadius: 7, padding: "5px 12px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}
+                        style={{ background: "transparent", border: "1px solid var(--vault-border)", color: "var(--vault-text)", borderRadius: 7, padding: "5px 12px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}
                       >
                         Edit
                       </button>
@@ -512,7 +512,7 @@ export default function UsersSettingsPage() {
 
       {/* Toast */}
       {toast && (
-        <div style={{ position: "fixed", bottom: 24, right: 24, background: "#10B981", color: "#fff", borderRadius: 10, padding: "12px 20px", fontSize: 14, fontWeight: 600, boxShadow: "0 8px 24px rgba(0,0,0,0.15)", zIndex: 200 }}>
+        <div style={{ position: "fixed", bottom: 24, right: 24, background: "#10B981", color: "var(--vault-canvas)", borderRadius: 10, padding: "12px 20px", fontSize: 14, fontWeight: 600, boxShadow: "0 8px 24px rgba(0,0,0,0.15)", zIndex: 200 }}>
           {toast}
         </div>
       )}

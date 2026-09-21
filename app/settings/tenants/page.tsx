@@ -112,7 +112,7 @@ export default function TenantsSettingsPage() {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 32 }}>
         <div>
-          <h1 style={{ fontSize: 26, fontWeight: 700, color: "#1A1760", margin: 0 }}>Stores</h1>
+          <h1 style={{ fontSize: "var(--vault-text-page-title)", fontWeight: 600, color: "var(--vault-text)", margin: 0 }}>Stores</h1>
           <p style={{ color: "#6b7280", marginTop: 4, fontSize: 14 }}>
             Manage tenants and their subscription status.
           </p>
@@ -120,8 +120,8 @@ export default function TenantsSettingsPage() {
         <button
           onClick={() => setShowModal(true)}
           style={{
-            background: "#635BFF",
-            color: "#fff",
+            background: "var(--vault-text)",
+            color: "var(--vault-canvas)",
             border: "none",
             borderRadius: 10,
             padding: "10px 20px",
@@ -140,7 +140,7 @@ export default function TenantsSettingsPage() {
       ) : tenants.length === 0 ? (
         <p style={{ color: "#9ca3af", fontSize: 14 }}>No stores found.</p>
       ) : (
-        <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e5e7eb", overflow: "hidden" }}>
+        <div style={{ background: "var(--vault-canvas)", borderRadius: 12, border: "1px solid #e5e7eb", overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
@@ -168,10 +168,10 @@ export default function TenantsSettingsPage() {
                   key={t.id}
                   style={{
                     borderBottom: i < tenants.length - 1 ? "1px solid #f3f4f6" : "none",
-                    background: editingId === t.id ? "#f9fafb" : "#fff",
+                    background: editingId === t.id ? "#f9fafb" : "var(--vault-canvas)",
                   }}
                 >
-                  <td style={{ padding: "14px 16px", fontSize: 14, fontWeight: 500, color: "#111827" }}>
+                  <td style={{ padding: "14px 16px", fontSize: 14, fontWeight: 500, color: "var(--vault-text)" }}>
                     {editingId === t.id ? (
                       <input
                         value={editName}
@@ -239,8 +239,8 @@ export default function TenantsSettingsPage() {
                         <button
                           onClick={() => handleSaveEdit(t.id)}
                           style={{
-                            background: "#635BFF",
-                            color: "#fff",
+                            background: "var(--vault-text)",
+                            color: "var(--vault-canvas)",
                             border: "none",
                             borderRadius: 7,
                             padding: "6px 14px",
@@ -271,8 +271,8 @@ export default function TenantsSettingsPage() {
                         onClick={() => handleEdit(t)}
                         style={{
                           background: "transparent",
-                          color: "#635BFF",
-                          border: "1px solid #635BFF",
+                          color: "var(--vault-text)",
+                          border: "1px solid var(--vault-text)",
                           borderRadius: 7,
                           padding: "5px 13px",
                           fontSize: 13,
@@ -307,14 +307,14 @@ export default function TenantsSettingsPage() {
         >
           <div
             style={{
-              background: "#fff",
+              background: "var(--vault-canvas)",
               borderRadius: 16,
               padding: 32,
               width: 440,
               boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
             }}
           >
-            <h2 style={{ fontSize: 20, fontWeight: 700, color: "#1A1760", margin: "0 0 24px" }}>
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--vault-text)", margin: "0 0 24px" }}>
               Add New Store
             </h2>
 
@@ -334,7 +334,7 @@ export default function TenantsSettingsPage() {
             )}
 
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--vault-text)", marginBottom: 6 }}>
                 Store Name
               </label>
               <input
@@ -354,7 +354,7 @@ export default function TenantsSettingsPage() {
             </div>
 
             <div style={{ marginBottom: 24 }}>
-              <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--vault-text)", marginBottom: 6 }}>
                 Slug <span style={{ fontWeight: 400, color: "#9ca3af" }}>(URL-safe identifier)</span>
               </label>
               <input
@@ -396,8 +396,8 @@ export default function TenantsSettingsPage() {
                 onClick={handleAddStore}
                 disabled={saving}
                 style={{
-                  background: saving ? "#a5b4fc" : "#635BFF",
-                  color: "#fff",
+                  background: saving ? "#a5b4fc" : "var(--vault-text)",
+                  color: "var(--vault-canvas)",
                   border: "none",
                   borderRadius: 9,
                   padding: "10px 20px",
