@@ -61,6 +61,7 @@ export default function VaultBrainPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterType>("All");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [stuckWebhooks, setStuckWebhooks] = useState<{ stuckCount: number; oldestMinutes: number | null } | null>(null);
 
   const fetchReports = useCallback(async () => {
     setLoading(true);
@@ -77,6 +78,18 @@ export default function VaultBrainPage() {
 
   useEffect(() => { fetchReports(); }, [fetchReports]);
 
+  // Webhook health — surfaces any Shopify webhook stuck in received/processing
+  // beyond a reasonable window (see app/api/webhook-events/health). Checked
+  // whenever staff load this page rather than on a schedule, since there's no
+  // cron infrastructure in this app yet.
+  useEffect(() => {
+    if (!user?.tenantId) return;
+    fetch("/api/webhook-events/health", { cache: "no-store", headers: { 'x-tenant-id': user.tenantId } })
+      .then((r) => r.json())
+      .then((json) => setStuckWebhooks(json))
+      .catch(() => setStuckWebhooks(null));
+  }, [user?.tenantId]);
+
   if (!user || !hasPermission(user, "vault_brain")) return null;
 
   const filtered = filter === "All" ? reports : reports.filter((r) => r.type === filter);
@@ -88,6 +101,22 @@ export default function VaultBrainPage() {
         <h1 style={{ fontSize: 26, fontWeight: 700, color: "#1A1A2E", margin: 0 }}>Vault Brain</h1>
         <p style={{ fontSize: 14, color: "#6B7280", marginTop: 4 }}>AI-processed reports from staff — bugs, ideas, decisions, and requests.</p>
       </div>
+
+      {/* Webhook health banner — only shown when something is actually stuck */}
+      {stuckWebhooks && stuckWebhooks.stuckCount > 0 && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10,
+          background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: 10,
+          padding: "12px 16px", marginBottom: 20, fontSize: 13, color: "#991B1B",
+        }}>
+          <span style={{ fontSize: 16 }}>⚠</span>
+          <span>
+            <strong>{stuckWebhooks.stuckCount}</strong> Shopify webhook{stuckWebhooks.stuckCount !== 1 ? "s" : ""} stuck without completing
+            {stuckWebhooks.oldestMinutes != null && ` — oldest is ${stuckWebhooks.oldestMinutes} minute${stuckWebhooks.oldestMinutes !== 1 ? "s" : ""} old`}.
+            An order may be missing from Vault — check the webhook_events table.
+          </span>
+        </div>
+      )}
 
       {/* Filter tabs */}
       <div style={{ display: "flex", gap: 4, marginBottom: 24, borderBottom: "1px solid #E8E8F0", paddingBottom: 0 }}>
