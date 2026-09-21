@@ -119,6 +119,7 @@ body { background: #F9FAFB; color: #1A1A2E; font-size: 14px; }
 .vault-toggle {
   width: 40px;
   height: 22px;
+  min-height: 0; /* override the legacy 44px min-height rule below */
   padding: 0;
   border: none;
   border-radius: 999px;
