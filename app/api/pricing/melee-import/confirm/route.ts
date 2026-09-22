@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requireManager } from "@/lib/require-auth";
-import { parseSizeLabel } from "@/lib/melee-size-parse";
-import { normalizeMm } from "@/lib/melee-pricing";
+import { commitMeleeImport, MeleeGroupPayload } from "@/lib/meleeImportCommit";
 
 export const dynamic = "force-dynamic";
 
@@ -18,24 +17,8 @@ export const dynamic = "force-dynamic";
 // Body: { groups: [{ origin: "natural"|"lab", rows: MeleeRow[] }] }
 //   (supplier_id, if present, is ignored.)
 
-interface MeleeRow {
-  shape: string;
-  size_type?: string;             // AI hint — overridden by parseSizeLabel()
-  size_label: string;
-  size_from: number | null;
-  size_to: number | null;
-  mm: string | null;   // "0.90" (round) or "2.50 x 2.50" (fancy) — exact-match text, never numeric
-  quality: string;
-  price_per_carat: number | null;
-  price_per_stone: number | null;
-  flagged: boolean;
-  flag_reason?: string;
-}
-
-interface GroupPayload {
+interface GroupPayload extends MeleeGroupPayload {
   supplier_id?: string | null;    // ignored — no supplier concept
-  origin: "natural" | "lab";
-  rows: MeleeRow[];
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -65,63 +48,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     // TENANT-WIDE overwrite — this import IS the melee price list. Clears every
     // existing melee row for the tenant (incl. any legacy supplier-scoped rows).
-    const { error: deleteErr } = await supabase
-      .from("pricing_melee_stones")
-      .delete()
-      .eq("tenant_id", tenantId);
-    if (deleteErr) {
-      return NextResponse.json({ error: `Failed to clear existing melee rows: ${deleteErr.message}` }, { status: 500 });
-    }
-
-    const importedAt = new Date().toISOString();
-    const groupResults: Array<{ imported: number; excluded_flagged: number; origin: string }> = [];
-    let totalImported = 0;
-
-    for (const group of groups) {
-      const { origin, rows } = group;
-      const priceableRows = rows.filter((r) => !r.flagged);
-      const excludedCount = rows.length - priceableRows.length;
-
-      const inserts = priceableRows.map((r) => {
-        const parsed = parseSizeLabel(r.size_label); // classify from the label, not the AI hint
-        // mm is TEXT — never coerce through Number(), which would corrupt fancy
-        // L×W values ("2.50 x 2.50" -> NaN -> null) and strip canonical trailing
-        // zeros ("0.90" -> 0.9). Re-normalize so any caller's formatting still
-        // matches what priceMelee()'s normalizeMm() produces at lookup time.
-        const normalized = normalizeMm(r.mm ?? null);
-        const mm = normalized ? normalized : null;
-        return {
-          tenant_id: tenantId,
-          supplier_id: null,                    // no supplier concept
-          origin,
-          shape: r.shape.toLowerCase().trim(),
-          size_type: parsed.size_type,
-          size_label: r.size_label,
-          size_from: parsed.size_from,
-          size_to: parsed.size_to,
-          mm,
-          quality: r.quality && r.quality.trim() ? r.quality.trim() : "unspecified",
-          price_per_carat: r.price_per_carat != null ? Number(r.price_per_carat) : null,
-          // Legacy NOT-NULL columns — now carry the REAL per-stone price (not 0).
-          stone_type: origin === "lab" ? "Lab Grown" : "Natural",
-          price_per_stone: r.price_per_stone != null ? Number(r.price_per_stone) : 0,
-          updated_at: importedAt,
-        };
-      });
-
-      // Insert in chunks — a monthly Prana import is thousands of rows.
-      const CHUNK = 500;
-      for (let i = 0; i < inserts.length; i += CHUNK) {
-        const { error: insertErr } = await supabase
-          .from("pricing_melee_stones")
-          .insert(inserts.slice(i, i + CHUNK));
-        if (insertErr) {
-          return NextResponse.json({ error: `Insert failed (origin ${origin}, chunk ${i}): ${insertErr.message}` }, { status: 500 });
-        }
-      }
-
-      groupResults.push({ imported: inserts.length, excluded_flagged: excludedCount, origin });
-      totalImported += inserts.length;
+    // Shared with the Supplier Connector Framework's sync-confirm route
+    // (app/api/inventory/suppliers/[id]/sync/confirm) via lib/meleeImportCommit.ts
+    // so both entry points commit through the exact same logic.
+    let totalImported: number;
+    let groupResults: Array<{ imported: number; excluded_flagged: number; origin: string }>;
+    let importedAt: string;
+    try {
+      const result = await commitMeleeImport(supabase, tenantId, groups);
+      totalImported = result.total_imported;
+      groupResults = result.groups;
+      importedAt = result.imported_at;
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Import failed" }, { status: 500 });
     }
 
     // Quality-map rebuild — PAUSED for the current import format. The standard

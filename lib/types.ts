@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────
 // Packet types
 // ─────────────────────────────────────────────
-export type PacketType = "repair" | "custom_order" | "layby" | "client_intake" | "online_order";
+export type PacketType = "repair" | "custom_order" | "layby" | "client_intake" | "online_order" | "stock_sale";
 
 // ─────────────────────────────────────────────
 // Form state (client-side)
@@ -478,6 +478,9 @@ export interface InventorySupplier {
   // legacy fields
   lead_time_days?: number | null;
   created_at?: string;
+  // Supplier Connector Framework (migration 140)
+  connector_type?: string | null;
+  connector_last_synced_at?: string | null;
 }
 
 export interface InventoryMovement {

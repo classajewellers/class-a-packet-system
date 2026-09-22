@@ -111,7 +111,7 @@ Last updated: 2026-09-22 (initial audit + plan)
 
 **UPDATE 2026-09-22: both merged to `main` and confirmed live on production** (security batch commit `38327e7`, notifications commit `8df4ed4`, both Vercel deploys resolved `success`; migration 150 also confirmed applied to production). See 9.1/9.3 below.
 
-**Branch divergence — still unresolved:** Phases 1-8 above were built on `feat/reporting-engine-sales-migration`, a separate lineage that still has NOT been merged to `main`. Their DB migrations (138-146) have been applied to staging (and some read-only-checked against production), but the application CODE using them (stock_sale packets, connector sync UI, the migrated reporting engine, AdminTable mobile view, etc.) is not yet live on production — only Phase 9's code is. Merging that branch is a separate, larger decision Josh should explicitly weigh in on given its size, not something to fold into this update.
+**Branch divergence — resolved 2026-09-22.** `feat/reporting-engine-sales-migration` (Phases 1-8's application code) merged to `main` after a sanity check (full typecheck clean; `git merge-tree` found exactly one real conflict — this file, resolved by keeping this section; scope confirmed against the diff as exactly the 31 files already reported this session, no unexpected env/config/DB changes). Deployed to production; see the merge report for the Vercel confirmation.
 
 | # | Item | Status | Notes |
 |---|---|---|---|

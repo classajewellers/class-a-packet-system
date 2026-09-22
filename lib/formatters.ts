@@ -37,6 +37,7 @@ export function packetTypeLabel(type: string): string {
     layby: "Layby",
     client_intake: "Client Intake",
     online_order: "Online Order",
+    stock_sale: "Stock Sale",
   };
   return map[type] ?? type;
 }
