@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { buildSalesReport } from "@/lib/reporting/reports/sales";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -44,143 +45,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     // ── SALES ──────────────────────────────────────────────────────────────────
+    // Migrated onto the reporting engine (lib/reporting/engine.ts,
+    // lib/reporting/reports/sales.ts) — 2026-09-22. Verified byte-for-byte
+    // identical output against the original hardcoded implementation before
+    // this swap (both a populated-range and a zero-rows case) — see
+    // VAULT_BUILD_CHECKLIST.md Phase 2.3. First section moved; the rest
+    // (orders/workshop/quotes/customers/staff) migrate incrementally.
     if (section === "sales") {
-      // Use select("*") and plain date strings (matching admin/packets API pattern)
-      const salesQ = supabase
-        .from("packets")
-        .select("*")
-        .gte("created_at", start)
-        .lt("created_at", endPlusOne)
-        .neq("packet_type", "client_intake")
-        .gt("total_charges", 0)
-        .order("created_at", { ascending: true });
-      const { data: packets, error } = await (tenantId ? salesQ.eq("tenant_id", tenantId) : salesQ);
-
-      console.log(
-        "[reporting:sales] packets:",
-        packets?.length ?? 0,
-        "error:",
-        error?.message ?? "none"
-      );
-      if (error)
-        return NextResponse.json({ error: error.message }, { status: 500 });
-
-      const rows = packets ?? [];
-      const totalRevenue = rows.reduce(
-        (s: number, r: { total_charges?: number | null }) =>
-          s + (r.total_charges ?? 0),
-        0
-      );
-      const orderCount = rows.length;
-      const avgOrderValue = orderCount > 0 ? totalRevenue / orderCount : 0;
-
-      // Prior period
-      const duration = diffDays(start, end) + 1;
-      const priorEnd = addDays(start, -1);
-      const priorStart = addDays(priorEnd, -(duration - 1));
-
-      const priorQ = supabase
-        .from("packets")
-        .select("total_charges")
-        .gte("created_at", priorStart)
-        .lt("created_at", start)
-        .neq("packet_type", "client_intake")
-        .gt("total_charges", 0);
-      const { data: priorPackets } = await (tenantId ? priorQ.eq("tenant_id", tenantId) : priorQ);
-
-      const priorRows = priorPackets ?? [];
-      const priorRevenue = priorRows.reduce(
-        (s: number, r: { total_charges?: number | null }) =>
-          s + (r.total_charges ?? 0),
-        0
-      );
-      const priorOrderCount = priorRows.length;
-      const revChange =
-        priorRevenue > 0
-          ? ((totalRevenue - priorRevenue) / priorRevenue) * 100
-          : null;
-      const orderChange =
-        priorOrderCount > 0
-          ? ((orderCount - priorOrderCount) / priorOrderCount) * 100
-          : null;
-
-      // Daily
-      type DayBucket = { date: string; revenue: number; count: number };
-      const byDay: Record<string, DayBucket> = {};
-      for (const r of rows) {
-        const day = (r.created_at as string).split("T")[0];
-        if (!byDay[day]) byDay[day] = { date: day, revenue: 0, count: 0 };
-        byDay[day].revenue += r.total_charges ?? 0;
-        byDay[day].count += 1;
+      try {
+        const report = await buildSalesReport(supabase, { tenantId, start, end });
+        return NextResponse.json(report);
+      } catch (err) {
+        return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
       }
-      const daily = Object.values(byDay)
-        .map((d) => ({ ...d, avg: d.count > 0 ? d.revenue / d.count : 0 }))
-        .sort((a, b) => a.date.localeCompare(b.date));
-
-      // By type
-      type TypeBucket = { type: string; revenue: number; count: number };
-      const byTypeMap: Record<string, TypeBucket> = {};
-      for (const r of rows) {
-        const t = (r.packet_type as string) ?? "unknown";
-        if (!byTypeMap[t]) byTypeMap[t] = { type: t, revenue: 0, count: 0 };
-        byTypeMap[t].revenue += r.total_charges ?? 0;
-        byTypeMap[t].count += 1;
-      }
-      const byType = Object.values(byTypeMap);
-
-      // By staff (exclude online_order)
-      type StaffBucket = { staff: string; revenue: number; count: number };
-      const byStaffMap: Record<string, StaffBucket> = {};
-      for (const r of rows.filter(
-        (r: { packet_type?: string | null }) => r.packet_type !== "online_order"
-      )) {
-        const s = (r.staff_member as string | null) ?? "Unknown";
-        if (!byStaffMap[s])
-          byStaffMap[s] = { staff: s, revenue: 0, count: 0 };
-        byStaffMap[s].revenue += r.total_charges ?? 0;
-        byStaffMap[s].count += 1;
-      }
-      const byStaff = Object.values(byStaffMap).sort(
-        (a, b) => b.revenue - a.revenue
-      );
-
-      // Top orders
-      const topOrders = [...rows]
-        .sort(
-          (
-            a: { total_charges?: number | null },
-            b: { total_charges?: number | null }
-          ) => (b.total_charges ?? 0) - (a.total_charges ?? 0)
-        )
-        .slice(0, 10)
-        .map((r) => ({
-          reference_number: r.reference_number,
-          customer:
-            [r.customer_first_name, r.customer_last_name]
-              .filter(Boolean)
-              .join(" ") || "—",
-          type: r.packet_type,
-          staff: r.staff_member ?? "—",
-          total: r.total_charges,
-          date: (r.created_at as string).split("T")[0],
-        }));
-
-      return NextResponse.json({
-        _meta: { section, start, end, recordCount: rows.length },
-        summary: {
-          totalRevenue,
-          orderCount,
-          avgOrderValue,
-          priorRevenue,
-          priorOrderCount,
-          revChange,
-          orderChange,
-        },
-        daily,
-        byType,
-        byStaff,
-        topOrders,
-      });
     }
 
     // ── ORDERS ─────────────────────────────────────────────────────────────────
