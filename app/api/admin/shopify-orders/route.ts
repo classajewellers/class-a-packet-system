@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { tenantScoped } from "@/lib/tenantScoped";
 import { Packet } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -8,6 +9,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   console.log("[shopify-orders] GET request received");
 
   const tenantId = req.headers.get('x-tenant-id') ?? ''
+  if (!tenantId) return NextResponse.json({ error: "Missing tenant", packets: [] }, { status: 400 });
   let supabase;
   try {
     supabase = await createTenantSupabaseClient(tenantId);
@@ -18,7 +20,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: msg, packets: [] }, { status: 500 });
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await tenantScoped(supabase, tenantId)
     .from("packets")
     .select("*")
     .eq("packet_type", "online_order")

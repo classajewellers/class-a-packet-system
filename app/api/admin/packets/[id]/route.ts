@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createTenantSupabaseClient } from '@/lib/supabase-server'
+import { tenantScoped } from '@/lib/tenantScoped'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,10 +11,11 @@ export async function DELETE(
   console.log('[DELETE /api/admin/packets/[id]] id:', params.id)
   try {
     const tenantId = req.headers.get('x-tenant-id') ?? ''
+    if (!tenantId) return NextResponse.json({ success: false, error: 'Missing tenant' }, { status: 400 })
     const supabase = await createTenantSupabaseClient(tenantId)
 
     // Step 1: Remove foreign key references from quotes table
-    const { error: quoteError } = await supabase
+    const { error: quoteError } = await tenantScoped(supabase, tenantId)
       .from('quotes')
       .update({ converted_to_packet_id: null })
       .eq('converted_to_packet_id', params.id)
@@ -24,7 +26,7 @@ export async function DELETE(
     }
 
     // Step 2: Remove foreign key references from workshop_jobs table
-    const { error: workshopError } = await supabase
+    const { error: workshopError } = await tenantScoped(supabase, tenantId)
       .from('workshop_jobs')
       .update({ packet_id: null })
       .eq('packet_id', params.id)

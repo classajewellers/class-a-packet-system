@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { tenantScoped } from "@/lib/tenantScoped";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -17,6 +18,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
+  if (!tenantId) return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
   const supabase = await createTenantSupabaseClient(tenantId);
 
   const [
@@ -24,21 +26,21 @@ export async function GET(
     { data: printedTag },
     { data: activeJob },
   ] = await Promise.all([
-    supabase
+    tenantScoped(supabase, tenantId)
       .from("inventory_rfid_tags")
       .select("id, epc, status, activated_at, print_job_id")
       .eq("inventory_piece_id", params.id)
       .eq("status", "active")
       .maybeSingle(),
 
-    supabase
+    tenantScoped(supabase, tenantId)
       .from("inventory_rfid_tags")
       .select("id, epc, status, print_job_id")
       .eq("inventory_piece_id", params.id)
       .eq("status", "printed")
       .maybeSingle(),
 
-    supabase
+    tenantScoped(supabase, tenantId)
       .from("print_jobs")
       .select("id, status, requested_at, completed_at, failed_at, last_error, rfid_tag_id")
       .eq("piece_id", params.id)
@@ -50,7 +52,7 @@ export async function GET(
 
   let recentJob = activeJob;
   if (!recentJob) {
-    const { data: lastJob } = await supabase
+    const { data: lastJob } = await tenantScoped(supabase, tenantId)
       .from("print_jobs")
       .select("id, status, requested_at, completed_at, failed_at, last_error, rfid_tag_id")
       .eq("piece_id", params.id)

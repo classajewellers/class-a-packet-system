@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { tenantScoped } from "@/lib/tenantScoped";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -87,7 +88,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // ── Check for existing active reservation ───────────────────────────────────
-  const { data: existing, error: existErr } = await supabase
+  const { data: existing, error: existErr } = await tenantScoped(supabase, tenantId)
     .from("inventory_reservations")
     .select("id, customer_id, customer:customers(first_name, last_name)")
     .eq("piece_id", piece_id)

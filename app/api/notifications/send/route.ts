@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { tenantScoped } from "@/lib/tenantScoped";
 import { packetTypeLabel, formatDateAU, formatAustralianPhone } from "@/lib/formatters";
 import { outboundBlock, logSuppressedOutbound } from "@/lib/outbound-guard";
 
@@ -42,8 +43,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // ── Fetch packet ────────────────────────────────────────────────────────────
   const tenantId = req.headers.get('x-tenant-id') ?? ''
+  if (!tenantId) return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
   const supabase = await createTenantSupabaseClient(tenantId);
-  const { data: packet, error: fetchError } = await supabase
+  const { data: packet, error: fetchError } = await tenantScoped(supabase, tenantId)
     .from("packets")
     .select("*")
     .eq("id", packet_id)
@@ -119,13 +121,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (channel === "sms") {
     dataUpdate.last_sms_sent = nowISO;
-    await supabase
+    await tenantScoped(supabase, tenantId)
       .from("packets")
       .update({ sms_sent: true, packet_data: dataUpdate })
       .eq("id", packet_id);
   } else {
     dataUpdate.last_email_sent = nowISO;
-    await supabase
+    await tenantScoped(supabase, tenantId)
       .from("packets")
       .update({ packet_data: dataUpdate })
       .eq("id", packet_id);

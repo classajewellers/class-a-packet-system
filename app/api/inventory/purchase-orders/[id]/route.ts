@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { tenantScoped } from "@/lib/tenantScoped";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -9,10 +10,11 @@ export async function GET(
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
+  if (!tenantId) return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
   const supabase = await createTenantSupabaseClient(tenantId);
 
   // Fetch PO header — no embedded joins to avoid PostgREST FK dependency
-  const { data: po, error: poErr } = await supabase
+  const { data: po, error: poErr } = await tenantScoped(supabase, tenantId)
     .from("inventory_purchase_orders")
     .select("*")
     .eq("id", params.id)
@@ -26,7 +28,7 @@ export async function GET(
   // Supplier name (separate query, FK-independent)
   let supplier: { id: string; name: string } | null = null;
   if (po.supplier_id) {
-    const { data: sup } = await supabase
+    const { data: sup } = await tenantScoped(supabase, tenantId)
       .from("inventory_suppliers")
       .select("id, name")
       .eq("id", po.supplier_id)
@@ -35,7 +37,7 @@ export async function GET(
   }
 
   // PO lines — plain columns only, no nested joins
-  const { data: lines, error: linesErr } = await supabase
+  const { data: lines, error: linesErr } = await tenantScoped(supabase, tenantId)
     .from("inventory_po_lines")
     .select("*")
     .eq("po_id", params.id)
@@ -53,7 +55,7 @@ export async function GET(
   // Pieces for these lines (separate query)
   const piecesByLineId: Record<string, { id: string; sku: string; quantity: number }[]> = {};
   if (lineIds.length > 0) {
-    const { data: pieces } = await supabase
+    const { data: pieces } = await tenantScoped(supabase, tenantId)
       .from("inventory_pieces")
       .select("id, sku, quantity, po_line_id")
       .in("po_line_id", lineIds);
@@ -66,7 +68,7 @@ export async function GET(
   // Packets linked to these lines (separate query)
   const packetById: Record<string, any> = {};
   if (packetIds.length > 0) {
-    const { data: packets } = await supabase
+    const { data: packets } = await tenantScoped(supabase, tenantId)
       .from("packets")
       .select("id, reference_number, customer_first_name, customer_last_name, packet_type")
       .in("id", packetIds);
@@ -92,12 +94,13 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
+  if (!tenantId) return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
   const supabase = await createTenantSupabaseClient(tenantId);
 
   const body = await req.json();
   const { lines, deleted_line_ids, supplier: _sup, ...updateData } = body;
 
-  const { data, error } = await supabase
+  const { data, error } = await tenantScoped(supabase, tenantId)
     .from("inventory_purchase_orders")
     .update({ ...updateData, updated_at: new Date().toISOString() })
     .eq("id", params.id)
@@ -108,7 +111,7 @@ export async function PATCH(
 
   // Delete removed lines — only non-received lines belonging to this PO
   if (Array.isArray(deleted_line_ids) && deleted_line_ids.length > 0) {
-    const { error: delErr } = await supabase
+    const { error: delErr } = await tenantScoped(supabase, tenantId)
       .from("inventory_po_lines")
       .delete()
       .in("id", deleted_line_ids)
@@ -122,16 +125,16 @@ export async function PATCH(
     for (const line of lines) {
       if (line.id) {
         const { id: lineId, category: _cat, piece: _pc, packet: _pkt, ...lineUpdate } = line;
-        const { error: luErr } = await supabase
+        const { error: luErr } = await tenantScoped(supabase, tenantId)
           .from("inventory_po_lines").update(lineUpdate).eq("id", lineId);
         if (luErr) return NextResponse.json({ error: `Line update failed: ${luErr.message}` }, { status: 500 });
       } else {
         // Destructure id out so an empty-string id from the UI is never sent —
         // Postgres rejects "" for a UUID column; omitting it triggers the DB default.
         const { id: _newLineId, ...insertData } = line;
-        const { error: liErr } = await supabase
+        const { error: liErr } = await tenantScoped(supabase, tenantId)
           .from("inventory_po_lines").insert({
-            ...insertData, po_id: params.id, tenant_id: tenantId, received: false,
+            ...insertData, po_id: params.id, received: false,
           });
         if (liErr) return NextResponse.json({ error: `Line insert failed: ${liErr.message}` }, { status: 500 });
       }
@@ -146,9 +149,10 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
+  if (!tenantId) return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
   const supabase = await createTenantSupabaseClient(tenantId);
 
-  const { error } = await supabase
+  const { error } = await tenantScoped(supabase, tenantId)
     .from("inventory_purchase_orders")
     .delete()
     .eq("id", params.id);

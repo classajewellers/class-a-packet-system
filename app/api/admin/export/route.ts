@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { tenantScoped } from "@/lib/tenantScoped";
 import { Packet, AdminPacketsQuery } from "@/lib/types";
 import { formatDateAU, formatCurrency, packetTypeLabel } from "@/lib/formatters";
 
@@ -81,8 +82,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   };
 
   const tenantId = req.headers.get('x-tenant-id') ?? ''
+  if (!tenantId) return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
   const supabase = await createTenantSupabaseClient(tenantId);
-  let dbQuery = supabase
+  let dbQuery = tenantScoped(supabase, tenantId)
     .from("packets")
     .select("*")
     .order("created_at", { ascending: false })

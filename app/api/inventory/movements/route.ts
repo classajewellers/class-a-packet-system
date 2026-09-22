@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { tenantScoped } from "@/lib/tenantScoped";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -7,13 +8,14 @@ export const revalidate = 0;
 // GET /api/inventory/movements?piece_id=…&limit=50
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
+  if (!tenantId) return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
   const supabase = await createTenantSupabaseClient(tenantId);
 
   const { searchParams } = new URL(req.url);
   const pieceId = searchParams.get("piece_id") ?? "";
   const limit   = Math.min(200, parseInt(searchParams.get("limit") ?? "50", 10));
 
-  let query = supabase
+  let query = tenantScoped(supabase, tenantId)
     .from("inventory_movements")
     .select(`
       *,
@@ -37,6 +39,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 // Reads current piece to populate from_location_id / from_status_id automatically.
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
+  if (!tenantId) return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
   const supabase = await createTenantSupabaseClient(tenantId);
 
   const body = await req.json();
@@ -53,7 +56,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // Fetch current piece state for from_ fields
-  const { data: piece, error: pieceErr } = await supabase
+  const { data: piece, error: pieceErr } = await tenantScoped(supabase, tenantId)
     .from("inventory_pieces")
     .select("location_id,status_id")
     .eq("id", piece_id)
@@ -66,10 +69,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const now = new Date().toISOString();
 
   // Log movement
-  const { data: movement, error: movErr } = await supabase
+  const { data: movement, error: movErr } = await tenantScoped(supabase, tenantId)
     .from("inventory_movements")
     .insert({
-      tenant_id:        tenantId,
       piece_id,
       from_location_id: piece.location_id ?? null,
       to_location_id:   to_location_id   ?? null,
@@ -89,7 +91,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (to_location_id) pieceUpdate.location_id = to_location_id;
   if (to_status_id)   pieceUpdate.status_id   = to_status_id;
 
-  const { error: updateErr } = await supabase
+  const { error: updateErr } = await tenantScoped(supabase, tenantId)
     .from("inventory_pieces")
     .update(pieceUpdate)
     .eq("id", piece_id);
