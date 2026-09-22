@@ -4,6 +4,7 @@ import { buildSalesReport } from "@/lib/reporting/reports/sales";
 import { buildOrdersReport } from "@/lib/reporting/reports/orders";
 import { buildWorkshopReport } from "@/lib/reporting/reports/workshop";
 import { buildQuotesReport } from "@/lib/reporting/reports/quotes";
+import { buildCustomersReport } from "@/lib/reporting/reports/customers";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -105,148 +106,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     // ── CUSTOMERS ──────────────────────────────────────────────────────────────
+    // Migrated onto the reporting engine — 2026-09-22. Verified byte-for-byte
+    // identical against the original hardcoded implementation on real
+    // staging data before this swap.
     if (section === "customers") {
-      // Query all packets that have a customer email
-      const custPacketsQ = supabase
-        .from("packets")
-        .select(
-          "customer_email, customer_first_name, customer_last_name, customer_phone, total_charges, created_at"
-        )
-        .not("customer_email", "is", null)
-        .neq("customer_email", "")
-        .order("created_at", { ascending: true });
-      const { data: packets, error } = await (tenantId ? custPacketsQ.eq("tenant_id", tenantId) : custPacketsQ);
-
-      console.log(
-        "[reporting:customers] packets:",
-        packets?.length ?? 0,
-        "error:",
-        error?.message ?? "none"
-      );
-      if (error)
-        return NextResponse.json({ error: error.message }, { status: 500 });
-
-      type CustomerEntry = {
-        name: string;
-        email: string;
-        phone: string | null;
-        totalOrders: number;
-        totalSpend: number;
-        firstVisit: string;
-        lastVisit: string;
-      };
-      const byEmail: Record<string, CustomerEntry> = {};
-
-      for (const p of packets ?? []) {
-        const email = (p.customer_email as string | null)?.trim();
-        if (!email) continue;
-        if (!byEmail[email]) {
-          byEmail[email] = {
-            name:
-              [p.customer_first_name, p.customer_last_name]
-                .filter(Boolean)
-                .join(" ") || "—",
-            email,
-            phone: (p.customer_phone as string | null) ?? null,
-            totalOrders: 0,
-            totalSpend: 0,
-            firstVisit: p.created_at as string,
-            lastVisit: p.created_at as string,
-          };
-        }
-        byEmail[email].totalOrders += 1;
-        byEmail[email].totalSpend += (p.total_charges as number | null) ?? 0;
-        if ((p.created_at as string) < byEmail[email].firstVisit)
-          byEmail[email].firstVisit = p.created_at as string;
-        if ((p.created_at as string) > byEmail[email].lastVisit)
-          byEmail[email].lastVisit = p.created_at as string;
-        if (
-          byEmail[email].name === "—" &&
-          (p.customer_first_name || p.customer_last_name)
-        ) {
-          byEmail[email].name =
-            [p.customer_first_name, p.customer_last_name]
-              .filter(Boolean)
-              .join(" ") || "—";
-        }
+      try {
+        const report = await buildCustomersReport(supabase, { tenantId, start, end });
+        return NextResponse.json(report);
+      } catch (err) {
+        return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
       }
-
-      const allCustomers = Object.values(byEmail);
-      const totalCustomers = allCustomers.length;
-
-      const date90 = addDays(today, -90);
-      const date180 = addDays(today, -180);
-      const date365 = addDays(today, -365);
-
-      const activeCustomers = allCustomers.filter(
-        (c) => c.lastVisit.split("T")[0] >= date90
-      ).length;
-
-      // New = first packet within selected range
-      const newInPeriod = allCustomers.filter(
-        (c) =>
-          c.firstVisit.split("T")[0] >= start &&
-          c.firstVisit.split("T")[0] <= end
-      ).length;
-
-      // Returning = had visits before range AND within range
-      const returningInPeriod = allCustomers.filter(
-        (c) =>
-          c.firstVisit.split("T")[0] < start &&
-          c.lastVisit.split("T")[0] >= start &&
-          c.lastVisit.split("T")[0] <= end
-      ).length;
-
-      const topCustomers = [...allCustomers]
-        .sort((a, b) => b.totalSpend - a.totalSpend)
-        .slice(0, 20)
-        .map((c) => ({
-          name: c.name,
-          email: c.email,
-          phone: c.phone,
-          total_orders: c.totalOrders,
-          total_spend: c.totalSpend,
-          last_visit_date: c.lastVisit.split("T")[0],
-        }));
-
-      const toRow = (c: CustomerEntry) => ({
-        name: c.name,
-        email: c.email,
-        phone: c.phone,
-        last_visit_date: c.lastVisit.split("T")[0],
-        total_spend: c.totalSpend,
-      });
-
-      const inactive90 = allCustomers
-        .filter((c) => c.lastVisit.split("T")[0] < date90)
-        .sort((a, b) => a.lastVisit.localeCompare(b.lastVisit))
-        .slice(0, 100)
-        .map(toRow);
-      const inactive180 = allCustomers
-        .filter((c) => c.lastVisit.split("T")[0] < date180)
-        .sort((a, b) => a.lastVisit.localeCompare(b.lastVisit))
-        .slice(0, 100)
-        .map(toRow);
-      const inactive365 = allCustomers
-        .filter((c) => c.lastVisit.split("T")[0] < date365)
-        .sort((a, b) => a.lastVisit.localeCompare(b.lastVisit))
-        .slice(0, 100)
-        .map(toRow);
-
-      return NextResponse.json({
-        _meta: {
-          section,
-          start,
-          end,
-          recordCount: (packets ?? []).length,
-          uniqueCustomers: totalCustomers,
-        },
-        summary: { newInPeriod, returningInPeriod, totalCustomers, activeCustomers },
-        topCustomers,
-        inactive90,
-        inactive180,
-        inactive365,
-      });
     }
 
     // ── STAFF ──────────────────────────────────────────────────────────────────
