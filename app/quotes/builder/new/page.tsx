@@ -10,6 +10,7 @@ import Link from "next/link";
 import { generateQuoteHTML } from "@/lib/quoteGenerator";
 import { calculateRetailPrice, calculateMultiplier, multiplierColour } from "@/lib/marginCalculator";
 import type { BlendedBreakdownLine } from "@/lib/marginCalculator";
+import { roundUpTo49or99 } from "@/lib/pricingRounding";
 import NivodaModal, { type NivodaStone } from "@/components/NivodaModal";
 import CharmNecklaceBuilder, { type CharmLineItem } from "@/components/CharmNecklaceBuilder";
 import { caratToMmRoundBrilliant } from "@/lib/melee-pricing";
@@ -198,23 +199,6 @@ function mapColourGroup(colour: string): string {
   return 'M';
 }
 
-// Class A's real team pricing rule (confirmed by Josh, 2026-09-22): round
-// UP (never down) to the nearest price ending in 49 or 99 — never to the
-// nearest $5. Every $100 block has exactly two valid endings, X49 and X99;
-// find the smallest one at or above the raw price. Replaces the old
-// Math.ceil(price / 5) * 5 rounding on the final quoted price.
-function roundUpTo49or99(price: number): number {
-  if (price <= 0) return 0;
-  const p = Math.round(price * 100) / 100; // clear float dust before comparing
-  const block = Math.floor(p / 100) * 100;
-  const opt49 = block + 49;
-  const opt99 = block + 99;
-  const EPS = 1e-9;
-  if (p <= opt49 + EPS) return opt49;
-  if (p <= opt99 + EPS) return opt99;
-  return block + 100 + 49;
-}
-
 function calcNdCost(stone: StoneEntry, ndData: NdData): number {
   const ct = parseFloat(stone.caratWeight) || 0;
   if (ct <= 0) return 0;
@@ -386,9 +370,9 @@ function computeItemPricing(
     const optSuggested = optTotal > 0 ? calculateRetailPrice(optTotal) : 0;
     if (oi === 0 && item.retailPriceOverride && parseFloat(item.retailPriceOverride) > 0) return parseFloat(item.retailPriceOverride);
     if (item.marginMultiplierOverride && parseFloat(item.marginMultiplierOverride) > 0) {
-      return Math.ceil(optTotal * parseFloat(item.marginMultiplierOverride) / 5) * 5;
+      return roundUpTo49or99(optTotal * parseFloat(item.marginMultiplierOverride));
     }
-    return optSuggested > 0 ? Math.ceil(optSuggested / 5) * 5 : Math.ceil(optTotal / 5) * 5;
+    return optSuggested > 0 ? roundUpTo49or99(optSuggested) : roundUpTo49or99(optTotal);
   });
 
   return {

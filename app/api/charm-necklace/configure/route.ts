@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createServerClient } from "@supabase/ssr";
+import { roundUpTo49or99 } from "@/lib/pricingRounding";
 
 export const dynamic    = "force-dynamic";
 export const revalidate = 0;
@@ -214,8 +215,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   ) as { multiplier: number } | undefined;
   const multiplier = bracket?.multiplier ?? 2.5;
   const rawRetail = totalCost * multiplier;
-  // Round to nearest $5
-  const retailPrice = Math.round(rawRetail / 5) * 5;
+  // Round UP to the nearest price ending in 49 or 99 (Class A's real team
+  // pricing rule, confirmed 2026-09-22) — was nearest $5.
+  const retailPrice = roundUpTo49or99(rawRetail);
 
   // ── Build description ──────────────────────────────────────────────────────
   const charmNames = selectedCharms.map(c => c.name).join(", ");
