@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createTenantSupabaseClient } from '@/lib/supabase-server'
+import { tenantScoped } from '@/lib/tenantScoped'
 
 export const dynamic = 'force-dynamic'
 
@@ -7,8 +8,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   try {
     const body = await req.json()
     const tenantId = req.headers.get('x-tenant-id') ?? ''
+    if (!tenantId) return NextResponse.json({ error: 'Missing tenant' }, { status: 400 })
     const supabase = await createTenantSupabaseClient(tenantId)
-    const { data, error } = await supabase
+    const { data, error } = await tenantScoped(supabase, tenantId)
       .from('inventory_locations')
       .update({
         name: body.name,
@@ -20,6 +22,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       .eq('id', params.id)
       .select()
       .single()
+    if (error?.code === 'PGRST116') return NextResponse.json({ error: 'Location not found' }, { status: 404 })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ location: data })
   } catch (err) {
@@ -30,8 +33,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const tenantId = req.headers.get('x-tenant-id') ?? ''
+    if (!tenantId) return NextResponse.json({ error: 'Missing tenant' }, { status: 400 })
     const supabase = await createTenantSupabaseClient(tenantId)
-    const { error } = await supabase.from('inventory_locations').delete().eq('id', params.id)
+    const { error } = await tenantScoped(supabase, tenantId).from('inventory_locations').delete().eq('id', params.id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ success: true })
   } catch (err) {

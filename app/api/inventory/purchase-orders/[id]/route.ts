@@ -94,12 +94,13 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
+  if (!tenantId) return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
   const supabase = await createTenantSupabaseClient(tenantId);
 
   const body = await req.json();
   const { lines, deleted_line_ids, supplier: _sup, ...updateData } = body;
 
-  const { data, error } = await supabase
+  const { data, error } = await tenantScoped(supabase, tenantId)
     .from("inventory_purchase_orders")
     .update({ ...updateData, updated_at: new Date().toISOString() })
     .eq("id", params.id)
@@ -110,7 +111,7 @@ export async function PATCH(
 
   // Delete removed lines — only non-received lines belonging to this PO
   if (Array.isArray(deleted_line_ids) && deleted_line_ids.length > 0) {
-    const { error: delErr } = await supabase
+    const { error: delErr } = await tenantScoped(supabase, tenantId)
       .from("inventory_po_lines")
       .delete()
       .in("id", deleted_line_ids)
@@ -124,16 +125,16 @@ export async function PATCH(
     for (const line of lines) {
       if (line.id) {
         const { id: lineId, category: _cat, piece: _pc, packet: _pkt, ...lineUpdate } = line;
-        const { error: luErr } = await supabase
+        const { error: luErr } = await tenantScoped(supabase, tenantId)
           .from("inventory_po_lines").update(lineUpdate).eq("id", lineId);
         if (luErr) return NextResponse.json({ error: `Line update failed: ${luErr.message}` }, { status: 500 });
       } else {
         // Destructure id out so an empty-string id from the UI is never sent —
         // Postgres rejects "" for a UUID column; omitting it triggers the DB default.
         const { id: _newLineId, ...insertData } = line;
-        const { error: liErr } = await supabase
+        const { error: liErr } = await tenantScoped(supabase, tenantId)
           .from("inventory_po_lines").insert({
-            ...insertData, po_id: params.id, tenant_id: tenantId, received: false,
+            ...insertData, po_id: params.id, received: false,
           });
         if (liErr) return NextResponse.json({ error: `Line insert failed: ${liErr.message}` }, { status: 500 });
       }
@@ -148,9 +149,10 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
+  if (!tenantId) return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
   const supabase = await createTenantSupabaseClient(tenantId);
 
-  const { error } = await supabase
+  const { error } = await tenantScoped(supabase, tenantId)
     .from("inventory_purchase_orders")
     .delete()
     .eq("id", params.id);

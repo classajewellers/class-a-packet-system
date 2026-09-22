@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { tenantScoped } from "@/lib/tenantScoped";
 import { Quote } from "@/lib/types";
 import { PIPELINE_STAGES, PipelineStage } from "@/lib/pipeline";
 
@@ -125,10 +126,11 @@ export async function DELETE(
 ): Promise<NextResponse> {
   console.log("[DELETE quote] id:", params.id);
   const tenantId = req.headers.get('x-tenant-id') ?? ''
+  if (!tenantId) return NextResponse.json({ error: "Missing tenant", success: false }, { status: 400 });
   const supabase = await createTenantSupabaseClient(tenantId);
 
   // Clear FK reference on packets before deleting to avoid constraint errors
-  const { error: clearErr } = await supabase
+  const { error: clearErr } = await tenantScoped(supabase, tenantId)
     .from("quotes")
     .update({ converted_to_packet_id: null })
     .eq("id", params.id);
@@ -137,7 +139,7 @@ export async function DELETE(
   }
 
   // Delete related notifications (notifications.quote_id FK blocks deletion)
-  const { error: notifErr } = await supabase
+  const { error: notifErr } = await tenantScoped(supabase, tenantId)
     .from("notifications")
     .delete()
     .eq("quote_id", params.id);
@@ -145,8 +147,7 @@ export async function DELETE(
     console.warn("[DELETE quote] notifications clear failed (non-fatal):", notifErr.message);
   }
 
-  const dq = supabase.from("quotes").delete().eq("id", params.id);
-  const { error } = await (tenantId ? dq.eq("tenant_id", tenantId) : dq);
+  const { error } = await tenantScoped(supabase, tenantId).from("quotes").delete().eq("id", params.id);
 
   if (error) {
     console.error("[DELETE quote] error:", error);
