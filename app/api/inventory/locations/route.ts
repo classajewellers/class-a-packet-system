@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createTenantSupabaseClient } from '@/lib/supabase-server'
+import { tenantScoped } from '@/lib/tenantScoped'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id') ?? ''
+  if (!tenantId) return NextResponse.json({ error: 'Missing tenant' }, { status: 400 })
   const supabase = await createTenantSupabaseClient(tenantId)
-  const { data, error } = await supabase
+  const { data, error } = await tenantScoped(supabase, tenantId)
     .from('inventory_locations')
     .select('*')
     // parents first, then children; alphabetical within each group

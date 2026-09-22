@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { tenantScoped } from "@/lib/tenantScoped";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -28,9 +29,10 @@ function categoryPrefix(categoryName?: string | null): string {
 
 async function generateSku(
   supabase: Awaited<ReturnType<typeof createTenantSupabaseClient>>,
+  tenantId: string,
   prefix: string
 ): Promise<string> {
-  const { data } = await supabase
+  const { data } = await tenantScoped(supabase, tenantId)
     .from("inventory_pieces")
     .select("sku")
     .ilike("sku", `${prefix}-%`)
@@ -58,6 +60,7 @@ export async function POST(
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
+  if (!tenantId) return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
   const supabase = await createTenantSupabaseClient(tenantId);
 
   const body = await req.json();
@@ -74,12 +77,12 @@ export async function POST(
 
   // Fetch PO and line for context
   const [{ data: po }, { data: line, error: lineErr }] = await Promise.all([
-    supabase
+    tenantScoped(supabase, tenantId)
       .from("inventory_purchase_orders")
       .select("po_number")
       .eq("id", params.id)
       .single(),
-    supabase
+    tenantScoped(supabase, tenantId)
       .from("inventory_po_lines")
       .select("id, quantity, received_quantity, estimated_cost")
       .eq("id", line_id)
@@ -104,7 +107,7 @@ export async function POST(
     const newReceivedQty = alreadyRecd + qty;
     const fullyReceived  = newReceivedQty >= orderedQty;
 
-    const { error: updErr } = await supabase
+    const { error: updErr } = await tenantScoped(supabase, tenantId)
       .from("inventory_po_lines")
       .update({
         received_quantity: newReceivedQty,
@@ -115,15 +118,14 @@ export async function POST(
 
     if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
 
-    await checkAndUpdatePoStatus(supabase, params.id);
+    await checkAndUpdatePoStatus(supabase, tenantId, params.id);
     return NextResponse.json({ skipped: true, received_quantity: newReceivedQty });
   }
 
   // ── Create receiving event ─────────────────────────────────────────────────
-  const { data: event, error: evtErr } = await supabase
+  const { data: event, error: evtErr } = await tenantScoped(supabase, tenantId)
     .from("inventory_receiving_events")
     .insert({
-      tenant_id:         tenantId,
       po_id:             params.id,
       po_line_id:        line_id,
       received_at:       new Date().toISOString(),
@@ -141,7 +143,7 @@ export async function POST(
   // ── Resolve category name for SKU prefix ──────────────────────────────────
   let categoryName: string | null = null;
   if (specs.category_id) {
-    const { data: cat } = await supabase
+    const { data: cat } = await tenantScoped(supabase, tenantId)
       .from("inventory_categories")
       .select("name")
       .eq("id", specs.category_id)
@@ -154,7 +156,7 @@ export async function POST(
   // ── Resolve default status ─────────────────────────────────────────────────
   let statusId: string | null = null;
   if (!specs.status_id) {
-    const { data: awaitingStatus } = await supabase
+    const { data: awaitingStatus } = await tenantScoped(supabase, tenantId)
       .from("inventory_statuses")
       .select("id")
       .ilike("name", "%await%")
@@ -166,7 +168,7 @@ export async function POST(
     if (awaitingStatus?.id) {
       statusId = awaitingStatus.id;
     } else {
-      const { data: inStockStatus } = await supabase
+      const { data: inStockStatus } = await tenantScoped(supabase, tenantId)
         .from("inventory_statuses")
         .select("id")
         .ilike("name", "%in stock%")
@@ -178,7 +180,7 @@ export async function POST(
   }
 
   // ── Resolve default location ───────────────────────────────────────────────
-  const { data: firstLocation } = await supabase
+  const { data: firstLocation } = await tenantScoped(supabase, tenantId)
     .from("inventory_locations")
     .select("id")
     .eq("is_active", true)
@@ -211,11 +213,10 @@ export async function POST(
 
   if (mode === "batch") {
     // One piece record with quantity representing the batch
-    const sku = await generateSku(supabase, prefix);
-    const { data: piece, error: pieceErr } = await supabase
+    const sku = await generateSku(supabase, tenantId, prefix);
+    const { data: piece, error: pieceErr } = await tenantScoped(supabase, tenantId)
       .from("inventory_pieces")
       .insert({
-        tenant_id:          tenantId,
         sku,
         status_id:          effectiveStatusId,
         location_id:        effectiveLocationId,
@@ -234,8 +235,7 @@ export async function POST(
       return NextResponse.json({ error: pieceErr?.message ?? "Failed to create piece" }, { status: 500 });
     }
 
-    await supabase.from("inventory_movements").insert({
-      tenant_id:        tenantId,
+    await tenantScoped(supabase, tenantId).from("inventory_movements").insert({
       piece_id:         piece.id,
       from_location_id: null,
       to_location_id:   effectiveLocationId,
@@ -250,11 +250,10 @@ export async function POST(
   } else {
     // Individual mode: create one piece per unit received
     for (let i = 0; i < qty; i++) {
-      const sku = await generateSku(supabase, prefix);
-      const { data: piece, error: pieceErr } = await supabase
+      const sku = await generateSku(supabase, tenantId, prefix);
+      const { data: piece, error: pieceErr } = await tenantScoped(supabase, tenantId)
         .from("inventory_pieces")
         .insert({
-          tenant_id:          tenantId,
           sku,
           status_id:          effectiveStatusId,
           location_id:        effectiveLocationId,
@@ -273,8 +272,7 @@ export async function POST(
         return NextResponse.json({ error: pieceErr?.message ?? `Failed to create piece ${i + 1}` }, { status: 500 });
       }
 
-      await supabase.from("inventory_movements").insert({
-        tenant_id:        tenantId,
+      await tenantScoped(supabase, tenantId).from("inventory_movements").insert({
         piece_id:         piece.id,
         from_location_id: null,
         to_location_id:   effectiveLocationId,
@@ -293,7 +291,7 @@ export async function POST(
   const newReceivedQty = alreadyRecd + qty;
   const fullyReceived  = newReceivedQty >= orderedQty;
 
-  await supabase
+  await tenantScoped(supabase, tenantId)
     .from("inventory_po_lines")
     .update({
       received_quantity: newReceivedQty,
@@ -303,7 +301,7 @@ export async function POST(
     })
     .eq("id", line_id);
 
-  await checkAndUpdatePoStatus(supabase, params.id);
+  await checkAndUpdatePoStatus(supabase, tenantId, params.id);
 
   return NextResponse.json({
     pieces: createdPieces,
@@ -314,9 +312,10 @@ export async function POST(
 
 async function checkAndUpdatePoStatus(
   supabase: Awaited<ReturnType<typeof createTenantSupabaseClient>>,
+  tenantId: string,
   poId: string
 ) {
-  const { data: lines } = await supabase
+  const { data: lines } = await tenantScoped(supabase, tenantId)
     .from("inventory_po_lines")
     .select("quantity, received_quantity")
     .eq("po_id", poId);
@@ -324,15 +323,15 @@ async function checkAndUpdatePoStatus(
   if (!lines || lines.length === 0) return;
 
   const total     = lines.length;
-  const received  = lines.filter(l => Number(l.received_quantity ?? 0) >= Number(l.quantity ?? 1)).length;
-  const anyRcvd   = lines.some(l => Number(l.received_quantity ?? 0) > 0);
+  const received  = lines.filter((l: { quantity: number; received_quantity: number }) => Number(l.received_quantity ?? 0) >= Number(l.quantity ?? 1)).length;
+  const anyRcvd   = lines.some((l: { received_quantity: number }) => Number(l.received_quantity ?? 0) > 0);
 
   let newStatus: string;
   if (received === 0 && !anyRcvd) newStatus = "ordered";
   else if (received < total)      newStatus = "partially_received";
   else                            newStatus = "received";
 
-  await supabase
+  await tenantScoped(supabase, tenantId)
     .from("inventory_purchase_orders")
     .update({ status: newStatus, updated_at: new Date().toISOString() })
     .eq("id", poId);

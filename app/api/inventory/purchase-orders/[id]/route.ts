@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { tenantScoped } from "@/lib/tenantScoped";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -9,10 +10,11 @@ export async function GET(
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
+  if (!tenantId) return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
   const supabase = await createTenantSupabaseClient(tenantId);
 
   // Fetch PO header — no embedded joins to avoid PostgREST FK dependency
-  const { data: po, error: poErr } = await supabase
+  const { data: po, error: poErr } = await tenantScoped(supabase, tenantId)
     .from("inventory_purchase_orders")
     .select("*")
     .eq("id", params.id)
@@ -26,7 +28,7 @@ export async function GET(
   // Supplier name (separate query, FK-independent)
   let supplier: { id: string; name: string } | null = null;
   if (po.supplier_id) {
-    const { data: sup } = await supabase
+    const { data: sup } = await tenantScoped(supabase, tenantId)
       .from("inventory_suppliers")
       .select("id, name")
       .eq("id", po.supplier_id)
@@ -35,7 +37,7 @@ export async function GET(
   }
 
   // PO lines — plain columns only, no nested joins
-  const { data: lines, error: linesErr } = await supabase
+  const { data: lines, error: linesErr } = await tenantScoped(supabase, tenantId)
     .from("inventory_po_lines")
     .select("*")
     .eq("po_id", params.id)
@@ -53,7 +55,7 @@ export async function GET(
   // Pieces for these lines (separate query)
   const piecesByLineId: Record<string, { id: string; sku: string; quantity: number }[]> = {};
   if (lineIds.length > 0) {
-    const { data: pieces } = await supabase
+    const { data: pieces } = await tenantScoped(supabase, tenantId)
       .from("inventory_pieces")
       .select("id, sku, quantity, po_line_id")
       .in("po_line_id", lineIds);
@@ -66,7 +68,7 @@ export async function GET(
   // Packets linked to these lines (separate query)
   const packetById: Record<string, any> = {};
   if (packetIds.length > 0) {
-    const { data: packets } = await supabase
+    const { data: packets } = await tenantScoped(supabase, tenantId)
       .from("packets")
       .select("id, reference_number, customer_first_name, customer_last_name, packet_type")
       .in("id", packetIds);

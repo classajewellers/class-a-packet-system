@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { tenantScoped } from "@/lib/tenantScoped";
 import { generateJewelleryZpl } from "@/lib/rfid-label";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +21,7 @@ export const revalidate = 0;
 //   verification do we retire the old tag and activate the new one atomically.
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
+  if (!tenantId) return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
   const supabase = await createTenantSupabaseClient(tenantId);
 
   const { piece_id, replace = false } = await req.json();
@@ -27,7 +29,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // ── Guard: block if a tag is already pending or printed (not yet verified) ──
   // This prevents double-print from rapid clicks or retried requests.
-  const { data: inflightTag } = await supabase
+  const { data: inflightTag } = await tenantScoped(supabase, tenantId)
     .from("inventory_rfid_tags")
     .select("id, status, epc")
     .eq("inventory_piece_id", piece_id)
@@ -47,7 +49,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // ── Guard: block if a job is already in-flight ─────────────────────────────
-  const { data: inflightJob } = await supabase
+  const { data: inflightJob } = await tenantScoped(supabase, tenantId)
     .from("print_jobs")
     .select("id, status")
     .eq("piece_id", piece_id)
@@ -62,7 +64,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // ── Guard: check for existing active tag ───────────────────────────────────
-  const { data: existingActiveTag } = await supabase
+  const { data: existingActiveTag } = await tenantScoped(supabase, tenantId)
     .from("inventory_rfid_tags")
     .select("id, epc, status")
     .eq("inventory_piece_id", piece_id)
@@ -84,7 +86,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Retirement happens atomically at verification time (POST /api/rfid/pieces/[id]/verify).
 
   // ── Check for an active printer for this tenant ────────────────────────────
-  const { data: printer } = await supabase
+  const { data: printer } = await tenantScoped(supabase, tenantId)
     .from("rfid_printers")
     .select("id")
     .eq("is_active", true)
@@ -100,7 +102,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // ── Fetch piece (scalar columns only — no PostgREST embed) ─────────────────
-  const { data: piece, error: pErr } = await supabase
+  const { data: piece, error: pErr } = await tenantScoped(supabase, tenantId)
     .from("inventory_pieces")
     .select(`
       id, sku, notes, barcode,
@@ -126,13 +128,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // column (schema drift) can never break printing. Any failure → no title.
   let designName: string | null = null;
   {
-    const { data: pd, error: pdErr } = await supabase
+    const { data: pd, error: pdErr } = await tenantScoped(supabase, tenantId)
       .from("inventory_pieces")
       .select("design_id")
       .eq("id", piece_id)
       .maybeSingle();
     const designId = !pdErr ? ((pd as { design_id?: string | null } | null)?.design_id ?? null) : null;
     if (designId) {
+      // inventory_designs has no tenant_id column (confirmed via migration
+      // 029) — it predates tenancy and is scoped only by auth.role() RLS,
+      // not per-tenant. Deliberately NOT wrapped in tenantScoped(), which
+      // would error trying to filter a column that doesn't exist.
       const { data: d } = await supabase
         .from("inventory_designs")
         .select("name")
@@ -173,10 +179,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // via inventory_rfid_tags_one_unresolved_per_piece partial unique index.
   // If a concurrent request slips through the SELECT guards above, the INSERT
   // will fail with a unique constraint violation — we return 409 for that case.
-  const { data: tag, error: tagErr } = await supabase
+  const { data: tag, error: tagErr } = await tenantScoped(supabase, tenantId)
     .from("inventory_rfid_tags")
     .insert({
-      tenant_id:           tenantId,
       inventory_piece_id:  piece_id,
       epc,
       status:              "pending",
@@ -198,10 +203,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // print_jobs_one_inflight_per_piece partial unique index.
   const idempotencyKey = `rfid-tag-${tag.id}`;
 
-  const { data: job, error: jobErr } = await supabase
+  const { data: job, error: jobErr } = await tenantScoped(supabase, tenantId)
     .from("print_jobs")
     .insert({
-      tenant_id:       tenantId,
       piece_id,
       printer_id:      printer.id,
       rfid_tag_id:     tag.id,
@@ -224,7 +228,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (jobErr || !job) {
     // Roll back tag record before returning
-    await supabase.from("inventory_rfid_tags").delete().eq("id", tag.id);
+    await tenantScoped(supabase, tenantId).from("inventory_rfid_tags").delete().eq("id", tag.id);
     const isConflict = jobErr?.code === "23505";
     return NextResponse.json(
       { error: isConflict ? "A print job is already in progress for this piece." : (jobErr?.message ?? "Failed to create print job") },
@@ -233,7 +237,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // Link tag → job
-  await supabase
+  await tenantScoped(supabase, tenantId)
     .from("inventory_rfid_tags")
     .update({ print_job_id: job.id })
     .eq("id", tag.id);

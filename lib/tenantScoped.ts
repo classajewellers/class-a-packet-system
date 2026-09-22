@@ -77,16 +77,29 @@ export function tenantScoped(supabase: SupabaseClient, tenantId: string) {
   return {
     from(table: string) {
       const base = supabase.from(table);
+
+      // select/update/delete are intentionally untyped (any) rather than
+      // trying to preserve Supabase's own literal-string column-inference
+      // overloads through a wrapper: attempting that (via
+      // `Parameters<typeof base.select>` or `typeof base.select` generics)
+      // crashes the TypeScript compiler outright on PostgrestFilterBuilder's
+      // self-referential generic types. This matches the existing
+      // convention already used throughout these routes' own Supabase
+      // calls (liberal `as any`/`as Packet[]` casts on query results) —
+      // callers cast the returned `data` to whatever shape they expect,
+      // exactly as they already did calling `supabase.from(table)` before.
+      /* eslint-disable @typescript-eslint/no-explicit-any */
+      const select = (columns?: any, options?: any): any =>
+        base.select(columns, options).eq("tenant_id", tenantId);
+      const update = (values: any): any =>
+        base.update(values).eq("tenant_id", tenantId);
+      const del = (): any => base.delete().eq("tenant_id", tenantId);
+      /* eslint-enable @typescript-eslint/no-explicit-any */
+
       return {
-        select(columns?: string, options?: { count?: "exact" | "planned" | "estimated"; head?: boolean }) {
-          return base.select(columns as string, options).eq("tenant_id", tenantId);
-        },
-        update(values: Row) {
-          return base.update(values).eq("tenant_id", tenantId);
-        },
-        delete() {
-          return base.delete().eq("tenant_id", tenantId);
-        },
+        select,
+        update,
+        delete: del,
         insert(rows: Row | Row[]) {
           const withTenant = Array.isArray(rows)
             ? rows.map((r) => withTenantId(r, tenantId))

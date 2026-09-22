@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { tenantScoped } from "@/lib/tenantScoped";
 
 export const dynamic = "force-dynamic";
 
@@ -8,9 +9,10 @@ export async function GET(
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
+  if (!tenantId) return NextResponse.json({ events: [], error: "Missing tenant" }, { status: 400 });
   try {
     const supabase = await createTenantSupabaseClient(tenantId);
-    const { data, error } = await supabase
+    const { data, error } = await tenantScoped(supabase, tenantId)
       .from("packet_activity_log")
       .select("id, event_type, old_value, new_value, created_at")
       .eq("packet_id", params.id)

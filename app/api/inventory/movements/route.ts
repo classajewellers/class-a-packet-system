@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { tenantScoped } from "@/lib/tenantScoped";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -7,13 +8,14 @@ export const revalidate = 0;
 // GET /api/inventory/movements?piece_id=…&limit=50
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
+  if (!tenantId) return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
   const supabase = await createTenantSupabaseClient(tenantId);
 
   const { searchParams } = new URL(req.url);
   const pieceId = searchParams.get("piece_id") ?? "";
   const limit   = Math.min(200, parseInt(searchParams.get("limit") ?? "50", 10));
 
-  let query = supabase
+  let query = tenantScoped(supabase, tenantId)
     .from("inventory_movements")
     .select(`
       *,
