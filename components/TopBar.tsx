@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useUser } from "@/context/UserContext";
+import NotificationBell from "@/components/NotificationBell";
 
 interface Props {
   onOpenSidebar: () => void;
@@ -56,6 +57,7 @@ export default function TopBar({ onOpenSidebar }: Props) {
       </div>
 
       <div className="flex items-center gap-3">
+        <NotificationBell />
         {user && (
           <div className="flex items-center gap-2">
             <span style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--vault-surface-selected)', color: 'var(--vault-text)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, border: '1px solid var(--vault-border)' }} title={user.name}>{user.initials}</span>
