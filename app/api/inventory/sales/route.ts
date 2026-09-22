@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { createPacket } from "@/lib/createPacket";
+import { PacketFormData } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -120,12 +122,108 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     grossProfit = Number(sold_price) - Number(discount_amount) - Number(costBasis);
   }
 
+  // ── Step 3b: Create the linked packets row (Phase 1.2, VAULT_BUILD_CHECKLIST.md) ──
+  // Unifies stock sales into the same pipeline as every other order type, so
+  // they surface in Reports/customer history/staff performance instead of
+  // being invisible to everything but inventory_sales. total_charges is the
+  // GROSS sold price (per Josh, 2026-09-22) — discount_amount stays on
+  // inventory_sales so reporting can derive net separately, never collapsed
+  // into one number. skipClaimSlip: true — a stock sale is already complete,
+  // it doesn't need the order-confirmation SMS/claim-slip flow that applies
+  // to repair/custom_order.
+  let customerFields = {
+    customer_first_name: "",
+    customer_last_name: "",
+    customer_email: "",
+    customer_phone: "",
+  };
+  if (customer_id) {
+    const { data: customerRow } = await supabase
+      .from("customers")
+      .select("first_name, last_name, email, phone")
+      .eq("id", customer_id)
+      .maybeSingle();
+    if (customerRow) {
+      customerFields = {
+        customer_first_name: customerRow.first_name ?? "",
+        customer_last_name: customerRow.last_name ?? "",
+        customer_email: customerRow.email ?? "",
+        customer_phone: customerRow.phone ?? "",
+      };
+    }
+  }
+
+  const packetFormData: PacketFormData = {
+    packet_type: "stock_sale",
+    customer_first_name: customerFields.customer_first_name,
+    customer_last_name: customerFields.customer_last_name,
+    customer_street: "",
+    customer_suburb: "",
+    customer_state: "",
+    customer_postcode: "",
+    customer_phone: customerFields.customer_phone,
+    customer_email: customerFields.customer_email,
+    customer_number: "",
+    stock_number: "",
+    valuation_required: false,
+    contact_preference: [],
+    articles: "",
+    instructions: notes || "",
+    total_charges: String(sold_price),
+    deposit: "",
+    in_date: now.split("T")[0],
+    due_date: "",
+    referral_source: "",
+    occasion: "",
+    staff_member: staff_id || "",
+    from_date: "",
+    arms_tracker_number: "",
+    cad_required: false,
+    layby_schedule: "",
+    number_of_payments: "",
+    terms_accepted: false,
+    budget_range: "",
+    jewellery_interests: [],
+    consent_to_marketing: false,
+    order_number: "",
+    shipping_method: "",
+    shipping_address_same: true,
+    shipping_street: "",
+    shipping_suburb: "",
+    shipping_state: "",
+    shipping_postcode: "",
+    items_ordered: "",
+    order_notes: "",
+    tracking_number: "",
+    order_source: "",
+    gift_wrapping: false,
+    delivery_method: "",
+    carat_weight: "",
+    metal_colour: "",
+    job_complexity: "",
+    manufacture_type: "",
+    workshop_due_date: "",
+    workshop_due_date_overridden: false,
+  };
+
+  const { packet, errors: packetErrors } = await createPacket(packetFormData, tenantId, supabase, {
+    skipClaimSlip: true,
+  });
+
+  if (!packet) {
+    return NextResponse.json(
+      { error: `Failed to create linked packet: ${packetErrors.supabase ?? "Unknown error"}` },
+      { status: 500 }
+    );
+  }
+
   // ── Step 4: Insert inventory_sales row ─────────────────────────────────────
   const { data: sale, error: saleErr } = await supabase
     .from("inventory_sales")
     .insert({
       tenant_id:      tenantId,
       piece_id,
+      packet_id:      packet.id,
       sold_price:     Number(sold_price),
       discount_amount: Number(discount_amount ?? 0),
       staff_id:       staff_id   || null,
@@ -194,6 +292,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   return NextResponse.json({
     sale,
+    packet,
     gross_profit: grossProfit,
     gross_profit_note: costBasis == null
       ? "Gross profit could not be calculated — no actual_cost or cost_price recorded on this piece"

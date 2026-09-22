@@ -16,6 +16,7 @@ const TYPE_BADGE: Record<PacketType, { cls: string; label?: string }> = {
   layby:         { cls: "ds-badge ds-badge-amber" },
   client_intake: { cls: "ds-badge ds-badge-teal" },
   online_order:  { cls: "ds-badge ds-badge-green" },
+  stock_sale:    { cls: "ds-badge ds-badge-sage" },
 };
 
 export default function AdminTable({ packets, onRowClick, selectedIds, onSelectionChange }: Props) {

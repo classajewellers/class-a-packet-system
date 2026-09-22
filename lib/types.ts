@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────
 // Packet types
 // ─────────────────────────────────────────────
-export type PacketType = "repair" | "custom_order" | "layby" | "client_intake" | "online_order";
+export type PacketType = "repair" | "custom_order" | "layby" | "client_intake" | "online_order" | "stock_sale";
 
 // ─────────────────────────────────────────────
 // Form state (client-side)

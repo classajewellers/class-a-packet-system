@@ -77,6 +77,7 @@ const eventNameMap: Record<PacketType, string> = {
   layby: "Layby Created",
   client_intake: "Client Intake Completed",
   online_order: "Online Order Created",
+  stock_sale: "Stock Sale Completed",
 };
 
 export async function fireKlaviyoEvent(packet: Packet): Promise<void> {
