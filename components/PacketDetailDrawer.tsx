@@ -12,6 +12,7 @@ import { generateValuationCertificate } from "@/lib/valuationCertificateGenerato
 import { useStaff } from "@/lib/useStaff";
 import AttachmentsSection from "./AttachmentsSection";
 import AddressAutocomplete from "./AddressAutocomplete";
+import Toggle from "./ui/Toggle";
 
 interface Props {
   packet: Packet;
@@ -529,39 +530,30 @@ export default function PacketDetailDrawer({ packet, onClose, onDelete, onUpdate
             </div>
           )}
 
-          {/* ── Workshop Required (online orders only) ──────────────────────
+          {/* ── Workshop Required (all job types) ────────────────────────────
               A real, persisted flag (packets.workshop_required, migration
-              137) — not a separate linked packet. Online orders don't go to
-              Workshop by default; ticking this is what makes this same
-              order appear in the Workshop queue (see
-              app/api/workshop/packets/route.ts). Saved via the same
-              PATCH /api/admin/packets/[id] path as every other field here. */}
-          {isOnline && (
-            <div style={{ background: "#F9FAFB", border: "1px solid #E8E8F0", borderRadius: 12, padding: "14px 16px" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: "#1A1A2E" }}>Workshop Required?</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = !local.workshop_required;
-                    set("workshop_required", next);
-                    saveOnBlur("workshop_required", next);
-                  }}
-                  style={{
-                    width: 40, height: 22, borderRadius: 999, border: "none", cursor: "pointer",
-                    background: local.workshop_required ? "#635BFF" : "#D1D5DB",
-                    position: "relative", transition: "background .15s",
-                  }}
-                >
-                  <span style={{
-                    position: "absolute", top: 3, left: local.workshop_required ? 20 : 3,
-                    width: 16, height: 16, borderRadius: "50%", background: "#fff",
-                    transition: "left .15s", display: "block",
-                  }} />
-                </button>
-              </div>
+              137) — not a separate linked packet. No job type goes to the
+              active Workshop queue by default; ticking this is what makes
+              this same packet appear there (see
+              app/api/workshop/packets/route.ts — gates the active queue
+              only, History stays ungated). Saved via the same
+              PATCH /api/admin/packets/[id] path as every other field here.
+              Existing in-progress jobs across every job type were
+              backfilled to true on 2026-09-22 so nothing already in
+              Workshop silently disappeared when this rolled out. */}
+          <div style={{ background: "#F9FAFB", border: "1px solid #E8E8F0", borderRadius: 12, padding: "14px 16px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#1A1A2E" }}>Workshop Required?</span>
+              <Toggle
+                checked={!!local.workshop_required}
+                onChange={(next) => {
+                  set("workshop_required", next);
+                  saveOnBlur("workshop_required", next);
+                }}
+                aria-label="Workshop Required?"
+              />
             </div>
-          )}
+          </div>
 
           {/* ── Action buttons: Reprint + Send Notification ── */}
           <div className={`grid gap-2 ${showNotifButton ? "grid-cols-2" : "grid-cols-1"}`}>
