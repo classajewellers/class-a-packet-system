@@ -198,6 +198,23 @@ function mapColourGroup(colour: string): string {
   return 'M';
 }
 
+// Class A's real team pricing rule (confirmed by Josh, 2026-09-22): round
+// UP (never down) to the nearest price ending in 49 or 99 — never to the
+// nearest $5. Every $100 block has exactly two valid endings, X49 and X99;
+// find the smallest one at or above the raw price. Replaces the old
+// Math.ceil(price / 5) * 5 rounding on the final quoted price.
+function roundUpTo49or99(price: number): number {
+  if (price <= 0) return 0;
+  const p = Math.round(price * 100) / 100; // clear float dust before comparing
+  const block = Math.floor(p / 100) * 100;
+  const opt49 = block + 49;
+  const opt99 = block + 99;
+  const EPS = 1e-9;
+  if (p <= opt49 + EPS) return opt49;
+  if (p <= opt99 + EPS) return opt99;
+  return block + 100 + 49;
+}
+
 function calcNdCost(stone: StoneEntry, ndData: NdData): number {
   const ct = parseFloat(stone.caratWeight) || 0;
   if (ct <= 0) return 0;
@@ -344,9 +361,9 @@ function computeItemPricing(
 
   let quotedPrice: number;
   if (item.marginMultiplierOverride && parseFloat(item.marginMultiplierOverride) > 0) {
-    quotedPrice = Math.ceil(totalCost * parseFloat(item.marginMultiplierOverride) / 5) * 5;
+    quotedPrice = roundUpTo49or99(totalCost * parseFloat(item.marginMultiplierOverride));
   } else {
-    quotedPrice = suggestedRetail > 0 ? suggestedRetail : (totalCost > 0 ? Math.ceil(totalCost / 5) * 5 : 0);
+    quotedPrice = suggestedRetail > 0 ? roundUpTo49or99(suggestedRetail) : (totalCost > 0 ? roundUpTo49or99(totalCost) : 0);
   }
 
   const finalPrice = item.retailPriceOverride && parseFloat(item.retailPriceOverride) > 0
@@ -1077,7 +1094,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                   </>
                 )}
                 <div style={{ borderTop: "1px solid #D1D5DB", marginTop: 8, paddingTop: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <span style={{ fontWeight: 700, color: "#1A1A2E", fontSize: 14 }}>Final Price <span style={{ fontWeight: 400, color: "#9CA3AF", fontSize: 11 }}>(rounded to nearest $5)</span></span>
+                  <span style={{ fontWeight: 700, color: "#1A1A2E", fontSize: 14 }}>Final Price <span style={{ fontWeight: 400, color: "#9CA3AF", fontSize: 11 }}>(rounded up to nearest $49/$99)</span></span>
                   <span style={{ fontWeight: 800, color: "#635BFF", fontSize: 14 }}>${pricing.finalPrice.toLocaleString("en-AU")}</span>
                 </div>
                 {item.stoneOptions.length > 1 && (
