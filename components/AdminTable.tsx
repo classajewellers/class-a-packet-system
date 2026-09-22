@@ -53,9 +53,66 @@ export default function AdminTable({ packets, onRowClick, selectedIds, onSelecti
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="ds-t w-full">
-        <thead>
+    <div>
+      {/* Mobile: stacked cards */}
+      <div className="md:hidden divide-y divide-gray-100">
+        {safePackets.map((p) => {
+          const customerName = [p.customer_first_name, p.customer_last_name]
+            .filter(Boolean).join(" ") || "—";
+          const created = new Date(p.created_at).toLocaleDateString("en-AU", {
+            day: "2-digit", month: "short", year: "numeric",
+          });
+          const badge = TYPE_BADGE[p.packet_type] ?? { cls: "ds-badge ds-badge-muted" };
+          const isSelected = selectedIds?.has(p.id) ?? false;
+
+          return (
+            <div
+              key={p.id}
+              onClick={() => onRowClick(p)}
+              className="px-4 py-3 cursor-pointer active:bg-gray-50"
+              style={isSelected ? { background: "rgba(124,106,254,0.08)" } : {}}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex items-start gap-2">
+                  {selectable && (
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => toggleOne(p.id)}
+                      className="h-4 w-4 rounded cursor-pointer mt-1"
+                      style={{ accentColor: "var(--violet)" }}
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <span style={{ fontWeight: 600, color: "var(--text)", fontSize: 14 }}>{customerName}</span>
+                      <span className={badge.cls}>{packetTypeLabel(p.packet_type)}</span>
+                    </div>
+                    <div className="ds-mono" style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                      {p.reference_number}
+                    </div>
+                    {p.staff_member && (
+                      <div style={{ fontSize: 12, color: "var(--text-2)", marginTop: 2 }}>{p.staff_member}</div>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  {p.due_date && (
+                    <div style={{ fontSize: 12, color: "var(--text-2)" }}>{formatDateAU(p.due_date)}</div>
+                  )}
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{created}</div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop: full table */}
+      <div className="hidden md:block overflow-x-auto">
+        <table className="ds-t w-full">
+          <thead>
           <tr>
             {selectable && (
               <th style={{ width: 32 }}>
@@ -126,6 +183,7 @@ export default function AdminTable({ packets, onRowClick, selectedIds, onSelecti
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

@@ -101,7 +101,7 @@ Last updated: 2026-09-22 (initial audit + plan)
 
 | # | Item | Status | Notes |
 |---|---|---|---|
-| 8.1 | Jobs page — mobile card view for AdminTable | NOT STARTED | Cheap, unblocked, can slot in opportunistically before Phase 8 formally starts. Pattern already proven in `app/quotes/page.tsx`/`app/online/page.tsx`. |
+| 8.1 | Jobs page — mobile card view for AdminTable | READY FOR TESTING | `components/AdminTable.tsx` now has a `md:hidden` stacked-card view (customer name + type badge + reference + staff + due date) alongside the existing `hidden md:block` desktop table, same split pattern as `app/quotes/page.tsx`. Used by `app/orders/page.tsx` and `app/admin/page.tsx`. Typecheck clean. **Not visually verified in a live browser** — the dev server (`gemquote-dev` in `.claude/launch.json`) failed to bind in this sandbox again (no logs, no response on port 3000, same limitation hit repeatedly earlier this session) — verified at the code level only (valid JSX, reuses the exact classes/tokens from the already-shipped quotes-page mobile pattern). Needs Josh to eyeball it on a phone/narrow viewport before this is called COMPLETE. |
 | 8.2 | Workshop page — stepper scroll wrapper + phone-width row layout | NOT STARTED | Same — cheap, can slot in early. |
 | 8.3 | Full systematic responsive audit (phone + iPad breakpoints, whole app) | NOT STARTED | Explicitly deferred until core workflows (Phases 1-5) are stable, per Josh's instruction. |
 
