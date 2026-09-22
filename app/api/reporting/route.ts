@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { buildSalesReport } from "@/lib/reporting/reports/sales";
+import { buildOrdersReport } from "@/lib/reporting/reports/orders";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -61,109 +62,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     // ── ORDERS ─────────────────────────────────────────────────────────────────
+    // Migrated onto the reporting engine — 2026-09-22. Verified byte-for-byte
+    // identical against the original hardcoded implementation on real
+    // staging data (populated range + zero-rows edge case) before this swap.
     if (section === "orders") {
-      const ordersQ = supabase
-        .from("packets")
-        .select("*")
-        .gte("created_at", start)
-        .lt("created_at", endPlusOne)
-        .order("created_at", { ascending: true });
-      const { data: packets, error } = await (tenantId ? ordersQ.eq("tenant_id", tenantId) : ordersQ);
-
-      console.log(
-        "[reporting:orders] packets:",
-        packets?.length ?? 0,
-        "error:",
-        error?.message ?? "none"
-      );
-      if (error)
-        return NextResponse.json({ error: error.message }, { status: 500 });
-
-      const rows = packets ?? [];
-      const totalCreated = rows.length;
-
-      // Average turnaround (due_date − created_at)
-      const withDue = rows.filter((r: { due_date?: string | null }) => r.due_date);
-      const avgTurnaround =
-        withDue.length > 0
-          ? withDue.reduce(
-              (s: number, r: { created_at: string; due_date: string }) =>
-                s + diffDays(r.created_at.split("T")[0], r.due_date),
-              0
-            ) / withDue.length
-          : 0;
-
-      // Overdue: repair + custom_order, past due date, not yet label-printed
-      // Fetch candidates then filter in JS to avoid complex OR syntax
-      const overdueQ = supabase
-        .from("packets")
-        .select(
-          "id, reference_number, packet_type, due_date, customer_first_name, customer_last_name, label_printed"
-        )
-        .in("packet_type", ["repair", "custom_order"])
-        .lt("due_date", today)
-        .order("due_date", { ascending: true })
-        .limit(200);
-      const { data: overduePackets } = await (tenantId ? overdueQ.eq("tenant_id", tenantId) : overdueQ);
-
-      console.log(
-        "[reporting:orders] overduePackets (pre-filter):",
-        overduePackets?.length ?? 0
-      );
-
-      const overdueRows = (overduePackets ?? []).filter(
-        (r: { label_printed?: boolean | null }) => !r.label_printed
-      );
-      const overdueCount = overdueRows.length;
-
-      // Daily count
-      type DayBucket = { date: string; count: number };
-      const byDay: Record<string, DayBucket> = {};
-      for (const r of rows) {
-        const day = (r.created_at as string).split("T")[0];
-        if (!byDay[day]) byDay[day] = { date: day, count: 0 };
-        byDay[day].count += 1;
+      try {
+        const report = await buildOrdersReport(supabase, { tenantId, start, end });
+        return NextResponse.json(report);
+      } catch (err) {
+        return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
       }
-      const daily = Object.values(byDay).sort((a, b) =>
-        a.date.localeCompare(b.date)
-      );
-
-      // By type
-      type TypeBucket = { type: string; count: number };
-      const byTypeMap: Record<string, TypeBucket> = {};
-      for (const r of rows) {
-        const t = (r.packet_type as string) ?? "unknown";
-        if (!byTypeMap[t]) byTypeMap[t] = { type: t, count: 0 };
-        byTypeMap[t].count += 1;
-      }
-      const byType = Object.values(byTypeMap);
-
-      const overdue = overdueRows.map(
-        (r: {
-          reference_number: string;
-          customer_first_name?: string | null;
-          customer_last_name?: string | null;
-          packet_type: string;
-          due_date: string;
-        }) => ({
-          reference_number: r.reference_number,
-          customer:
-            [r.customer_first_name, r.customer_last_name]
-              .filter(Boolean)
-              .join(" ") || "—",
-          type: r.packet_type,
-          due_date: r.due_date,
-          days_overdue: diffDays(r.due_date, today),
-        })
-      );
-
-      return NextResponse.json({
-        _meta: { section, start, end, recordCount: rows.length },
-        summary: { totalCreated, overdueCount, avgTurnaround },
-        daily,
-        byType,
-        overdue,
-      });
     }
 
     // ── WORKSHOP ───────────────────────────────────────────────────────────────
