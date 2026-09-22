@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { tenantScoped } from "@/lib/tenantScoped";
 import { createPacket } from "@/lib/createPacket";
 import { calculateWorkshopDueDate } from "@/lib/workshopDueDates";
 import { sendKlaviyoPendingApprovalEmail } from "@/lib/klaviyo";
@@ -182,18 +183,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       ? `$${amountPaid.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       : "a deposit";
 
-    // Look up the assigned staff member's profile ID (if any), for
-    // notifications either branch below might insert.
-    let userId: string | null = null;
-    if (quote.assigned_to) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("full_name", quote.assigned_to)
-        .single();
-      userId = profile?.id ?? null;
-    }
-
     const resolvedTenantId = tenantId || quote.tenant_id || null;
 
     if (!resolvedTenantId) {
@@ -222,31 +211,38 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       console.error("[stripe/webhook] Auto packet creation FAILED:", JSON.stringify(errors));
       // Money is real regardless — quote already marked "paid" above. Flag
       // for manual handling rather than losing the payment record.
-      await supabase.from("notifications").insert({
-        tenant_id: resolvedTenantId,
-        user_id: userId,
-        type: "deposit_paid",
-        title: `Deposit received, order creation FAILED — ${quote.reference_number}`,
-        message: `${customerName ? customerName + " has" : "A customer has"} paid ${amountStr} deposit, but the order could not be auto-created (${errors.supabase ?? errors.reference ?? "unknown error"}). Please create the order manually.`,
-        quote_id: quoteId,
-        read: false,
-        created_at: now,
-      });
+      // Broadcast (user_id null) — no packet exists yet to assign this to
+      // a specific person, and any manager needs to see it and act.
+      const { error: notifErr } = await tenantScoped(supabase, resolvedTenantId)
+        .from("notifications")
+        .insert({
+          user_id: null,
+          type: "deposit_paid_packet_failed",
+          title: `Deposit received, order creation FAILED — ${quote.reference_number}`,
+          message: `${customerName ? customerName + " has" : "A customer has"} paid ${amountStr} deposit, but the order could not be auto-created (${errors.supabase ?? errors.reference ?? "unknown error"}). Please create the order manually.`,
+          link_type: "quote",
+          link_id: quoteId,
+        });
+      if (notifErr) console.error("[stripe/webhook] Failed to record deposit-failure notification:", notifErr.message);
       return NextResponse.json({ received: true, packetError: true });
     }
 
     console.log("[stripe/webhook] Auto-created packet:", packet.id, packet.reference_number);
 
-    await supabase.from("notifications").insert({
-      tenant_id: resolvedTenantId,
-      user_id: userId,
-      type: "deposit_paid",
-      title: `Order auto-created, pending your approval — ${packet.reference_number}`,
-      message: `${customerName ? customerName + " has" : "A customer has"} paid ${amountStr} deposit and their order (${packet.reference_number}) was created automatically. Review and approve it before it proceeds through the workshop.`,
-      quote_id: quoteId,
-      read: false,
-      created_at: now,
-    });
+    // Broadcast (user_id null) — same reasoning as above; whichever manager
+    // opens Vault next should see this, not just the originally assigned
+    // staff member (who may be off, or the quote may be unassigned).
+    const { error: pendingNotifErr } = await tenantScoped(supabase, resolvedTenantId)
+      .from("notifications")
+      .insert({
+        user_id: null,
+        type: "packet_pending_approval",
+        title: `Order auto-created, pending your approval — ${packet.reference_number}`,
+        message: `${customerName ? customerName + " has" : "A customer has"} paid ${amountStr} deposit and their order (${packet.reference_number}) was created automatically. Review and approve it before it proceeds through the workshop.`,
+        link_type: "packet",
+        link_id: packet.id,
+      });
+    if (pendingNotifErr) console.error("[stripe/webhook] Failed to record pending-approval notification:", pendingNotifErr.message);
 
     try {
       await sendKlaviyoPendingApprovalEmail(packet);
