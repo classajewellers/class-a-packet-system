@@ -27,17 +27,22 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         "*, workshop_subcontractor_name, workshop_pathway_id, workshop_step_index, workshop_intake_substatus, workshop_needs_valuation, workshop_valuer, workshop_supplier, workshop_po_number, customer_id"
       )
       .in("job_type", WORKSHOP_JOB_TYPES)
-      // Online orders don't go to Workshop by default — only once staff have
-      // explicitly ticked "Workshop Required?" on the order (packets.
-      // workshop_required, migration 137). Every other job type in
-      // WORKSHOP_JOB_TYPES (repair/custom_order/stock_work/collection_order)
-      // is unaffected by this flag and keeps showing up as before.
-      .or("job_type.neq.online_order,workshop_required.eq.true")
       .order("due_date", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: false });
 
     if (tenantId) q = q.eq("tenant_id", tenantId);
-    if (!includeCollected) q = q.neq("status", "collected");
+    if (!includeCollected) {
+      q = q.neq("status", "collected");
+      // The ACTIVE queue only, across every job type — no packet shows up
+      // here until staff explicitly tick "Workshop Required?" (packets.
+      // workshop_required, migration 137). Existing in-progress jobs were
+      // backfilled to true on 2026-09-22 so nothing already active
+      // silently disappeared when this rolled out. Deliberately NOT
+      // applied when includeCollected is set: History (app/workshop/
+      // history/page.tsx) reads every past job regardless of this flag —
+      // it's a complete historical record, not something staff opt into.
+      q = q.eq("workshop_required", true);
+    }
     if (sourceOrderRef) q = q.eq("source_order_ref", sourceOrderRef);
 
     const { data: packets, error } = await q;
