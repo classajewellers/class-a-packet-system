@@ -203,17 +203,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const whiteGoldPremium = metal.includes("white") ? 25 : 0;
   const totalCost = baseCost + charmCostSum + totalLabour + whiteGoldPremium;
 
-  // ── Retail price from margin brackets ─────────────────────────────────────
-  const { data: brackets } = await db
-    .from("pricing_margin_brackets")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .order("cost_min", { ascending: true });
-
-  const bracket = (brackets ?? []).find((b: { cost_min: number; cost_max: number | null }) =>
-    totalCost >= b.cost_min && (b.cost_max === null || totalCost <= b.cost_max)
-  ) as { multiplier: number } | undefined;
-  const multiplier = bracket?.multiplier ?? 2.5;
+  // ── Retail price — fixed 2.5x multiplier ───────────────────────────────────
+  // Charm Builder is a custom feature built for Class A only, not part of
+  // general Vault tenant pricing — it deliberately does NOT go through
+  // pricing_margin_brackets/pricing_component_rules/calculate_price(). This
+  // multiplier is permanently fixed at 2.5x by design (confirmed by Josh,
+  // 2026-09-22), not a fallback default: pricing_margin_brackets has no
+  // tenant_id column at all, so the previous .eq('tenant_id', tenantId)
+  // query here always errored and silently fell through to this same 2.5
+  // value anyway — right number, wrong (accidental) reason. This makes it
+  // explicit and removes a query that could never succeed.
+  const multiplier = 2.5;
   const rawRetail = totalCost * multiplier;
   // Round UP to the nearest price ending in 49 or 99 (Class A's real team
   // pricing rule, confirmed 2026-09-22) — was nearest $5.
