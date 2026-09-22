@@ -9,6 +9,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await supabase
     .from('inventory_suppliers')
     .select('*')
+    .eq('tenant_id', tenantId)
     .order('name', { ascending: true })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ suppliers: data ?? [] })
