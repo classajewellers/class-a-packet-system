@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { buildSalesReport } from "@/lib/reporting/reports/sales";
 import { buildOrdersReport } from "@/lib/reporting/reports/orders";
+import { buildWorkshopReport } from "@/lib/reporting/reports/workshop";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -75,109 +76,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     // ── WORKSHOP ───────────────────────────────────────────────────────────────
+    // Migrated onto the reporting engine — 2026-09-22. Verified byte-for-byte
+    // identical against the original hardcoded implementation on real
+    // staging data, plus a simulated table-not-found (42P01) case since
+    // workshop_jobs exists but is empty on staging so that branch couldn't
+    // be exercised for real.
     if (section === "workshop") {
-      const jobsQ = supabase.from("workshop_jobs").select("*").order("created_at", { ascending: false });
-      const { data: jobs, error } = await (tenantId ? jobsQ.eq("tenant_id", tenantId) : jobsQ);
-
-      console.log(
-        "[reporting:workshop] jobs:",
-        jobs?.length ?? 0,
-        "error:",
-        error?.message ?? "none"
-      );
-
-      // Gracefully handle table-not-found
-      if (error) {
-        if (error.code === "42P01") {
-          // Table does not exist yet
-          return NextResponse.json({
-            _meta: { section, start, end, recordCount: 0 },
-            summary: { totalActive: 0, completedInPeriod: 0, overdueCount: 0 },
-            byJeweller: [],
-            byStage: [],
-            overdue: [],
-          });
-        }
-        return NextResponse.json({ error: error.message }, { status: 500 });
+      try {
+        const report = await buildWorkshopReport(supabase, { tenantId, start, end });
+        return NextResponse.json(report);
+      } catch (err) {
+        return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
       }
-
-      const rows = jobs ?? [];
-      const activeJobs = rows.filter(
-        (r: { stage?: string | null }) => r.stage !== "completed"
-      );
-
-      // Completed within the selected period (by stage_changed_at if available)
-      const completedInPeriod = rows.filter((r: {
-        stage?: string | null;
-        stage_changed_at?: string | null;
-      }) =>
-        r.stage === "completed" &&
-        r.stage_changed_at &&
-        r.stage_changed_at >= start &&
-        r.stage_changed_at < endPlusOne
-      );
-
-      // By jeweller
-      type JewellerBucket = { jeweller: string; count: number };
-      const byJewellerMap: Record<string, JewellerBucket> = {};
-      for (const r of activeJobs) {
-        const j = (r.assigned_jeweller as string | null) ?? "Unassigned";
-        if (!byJewellerMap[j])
-          byJewellerMap[j] = { jeweller: j, count: 0 };
-        byJewellerMap[j].count += 1;
-      }
-      const byJeweller = Object.values(byJewellerMap).sort(
-        (a, b) => b.count - a.count
-      );
-
-      // By stage
-      type StageBucket = { stage: string; count: number };
-      const byStageMap: Record<string, StageBucket> = {};
-      for (const r of activeJobs) {
-        const s = (r.stage as string) ?? "unknown";
-        if (!byStageMap[s]) byStageMap[s] = { stage: s, count: 0 };
-        byStageMap[s].count += 1;
-      }
-      const byStage = Object.values(byStageMap).sort(
-        (a, b) => b.count - a.count
-      );
-
-      // Overdue active jobs
-      const overdueJobs = activeJobs
-        .filter(
-          (r: { due_date?: string | null }) =>
-            r.due_date && (r.due_date as string) < today
-        )
-        .map((r: {
-          reference_number?: string | null;
-          customer_surname?: string | null;
-          assigned_jeweller?: string | null;
-          stage?: string | null;
-          due_date?: string | null;
-        }) => ({
-          reference_number: r.reference_number ?? "—",
-          customer_surname: r.customer_surname ?? "—",
-          jeweller: r.assigned_jeweller ?? "Unassigned",
-          stage: r.stage ?? "—",
-          due_date: r.due_date,
-          days_overdue: r.due_date ? diffDays(r.due_date as string, today) : 0,
-        }))
-        .sort(
-          (a: { days_overdue: number }, b: { days_overdue: number }) =>
-            b.days_overdue - a.days_overdue
-        );
-
-      return NextResponse.json({
-        _meta: { section, start, end, recordCount: rows.length },
-        summary: {
-          totalActive: activeJobs.length,
-          completedInPeriod: completedInPeriod.length,
-          overdueCount: overdueJobs.length,
-        },
-        byJeweller,
-        byStage,
-        overdue: overdueJobs,
-      });
     }
 
     // ── QUOTES ─────────────────────────────────────────────────────────────────
