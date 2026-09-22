@@ -8,8 +8,9 @@ import { useUser } from "@/context/UserContext";
 import { canManage, hasPermission } from "@/lib/userTypes";
 import Link from "next/link";
 import { generateQuoteHTML } from "@/lib/quoteGenerator";
-import { calculateRetailPrice, calculateBlendedRetailFromBrackets, calculateMultiplier, multiplierColour } from "@/lib/marginCalculator";
+import { calculateRetailPrice, calculateMultiplier, multiplierColour } from "@/lib/marginCalculator";
 import type { BlendedBreakdownLine } from "@/lib/marginCalculator";
+import { roundUpTo49or99 } from "@/lib/pricingRounding";
 import NivodaModal, { type NivodaStone } from "@/components/NivodaModal";
 import CharmNecklaceBuilder, { type CharmLineItem } from "@/components/CharmNecklaceBuilder";
 import { caratToMmRoundBrilliant } from "@/lib/melee-pricing";
@@ -19,6 +20,30 @@ import { caratToMmRoundBrilliant } from "@/lib/melee-pricing";
 interface MetalRate { id: string; metal_type: string; price_per_gram: number; }
 interface FixedCost { id: string; key: string; label: string; amount: number; }
 interface MarginBracket { id: string; cost_min: number; cost_max: number | null; multiplier: number; stone_type?: string | null; }
+// Shape of the calculate_price() ad-hoc RPC response, via
+// POST /api/quotes/calculate-price. Replaces the legacy
+// calculateBlendedRetailFromBrackets()/pricing_margin_brackets path — each
+// cost component (metal, main stone(s), melee) is priced through its own
+// cost-tier multiplier in pricing_component_rules, instead of one blended
+// multiplier applied to the combined total. Labour/addons pass through as
+// flat retail figures with no multiplier (calculate_price's own established
+// behaviour for every mode, not a rule invented here).
+interface CalcPriceResult {
+  total_retail: number;
+  metal_retail: number;
+  stone_retail: number;
+  stone_status: string;
+  melee_retail: number;
+  melee_status: string;
+  labour_retail: number;
+  addons_retail: number;
+  inputs: {
+    metal_multiplier: number | null;
+    stone_multiplier: number | null;
+    melee_multiplier: number | null;
+  };
+  error?: string;
+}
 interface StonePricingData {
   base_prices:         Array<{ stone_type: string; base_price_per_carat: number }>;
   colour_adjustments:  Array<{ stone_type: string; colour_grade: string;  adjustment_percent: number; sort_order: number }>;
@@ -236,7 +261,7 @@ function computeItemPricing(
   item: BuilderItem,
   metalRates: MetalRate[],
   fixedCosts: FixedCost[],
-  marginBrackets: MarginBracket[],
+  calcResult: CalcPriceResult | null,
   isManager: boolean,
   stonePricing: StonePricingData | null = null,
   ndData: NdData | null = null
@@ -295,32 +320,34 @@ function computeItemPricing(
   const baseWithoutMainStone = metalCost + meleeCost + addonsCost - mainStoneSettingCost;
   const totalCost = metalCost + mainStoneCost + meleeCost + addonsCost;
 
-  // Filter brackets by stone_type when the DB has stone_type rows; fall back to all brackets
-  const primaryOrigin = item.includeMainStone
-    ? (item.stoneOptions[0]?.stones[0]?.origin ?? "Natural")
-    : "Natural";
-  const stoneTypeKey = primaryOrigin === "Lab Grown" ? "lab_grown" : "natural";
-  const hasStonetype = marginBrackets.some(b => b.stone_type != null);
-  const activeBrackets = hasStonetype
-    ? (() => {
-        const filtered = marginBrackets.filter(b => b.stone_type === stoneTypeKey);
-        return filtered.length > 0
-          ? filtered
-          : marginBrackets.filter(b => b.stone_type === "natural" || b.stone_type == null);
-      })()
-    : marginBrackets;
-  const safeBrackets = activeBrackets.length > 0 ? activeBrackets : marginBrackets;
-
-  const blended = calculateBlendedRetailFromBrackets(totalCost, safeBrackets);
-  const suggestedRetail = blended.retail;
-  const rawPrice = blended.unrounded;
-  const breakdown = blended.breakdown;
+  // Retail now comes from calculate_price() (ad-hoc mode) via
+  // POST /api/quotes/calculate-price, fetched asynchronously and passed in
+  // as calcResult — each cost component (metal, main stone(s), melee) is
+  // priced through its own cost-tier multiplier in pricing_component_rules,
+  // replacing the old single blended-bracket multiplier on the combined
+  // total. Labour/addons pass straight through as flat retail figures with
+  // no multiplier applied (calculate_price's own established behaviour).
+  // While the async call is in flight (or hasn't fired yet), suggestedRetail
+  // is 0 and quotedPrice falls back to a plain cost-based rounding below —
+  // same "no price yet" fallback shape the old code already had for a
+  // zero-cost item.
+  const suggestedRetail = calcResult && !calcResult.error ? calcResult.total_retail : 0;
+  const rawPrice = suggestedRetail;
+  const breakdown: BlendedBreakdownLine[] = calcResult && !calcResult.error
+    ? [
+        calcResult.metal_retail > 0 && { label: "Metal", portion: metalCost, multiplier: calcResult.inputs.metal_multiplier ?? 0, subtotal: calcResult.metal_retail },
+        calcResult.stone_retail > 0 && { label: "Main stone", portion: mainStoneCost, multiplier: calcResult.inputs.stone_multiplier ?? 0, subtotal: calcResult.stone_retail },
+        calcResult.melee_retail > 0 && { label: "Melee", portion: meleeCost, multiplier: calcResult.inputs.melee_multiplier ?? 0, subtotal: calcResult.melee_retail },
+        calcResult.labour_retail > 0 && { label: "Labour (flat, no multiplier)", portion: calcResult.labour_retail, multiplier: 1, subtotal: calcResult.labour_retail },
+        calcResult.addons_retail > 0 && { label: "Addons (flat, no multiplier)", portion: calcResult.addons_retail, multiplier: 1, subtotal: calcResult.addons_retail },
+      ].filter((line): line is BlendedBreakdownLine => line !== false)
+    : [];
 
   let quotedPrice: number;
   if (item.marginMultiplierOverride && parseFloat(item.marginMultiplierOverride) > 0) {
-    quotedPrice = Math.ceil(totalCost * parseFloat(item.marginMultiplierOverride) / 5) * 5;
+    quotedPrice = roundUpTo49or99(totalCost * parseFloat(item.marginMultiplierOverride));
   } else {
-    quotedPrice = suggestedRetail > 0 ? suggestedRetail : (totalCost > 0 ? Math.ceil(totalCost / 5) * 5 : 0);
+    quotedPrice = suggestedRetail > 0 ? roundUpTo49or99(suggestedRetail) : (totalCost > 0 ? roundUpTo49or99(totalCost) : 0);
   }
 
   const finalPrice = item.retailPriceOverride && parseFloat(item.retailPriceOverride) > 0
@@ -341,13 +368,11 @@ function computeItemPricing(
     const optSettingCost = (opt.stones?.length ?? 0) * mainStoneSettingRate;
     const optTotal = baseWithoutMainStone + optStoneCost + optSettingCost;
     const optSuggested = optTotal > 0 ? calculateRetailPrice(optTotal) : 0;
-    const optBracket = safeBrackets.find(b => optTotal >= Number(b.cost_min) && (b.cost_max == null || optTotal <= Number(b.cost_max))) ?? safeBrackets[safeBrackets.length - 1];
-    const optRaw = optBracket ? optTotal * Number(optBracket.multiplier) : optTotal;
     if (oi === 0 && item.retailPriceOverride && parseFloat(item.retailPriceOverride) > 0) return parseFloat(item.retailPriceOverride);
     if (item.marginMultiplierOverride && parseFloat(item.marginMultiplierOverride) > 0) {
-      return Math.ceil(optTotal * parseFloat(item.marginMultiplierOverride) / 5) * 5;
+      return roundUpTo49or99(optTotal * parseFloat(item.marginMultiplierOverride));
     }
-    return optSuggested > 0 ? Math.ceil(optSuggested / 5) * 5 : Math.ceil(optRaw / 5) * 5;
+    return optSuggested > 0 ? roundUpTo49or99(optSuggested) : roundUpTo49or99(optTotal);
   });
 
   return {
@@ -1039,7 +1064,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                   </>
                 ) : (
                   <>
-                    <div style={{ color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 4, marginTop: 6 }}>Margin calculation (blended)</div>
+                    <div style={{ color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 4, marginTop: 6 }}>Margin calculation (per component)</div>
                     {pricing.breakdown.map((line, i) => (
                       <div key={i} style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
                         <span style={{ color: "#9CA3AF", fontSize: 12 }}>{line.label} × {Number(line.multiplier).toFixed(2)}</span>
@@ -1053,7 +1078,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                   </>
                 )}
                 <div style={{ borderTop: "1px solid #D1D5DB", marginTop: 8, paddingTop: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <span style={{ fontWeight: 700, color: "#1A1A2E", fontSize: 14 }}>Final Price <span style={{ fontWeight: 400, color: "#9CA3AF", fontSize: 11 }}>(rounded to nearest $5)</span></span>
+                  <span style={{ fontWeight: 700, color: "#1A1A2E", fontSize: 14 }}>Final Price <span style={{ fontWeight: 400, color: "#9CA3AF", fontSize: 11 }}>(rounded up to nearest $49/$99)</span></span>
                   <span style={{ fontWeight: 800, color: "#635BFF", fontSize: 14 }}>${pricing.finalPrice.toLocaleString("en-AU")}</span>
                 </div>
                 {item.stoneOptions.length > 1 && (
@@ -1140,6 +1165,10 @@ function QuoteBuilderPageInner() {
   const [stonePricing, setStonePricing] = useState<StonePricingData | null>(null);
   const [ndData, setNdData] = useState<NdData | null>(null);
   const [meleeStones, setMeleeStones] = useState<MeleeStoneRef[]>([]);
+  // calculate_price() ad-hoc results, keyed by item.id — fetched
+  // asynchronously (see the effect below), since pricing now goes through a
+  // server RPC rather than the old synchronous bracket calculation.
+  const [calcPriceResults, setCalcPriceResults] = useState<Record<string, CalcPriceResult | null>>({});
 
   // Customer
   const [firstName, setFirstName] = useState("");
@@ -1252,9 +1281,80 @@ function QuoteBuilderPageInner() {
 
   // ── Pricing ────────────────────────────────────────────────────────────────
 
+  // Builds the exact payload POST /api/quotes/calculate-price expects for
+  // one item — metal rows (type/weight as already selected), main stone(s)
+  // (manager-typed cost, or the calcStoneBaseCost() estimate, exactly the
+  // same wholesale figure the old bracket calc used as its stone-cost
+  // input), melee rows (raw origin/shape/quality/carat/mm — the RPC does its
+  // own pricing_melee_stones lookup, same table lib/melee-pricing.ts already
+  // queries client-side for the per-row preview), and the flat labour/addons
+  // total (setting + small-stone settings + components + engraving — never
+  // multiplied, in this system or the old one's addons).
+  function buildCalcPricePayload(item: BuilderItem) {
+    const metals = item.metals
+      .filter(m => m.type && (parseFloat(m.weight) || 0) > 0)
+      .map(m => ({ type: m.type, weight: parseFloat(m.weight) || 0 }));
+
+    const stones = item.includeMainStone && isManager && item.stoneOptions[0]
+      ? (item.stoneOptions[0].stones ?? [])
+          .map(st => {
+            const manualCost = st.cost.trim() !== "" ? parseFloat(st.cost) : NaN;
+            const wholesale = !isNaN(manualCost) ? manualCost : calcStoneBaseCost(st, stonePricing, ndData);
+            return { wholesale, carat: parseFloat(st.caratWeight) || 0, origin: st.origin };
+          })
+          .filter(s => s.wholesale > 0)
+      : [];
+
+    const melee = isManager
+      ? item.meleeRows
+          .filter(r => r.origin && r.shape && r.quality && r.caratWeight && r.mm && (parseInt(r.qty) || 0) > 0)
+          .map(r => ({ origin: r.origin, shape: r.shape, quality: r.quality, carat: parseFloat(r.caratWeight) || 0, mm: r.mm, qty: parseInt(r.qty) || 0 }))
+      : [];
+
+    const mainStoneSettingRate = Number(fixedCosts.find(fc => fc.key === "main_stone_setting")?.amount ?? 80);
+    const stoneCount = item.includeMainStone && item.stoneOptions[0] ? (item.stoneOptions[0].stones?.length ?? 0) : 0;
+    const mainStoneSettingCost = item.includeMainStone ? stoneCount * mainStoneSettingRate : 0;
+    const totalMeleeQty = item.meleeRows.reduce((s, r) => s + (parseInt(r.qty) || 0), 0);
+    const smallSettingsCost = totalMeleeQty * 30;
+    const componentsCost = item.components.reduce((s, c) => s + (parseFloat(c.cost) || 0), 0);
+    const handEngravingCost = item.handEngraving ? (parseFloat(item.handEngravingAmount) || 150) : 0;
+    const laserEngravingCost = item.laserEngraving ? (parseFloat(item.laserEngravingAmount) || 80) : 0;
+    const labourRetail = Number(fixedCosts.find(fc => fc.key === "labour")?.amount ?? 0);
+    const addonsRetail = mainStoneSettingCost + smallSettingsCost + componentsCost + handEngravingCost + laserEngravingCost;
+
+    return { metals, stones, melee, labourRetail, addonsRetail };
+  }
+
+  // Re-fetch calculate_price() for every item whenever its price-relevant
+  // inputs change. Runs per item rather than batched — an item with no
+  // metal rows yet (mid-edit) is simply skipped, not an error.
+  useEffect(() => {
+    let cancelled = false;
+    for (const item of items) {
+      const payload = buildCalcPricePayload(item);
+      if (payload.metals.length === 0) {
+        setCalcPriceResults(prev => ({ ...prev, [item.id]: null }));
+        continue;
+      }
+      fetch("/api/quotes/calculate-price", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-tenant-id": user?.tenantId ?? "" },
+        body: JSON.stringify(payload),
+      })
+        .then(r => r.json())
+        .then((j: CalcPriceResult) => { if (!cancelled) setCalcPriceResults(prev => ({ ...prev, [item.id]: j })); })
+        .catch(() => { if (!cancelled) setCalcPriceResults(prev => ({ ...prev, [item.id]: null })); });
+    }
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    JSON.stringify(items.map(it => buildCalcPricePayload(it))),
+    fixedCosts, isManager, user?.tenantId,
+  ]);
+
   const allPricings = useMemo(() =>
-    items.map(item => computeItemPricing(item, metalRates, fixedCosts, marginBrackets, isManager, stonePricing, ndData)),
-    [items, metalRates, fixedCosts, marginBrackets, isManager, stonePricing, ndData]
+    items.map(item => computeItemPricing(item, metalRates, fixedCosts, calcPriceResults[item.id] ?? null, isManager, stonePricing, ndData)),
+    [items, metalRates, fixedCosts, calcPriceResults, isManager, stonePricing, ndData]
   );
 
   const charmTotal = useMemo(() => charmItems.reduce((sum, c) => sum + Number(c.retail_price), 0), [charmItems]);
