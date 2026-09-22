@@ -17,6 +17,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         phone: body.phone ?? null,
         lead_time_days: body.lead_time_days ?? null,
         notes: body.notes ?? null,
+        connector_type: body.connector_type || null,
       })
       .eq('id', params.id)
       .select()
