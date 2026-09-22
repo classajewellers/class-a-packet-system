@@ -3,6 +3,7 @@ import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { buildSalesReport } from "@/lib/reporting/reports/sales";
 import { buildOrdersReport } from "@/lib/reporting/reports/orders";
 import { buildWorkshopReport } from "@/lib/reporting/reports/workshop";
+import { buildQuotesReport } from "@/lib/reporting/reports/quotes";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -91,147 +92,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     // ── QUOTES ─────────────────────────────────────────────────────────────────
+    // Migrated onto the reporting engine — 2026-09-22. Verified byte-for-byte
+    // identical against the original hardcoded implementation on real
+    // staging data (populated range + zero-rows edge case) before this swap.
     if (section === "quotes") {
-      const quotesQ = supabase
-        .from("quotes")
-        .select("*")
-        .gte("created_at", start)
-        .lt("created_at", endPlusOne)
-        .order("created_at", { ascending: true });
-      const { data: quotes, error } = await (tenantId ? quotesQ.eq("tenant_id", tenantId) : quotesQ);
-
-      console.log(
-        "[reporting:quotes] quotes:",
-        quotes?.length ?? 0,
-        "error:",
-        error?.message ?? "none"
-      );
-      if (error)
-        return NextResponse.json({ error: error.message }, { status: 500 });
-
-      const rows = quotes ?? [];
-      const totalCreated = rows.length;
-      const wonCount = rows.filter(
-        (r: { status?: string | null }) => r.status === "job_won"
-      ).length;
-      const convertedCount = rows.filter(
-        (r: { converted_to_packet_id?: string | null }) =>
-          r.converted_to_packet_id != null
-      ).length;
-      const conversionRate =
-        totalCreated > 0
-          ? ((wonCount + convertedCount) / totalCreated) * 100
-          : 0;
-
-      const pipeline = rows.filter(
-        (r: { status?: string | null }) =>
-          r.status !== "job_lost" && r.status !== "job_won"
-      );
-      // Use total, quoted_price, or line_items total — whichever is populated
-      const totalPipelineValue = pipeline.reduce(
-        (s: number, r: { total?: number | null; quoted_price?: number | null }) =>
-          s + (r.total ?? r.quoted_price ?? 0),
-        0
-      );
-
-      // Avg days to close (won quotes)
-      const wonWithDate = rows.filter(
-        (r: { status?: string | null; job_won_at?: string | null }) =>
-          r.status === "job_won" && r.job_won_at
-      );
-      const avgDaysToClose =
-        wonWithDate.length > 0
-          ? wonWithDate.reduce(
-              (s: number, r: { created_at: string; job_won_at: string }) =>
-                s +
-                diffDays(
-                  r.created_at.split("T")[0],
-                  r.job_won_at.split("T")[0]
-                ),
-              0
-            ) / wonWithDate.length
-          : 0;
-
-      // By status (doughnut)
-      type StatusBucket = { status: string; count: number };
-      const byStatusMap: Record<string, StatusBucket> = {};
-      for (const r of rows) {
-        const st = (r.status as string) ?? "unknown";
-        if (!byStatusMap[st]) byStatusMap[st] = { status: st, count: 0 };
-        byStatusMap[st].count += 1;
+      try {
+        const report = await buildQuotesReport(supabase, { tenantId, start, end });
+        return NextResponse.json(report);
+      } catch (err) {
+        return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
       }
-      const byStatus = Object.values(byStatusMap);
-
-      // By staff
-      type StaffEntry = {
-        staff: string;
-        total: number;
-        won: number;
-        lost: number;
-        converted: number;
-      };
-      const byStaffMap: Record<string, StaffEntry> = {};
-      for (const r of rows) {
-        const s =
-          (r.assigned_to as string | null) ??
-          (r.staff_member as string | null) ??
-          "Unknown";
-        if (!byStaffMap[s])
-          byStaffMap[s] = { staff: s, total: 0, won: 0, lost: 0, converted: 0 };
-        byStaffMap[s].total += 1;
-        if (r.status === "job_won") byStaffMap[s].won += 1;
-        if (r.status === "job_lost") byStaffMap[s].lost += 1;
-        if (r.converted_to_packet_id) byStaffMap[s].converted += 1;
-      }
-      const byStaff = Object.values(byStaffMap)
-        .map((s) => ({
-          ...s,
-          rate:
-            s.total > 0 ? ((s.won + s.converted) / s.total) * 100 : 0,
-        }))
-        .sort((a, b) => b.total - a.total);
-
-      const pipelineList = pipeline.slice(0, 50).map(
-        (r: {
-          reference_number?: string | null;
-          customer_first_name?: string | null;
-          customer_last_name?: string | null;
-          assigned_to?: string | null;
-          staff_member?: string | null;
-          status?: string | null;
-          total?: number | null;
-          quoted_price?: number | null;
-          created_at: string;
-        }) => ({
-          reference_number: r.reference_number ?? "—",
-          customer:
-            [r.customer_first_name, r.customer_last_name]
-              .filter(Boolean)
-              .join(" ") || "—",
-          staff: r.assigned_to ?? r.staff_member ?? "—",
-          status: r.status ?? "—",
-          value: r.total ?? r.quoted_price ?? 0,
-          date: r.created_at.split("T")[0],
-        })
-      );
-
-      return NextResponse.json({
-        _meta: { section, start, end, recordCount: rows.length },
-        summary: {
-          totalCreated,
-          wonCount,
-          lostCount: rows.filter(
-            (r: { status?: string | null }) => r.status === "job_lost"
-          ).length,
-          convertedCount,
-          conversionRate,
-          totalPipelineValue,
-          avgDaysToClose,
-        },
-        byStatus,
-        byStaff,
-        pipeline: pipelineList,
-      });
     }
 
     // ── CUSTOMERS ──────────────────────────────────────────────────────────────
