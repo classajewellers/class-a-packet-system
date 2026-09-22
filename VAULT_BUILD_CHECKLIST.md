@@ -38,8 +38,9 @@ Last updated: 2026-09-22 (initial audit + plan)
 
 | # | Item | Status | Notes |
 |---|---|---|---|
-| 1.1 | Reorder point / low-stock threshold — serialized designs (`inventory_products`) | READY FOR TESTING | Migration `138_inventory_reorder_points.sql` written + pglite-verified (3/3 checks pass). Adds `reorder_point` + a reusable `inventory_low_stock` view. Needs Josh to apply to staging, same as every other migration this session. |
-| 1.1b | Reorder point — quantity-tracked variants (`inventory_product_variants`) | BLOCKED | **New drift found**: `inventory_product_variants` (migration 095) and `inventory_stock_levels` (migration 113) don't exist on staging at all — same class of gap as 077/115 found earlier this session. Deferred rather than guessing at re-applying migrations I didn't author onto an unknown-state DB. Need Josh to confirm these are live on production, then decide whether/how to bring staging in line before the variant-side reorder point can be added. |
+| 1.1 | Reorder point / low-stock threshold — serialized designs (`inventory_products`) | COMPLETE | Migration `138_inventory_reorder_points.sql` — applied to staging, confirmed by Josh 2026-09-22. Adds `reorder_point` + a reusable `inventory_low_stock` view. |
+| 1.1b | Staging drift closure — `inventory_product_variants`/`price_calculation_snapshots`/`pricing_birthstones`/`inventory_stock_levels`/`inventory_stock_receipts` | COMPLETE (staging only) | Migration `139_close_variant_pricing_staging_drift.sql` — applied to staging, confirmed by Josh 2026-09-22. Production already had all 7 relevant tables (confirmed via read-only check) — this was a staging-only gap, so **139 must NOT be applied to production**. Staging now matches reality; unblocks 1.1c below. |
+| 1.1c | Reorder point — quantity-tracked variants (`inventory_product_variants`) | NOT STARTED | Unblocked now that 1.1b is resolved on staging. Add `reorder_point` to `inventory_product_variants` + extend `inventory_low_stock` view with the quantity-tracked side (UNION, summing `inventory_stock_levels.quantity` per variant). Small follow-up migration. |
 | 1.2 | Unify "sell from stock" into the packets/order pipeline | NOT STARTED | `app/api/inventory/sales/route.ts` currently only writes `inventory_sales`, never touches `packets`. This is the single highest-leverage fix — POS, auto-workshop-detection, and QR all depend on sales and orders being one system. |
 
 ## Phase 2 — Reusable engines (parallel workstreams, both unblocked)
@@ -90,7 +91,8 @@ Last updated: 2026-09-22 (initial audit + plan)
 | 7.1 | GIA/IGI certificate integration | What access do we actually have? GIA's report-check API typically needs an enterprise partnership, not public signup. Need Josh to confirm what's contracted/available. |
 | 7.2 | EFTPOS/terminal integration | Provider choice + credentials + hardware confirmation (see 5.4). |
 | 7.3 | Live Prana/AJS API sync (beyond existing monthly manual upload) | Need real login/API credentials for their ordering/pricing systems, if a live sync is wanted instead of continuing the working monthly CSV upload. |
-| 7.4 | Quantity-tracked variant reorder points (1.1b) | Need Josh to confirm whether migrations 095 (`inventory_product_variants`) and 113 (`inventory_stock_levels`, quantity tracking) are actually live on production. If yes, staging needs them applied before variant-level reorder points can be added (same drift-closing pattern as migrations 077 and 115 earlier this session). If no, need to know whether quantity-tracked stock tracking is even in active use anywhere yet. |
+
+~~7.4~~ Resolved 2026-09-22 — production confirmed to already have all 7 tables from the 095/096/113 family; migration 139 closed the staging-only gap. No longer blocked, see 1.1c above.
 
 ## Phase 8 — Systematic mobile/PWA audit (deliberately last per Josh's own instruction #12)
 
