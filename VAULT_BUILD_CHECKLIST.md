@@ -13,24 +13,27 @@ Last updated: 2026-09-22 (initial audit + plan)
 
 ## Already complete (confirmed by code audit — no work needed unless a bug is found)
 
+**LIVE-STAGING AUDIT, 2026-09-22:** every row below was originally marked complete from a codebase read alone, not a live staging check. Given how many drifts turned up this session, every table/RPC dependency in this table was re-verified with a direct read-only query against staging. Two rows turned out to be broken in practice despite being code-complete — see the CAVEAT notes. Everything else below (RFID's `vault_verify_rfid_tag` RPC with its real signature, `calculate_price` RPC, `quotes.stripe_payment_link_url`/`_id`, `pricing_component_rules`, `design_band_recipes`, `workshop_jobs`, `packets.workshop_required`, `attachments`, `inventory_designs`/`pieces`/`products`, `inventory_locations.parent_id`) was confirmed genuinely present and working on staging, not just present in the code.
+
 | Item | Evidence |
 |---|---|
-| Inventory core (pieces/products/variants) | `supabase/migrations/029_inventory_designs_pieces.sql`, `079_inventory_products_and_sales.sql` |
-| Locations (CRUD + hierarchy) | `app/inventory/locations/page.tsx`, `082_inventory_locations_hierarchy.sql` |
-| Stock reservations | `081_inventory_reservations.sql`, `app/api/inventory/reservations/*`, wired into `app/inventory/[id]/page.tsx` |
-| RFID (end-to-end) | `app/settings/rfid/page.tsx`, `app/api/rfid/*`, `091_rfid_system.sql`, `vault-rfid-bridge/` — **CAVEAT (2026-09-22): code-complete, but `tenant_rfid_connections`/`tenant_rfid_handhelds` were found missing from staging (079 drift, see Phase 1.2 row) — RFID cannot actually run end-to-end on staging until migration 142 is applied. Not re-tested live once 142 lands.** |
-| Purchase orders + packet linking | `app/api/inventory/purchase-orders/*`, `087_po_lines_packet_link.sql` |
-| Workshop (list/Board/History) | `app/workshop/{page,board/page,history/page}.tsx`, shared `WorkshopJobDrawer` |
+| Inventory core (pieces/products/variants) | `supabase/migrations/029_inventory_designs_pieces.sql`, `079_inventory_products_and_sales.sql` — confirmed live on staging. |
+| Locations (CRUD + hierarchy) | `app/inventory/locations/page.tsx`, `082_inventory_locations_hierarchy.sql` — confirmed live on staging. |
+| Stock reservations | `081_inventory_reservations.sql`, `app/api/inventory/reservations/*`, wired into `app/inventory/[id]/page.tsx` — **CAVEAT (2026-09-22, live-staging audit): `inventory_reservations` was found MISSING from staging entirely** (081 apparently never applied there). Used by the Mark-as-Sold reservation-conflict check (Phase 1.2). Not yet fixed — needs its own closing migration, not yet written. |
+| RFID (end-to-end) | `app/settings/rfid/page.tsx`, `app/api/rfid/*`, `091_rfid_system.sql`, `vault-rfid-bridge/` — **CAVEAT (2026-09-22): code-complete, but `tenant_rfid_connections`/`tenant_rfid_handhelds` were found missing from staging (079 drift) — RFID cannot actually run end-to-end on staging until migration 142 is applied. `vault_verify_rfid_tag` RPC itself is confirmed present and working (an earlier check with the wrong param signature gave a false "missing" reading — corrected). Not re-tested live once 142 lands.** |
+| Purchase orders + packet linking | `app/api/inventory/purchase-orders/*`, `087_po_lines_packet_link.sql` — **CAVEAT (2026-09-22, live-staging audit): `inventory_purchase_orders`, `inventory_po_lines`, and `inventory_receiving_events` were found MISSING from staging entirely** (migrations 084/086/087/089/090 apparently never applied there, despite 084's own comment explicitly describing this exact gap). Closed by migration `143_close_po_receiving_staging_drift.sql`, pglite-verified. |
+| Workshop (list/Board/History) | `app/workshop/{page,board/page,history/page}.tsx`, shared `WorkshopJobDrawer` — `workshop_jobs` confirmed live on staging (empty, but present and queryable). |
 | Workshop manager noticeboard | `app/workshop/board/page.tsx` (`ManagerNoticeboard`, manager-gated) |
-| Attachments (universal) | `components/AttachmentsSection.tsx`, wired identically into orders + workshop |
-| workshop_required manual toggle | migration 137, this session — real persisted flag, active-queue gated, History ungated |
+| Attachments (universal) | `components/AttachmentsSection.tsx`, wired identically into orders + workshop — `attachments` table confirmed live on staging. |
+| workshop_required manual toggle | migration 137, this session — real persisted flag, active-queue gated, History ungated — confirmed live on staging. |
 | Quotes builders (new item + repair) | `app/quotes/builder/{new,repair}/page.tsx` |
-| Quote pricing automation | rule-based via `pricing_component_rules` family + settings routes, not AI |
-| Quote Stripe payment links | `app/api/quotes/[id]/payment-link/route.ts`, `lib/generatePaymentLink.ts` |
-| Pricing engine (`calculate_price`) | migrations 095, 109, 121, 123-126, 132-134 |
+| Quote pricing automation | rule-based via `pricing_component_rules` family + settings routes, not AI — `pricing_component_rules`/`design_band_recipes` confirmed live on staging. |
+| Quote Stripe payment links | `app/api/quotes/[id]/payment-link/route.ts`, `lib/generatePaymentLink.ts` — `quotes.stripe_payment_link_url`/`_id` confirmed present on staging. |
+| Pricing engine (`calculate_price`) | migrations 095, 109, 121, 123-126, 132-134 — RPC confirmed live and functional on staging (returns a real business-logic response, not a missing-function error). |
 | AI extraction pattern (reusable template) | `app/api/pricing/melee-import/extract/route.ts` — forced tool-use, flag/confirm, never auto-commits |
-| PWA viewport/manifest | `app/layout.tsx`, `public/manifest.json` — correctly configured |
-| Mobile app shell (Sidebar/TopBar drawer) | `components/Sidebar.tsx`, `components/TopBar.tsx` — working mobile drawer nav |
+| PWA viewport/manifest | `app/layout.tsx`, `public/manifest.json` — correctly configured (static config, not staging-dependent) |
+| Mobile app shell (Sidebar/TopBar drawer) | `components/Sidebar.tsx`, `components/TopBar.tsx` — working mobile drawer nav (static, not staging-dependent) |
+| **NEW FINDING — undocumented tables** | `inventory_statuses` and `inventory_categories` (used by 14+ files, including the Mark-as-Sold "Sold" status lookup) have **no migration file anywhere in the repo** — hand-created directly against a database at some point rather than through the migration system. Both were found MISSING from staging. Schema confirmed directly by Josh from production (2026-09-22): `id uuid, tenant_id uuid, name text, sort_order integer, is_active boolean, created_at timestamptz`. Closed by migration `144_close_statuses_categories_staging_drift.sql`, pglite-verified — schema only, no seed data yet (see that row's notes on why seed data is still needed before this is functionally usable, not just structurally present). |
 
 ---
 
