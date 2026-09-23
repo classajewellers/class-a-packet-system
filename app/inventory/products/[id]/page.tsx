@@ -34,6 +34,7 @@ export default function ProductDetailPage({ params }: Params) {
 
   const [product, setProduct] = useState<any>(null);
   const [pieces, setPieces]   = useState<any[]>([]);
+  const [atp, setAtp]         = useState<{ in_stock: number; committed: number; available_to_sell_today: number; in_production: Array<{ job_id: string; packet_id: string | null; stage: string; due_date: string | null; workshop_link: string }> } | null>(null);
   const [loading, setLoading] = useState(true);
   const [ref, setRef]         = useState<any>(null);
 
@@ -64,6 +65,7 @@ export default function ProductDetailPage({ params }: Params) {
       const json = await prodRes.json();
       setProduct(json.product);
       setPieces(json.pieces ?? []);
+      setAtp(json.atp ?? null);
     }
     if (refRes.ok) setRef(await refRes.json());
     setLoading(false);
@@ -286,6 +288,48 @@ export default function ProductDetailPage({ params }: Params) {
           </div>
         )}
       </div>
+
+      {/* Grace — Available to Promise */}
+      {atp && (
+        <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20, marginBottom: 20 }}>
+          <h2 style={{ margin: "0 0 14px", fontSize: 16, fontWeight: 700, color: "#111827" }}>Stock Availability</h2>
+          <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: atp.in_production.length > 0 ? 18 : 0 }}>
+            <div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: "#111827" }}>{atp.in_stock}</div>
+              <div style={{ fontSize: 12, color: "#6B7280" }}>In stock</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: "#F59E0B" }}>{atp.committed}</div>
+              <div style={{ fontSize: 12, color: "#6B7280" }}>Committed</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: atp.available_to_sell_today > 0 ? "#10B981" : "#6B7280" }}>{atp.available_to_sell_today}</div>
+              <div style={{ fontSize: 12, color: "#6B7280" }}>Available to sell today</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: "#3B82F6" }}>{atp.in_production.length}</div>
+              <div style={{ fontSize: 12, color: "#6B7280" }}>In production</div>
+            </div>
+          </div>
+          {atp.in_production.length > 0 && (
+            <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 8 }}>In production — by job</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {atp.in_production.map(job => (
+                  <a
+                    key={job.job_id}
+                    href={job.workshop_link}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 8, border: "1px solid #E5E7EB", textDecoration: "none", color: "#111827", fontSize: 13 }}
+                  >
+                    <span>Job {job.job_id.slice(0, 8)} — <span style={{ color: "#6B7280" }}>{job.stage}</span></span>
+                    <span style={{ color: "#6B7280", fontSize: 12 }}>{job.due_date ? `Due ${job.due_date}` : "No due date set"}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Files & Attachments */}
       <InventoryAttachmentsPanel

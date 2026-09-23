@@ -411,6 +411,12 @@ export default function InventoryPage() {
                           <div style={{ fontSize: 14, fontWeight: 700, color: "var(--vault-text)" }}>{product.piece_count ?? 0}</div>
                           <div style={{ fontSize: 10, color: "var(--vault-text-muted)" }}>pieces</div>
                         </div>
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: (product.atp?.available_to_sell_today ?? 0) > 0 ? "#10B981" : "var(--vault-text-muted)" }}>
+                            {product.atp?.available_to_sell_today ?? 0}
+                          </div>
+                          <div style={{ fontSize: 10, color: "var(--vault-text-muted)" }}>available today</div>
+                        </div>
                       </div>
                       <button
                         onClick={e => { e.stopPropagation(); router.push(`/inventory/products/${product.id}`); }}

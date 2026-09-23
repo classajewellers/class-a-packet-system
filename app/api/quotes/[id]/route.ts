@@ -3,6 +3,7 @@ import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { tenantScoped } from "@/lib/tenantScoped";
 import { Quote } from "@/lib/types";
 import { PIPELINE_STAGES, PipelineStage } from "@/lib/pipeline";
+import { autoReserveQuoteItems, autoReleaseQuoteReservations } from "@/lib/graceReservations";
 
 export const dynamic = "force-dynamic";
 
@@ -115,6 +116,27 @@ export async function PATCH(
       { error: error?.message ?? "Update failed" },
       { status: 500 }
     );
+  }
+
+  // ── Grace ATP — auto reserve/release stock pieces on quote won/lost ────────
+  // Non-fatal: a reservation-wiring failure must not block the quote status
+  // update itself (same tolerance pattern as the FK-clear/notification
+  // cleanup in DELETE below).
+  if (body.status === "converted" || body.status === "job_won" || body.status === "paid") {
+    try {
+      const result = await autoReserveQuoteItems(supabase, tenantId, data as { id: string; quote_builder_data?: unknown; customer_id?: string | null });
+      if (result.skipped.length > 0) {
+        console.warn("[quotes/[id] PATCH] Grace auto-reserve skipped some pieces:", result.skipped);
+      }
+    } catch (e) {
+      console.error("[quotes/[id] PATCH] Grace auto-reserve failed (non-fatal):", e);
+    }
+  } else if (body.status === "job_lost") {
+    try {
+      await autoReleaseQuoteReservations(supabase, tenantId, params.id);
+    } catch (e) {
+      console.error("[quotes/[id] PATCH] Grace auto-release failed (non-fatal):", e);
+    }
   }
 
   return NextResponse.json({ quote: data as Quote });

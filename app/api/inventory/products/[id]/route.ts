@@ -11,6 +11,76 @@ const PIECE_SELECT = `
   location:inventory_locations(id, name)
 `.trim();
 
+// Grace ATP (Available to Promise) — stock/catalogue items only (this route
+// is keyed on inventory_products, which is what the live data and this page
+// actually use — see session notes for why inventory_designs is NOT used).
+//
+// "In stock": inventory_pieces.quantity summed for pieces whose location is
+// a sellable type (display, storage — confirmed 2026-09-23; consignment
+// deliberately excluded for now, no consignment locations exist in real
+// data yet; workshop/transit excluded, not customer-facing stock) and whose
+// status is 'in_stock' (the piece's own text status column — NOT
+// status_id/inventory_statuses, which inventory_pieces does not have a
+// column for on live staging).
+const SELLABLE_LOCATION_TYPES = ["display", "storage"];
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SupabaseClientAny = any;
+
+async function computeATP(supabase: SupabaseClientAny, tenantId: string, productId: string) {
+  const [piecesRes, reservationsRes, jobsRes] = await Promise.all([
+    supabase
+      .from("inventory_pieces")
+      .select("id, quantity, status, location:inventory_locations(id, name, type)")
+      .eq("product_id", productId)
+      .eq("tenant_id", tenantId),
+    supabase
+      .from("inventory_reservations")
+      .select("id, piece_id, quote_id, order_id")
+      .eq("tenant_id", tenantId)
+      .eq("status", "active"),
+    supabase
+      .from("workshop_jobs")
+      .select("id, packet_id, stage, due_date")
+      .eq("product_id", productId)
+      .neq("stage", "completed"),
+  ]);
+
+  const pieces = piecesRes.data ?? [];
+  const pieceIds = new Set(pieces.map((p: { id: string }) => p.id));
+
+  const inStock = pieces.reduce((sum: number, p: { quantity?: number | null; status?: string | null; location?: { type?: string } | { type?: string }[] | null }) => {
+    const loc = Array.isArray(p.location) ? p.location[0] : p.location;
+    const isSellableLocation = !!loc && SELLABLE_LOCATION_TYPES.includes(loc.type ?? "");
+    const isStockStatus = p.status === "in_stock";
+    if (!isSellableLocation || !isStockStatus) return sum;
+    return sum + (p.quantity ?? 1);
+  }, 0);
+
+  // Committed = active reservations for pieces belonging to this product.
+  // Each reservation is one physical piece (piece_id is a single-unit FK),
+  // so committed counts reservation rows, not summed quantity — a
+  // quantity-tracked piece row being partially reserved is out of scope
+  // for this first version (inventory_reservations.piece_id has no
+  // quantity field of its own).
+  const committed = (reservationsRes.data ?? []).filter((r: { piece_id: string }) => pieceIds.has(r.piece_id)).length;
+
+  const inProduction = (jobsRes.data ?? []).map((j: { id: string; packet_id: string | null; stage: string; due_date: string | null }) => ({
+    job_id: j.id,
+    packet_id: j.packet_id,
+    stage: j.stage,
+    due_date: j.due_date,
+    workshop_link: `/workshop/board?job=${j.id}`,
+  }));
+
+  return {
+    in_stock: inStock,
+    committed,
+    available_to_sell_today: Math.max(0, inStock - committed),
+    in_production: inProduction,
+  };
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -37,9 +107,12 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  const atp = await computeATP(supabase, tenantId, params.id);
+
   return NextResponse.json({
     product: productRes.data,
     pieces: piecesRes.data ?? [],
+    atp,
   });
 }
 

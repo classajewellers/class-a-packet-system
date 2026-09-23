@@ -23,9 +23,13 @@ export async function PATCH(
   const { release_reason, moved_by } = body;
 
   // ── Fetch the reservation ───────────────────────────────────────────────────
+  // previous_piece_status (text) is the real revert target — see migration
+  // 157. previous_status_id (uuid, references inventory_statuses) is legacy/
+  // unused for this purpose: inventory_pieces.status is a plain text column,
+  // not an inventory_statuses row.
   const { data: reservation, error: resErr } = await supabase
     .from("inventory_reservations")
-    .select("id, piece_id, status, previous_status_id, customer_id")
+    .select("id, piece_id, status, previous_piece_status, customer_id")
     .eq("id", params.id)
     .eq("tenant_id", tenantId)
     .single();
@@ -38,15 +42,7 @@ export async function PATCH(
   }
 
   const now = new Date().toISOString();
-
-  // ── Fetch current piece status (for the movement from_status_id) ────────────
-  const { data: piece } = await supabase
-    .from("inventory_pieces")
-    .select("status_id")
-    .eq("id", reservation.piece_id)
-    .single();
-
-  const currentStatusId = piece?.status_id ?? null;
+  const revertStatus = reservation.previous_piece_status || "in_stock";
 
   // ── Update reservation to released ─────────────────────────────────────────
   const { data: updated, error: updateErr } = await supabase
@@ -63,26 +59,24 @@ export async function PATCH(
 
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
 
-  // ── Revert piece status to previous_status_id ───────────────────────────────
-  if (reservation.previous_status_id) {
-    const { error: pieceErr } = await supabase
-      .from("inventory_pieces")
-      .update({ status_id: reservation.previous_status_id, updated_at: now })
-      .eq("id", reservation.piece_id)
-      .eq("tenant_id", tenantId);
+  // ── Revert piece status ──────────────────────────────────────────────────────
+  const { error: pieceErr } = await supabase
+    .from("inventory_pieces")
+    .update({ status: revertStatus })
+    .eq("id", reservation.piece_id)
+    .eq("tenant_id", tenantId);
 
-    if (pieceErr) {
-      console.error("[reservations/release] piece status revert failed:", pieceErr.message);
-    }
+  if (pieceErr) {
+    console.error("[reservations/release] piece status revert failed:", pieceErr.message);
   }
 
-  // ── Insert movement row ─────────────────────────────────────────────────────
-  const movNotes = `Reservation released${release_reason ? `: ${release_reason}` : ""}`;
+  // ── Insert movement row ──────────────────────────────────────────────────────
+  const movNotes = `Reservation released (reserved → ${revertStatus})${release_reason ? `: ${release_reason}` : ""}`;
   await supabase.from("inventory_movements").insert({
     tenant_id:        tenantId,
     piece_id:         reservation.piece_id,
-    from_status_id:   currentStatusId,
-    to_status_id:     reservation.previous_status_id ?? null,
+    from_status_id:   null,
+    to_status_id:     null,
     from_location_id: null,
     to_location_id:   null,
     moved_by:         moved_by || null,

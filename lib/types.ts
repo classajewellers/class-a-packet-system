@@ -762,6 +762,8 @@ export interface InventoryProduct {
   created_at: string;
   // Computed
   piece_count?: number;
+  // Grace ATP (Available to Promise) — stock/catalogue items only
+  atp?: { in_stock: number; committed: number; available_to_sell_today: number };
   // Joined
   category?: { id: string; name: string } | string | null;
 }
