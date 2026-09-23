@@ -40,6 +40,11 @@ interface CalcPriceResult {
   inputs: {
     metal_multiplier: number | null;
     stone_multiplier: number | null;
+    // Only meaningful when stone_rows_count === 1 — migration 160 fixed
+    // this to always be null before then, and for 2+ stone rows landing in
+    // different cost tiers there is no single correct multiplier to show
+    // in the first place (display falls back to "Mixed" — see below).
+    stone_rows_count: number | null;
     melee_multiplier: number | null;
   };
   error?: string;
@@ -336,7 +341,16 @@ function computeItemPricing(
   const breakdown: BlendedBreakdownLine[] = calcResult && !calcResult.error
     ? [
         calcResult.metal_retail > 0 && { label: "Metal", portion: metalCost, multiplier: calcResult.inputs.metal_multiplier ?? 0, subtotal: calcResult.metal_retail },
-        calcResult.stone_retail > 0 && { label: "Main stone", portion: mainStoneCost, multiplier: calcResult.inputs.stone_multiplier ?? 0, subtotal: calcResult.stone_retail },
+        // stone_multiplier is only meaningful for exactly one stone row —
+        // migration 160. For 2+ stones landing in different cost tiers,
+        // there is no single correct multiplier to show, so "Mixed" is
+        // shown instead of a misleading number (never 0.00, which used to
+        // display even for a correctly-priced single stone — see 160).
+        calcResult.stone_retail > 0 && {
+          label: "Main stone", portion: mainStoneCost, subtotal: calcResult.stone_retail,
+          multiplier: calcResult.inputs.stone_multiplier ?? 0,
+          multiplierLabel: (calcResult.inputs.stone_rows_count ?? 0) > 1 ? "Mixed" : undefined,
+        },
         calcResult.melee_retail > 0 && { label: "Melee", portion: meleeCost, multiplier: calcResult.inputs.melee_multiplier ?? 0, subtotal: calcResult.melee_retail },
         calcResult.labour_retail > 0 && { label: "Labour (flat, no multiplier)", portion: calcResult.labour_retail, multiplier: 1, subtotal: calcResult.labour_retail },
         calcResult.addons_retail > 0 && { label: "Addons (flat, no multiplier)", portion: calcResult.addons_retail, multiplier: 1, subtotal: calcResult.addons_retail },
@@ -1082,7 +1096,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                     <div style={{ color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 4, marginTop: 6 }}>Margin calculation (per component)</div>
                     {pricing.breakdown.map((line, i) => (
                       <div key={i} style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                        <span style={{ color: "#9CA3AF", fontSize: 12 }}>{line.label} × {Number(line.multiplier).toFixed(2)}</span>
+                        <span style={{ color: "#9CA3AF", fontSize: 12 }}>{line.label} × {line.multiplierLabel ?? Number(line.multiplier).toFixed(2)}</span>
                         <span style={{ color: "#374151", fontSize: 12 }}>${Number(line.subtotal).toFixed(2)}</span>
                       </div>
                     ))}
