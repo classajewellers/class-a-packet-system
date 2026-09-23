@@ -9,11 +9,16 @@ import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
 
 type POStatus = "draft" | "ordered" | "partially_received" | "received" | "cancelled";
 
+interface XeroAccountOption { id: string; code: string; name: string; type: string; }
+
 interface PoLine {
   id: string;
   title: string | null;
   category_id: string | null;
   category?: { id: string; name: string } | null;
+  xero_account_id: string | null;
+  xero_account_code: string | null;
+  xero_account_name: string | null;
   metal_type: string | null;
   metal_karat: string | null;
   metal_colour: string | null;
@@ -46,6 +51,9 @@ interface EditPoLine {
   id: string;
   title: string;
   category_id: string;
+  xero_account_id: string;
+  xero_account_code: string;
+  xero_account_name: string;
   metal_type: string;
   metal_karat: string;
   metal_colour: string;
@@ -503,6 +511,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   const [locations, setLocations]   = useState<any[]>([]);
   const [products, setProducts]     = useState<any[]>([]);
   const [suppliers, setSuppliers]   = useState<{ id: string; name: string }[]>([]);
+  const [xeroAccounts, setXeroAccounts] = useState<XeroAccountOption[] | null>(null);
   const [showReceive, setShowReceive] = useState(false);
   const [receivedCount, setReceivedCount] = useState(0);
   const [allDone, setAllDone] = useState(false);
@@ -533,10 +542,11 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   const fetchPo = useCallback(async () => {
     if (!tenantId) return;
     setLoading(true);
-    const [poRes, refRes, prodRes] = await Promise.all([
+    const [poRes, refRes, prodRes, xeroRes] = await Promise.all([
       fetch(`/api/inventory/purchase-orders/${params.id}`, { headers }),
       fetch("/api/inventory/reference", { headers }),
       fetch("/api/inventory/products?limit=500", { headers }),
+      fetch("/api/xero/accounts", { headers }),
     ]);
     if (poRes.ok) {
       const json = await poRes.json();
@@ -552,6 +562,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
       const json = await prodRes.json();
       setProducts(json.products ?? []);
     }
+    setXeroAccounts(xeroRes.ok ? (await xeroRes.json()).accounts ?? [] : []);
     setLoading(false);
   }, [tenantId, params.id]);
 
@@ -627,6 +638,9 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
       id:                l.id,
       title:             l.title             ?? "",
       category_id:       l.category_id       ?? "",
+      xero_account_id:   l.xero_account_id   ?? "",
+      xero_account_code: l.xero_account_code ?? "",
+      xero_account_name: l.xero_account_name ?? "",
       metal_type:        l.metal_type        ?? "",
       metal_karat:       l.metal_karat       ?? "",
       metal_colour:      l.metal_colour      ?? "",
@@ -688,6 +702,9 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
           id:                l.id,
           title:             l.title             || null,
           category_id:       l.category_id       || null,
+          xero_account_id:   l.xero_account_id   || null,
+          xero_account_code: l.xero_account_code || null,
+          xero_account_name: l.xero_account_name || null,
           metal_type:        l.metal_type        || null,
           metal_karat:       l.metal_karat       || null,
           metal_colour:      l.metal_colour      || null,
@@ -878,6 +895,35 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                       <input value={line.title} onChange={e => setLine({ title: e.target.value })} style={IF} />
                     </div>
                     <div>
+                      <label style={LF}>Category</label>
+                      <select value={line.category_id} onChange={e => setLine({ category_id: e.target.value })} style={{ ...IF, background: "#fff" }}>
+                        <option value="">—</option>
+                        {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={LF}>Xero Account</label>
+                      <select
+                        value={line.xero_account_id}
+                        onChange={e => {
+                          const acc = xeroAccounts?.find(a => a.id === e.target.value);
+                          setLine({
+                            xero_account_id:   acc?.id ?? "",
+                            xero_account_code: acc?.code ?? "",
+                            xero_account_name: acc?.name ?? "",
+                          });
+                        }}
+                        style={{ ...IF, background: "#fff" }}
+                      >
+                        <option value="">
+                          {xeroAccounts === null ? "Loading…" : xeroAccounts.length === 0 ? "Xero not connected" : "—"}
+                        </option>
+                        {xeroAccounts?.map(a => (
+                          <option key={a.id} value={a.id}>{a.code ? `${a.code} — ${a.name}` : a.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
                       <label style={LF}>Metal Type</label>
                       <input value={line.metal_type} onChange={e => setLine({ metal_type: e.target.value })} style={IF} />
                     </div>
@@ -970,7 +1016,9 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
         <button
           type="button"
           onClick={() => setEditLines(ls => [...ls, {
-            id: "", title: "", category_id: "", metal_type: "", metal_karat: "",
+            id: "", title: "", category_id: "",
+            xero_account_id: "", xero_account_code: "", xero_account_name: "",
+            metal_type: "", metal_karat: "",
             metal_colour: "", diamond_type: "", diamond_carat: "", diamond_colour: "",
             diamond_clarity: "", finger_size: "", quantity: "1", estimated_cost: "",
             actual_cost: null, supplier_design_no: "", packet_id: "", notes: "",

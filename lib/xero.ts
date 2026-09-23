@@ -8,21 +8,6 @@
 
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
-// Fixed, Vault-defined taxonomy for PO-line GL mapping — confirmed with
-// Josh 2026-09-23. The same six categories for every tenant; only which
-// real Xero account each maps to is tenant-specific. Lives here (not in
-// app/api/xero/account-mappings/route.ts) because a Next.js route.ts file
-// may only export HTTP method handlers and a small set of route config
-// fields — any other named export fails the build's route-type check.
-export const XERO_MAPPING_CATEGORIES = [
-  { key: "diamonds_gemstones",  label: "Diamonds/Gemstones" },
-  { key: "metal",               label: "Metal" },
-  { key: "findings_components", label: "Findings/Components" },
-  { key: "labour",              label: "Labour" },
-  { key: "freight_shipping",    label: "Freight/Shipping" },
-  { key: "other",               label: "Other/Miscellaneous" },
-] as const;
-
 export class XeroNotConnectedError extends Error {
   constructor() { super("Xero is not connected for this tenant"); }
 }
