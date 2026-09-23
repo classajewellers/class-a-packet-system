@@ -202,8 +202,20 @@ interface ZapierFlatOrder {
 
 // Returns 'pickup' when the shipping method title indicates local/in-store pickup,
 // 'shipping' otherwise. Checks for "pickup", "pick up", and "collect" keywords.
+//
+// Fixed 2026-09-24 (recurring bug: real pickup orders printed as shipping
+// labels): when Shopify sends no shipping_lines at all, this now defaults
+// to 'pickup', not 'shipping'. Empty shipping_lines is the normal signature
+// of a genuine local-pickup order (no shipping rate was purchased) —
+// confirmed a real shipping order's shipping_lines entry survives a free-
+// shipping discount (the discount zeroes the price, it doesn't remove the
+// line), so this default no longer risks misreading a real $0-shipping
+// order. The only other realistic empty-shipping_lines case is a fully
+// virtual/digital order (e.g. a gift card) needing no physical fulfillment
+// at all — this codebase has no gift-card handling either way, so no label
+// gets printed for that case regardless of which value is stored here.
 function detectDeliveryMethod(shippingMethod: string | null): "pickup" | "shipping" {
-  if (!shippingMethod) return "shipping";
+  if (!shippingMethod) return "pickup";
   const lower = shippingMethod.toLowerCase();
   return lower.includes("pickup") || lower.includes("pick up") || lower.includes("collect")
     ? "pickup"
