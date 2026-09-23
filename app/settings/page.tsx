@@ -20,6 +20,12 @@ interface ShopifyConnection {
   connected_at?: string | null;
   webhook_registered?: boolean;
 }
+interface XeroConnection {
+  connected: boolean;
+  xero_tenant_name?: string | null;
+  scopes?: string | null;
+  connected_at?: string | null;
+}
 type Section = 'integrations' | 'pricing' | 'store';
 type PricingTab = 'metal' | 'fixed' | 'margin' | 'melee';
 
@@ -56,6 +62,11 @@ export default function SettingsPage() {
   const [shopInput, setShopInput] = useState('');
   const [shopifyDisconnecting, setShopifyDisconnecting] = useState(false);
 
+  /* Xero connection state */
+  const [xeroConn, setXeroConn] = useState<XeroConnection | null>(null);
+  const [xeroConnLoading, setXeroConnLoading] = useState(false);
+  const [xeroDisconnecting, setXeroDisconnecting] = useState(false);
+
   /* Pricing state */
   const [pricingTab, setPricingTab] = useState<PricingTab>('metal');
   const [metalRates, setMetalRates] = useState<MetalRate[]>([]);
@@ -86,10 +97,13 @@ export default function SettingsPage() {
     if (stored) setLastSynced(stored);
   }, []);
 
-  /* Shopify: read query params on load (success/error redirected back from OAuth) */
+  /* Shopify/Xero: read query params on load (success/error redirected back from OAuth) */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("shopify_connected") || params.get("shopify_error") || params.get("webhook_warning")) {
+    if (
+      params.get("shopify_connected") || params.get("shopify_error") || params.get("webhook_warning") ||
+      params.get("xero_connected") || params.get("xero_error")
+    ) {
       setSection('integrations');
       // Remove query params without full reload
       const clean = window.location.pathname;
@@ -120,6 +134,32 @@ export default function SettingsPage() {
       setShopifyConn({ connected: false });
     } finally {
       setShopifyDisconnecting(false);
+    }
+  }
+
+  /* Xero: load connection status when integrations tab is active */
+  useEffect(() => {
+    if (section !== 'integrations' || !user?.tenantId || xeroConn !== null || xeroConnLoading) return;
+    setXeroConnLoading(true);
+    fetch('/api/xero/connection', { headers: { 'x-tenant-id': user.tenantId } })
+      .then(r => r.json())
+      .then((json: XeroConnection) => setXeroConn(json))
+      .catch(() => setXeroConn({ connected: false }))
+      .finally(() => setXeroConnLoading(false));
+  }, [section, user, xeroConn, xeroConnLoading]);
+
+  /* Xero: disconnect */
+  async function disconnectXero() {
+    if (!confirm('Disconnect Xero? Purchase order sync will stop.')) return;
+    setXeroDisconnecting(true);
+    try {
+      await fetch('/api/xero/connection', {
+        method: 'DELETE',
+        headers: { 'x-tenant-id': user?.tenantId ?? '' },
+      });
+      setXeroConn({ connected: false });
+    } finally {
+      setXeroDisconnecting(false);
     }
   }
 
@@ -463,6 +503,71 @@ export default function SettingsPage() {
                   <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 8 }}>
                     Enter your store subdomain only — e.g. <code>classajewellers</code>, not the full URL.
                   </p>
+                </div>
+              )}
+            </div>
+
+            {/* ── Xero Connect ── */}
+            <div style={{ ...card, padding: 24, marginTop: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth={1.8}>
+                    <circle cx="12" cy="12" r="9" />
+                    <path strokeLinecap="round" d="M8 8l8 8M16 8l-8 8" />
+                  </svg>
+                </div>
+                <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--vault-text)' }}>Xero</span>
+                {xeroConnLoading && <span style={{ fontSize: 12, color: '#9CA3AF' }}>Loading…</span>}
+                {!xeroConnLoading && xeroConn?.connected && (
+                  <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: '#DCFCE7', color: '#16A34A' }}>Connected</span>
+                )}
+                {!xeroConnLoading && xeroConn && !xeroConn.connected && (
+                  <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: '#F3F4F6', color: '#6B7280' }}>Not connected</span>
+                )}
+              </div>
+
+              {xeroConn?.connected ? (
+                <div>
+                  <p style={{ fontSize: 13, color: '#374151', marginBottom: 4 }}>
+                    <strong>{xeroConn.xero_tenant_name ?? 'Xero organisation'}</strong>
+                  </p>
+                  {xeroConn.connected_at && (
+                    <p style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12 }}>
+                      Connected {formatDateAU(xeroConn.connected_at.split('T')[0])}
+                    </p>
+                  )}
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <a
+                      href="/api/xero/oauth/install"
+                      style={{ fontSize: 13, fontWeight: 600, color: 'var(--vault-text)', background: 'var(--vault-surface-selected)', border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', textDecoration: 'none' }}
+                    >
+                      Reconnect
+                    </a>
+                    <button
+                      onClick={disconnectXero}
+                      disabled={xeroDisconnecting}
+                      style={{ fontSize: 13, fontWeight: 600, color: '#DC2626', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', opacity: xeroDisconnecting ? 0.6 : 1 }}
+                    >
+                      {xeroDisconnecting ? 'Disconnecting…' : 'Disconnect'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 12 }}>
+                    Connect Xero to sync purchase orders.
+                  </p>
+                  <a
+                    href="/api/xero/oauth/install"
+                    style={{
+                      fontSize: 13, fontWeight: 600, padding: '8px 16px',
+                      background: '#2563EB', color: '#fff',
+                      borderRadius: 8, textDecoration: 'none',
+                      cursor: 'pointer', whiteSpace: 'nowrap', display: 'inline-block',
+                    }}
+                  >
+                    Connect Xero →
+                  </a>
                 </div>
               )}
             </div>
