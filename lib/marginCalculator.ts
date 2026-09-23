@@ -23,6 +23,10 @@ export interface BlendedBreakdownLine {
   portion: number;
   multiplier: number;
   subtotal: number;
+  // Overrides the numeric multiplier display (e.g. "Mixed") for cases with
+  // no single correct multiplier to show — multiple stones landing in
+  // different cost tiers, for example. See app/quotes/builder/new/page.tsx.
+  multiplierLabel?: string;
 }
 
 export interface BlendedResult {
