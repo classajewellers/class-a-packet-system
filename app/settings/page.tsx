@@ -26,16 +26,6 @@ interface XeroConnection {
   scopes?: string | null;
   connected_at?: string | null;
 }
-interface XeroAccountOption { id: string; code: string; name: string; type: string; }
-interface XeroAccountMapping { xero_account_id: string; xero_account_code: string; xero_account_name: string; }
-const XERO_MAPPING_CATEGORIES = [
-  { key: "diamonds_gemstones",  label: "Diamonds/Gemstones" },
-  { key: "metal",               label: "Metal" },
-  { key: "findings_components", label: "Findings/Components" },
-  { key: "labour",              label: "Labour" },
-  { key: "freight_shipping",    label: "Freight/Shipping" },
-  { key: "other",               label: "Other/Miscellaneous" },
-] as const;
 type Section = 'integrations' | 'pricing' | 'store';
 type PricingTab = 'metal' | 'fixed' | 'margin' | 'melee';
 
@@ -77,15 +67,6 @@ export default function SettingsPage() {
   const [xeroConnLoading, setXeroConnLoading] = useState(false);
   const [xeroDisconnecting, setXeroDisconnecting] = useState(false);
 
-  /* Xero account mapping state */
-  const [xeroAccounts, setXeroAccounts] = useState<XeroAccountOption[] | null>(null);
-  const [xeroAccountsLoading, setXeroAccountsLoading] = useState(false);
-  const [xeroAccountsError, setXeroAccountsError] = useState('');
-  const [xeroMappings, setXeroMappings] = useState<Record<string, XeroAccountMapping>>({});
-  const [xeroMappingsLoaded, setXeroMappingsLoaded] = useState(false);
-  const [xeroMappingSelections, setXeroMappingSelections] = useState<Record<string, string>>({});
-  const [xeroMappingSaving, setXeroMappingSaving] = useState(false);
-  const [xeroMappingSaved, setXeroMappingSaved] = useState(false);
 
   /* Pricing state */
   const [pricingTab, setPricingTab] = useState<PricingTab>('metal');
@@ -183,59 +164,6 @@ export default function SettingsPage() {
     }
   }
 
-  /* Xero: load live Chart of Accounts + saved mappings once connected */
-  useEffect(() => {
-    if (!xeroConn?.connected || !user?.tenantId || xeroAccounts !== null || xeroAccountsLoading) return;
-    setXeroAccountsLoading(true);
-    setXeroAccountsError('');
-    Promise.all([
-      fetch('/api/xero/accounts', { headers: { 'x-tenant-id': user.tenantId } }).then(r => r.json()),
-      fetch('/api/xero/account-mappings', { headers: { 'x-tenant-id': user.tenantId } }).then(r => r.json()),
-    ])
-      .then(([accountsJson, mappingsJson]) => {
-        if (accountsJson.error) {
-          setXeroAccountsError(accountsJson.error);
-          setXeroAccounts([]);
-        } else {
-          setXeroAccounts(accountsJson.accounts ?? []);
-        }
-        const mappings = mappingsJson.mappings ?? {};
-        setXeroMappings(mappings);
-        const selections: Record<string, string> = {};
-        for (const cat of XERO_MAPPING_CATEGORIES) {
-          if (mappings[cat.key]) selections[cat.key] = mappings[cat.key].xero_account_id;
-        }
-        setXeroMappingSelections(selections);
-        setXeroMappingsLoaded(true);
-      })
-      .catch(() => setXeroAccountsError('Failed to load Xero accounts'))
-      .finally(() => setXeroAccountsLoading(false));
-  }, [xeroConn, user, xeroAccounts, xeroAccountsLoading]);
-
-  /* Xero: save account mappings */
-  async function saveXeroMappings() {
-    if (!user?.tenantId || !xeroAccounts) return;
-    setXeroMappingSaving(true);
-    setXeroMappingSaved(false);
-    try {
-      const mappings: Record<string, XeroAccountMapping> = {};
-      for (const [key, accountId] of Object.entries(xeroMappingSelections)) {
-        const account = xeroAccounts.find(a => a.id === accountId);
-        if (account) mappings[key] = { xero_account_id: account.id, xero_account_code: account.code, xero_account_name: account.name };
-      }
-      const res = await fetch('/api/xero/account-mappings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'x-tenant-id': user.tenantId },
-        body: JSON.stringify({ mappings }),
-      });
-      if (res.ok) {
-        setXeroMappings(mappings);
-        setXeroMappingSaved(true);
-      }
-    } finally {
-      setXeroMappingSaving(false);
-    }
-  }
 
   /* Pricing: lazy load when section first visited */
   useEffect(() => {
@@ -624,49 +552,6 @@ export default function SettingsPage() {
                     >
                       {xeroDisconnecting ? 'Disconnecting…' : 'Disconnect'}
                     </button>
-                  </div>
-
-                  {/* ── Chart of Accounts Mapping ── */}
-                  <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid var(--vault-border)' }}>
-                    <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--vault-text)', marginBottom: 4 }}>Chart of Accounts Mapping</h3>
-                    <p style={{ fontSize: 12, color: '#6B7280', marginBottom: 14 }}>
-                      Map each purchase order cost category to your real Xero accounts, once.
-                    </p>
-                    {xeroAccountsLoading && <p style={{ fontSize: 13, color: '#9CA3AF' }}>Loading your Xero accounts…</p>}
-                    {xeroAccountsError && (
-                      <p style={{ fontSize: 13, color: '#DC2626', marginBottom: 10 }}>{xeroAccountsError}</p>
-                    )}
-                    {!xeroAccountsLoading && xeroAccounts && (
-                      <div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px', marginBottom: 14 }}>
-                          {XERO_MAPPING_CATEGORIES.map(cat => (
-                            <div key={cat.key}>
-                              <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--vault-text)', display: 'block', marginBottom: 4 }}>{cat.label}</label>
-                              <select
-                                value={xeroMappingSelections[cat.key] ?? ''}
-                                onChange={e => setXeroMappingSelections(prev => ({ ...prev, [cat.key]: e.target.value }))}
-                                style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: '1px solid var(--vault-border)', fontSize: 13, background: '#F9FAFB', color: 'var(--vault-text)' }}
-                              >
-                                <option value="">— Select account —</option>
-                                {xeroAccounts.map(a => (
-                                  <option key={a.id} value={a.id}>{a.code ? `${a.code} — ${a.name}` : a.name}</option>
-                                ))}
-                              </select>
-                            </div>
-                          ))}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <button
-                            onClick={saveXeroMappings}
-                            disabled={xeroMappingSaving}
-                            style={{ fontSize: 13, fontWeight: 600, padding: '8px 16px', background: '#2563EB', color: '#fff', border: 'none', borderRadius: 8, cursor: xeroMappingSaving ? 'wait' : 'pointer', opacity: xeroMappingSaving ? 0.7 : 1 }}
-                          >
-                            {xeroMappingSaving ? 'Saving…' : 'Save Mapping'}
-                          </button>
-                          {xeroMappingSaved && <span style={{ fontSize: 13, color: '#16A34A' }}>✓ Saved</span>}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
               ) : (

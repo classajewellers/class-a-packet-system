@@ -14,6 +14,8 @@ interface OpenPacket {
   packet_type: string | null;
 }
 
+interface XeroAccountOption { id: string; code: string; name: string; type: string; }
+
 interface PoLine {
   _id: string; // local only
   title: string;
@@ -32,6 +34,14 @@ interface PoLine {
   forOrder: boolean; // local state only — tracks "Stock" vs "Customer Order" mode
   packet_id: string; // uuid when an order is selected, "" when none yet chosen
   notes: string;
+  // Which real Xero account this line's cost should be billed against —
+  // chosen per line (not a once-off Settings mapping), since a single PO
+  // can mix items that belong on different accounts. code/name are
+  // captured at selection time so a later Xero rename doesn't retroactively
+  // change what a historical line shows.
+  xero_account_id: string;
+  xero_account_code: string;
+  xero_account_name: string;
   // AI state
   aiDesc: string;
   aiLoading: boolean;
@@ -44,6 +54,7 @@ function blankLine(): PoLine {
     stone_type: "", stone_carat: "", stone_colour: "", stone_clarity: "",
     finger_size: "", quantity: "1", estimated_cost: "", supplier_design_no: "",
     forOrder: false, packet_id: "", notes: "",
+    xero_account_id: "", xero_account_code: "", xero_account_name: "",
     aiDesc: "", aiLoading: false,
   };
 }
@@ -120,13 +131,20 @@ export default function NewPurchaseOrderPage() {
   const [saveAs, setSaveAs]     = useState<"draft" | "ordered">("draft");
   const [error, setError]       = useState("");
 
+  // Xero accounts for the per-line "Xero Account" dropdown — fetched once;
+  // null while loading, empty array if Xero isn't connected or the fetch
+  // failed (the dropdown degrades to "not connected", not an error state,
+  // since Xero is optional).
+  const [xeroAccounts, setXeroAccounts] = useState<XeroAccountOption[] | null>(null);
+
   const headers = { "x-tenant-id": tenantId };
 
   const fetchRef = useCallback(async () => {
     if (!tenantId) return;
-    const [refRes, pktsRes] = await Promise.all([
+    const [refRes, pktsRes, xeroRes] = await Promise.all([
       fetch("/api/inventory/reference", { headers }),
       fetch("/api/inventory/open-packets", { headers }),
+      fetch("/api/xero/accounts", { headers }),
     ]);
     if (refRes.ok) {
       const json = await refRes.json();
@@ -136,6 +154,12 @@ export default function NewPurchaseOrderPage() {
     if (pktsRes.ok) {
       const json = await pktsRes.json();
       setOpenPackets(json.packets ?? []);
+    }
+    if (xeroRes.ok) {
+      const json = await xeroRes.json();
+      setXeroAccounts(json.accounts ?? []);
+    } else {
+      setXeroAccounts([]);
     }
   }, [tenantId]);
 
@@ -195,6 +219,9 @@ export default function NewPurchaseOrderPage() {
       lines: lines.map(l => ({
         title:              l.title              || null,
         category_id:        l.category_id        || null,
+        xero_account_id:    l.xero_account_id    || null,
+        xero_account_code:  l.xero_account_code  || null,
+        xero_account_name:  l.xero_account_name  || null,
         metal_type:         l.metal_type         || null,
         metal_karat:        l.metal_karat        || null,
         metal_colour:       l.metal_colour       || null,
@@ -356,6 +383,28 @@ export default function NewPurchaseOrderPage() {
                   <select value={line.category_id} onChange={e => updateLine(line._id, { category_id: e.target.value })} style={{ ...IF, background: "#fff" }}>
                     <option value="">—</option>
                     {ref?.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={LF}>Xero Account</label>
+                  <select
+                    value={line.xero_account_id}
+                    onChange={e => {
+                      const acc = xeroAccounts?.find(a => a.id === e.target.value);
+                      updateLine(line._id, {
+                        xero_account_id:   acc?.id ?? "",
+                        xero_account_code: acc?.code ?? "",
+                        xero_account_name: acc?.name ?? "",
+                      });
+                    }}
+                    style={{ ...IF, background: "#fff" }}
+                  >
+                    <option value="">
+                      {xeroAccounts === null ? "Loading…" : xeroAccounts.length === 0 ? "Xero not connected" : "—"}
+                    </option>
+                    {xeroAccounts?.map(a => (
+                      <option key={a.id} value={a.id}>{a.code ? `${a.code} — ${a.name}` : a.name}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
