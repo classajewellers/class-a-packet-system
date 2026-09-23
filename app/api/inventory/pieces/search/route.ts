@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { resolvePieceExtras, toLocationsById, CategoryRow, StatusRow, ProductLite } from "@/lib/pieceResolution";
 
 export const dynamic = "force-dynamic";
 
-// Deliberately separate from GET /api/inventory/pieces (app/api/inventory/pieces/route.ts),
-// which joins on status_id/category_id/supplier_id relationships and searches a
-// "title" column - none of which exist on the real inventory_pieces schema on
-// staging (confirmed directly: that route currently errors with PGRST200,
-// "no relationship between inventory_pieces and inventory_statuses"). That's a
-// pre-existing, unrelated bug - out of scope here, flagged separately. This
-// route queries only columns confirmed to actually exist: sku, metal_weight_grams,
-// a plain text status column, and the (working) FK to inventory_products for a
-// display name when the piece is linked to a design.
+// Used by the quote builder's "Linked Piece" search (app/quotes/builder/
+// new/page.tsx). Previously selected an explicit column list including
+// metal_weight_grams and status, assuming both exist — confirmed
+// 2026-09-23 that production's inventory_pieces has NO plain status
+// column at all (status_id only), so this route 500'd on production for
+// every search. The 500 was invisible in the UI: the response still
+// carried `pieces: []`, and the frontend never checked response.ok, so a
+// broken search looked identical to a genuine empty result (fixed
+// separately in the frontend below).
+//
+// Fixed with the same schema-defensive approach as
+// lib/pieceResolution.ts: select("*") never errors regardless of which
+// columns exist, and status/design are resolved via the shared resolver
+// instead of assuming a fixed shape.
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
   const supabase = await createTenantSupabaseClient(tenantId);
@@ -26,7 +32,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   let query = supabase
     .from("inventory_pieces")
-    .select("id, sku, metal_weight_grams, status, product:inventory_products(name)")
+    .select("*")
     .ilike("sku", `%${search}%`)
     .order("created_at", { ascending: false })
     .limit(perPage);
@@ -36,5 +42,34 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message, pieces: [] }, { status: 500 });
 
-  return NextResponse.json({ pieces: data ?? [] });
+  const rawPieces = (data ?? []) as Record<string, unknown>[];
+  const productIds = Array.from(new Set(
+    rawPieces.map(p => p.product_id as string | null).filter((id): id is string => !!id)
+  ));
+
+  const [statusesRes, productsRes] = await Promise.all([
+    supabase.from("inventory_statuses").select("*").eq("tenant_id", tenantId),
+    productIds.length > 0
+      ? supabase.from("inventory_products").select("id,name,category").in("id", productIds)
+      : Promise.resolve({ data: [] as ProductLite[] }),
+  ]);
+  const ctx = {
+    categoriesById: new Map<string, CategoryRow>(),
+    statusesById: new Map(((statusesRes.data ?? []) as StatusRow[]).map(s => [s.id, s])),
+    locationsById: toLocationsById([]),
+    productsById: new Map(((productsRes.data ?? []) as ProductLite[]).map(p => [p.id, p])),
+  };
+
+  const pieces = rawPieces.map(p => {
+    const extras = resolvePieceExtras(p, ctx);
+    return {
+      id: p.id,
+      sku: p.sku,
+      metal_weight_grams: p.metal_weight_grams ?? null,
+      resolved_status: extras.resolved_status,
+      resolved_design: extras.resolved_design,
+    };
+  });
+
+  return NextResponse.json({ pieces });
 }
