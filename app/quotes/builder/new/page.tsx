@@ -385,15 +385,17 @@ function computeItemPricing(
 
 // ─── PiecePicker ───────────────────────────────────────────────────────────────
 // Small debounced search-and-select against the real inventory_pieces search
-// endpoint (already built, searches sku + title) — replaces free-typing a SKU
-// that was never actually validated against anything.
+// endpoint — searches sku only (title does not exist as a column on either
+// real schema). resolved_status/resolved_design come from the shared
+// lib/pieceResolution.ts resolver, since production and staging genuinely
+// have different real inventory_pieces schemas (confirmed 2026-09-23).
 
 interface InventoryPieceResult {
   id: string;
   sku: string;
   metal_weight_grams: number | string | null;
-  status?: string | null;
-  product?: { name: string } | null;
+  resolved_status?: { label: string; colour: string } | null;
+  resolved_design?: string | null;
 }
 
 function PiecePicker({
@@ -411,19 +413,29 @@ function PiecePicker({
   const [results, setResults] = useState<InventoryPieceResult[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  // A failed search (e.g. a schema mismatch on the server) used to render
+  // identically to a genuine empty result, since the response body still
+  // carries `pieces: []` even on a 500 — confirmed 2026-09-23 this hid a
+  // real production bug. Tracked separately so the UI can tell the two
+  // apart.
+  const [searchError, setSearchError] = useState("");
 
   useEffect(() => { setQuery(value); }, [value]);
 
   useEffect(() => {
-    if (!open || query.trim().length < 2) { setResults([]); return; }
+    if (!open || query.trim().length < 2) { setResults([]); setSearchError(""); return; }
     setLoading(true);
+    setSearchError("");
     const t = setTimeout(() => {
       fetch(`/api/inventory/pieces/search?search=${encodeURIComponent(query.trim())}&per_page=8`, {
         headers: { "x-tenant-id": tenantId },
       })
-        .then(r => r.json())
-        .then(json => setResults(json.pieces ?? []))
-        .catch(() => setResults([]))
+        .then(async r => {
+          const json = await r.json();
+          if (!r.ok) throw new Error(json.error || "Search failed");
+          setResults(json.pieces ?? []);
+        })
+        .catch(err => { setResults([]); setSearchError(err.message || "Search failed"); })
         .finally(() => setLoading(false));
     }, 300);
     return () => clearTimeout(t);
@@ -438,7 +450,7 @@ function PiecePicker({
         onChange={e => { setQuery(e.target.value); setOpen(true); if (!e.target.value) onClear(); }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="Search SKU or title…"
+        placeholder="Search SKU…"
       />
       {open && query.trim().length >= 2 && (
         <div style={{
@@ -448,10 +460,13 @@ function PiecePicker({
           boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
         }}>
           {loading && <div style={{ padding: "8px 12px", fontSize: 12, color: "#9CA3AF" }}>Searching…</div>}
-          {!loading && results.length === 0 && (
+          {!loading && searchError && (
+            <div style={{ padding: "8px 12px", fontSize: 12, color: "#DC2626" }}>Search failed: {searchError}</div>
+          )}
+          {!loading && !searchError && results.length === 0 && (
             <div style={{ padding: "8px 12px", fontSize: 12, color: "#9CA3AF" }}>No pieces found</div>
           )}
-          {!loading && results.map(p => (
+          {!loading && !searchError && results.map(p => (
             <div
               key={p.id}
               onMouseDown={() => { onSelect(p); setOpen(false); }}
@@ -461,11 +476,11 @@ function PiecePicker({
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                 <span style={{ fontWeight: 600, color: "#1A1A2E" }}>{p.sku}</span>
-                {p.status && (
-                  <span style={{ fontSize: 10, fontWeight: 600, color: "#6B7280", background: "#F3F4F6", padding: "1px 6px", borderRadius: 999 }}>{p.status}</span>
+                {p.resolved_status && (
+                  <span style={{ fontSize: 10, fontWeight: 600, color: p.resolved_status.colour, background: p.resolved_status.colour + "22", padding: "1px 6px", borderRadius: 999 }}>{p.resolved_status.label}</span>
                 )}
               </div>
-              {p.product?.name && <div style={{ color: "#6B7280", marginTop: 2 }}>{p.product.name}</div>}
+              {p.resolved_design && <div style={{ color: "#6B7280", marginTop: 2 }}>{p.resolved_design}</div>}
             </div>
           ))}
         </div>
