@@ -386,7 +386,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
                 {loading && results.length === 0 && (
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 200, gap: 12, color: "#6B7280" }}>
                     <div style={{ width: 32, height: 32, border: "3px solid #635BFF", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-                    <span style={{ fontSize: 14 }}>Searching Nivoda…</span>
+                    <span style={{ fontSize: 14 }}>Searching…</span>
                     <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
                   </div>
                 )}
