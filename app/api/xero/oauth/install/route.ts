@@ -14,15 +14,18 @@ export const dynamic = "force-dynamic";
 // this change needs to reconnect; refresh tokens don't retroactively gain
 // scopes. Confirmed acceptable: no real tenant connected yet.
 //
-// accounting.transactions -> accounting.purchaseorders, also 2026-09-23:
-// the original broad accounting.transactions scope is permanently
-// unissuable to any Xero app created on or after 2026-03-02 (confirmed via
-// Xero's Granular Scopes docs) — this app was registered today, so
-// requesting it returned invalid_scope on Xero's own login page.
-// accounting.purchaseorders is the specific granular scope this
-// integration actually needs, since it exists purely to sync purchase
-// orders.
-const SCOPES = "openid profile email offline_access accounting.purchaseorders accounting.contacts accounting.settings.read";
+// accounting.transactions -> accounting.invoices, also 2026-09-23: the
+// original broad accounting.transactions scope is permanently unissuable
+// to any Xero app created on or after 2026-03-02 (confirmed via Xero's
+// Granular Scopes docs) — this app was registered today, so requesting it
+// returned invalid_scope on Xero's own login page.
+// accounting.purchaseorders (tried first) turned out not to be a real
+// scope at all — it only ever appeared as an API docs page title, never as
+// an OAuth scope. Purchase orders are actually covered by the broader
+// accounting.invoices scope (which also covers credit notes, quotes,
+// repeating invoices, etc.) — confirmed directly against Xero's docs
+// before applying this second attempt.
+const SCOPES = "openid profile email offline_access accounting.invoices accounting.contacts accounting.settings.read";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://jewelleryvault.com.au";
 
 // Encode { tenantId, nonce, exp } signed with XERO_CLIENT_SECRET — same
