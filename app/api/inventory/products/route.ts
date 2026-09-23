@@ -38,10 +38,14 @@ export async function GET(req: NextRequest) {
     const SELLABLE_LOCATION_TYPES = ["display", "storage"];
     let atpByProduct: Record<string, { in_stock: number; committed: number; available_to_sell_today: number }> = {};
     if (productIds.length > 0) {
-      const [piecesRes, reservationsRes] = await Promise.all([
+      const [piecesRes, reservationsRes, statusesRes] = await Promise.all([
+        // "*" — production's pieces may resolve "in stock" via status_id
+        // instead of/alongside the plain status text column (confirmed
+        // 2026-09-23); both are checked below, same as
+        // app/api/inventory/products/[id]/route.ts's computeATP().
         supabase
           .from("inventory_pieces")
-          .select("id, product_id, quantity, status, location:inventory_locations(type)")
+          .select("*, location:inventory_locations(type)")
           .in("product_id", productIds)
           .eq("tenant_id", tenantId),
         supabase
@@ -49,7 +53,17 @@ export async function GET(req: NextRequest) {
           .select("piece_id")
           .eq("tenant_id", tenantId)
           .eq("status", "active"),
+        supabase
+          .from("inventory_statuses")
+          .select("id, name")
+          .eq("tenant_id", tenantId),
       ]);
+
+      const statusNameById = new Map(((statusesRes.data ?? []) as { id: string; name: string }[]).map((s) => [s.id, s.name.toLowerCase()]));
+      const isInStockStatus = (p: { status?: string | null; status_id?: string | null }): boolean => {
+        if (p.status_id && statusNameById.has(p.status_id)) return statusNameById.get(p.status_id) === "in stock";
+        return p.status === "in_stock";
+      };
 
       const reservedPieceIds = new Set((reservationsRes.data ?? []).map((r: { piece_id: string }) => r.piece_id));
       const inStockByProduct: Record<string, number> = {};
@@ -58,8 +72,7 @@ export async function GET(req: NextRequest) {
       for (const p of piecesRes.data ?? []) {
         const loc = Array.isArray(p.location) ? p.location[0] : p.location;
         const isSellableLocation = !!loc && SELLABLE_LOCATION_TYPES.includes(loc.type ?? "");
-        const isStockStatus = p.status === "in_stock";
-        if (isSellableLocation && isStockStatus) {
+        if (isSellableLocation && isInStockStatus(p)) {
           inStockByProduct[p.product_id] = (inStockByProduct[p.product_id] ?? 0) + (p.quantity ?? 1);
         }
         if (reservedPieceIds.has(p.id)) {

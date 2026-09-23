@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import {
+  resolvePieceExtras, toLocationsById, CategoryRow, StatusRow, ProductLite,
+} from "@/lib/pieceResolution";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const PIECE_SELECT = `
-  id, sku, title, metal_type, metal_karat, metal_colour, finger_size,
-  cost_price, retail_price, created_at,
-  status:inventory_statuses(id, name, colour),
-  location:inventory_locations(id, name)
-`.trim();
+// Confirmed 2026-09-23: production and staging inventory_pieces are
+// genuinely different real schemas (production has a real category_id/
+// status_id/title model; staging doesn't). "*" never errors regardless of
+// which columns exist — see lib/pieceResolution.ts for how display fields
+// are resolved defensively across both, same approach as
+// app/api/inventory/pieces/route.ts.
+const PIECE_SELECT = `*`;
 
 // Grace ATP (Available to Promise) — stock/catalogue items only (this route
 // is keyed on inventory_products, which is what the live data and this page
@@ -28,10 +32,13 @@ const SELLABLE_LOCATION_TYPES = ["display", "storage"];
 type SupabaseClientAny = any;
 
 async function computeATP(supabase: SupabaseClientAny, tenantId: string, productId: string) {
-  const [piecesRes, reservationsRes, jobsRes] = await Promise.all([
+  const [piecesRes, reservationsRes, jobsRes, statusesRes] = await Promise.all([
+    // "*" — production's pieces may carry status_id instead of/alongside
+    // the plain status text column; both are read defensively below rather
+    // than assuming one shape (same reasoning as lib/pieceResolution.ts).
     supabase
       .from("inventory_pieces")
-      .select("id, quantity, status, location:inventory_locations(id, name, type)")
+      .select("*, location:inventory_locations(id, name, type)")
       .eq("product_id", productId)
       .eq("tenant_id", tenantId),
     supabase
@@ -44,16 +51,31 @@ async function computeATP(supabase: SupabaseClientAny, tenantId: string, product
       .select("id, packet_id, stage, due_date")
       .eq("product_id", productId)
       .neq("stage", "completed"),
+    supabase
+      .from("inventory_statuses")
+      .select("id, name")
+      .eq("tenant_id", tenantId),
   ]);
+
+  const statusNameById = new Map(((statusesRes.data ?? []) as { id: string; name: string }[]).map((s) => [s.id, s.name.toLowerCase()]));
 
   const pieces = piecesRes.data ?? [];
   const pieceIds = new Set(pieces.map((p: { id: string }) => p.id));
 
-  const inStock = pieces.reduce((sum: number, p: { quantity?: number | null; status?: string | null; location?: { type?: string } | { type?: string }[] | null }) => {
+  // "In stock" status check works across both schemas: production may
+  // resolve it via status_id -> inventory_statuses.name (e.g. "In Stock"),
+  // staging via the plain status text column. Neither is assumed present.
+  function isInStockStatus(p: { status?: string | null; status_id?: string | null }): boolean {
+    if (p.status_id && statusNameById.has(p.status_id)) {
+      return statusNameById.get(p.status_id) === "in stock";
+    }
+    return p.status === "in_stock";
+  }
+
+  const inStock = pieces.reduce((sum: number, p: { quantity?: number | null; status?: string | null; status_id?: string | null; location?: { type?: string } | { type?: string }[] | null }) => {
     const loc = Array.isArray(p.location) ? p.location[0] : p.location;
     const isSellableLocation = !!loc && SELLABLE_LOCATION_TYPES.includes(loc.type ?? "");
-    const isStockStatus = p.status === "in_stock";
-    if (!isSellableLocation || !isStockStatus) return sum;
+    if (!isSellableLocation || !isInStockStatus(p)) return sum;
     return sum + (p.quantity ?? 1);
   }, 0);
 
@@ -109,9 +131,27 @@ export async function GET(
 
   const atp = await computeATP(supabase, tenantId, params.id);
 
+  const rawPieces = (piecesRes.data ?? []) as Record<string, unknown>[];
+  const productIds = Array.from(new Set(rawPieces.map(p => p.product_id as string | null).filter((id): id is string => !!id)));
+  const [categoriesRes, statusesRes, locationsRes, productsRes] = await Promise.all([
+    supabase.from("inventory_categories").select("*").eq("tenant_id", tenantId),
+    supabase.from("inventory_statuses").select("*").eq("tenant_id", tenantId),
+    supabase.from("inventory_locations").select("*").eq("tenant_id", tenantId),
+    productIds.length > 0
+      ? supabase.from("inventory_products").select("id,name,category").in("id", productIds)
+      : Promise.resolve({ data: [] as ProductLite[] }),
+  ]);
+  const ctx = {
+    categoriesById: new Map(((categoriesRes.data ?? []) as CategoryRow[]).map(c => [c.id, c])),
+    statusesById:   new Map(((statusesRes.data ?? []) as StatusRow[]).map(s => [s.id, s])),
+    locationsById:  toLocationsById((locationsRes.data ?? []) as any[]),
+    productsById:   new Map(((productsRes.data ?? []) as ProductLite[]).map(p => [p.id, p])),
+  };
+  const pieces = rawPieces.map(p => ({ ...p, ...resolvePieceExtras(p, ctx) }));
+
   return NextResponse.json({
     product: productRes.data,
-    pieces: piecesRes.data ?? [],
+    pieces,
     atp,
   });
 }
