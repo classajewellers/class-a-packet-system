@@ -73,18 +73,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!piece_id) return NextResponse.json({ error: "piece_id is required" }, { status: 400 });
 
   // ── Fetch piece + current status ────────────────────────────────────────────
+  // inventory_pieces.status is a plain text column (in_stock/on_order/sold/
+  // workshop/consignment/repair/reserved — migration 030 + 157), NOT a
+  // status_id FK to inventory_statuses — that column does not exist on this
+  // table (confirmed live 2026-09-23).
   const { data: piece, error: pieceErr } = await supabase
     .from("inventory_pieces")
-    .select("id, status_id, status:inventory_statuses(id, name)")
+    .select("id, status")
     .eq("id", piece_id)
     .eq("tenant_id", tenantId)
     .single();
 
   if (pieceErr || !piece) return NextResponse.json({ error: "Piece not found" }, { status: 404 });
 
-  const currentStatusName = ((piece.status as any)?.name ?? "").toLowerCase();
-  if (currentStatusName.includes("sold")) {
+  if (piece.status === "sold") {
     return NextResponse.json({ error: "This item has already been sold and cannot be reserved" }, { status: 409 });
+  }
+  if (piece.status === "reserved") {
+    return NextResponse.json({ error: "This item is already reserved" }, { status: 409 });
   }
 
   // ── Check for existing active reservation ───────────────────────────────────
@@ -106,23 +112,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // ── Resolve Reserved status UUID dynamically ────────────────────────────────
-  const { data: reservedStatuses, error: statusErr } = await supabase
-    .from("inventory_statuses")
-    .select("id, name")
-    .ilike("name", "%reserv%")
-    .eq("tenant_id", tenantId)
-    .limit(5);
-
-  if (statusErr || !reservedStatuses?.length) {
-    return NextResponse.json(
-      { error: "Could not find a 'Reserved' status in inventory_statuses. Please create one in Inventory Settings." },
-      { status: 422 }
-    );
-  }
-
-  const reservedStatus = reservedStatuses[0];
-  const prevStatusId = piece.status_id ?? null;
+  const previousStatus = piece.status;
   const now = new Date().toISOString();
 
   // ── Insert reservation row ──────────────────────────────────────────────────
@@ -138,7 +128,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       workshop_packet_id: workshop_packet_id || null,
       expires_at:         expires_at  || null,
       created_by:         created_by  || null,
-      previous_status_id: prevStatusId,
+      previous_piece_status: previousStatus,
       status:             "active",
     })
     .select()
@@ -155,7 +145,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // ── Update piece status ─────────────────────────────────────────────────────
   const { error: pieceUpdateErr } = await supabase
     .from("inventory_pieces")
-    .update({ status_id: reservedStatus.id, updated_at: now })
+    .update({ status: "reserved" })
     .eq("id", piece_id)
     .eq("tenant_id", tenantId);
 
@@ -163,13 +153,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: `Reservation created but failed to update piece status: ${pieceUpdateErr.message}` }, { status: 500 });
   }
 
-  // ── Insert movement row ─────────────────────────────────────────────────────
-  const movNotes = `Reserved${reservation.id ? ` — ref ${reservation.id.slice(0, 8)}` : ""}${reason ? `: ${reason}` : ""}`;
+  // ── Insert movement row ──────────────────────────────────────────────────────
+  // from_status_id/to_status_id are FKs into inventory_statuses, a separate
+  // (largely unused) status model from inventory_pieces.status text — left
+  // null here since there is no reliable mapping between the two; the
+  // human-readable transition is captured in notes instead.
+  const movNotes = `Reserved (${previousStatus} → reserved)${reservation.id ? ` — ref ${reservation.id.slice(0, 8)}` : ""}${reason ? `: ${reason}` : ""}`;
   await supabase.from("inventory_movements").insert({
     tenant_id:        tenantId,
     piece_id,
-    from_status_id:   prevStatusId,
-    to_status_id:     reservedStatus.id,
+    from_status_id:   null,
+    to_status_id:     null,
     from_location_id: null,
     to_location_id:   null,
     moved_by:         moved_by || null,
