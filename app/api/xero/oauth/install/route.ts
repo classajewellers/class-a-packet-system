@@ -9,11 +9,20 @@ export const dynamic = "force-dynamic";
 // offline_access is required to receive a refresh_token — Xero access
 // tokens expire after 30 minutes (unlike Shopify's long-lived Partner-app
 // tokens), so this integration cannot work without it.
-// accounting.settings (read) added 2026-09-23 for the Chart of Accounts
+// accounting.settings.read added 2026-09-23 for the Chart of Accounts
 // mapping feature — GET /Accounts requires it. Any tenant connected before
 // this change needs to reconnect; refresh tokens don't retroactively gain
 // scopes. Confirmed acceptable: no real tenant connected yet.
-const SCOPES = "openid profile email offline_access accounting.transactions accounting.contacts accounting.settings.read";
+//
+// accounting.transactions -> accounting.purchaseorders, also 2026-09-23:
+// the original broad accounting.transactions scope is permanently
+// unissuable to any Xero app created on or after 2026-03-02 (confirmed via
+// Xero's Granular Scopes docs) — this app was registered today, so
+// requesting it returned invalid_scope on Xero's own login page.
+// accounting.purchaseorders is the specific granular scope this
+// integration actually needs, since it exists purely to sync purchase
+// orders.
+const SCOPES = "openid profile email offline_access accounting.purchaseorders accounting.contacts accounting.settings.read";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://jewelleryvault.com.au";
 
 // Encode { tenantId, nonce, exp } signed with XERO_CLIENT_SECRET — same
