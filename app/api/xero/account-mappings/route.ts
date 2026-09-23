@@ -1,19 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { XERO_MAPPING_CATEGORIES } from "@/lib/xero";
 
 export const dynamic = "force-dynamic";
-
-// Fixed, Vault-defined taxonomy — confirmed with Josh 2026-09-23. The same
-// six categories for every tenant; only which real Xero account each maps
-// to is tenant-specific.
-export const XERO_MAPPING_CATEGORIES = [
-  { key: "diamonds_gemstones", label: "Diamonds/Gemstones" },
-  { key: "metal",              label: "Metal" },
-  { key: "findings_components", label: "Findings/Components" },
-  { key: "labour",             label: "Labour" },
-  { key: "freight_shipping",   label: "Freight/Shipping" },
-  { key: "other",              label: "Other/Miscellaneous" },
-] as const;
 
 const VALID_KEYS = new Set(XERO_MAPPING_CATEGORIES.map(c => c.key));
 
