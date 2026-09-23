@@ -557,11 +557,35 @@ export interface InventoryPiece {
   design_id?: string | null;
   other_specs?: string | null;
   // joined relations
+  // NOTE: inventory_pieces.status is actually a plain text column
+  // (in_stock|on_order|sold|workshop|consignment|repair|reserved) — there
+  // is no status_id FK to InventoryStatus, confirmed live 2026-09-23. This
+  // field is typed as InventoryStatus for compatibility with existing call
+  // sites (e.g. app/inventory/[id]/page.tsx) that still assume the old
+  // (broken) joined-object shape; fixed call sites read the raw string via
+  // a local cast instead of widening this shared type. See
+  // app/api/inventory/pieces/route.ts and .../products/[id]/route.ts.
   status?: InventoryStatus | null;
   location?: InventoryLocation | null;
+  // Full ancestor path via inventory_locations.parent_id, e.g.
+  // "Adelaide Showroom > Horseshoe 1" — computed server-side, see
+  // lib/locationPath.ts. Null/undefined where no location is set.
+  location_path?: string | null;
   category?: InventoryCategory | null;
   supplier?: InventorySupplier | null;
   design?: InventoryDesign | null;
+  // The linked catalogue product (inventory_products, via product_id) —
+  // category comes from here, not from a category on the piece itself.
+  product?: { id: string; name: string; category?: string | null } | null;
+  // Server-resolved display fields (lib/pieceResolution.ts) — the single
+  // source of truth for rendering, since production and staging have
+  // genuinely different real inventory_pieces schemas (confirmed
+  // 2026-09-23: production has a real category_id/status_id/title model
+  // with custom statuses; staging doesn't). Always read these for display
+  // instead of the raw category_id/status_id/title/product fields.
+  resolved_category?: string | null;
+  resolved_status?: { label: string; colour: string } | null;
+  resolved_design?: string | null;
 }
 
 export interface InventoryReferenceData {

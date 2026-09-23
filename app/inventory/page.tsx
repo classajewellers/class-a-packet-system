@@ -12,17 +12,24 @@ import {
   InventoryVariant,
 } from "@/lib/types";
 import { Search, Plus, X, Filter, Sparkles, Loader, ChevronDown, ChevronRight, Package, Upload } from "lucide-react";
+import { FALLBACK_STATUS_OPTIONS } from "@/lib/pieceResolution";
 
 const PAGE_SIZE = 50;
 
-function StatusBadge({ status }: { status?: InventoryStatus | null }) {
+// Renders the server-resolved status ({label, colour}) — production and
+// staging resolve this differently (a real inventory_statuses row on
+// production, e.g. "Awaiting photography"; a fixed fallback palette on
+// staging's plain text enum) but both produce the same {label, colour}
+// shape, so the UI never needs to know which environment it's in. See
+// lib/pieceResolution.ts.
+function StatusBadge({ status }: { status?: { label: string; colour: string } | null }) {
   if (!status) return <span style={{ color: "var(--vault-text-muted)", fontSize: 12 }}>—</span>;
   return (
     <span style={{
       display: "inline-block", padding: "2px 10px", borderRadius: 999, fontSize: 12, fontWeight: 500,
       background: status.colour + "22", color: status.colour, border: `1px solid ${status.colour}44`,
     }}>
-      {status.name}
+      {status.label}
     </span>
   );
 }
@@ -35,14 +42,19 @@ function Pill({ children }: { children: React.ReactNode }) {
   );
 }
 
+// title/category_id/status_id/metal_type removed — none of these are real
+// inventory_pieces columns (confirmed live 2026-09-23: only metal_karat and
+// metal_colour exist, no metal_type). status uses the piece's real text
+// enum; category still isn't set here since a piece's category comes from
+// its linked product, not a quick-add field.
 interface AddForm {
-  title: string; category_id: string; status_id: string; location_id: string;
-  metal_type: string; metal_karat: string; metal_colour: string; finger_size: string; notes: string;
+  status: string; location_id: string;
+  metal_karat: string; metal_colour: string; finger_size: string; notes: string;
 }
 
 const BLANK_FORM: AddForm = {
-  title: "", category_id: "", status_id: "", location_id: "",
-  metal_type: "", metal_karat: "", metal_colour: "", finger_size: "", notes: "",
+  status: "in_stock", location_id: "",
+  metal_karat: "", metal_colour: "", finger_size: "", notes: "",
 };
 
 type ViewMode = "flat" | "grouped";
@@ -68,11 +80,17 @@ export default function InventoryPage() {
   const [ref, setRef]         = useState<InventoryReferenceData | null>(null);
 
   // Filters
+  // Category filters on the LINKED PRODUCT's category text field
+  // (inventory_products.category) — there is no category on the piece
+  // itself. Status filters on inventory_pieces.status directly (the real
+  // text column), not an inventory_statuses id.
   const [search, setSearch]         = useState("");
-  const [categoryId, setCategoryId] = useState("");
-  const [statusId, setStatusId]     = useState("");
+  const [category, setCategory]     = useState("");
+  const [status, setStatus]         = useState("");
   const [locationId, setLocationId] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [categoryOptions, setCategoryOptions] = useState<{ value: string; label: string }[]>([]);
+  const [statusOptions, setStatusOptions]     = useState<{ value: string; label: string; colour: string }[]>([]);
 
   // Add-item modal
   const [showAdd, setShowAdd]   = useState(false);
@@ -106,8 +124,8 @@ export default function InventoryPage() {
     setLoading(true);
     const params = new URLSearchParams({ page: String(page), per_page: String(PAGE_SIZE) });
     if (search)     params.set("search",      search);
-    if (categoryId) params.set("category_id", categoryId);
-    if (statusId)   params.set("status_id",   statusId);
+    if (category)   params.set("category",    category);
+    if (status)     params.set("status",      status);
     if (locationId) params.set("location_id", locationId);
     const res = await fetch(`/api/inventory/pieces?${params}`, { headers });
     if (res.ok) {
@@ -116,7 +134,22 @@ export default function InventoryPage() {
       setTotal(json.total  ?? 0);
     }
     setLoading(false);
-  }, [tenantId, page, search, categoryId, statusId, locationId]);
+  }, [tenantId, page, search, category, status, locationId]);
+
+  // Category/Status filter options merge BOTH real schemas — production's
+  // real inventory_categories/inventory_statuses rows (custom statuses like
+  // "Awaiting photography") plus the linked-product category / plain status
+  // enum used on staging. See app/api/inventory/pieces/route.ts's
+  // buildFilterOptions().
+  const fetchFilterOptions = useCallback(async () => {
+    if (!tenantId) return;
+    const res = await fetch("/api/inventory/pieces/filter-options", { headers });
+    if (res.ok) {
+      const json = await res.json();
+      setCategoryOptions(json.categoryOptions ?? []);
+      setStatusOptions(json.statusOptions ?? []);
+    }
+  }, [tenantId]);
 
   const fetchGrouped = useCallback(async () => {
     if (!tenantId) return;
@@ -131,6 +164,7 @@ export default function InventoryPage() {
   }, [tenantId]);
 
   useEffect(() => { fetchRef(); }, [fetchRef]);
+  useEffect(() => { fetchFilterOptions(); }, [fetchFilterOptions]);
   useEffect(() => { if (viewMode === "flat") fetchPieces(); }, [fetchPieces, viewMode]);
   useEffect(() => { if (viewMode === "grouped") fetchGrouped(); }, [fetchGrouped, viewMode]);
 
@@ -162,8 +196,6 @@ export default function InventoryPage() {
     const f = json.fields ?? {};
     setAddForm(prev => ({
       ...prev,
-      title:        f.title        && !prev.title        ? f.title        : prev.title,
-      metal_type:   f.metal_type   && !prev.metal_type   ? f.metal_type   : prev.metal_type,
       metal_karat:  f.metal_karat  && !prev.metal_karat  ? f.metal_karat  : prev.metal_karat,
       metal_colour: f.metal_colour && !prev.metal_colour ? f.metal_colour : prev.metal_colour,
       finger_size:  f.finger_size  && !prev.finger_size  ? f.finger_size  : prev.finger_size,
@@ -191,10 +223,10 @@ export default function InventoryPage() {
   function openAdd() { setShowAdd(true); setAddForm(BLANK_FORM); setAiDesc(""); setAddError(""); }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const hasFilters = search || categoryId || statusId || locationId;
+  const hasFilters = search || category || status || locationId;
 
   function clearFilters() {
-    setSearch(""); setCategoryId(""); setStatusId(""); setLocationId(""); setPage(1);
+    setSearch(""); setCategory(""); setStatus(""); setLocationId(""); setPage(1);
   }
 
   if (!hydrated) return null;
@@ -299,13 +331,13 @@ export default function InventoryPage() {
             </div>
             {showFilters && (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                <select value={categoryId} onChange={e => { setCategoryId(e.target.value); setPage(1); }} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13, background: "var(--vault-canvas)", color: "var(--vault-text)" }}>
+                <select value={category} onChange={e => { setCategory(e.target.value); setPage(1); }} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13, background: "var(--vault-canvas)", color: "var(--vault-text)" }}>
                   <option value="">All Categories</option>
-                  {ref?.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  {categoryOptions.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
-                <select value={statusId} onChange={e => { setStatusId(e.target.value); setPage(1); }} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13, background: "var(--vault-canvas)", color: "var(--vault-text)" }}>
+                <select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13, background: "var(--vault-canvas)", color: "var(--vault-text)" }}>
                   <option value="">All Statuses</option>
-                  {ref?.statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  {statusOptions.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
                 <select value={locationId} onChange={e => { setLocationId(e.target.value); setPage(1); }} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13, background: "var(--vault-canvas)", color: "var(--vault-text)" }}>
                   <option value="">All Locations</option>
@@ -323,7 +355,7 @@ export default function InventoryPage() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
               <thead>
                 <tr style={{ background: "var(--vault-surface)", borderBottom: "1px solid #E5E7EB" }}>
-                  {["SKU", "Title", "Category", "Status", "Location", "Metal", "Retail Price", ""].map(h => (
+                  {["SKU", "Design", "Category", "Status", "Location", "Metal", "Retail Price", ""].map(h => (
                     <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontWeight: 600, color: "var(--vault-text)", fontSize: 12, whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
@@ -342,11 +374,11 @@ export default function InventoryPage() {
                     onMouseLeave={e => (e.currentTarget.style.background = "")}
                   >
                     <td style={{ padding: "12px 16px", fontFamily: "monospace", fontWeight: 600, color: "var(--vault-text)" }}>{piece.sku}</td>
-                    <td style={{ padding: "12px 16px", color: "var(--vault-text)" }}>{piece.title ?? <span style={{ color: "var(--vault-text-muted)" }}>—</span>}</td>
-                    <td style={{ padding: "12px 16px", color: "var(--vault-text-secondary)" }}>{piece.category?.name ?? "—"}</td>
-                    <td style={{ padding: "12px 16px" }}><StatusBadge status={piece.status} /></td>
-                    <td style={{ padding: "12px 16px", color: "var(--vault-text-secondary)" }}>{piece.location?.name ?? "—"}</td>
-                    <td style={{ padding: "12px 16px", color: "var(--vault-text-secondary)", fontSize: 13 }}>{[piece.metal_karat, piece.metal_colour, piece.metal_type].filter(Boolean).join(" ") || "—"}</td>
+                    <td style={{ padding: "12px 16px", color: "var(--vault-text)" }}>{piece.resolved_design ?? <span style={{ color: "var(--vault-text-muted)" }}>—</span>}</td>
+                    <td style={{ padding: "12px 16px", color: "var(--vault-text-secondary)" }}>{piece.resolved_category ?? "—"}</td>
+                    <td style={{ padding: "12px 16px" }}><StatusBadge status={piece.resolved_status} /></td>
+                    <td style={{ padding: "12px 16px", color: "var(--vault-text-secondary)" }}>{piece.location_path ?? piece.location?.name ?? "—"}</td>
+                    <td style={{ padding: "12px 16px", color: "var(--vault-text-secondary)", fontSize: 13 }}>{[piece.metal_karat, piece.metal_colour].filter(Boolean).join(" ") || "—"}</td>
                     <td style={{ padding: "12px 16px", color: "var(--vault-text)", fontWeight: 500 }}>
                       {piece.retail_price != null
                         ? `$${piece.retail_price.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -454,11 +486,10 @@ export default function InventoryPage() {
                                   onMouseLeave={e => (e.currentTarget.style.background = "")}
                                 >
                                   <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 600, color: "var(--vault-text)", width: 100, flexShrink: 0 }}>{piece.sku}</span>
-                                  <span style={{ fontSize: 13, color: "var(--vault-text)", flex: 1 }}>{piece.title ?? "—"}</span>
-                                  <span style={{ fontSize: 12, color: "var(--vault-text-muted)", marginRight: 16 }}>{(piece.location as any)?.name ?? "—"}</span>
-                                  {piece.status && (
-                                    <span style={{ fontSize: 11, padding: "1px 8px", borderRadius: 999, background: (piece.status as any).colour + "22", color: (piece.status as any).colour, border: `1px solid ${(piece.status as any).colour}44`, fontWeight: 500 }}>
-                                      {piece.status.name}
+                                  <span style={{ fontSize: 12, color: "var(--vault-text-muted)", flex: 1 }}>{piece.location_path ?? (piece.location as any)?.name ?? "—"}</span>
+                                  {piece.resolved_status && (
+                                    <span style={{ fontSize: 11, padding: "1px 8px", borderRadius: 999, background: piece.resolved_status.colour + "22", color: piece.resolved_status.colour, border: `1px solid ${piece.resolved_status.colour}44`, fontWeight: 500 }}>
+                                      {piece.resolved_status.label}
                                     </span>
                                   )}
                                 </div>
@@ -502,11 +533,10 @@ export default function InventoryPage() {
                           onMouseLeave={e => (e.currentTarget.style.background = "")}
                         >
                           <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 600, color: "var(--vault-text)", width: 100, flexShrink: 0 }}>{piece.sku}</span>
-                          <span style={{ fontSize: 13, color: "var(--vault-text)", flex: 1 }}>{piece.title ?? "—"}</span>
-                          <span style={{ fontSize: 12, color: "var(--vault-text-muted)", marginRight: 16 }}>{(piece.location as any)?.name ?? "—"}</span>
-                          {piece.status && (
-                            <span style={{ fontSize: 11, padding: "1px 8px", borderRadius: 999, background: (piece.status as any).colour + "22", color: (piece.status as any).colour, border: `1px solid ${(piece.status as any).colour}44`, fontWeight: 500 }}>
-                              {piece.status.name}
+                          <span style={{ fontSize: 12, color: "var(--vault-text-muted)", flex: 1 }}>{piece.location_path ?? (piece.location as any)?.name ?? "—"}</span>
+                          {piece.resolved_status && (
+                            <span style={{ fontSize: 11, padding: "1px 8px", borderRadius: 999, background: piece.resolved_status.colour + "22", color: piece.resolved_status.colour, border: `1px solid ${piece.resolved_status.colour}44`, fontWeight: 500 }}>
+                              {piece.resolved_status.label}
                             </span>
                           )}
                         </div>
@@ -566,22 +596,10 @@ export default function InventoryPage() {
             )}
 
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <div>
-                <label style={LF}>Title</label>
-                <input value={addForm.title} onChange={e => setAddForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Diamond Solitaire Ring" style={IF} />
-              </div>
-              <div>
-                <label style={LF}>Category</label>
-                <select value={addForm.category_id} onChange={e => setAddForm(f => ({ ...f, category_id: e.target.value }))} style={{ ...IF, background: "var(--vault-canvas)" }}>
-                  <option value="">— Select category —</option>
-                  {ref?.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+              <div style={{ fontSize: 12, color: "var(--vault-text-muted)" }}>
+                This creates an unlinked piece (no Design). Link it to a product from the piece&apos;s own page afterward if it belongs to one.
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 16px" }}>
-                <div>
-                  <label style={LF}>Metal Type</label>
-                  <input value={addForm.metal_type} onChange={e => setAddForm(f => ({ ...f, metal_type: e.target.value }))} placeholder="e.g. Yellow Gold" style={IF} />
-                </div>
                 <div>
                   <label style={LF}>Carat</label>
                   <input value={addForm.metal_karat} onChange={e => setAddForm(f => ({ ...f, metal_karat: e.target.value }))} placeholder="e.g. 18ct" style={IF} />
@@ -597,9 +615,8 @@ export default function InventoryPage() {
               </div>
               <div>
                 <label style={LF}>Status</label>
-                <select value={addForm.status_id} onChange={e => setAddForm(f => ({ ...f, status_id: e.target.value }))} style={{ ...IF, background: "var(--vault-canvas)" }}>
-                  <option value="">— Select status —</option>
-                  {ref?.statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                <select value={addForm.status} onChange={e => setAddForm(f => ({ ...f, status: e.target.value }))} style={{ ...IF, background: "var(--vault-canvas)" }}>
+                  {FALLBACK_STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
               </div>
               <div>
