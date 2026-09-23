@@ -9,7 +9,11 @@ export const dynamic = "force-dynamic";
 // offline_access is required to receive a refresh_token — Xero access
 // tokens expire after 30 minutes (unlike Shopify's long-lived Partner-app
 // tokens), so this integration cannot work without it.
-const SCOPES = "openid profile email offline_access accounting.transactions accounting.contacts";
+// accounting.settings (read) added 2026-09-23 for the Chart of Accounts
+// mapping feature — GET /Accounts requires it. Any tenant connected before
+// this change needs to reconnect; refresh tokens don't retroactively gain
+// scopes. Confirmed acceptable: no real tenant connected yet.
+const SCOPES = "openid profile email offline_access accounting.transactions accounting.contacts accounting.settings.read";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://jewelleryvault.com.au";
 
 // Encode { tenantId, nonce, exp } signed with XERO_CLIENT_SECRET — same
