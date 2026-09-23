@@ -25,7 +25,14 @@ export const dynamic = "force-dynamic";
 // accounting.invoices scope (which also covers credit notes, quotes,
 // repeating invoices, etc.) — confirmed directly against Xero's docs
 // before applying this second attempt.
-const SCOPES = "openid profile email offline_access accounting.invoices accounting.contacts accounting.settings.read";
+//
+// accounting.attachments added 2026-09-24 for the receiving-invoice ->
+// Xero draft bill feature — POST /Invoices/{id}/Attachments (attaching the
+// uploaded supplier invoice PDF/photo to the created bill) requires it.
+// Write scope, not .read, since we're uploading a file, not just viewing
+// existing ones. Confirmed with Josh: another reconnect is required and
+// accepted.
+const SCOPES = "openid profile email offline_access accounting.invoices accounting.contacts accounting.settings.read accounting.attachments";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://jewelleryvault.com.au";
 
 // Encode { tenantId, nonce, exp } signed with XERO_CLIENT_SECRET — same
