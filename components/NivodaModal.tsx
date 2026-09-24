@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -79,6 +80,27 @@ function DiamondIcon() {
   );
 }
 
+function ShapeBtn({ s, active, onToggle }: { s: string; active: boolean; onToggle: (shape: string) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(s)}
+      style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${active ? "#635BFF" : "#E8E8F0"}`, background: active ? "#635BFF" : "#fff", color: active ? "#fff" : "#374151", fontSize: 11, fontWeight: 500, cursor: "pointer", transition: "all .15s" }}
+    >
+      {SHAPE_LABELS[s] ?? s}
+    </button>
+  );
+}
+
+function ResultsSpinner({ label }: { label: string }) {
+  return (
+    <>
+      <div className="spinner" style={{ width: 32, height: 32, border: "3px solid #E0E7FF", borderTopColor: "#635BFF", borderRadius: "50%" }} />
+      <span style={{ fontSize: 14 }}>{label}</span>
+    </>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: Props) {
@@ -98,6 +120,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
   const [refIds, setRefIds]                 = useState<Record<string, string>>({});
   const [totalCount, setTotalCount]         = useState(0);
   const [loading, setLoading]               = useState(false);
+  const [replacing, setReplacing]           = useState(false);
   const [error, setError]                   = useState<string | null>(null);
   const [searched, setSearched]             = useState(false);
   const [priceUnavailable, setPriceUnavailable] = useState(false);
@@ -108,8 +131,43 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
   // Retail prices keyed by stone.id — populated server-side via estimate-stone-retail
   const [retailPrices, setRetailPrices] = useState<Record<string, number>>({});
   const fetchingRetail = useRef(false);
+  const searchSeq = useRef(0);
+  const overlayRef = useRef<HTMLDivElement>(null);
 
   const PAGE_SIZE = 20;
+
+  useLayoutEffect(() => {
+    if (!open || typeof document === "undefined") return;
+    const content = document.querySelector(".app-content") as HTMLElement | null;
+    const scrollTop = content?.scrollTop ?? 0;
+    document.documentElement.classList.add("nivoda-scroll-lock");
+
+    const overlay = overlayRef.current;
+    let startY = 0;
+    const onStart = (e: TouchEvent) => { startY = e.touches[0]?.clientY ?? 0; };
+    const onMove = (e: TouchEvent) => {
+      const target = e.target as HTMLElement | null;
+      const scroller = target?.closest(".nivoda-filters, .nivoda-results") as HTMLElement | null;
+      if (!scroller) {
+        e.preventDefault();
+        return;
+      }
+      const dy = (e.touches[0]?.clientY ?? 0) - startY;
+      const atTop = scroller.scrollTop <= 0;
+      const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
+      const cannotScroll = scroller.scrollHeight <= scroller.clientHeight + 1;
+      if (cannotScroll || (atTop && dy > 0) || (atBottom && dy < 0)) e.preventDefault();
+    };
+    overlay?.addEventListener("touchstart", onStart, { passive: true });
+    overlay?.addEventListener("touchmove", onMove, { passive: false });
+
+    return () => {
+      document.documentElement.classList.remove("nivoda-scroll-lock");
+      if (content) content.scrollTop = scrollTop;
+      overlay?.removeEventListener("touchstart", onStart);
+      overlay?.removeEventListener("touchmove", onMove);
+    };
+  }, [open]);
 
   async function fetchRetailPrices(stones: NivodaStone[]) {
     console.log("[retail] called, stones:", stones.length, "fetching:", fetchingRetail.current);
@@ -157,7 +215,10 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
   }
 
   const runSearch = useCallback(async (offset = 0) => {
+    const seq = ++searchSeq.current;
+    const replace = offset === 0;
     setLoading(true);
+    setReplacing(replace);
     setError(null);
     try {
       const res = await fetch("/api/nivoda/search", {
@@ -177,13 +238,14 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
         }),
       });
       const json = await res.json();
+      if (seq !== searchSeq.current) return;
       if (!res.ok || json.error) {
         setError("Unable to connect to Nivoda. Please enter stone details manually.");
         return;
       }
       const incoming: NivodaStone[] = json.results ?? [];
       setPriceUnavailable(Boolean(json.currencyConversionFailed));
-      if (offset === 0) {
+      if (replace) {
         setResults(incoming);
         const ids: Record<string, string> = {};
         incoming.forEach(s => { ids[s.id] = makeRefId(s.price); });
@@ -200,16 +262,14 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
       setTotalCount(json.total_count ?? 0);
       setSearched(true);
     } catch {
+      if (seq !== searchSeq.current) return;
       setError("Unable to connect to Nivoda. Please enter stone details manually.");
     } finally {
-      setLoading(false);
+      if (seq === searchSeq.current) setLoading(false);
     }
   }, [shapes, caratFrom, caratTo, colorGrades, clarityGrades, labgrown, hasImage, budget, tenantId]);
 
   function handleSearch() {
-    setResults([]);
-    setRefIds({});
-    setTotalCount(0);
     setSelectedStone(null);
     runSearch(0);
   }
@@ -223,78 +283,22 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
     onClose();
   }
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
   const numIn: React.CSSProperties = { border: "1px solid #E8E8F0", borderRadius: 8, padding: "7px 10px", fontSize: 13, outline: "none", width: "100%", boxSizing: "border-box" };
 
-  function ShapeBtn({ s }: { s: string }) {
-    const active = shapes.includes(s);
-    return (
-      <button
-        onClick={() => toggleShape(s)}
-        style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${active ? "#635BFF" : "#E8E8F0"}`, background: active ? "#635BFF" : "#fff", color: active ? "#fff" : "#374151", fontSize: 11, fontWeight: 500, cursor: "pointer", transition: "all .15s" }}
-      >
-        {SHAPE_LABELS[s] ?? s}
-      </button>
-    );
-  }
-
-  return (
+  return createPortal(
     <div
+      ref={overlayRef}
       className="nivoda-overlay"
       onClick={onClose}
     >
-      <style>{`
-        .nivoda-overlay {
-          position: fixed; inset: 0; z-index: 200;
-          background: rgba(0,0,0,0.6);
-          display: flex; align-items: center; justify-content: center;
-          padding: 16px;
-        }
-        .nivoda-modal {
-          background: #fff; border-radius: 16px; width: 100%; max-width: 1020px;
-          height: min(92dvh, 900px); max-height: 92dvh;
-          display: flex; flex-direction: column;
-          box-shadow: 0 24px 80px rgba(0,0,0,0.25); overflow: hidden;
-        }
-        .nivoda-header { padding: 18px 24px; }
-        .nivoda-body {
-          display: flex; flex: 1; min-height: 0; overflow: hidden;
-          flex-direction: row;
-        }
-        .nivoda-filters {
-          width: 240px; flex-shrink: 0;
-          border-right: 1px solid #E8E8F0;
-          padding: 20px 16px; overflow-y: auto; background: #FAFBFF;
-        }
-        .nivoda-results { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; padding: 20px; }
-        .nivoda-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-        .nivoda-spec-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-        .nivoda-spec-value { min-width: 0; overflow-wrap: anywhere; text-align: right; }
-        @media (max-width: 1099px) {
-          .nivoda-grid { grid-template-columns: repeat(2, 1fr); }
-        }
-        @media (max-width: 767px) {
-          .nivoda-overlay { padding: 8px; align-items: stretch; }
-          .nivoda-modal { height: 100%; max-height: none; border-radius: 12px; }
-          .nivoda-header { padding: 14px 14px; }
-          .nivoda-body { flex-direction: column; }
-          .nivoda-filters {
-            width: 100%; max-height: 38%;
-            border-right: none; border-bottom: 1px solid #E8E8F0;
-            padding: 12px 14px;
-          }
-          .nivoda-results { padding: 12px; }
-          .nivoda-grid { grid-template-columns: 1fr; gap: 10px; }
-          .nivoda-hero, .nivoda-hero img { max-height: 220px !important; }
-        }
-        @media (min-width: 480px) and (max-width: 767px) {
-          .nivoda-grid { grid-template-columns: 1fr 1fr; }
-        }
-      `}</style>
       <div
         className="nivoda-modal"
         onClick={e => e.stopPropagation()}
+        onMouseDown={e => {
+          if ((e.target as HTMLElement).closest("button")) e.preventDefault();
+        }}
       >
         {/* Header */}
         <div className="nivoda-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #E8E8F0", flexShrink: 0, gap: 12 }}>
@@ -306,7 +310,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
               <div style={{ fontSize: 16, fontWeight: 700, color: "#1A1A2E" }}>Browse Stones</div>
             </div>
           </div>
-          <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 20, color: "#9CA3AF", lineHeight: 1, padding: "4px 8px" }}>×</button>
+          <button type="button" onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 20, color: "#9CA3AF", lineHeight: 1, padding: "4px 8px" }}>×</button>
         </div>
 
         {/* Body */}
@@ -321,7 +325,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
               <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Stone Type</div>
               <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: "1px solid #E8E8F0" }}>
                 {[{ v: true, label: "Lab Grown" }, { v: false, label: "Natural" }].map(({ v, label }) => (
-                  <button key={String(v)} onClick={() => setLabgrown(v)} style={{ flex: 1, padding: "7px 4px", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, background: labgrown === v ? "#635BFF" : "#fff", color: labgrown === v ? "#fff" : "#374151", transition: "all .15s" }}>{label}</button>
+                  <button type="button" key={String(v)} onClick={() => setLabgrown(v)} style={{ flex: 1, padding: "7px 4px", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, background: labgrown === v ? "#635BFF" : "#fff", color: labgrown === v ? "#fff" : "#374151", transition: "all .15s" }}>{label}</button>
                 ))}
               </div>
             </div>
@@ -330,10 +334,11 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Shape</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                {PRIMARY_SHAPES.map(s => <ShapeBtn key={s} s={s} />)}
-                {showMoreShapes && EXTENDED_SHAPES.map(s => <ShapeBtn key={s} s={s} />)}
+                {PRIMARY_SHAPES.map(s => <ShapeBtn key={s} s={s} active={shapes.includes(s)} onToggle={toggleShape} />)}
+                {showMoreShapes && EXTENDED_SHAPES.map(s => <ShapeBtn key={s} s={s} active={shapes.includes(s)} onToggle={toggleShape} />)}
               </div>
               <button
+                type="button"
                 onClick={() => setShowMoreShapes(v => !v)}
                 style={{ marginTop: 6, background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "#635BFF", fontWeight: 500, padding: 0 }}
               >
@@ -364,6 +369,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
                   const active = colorGrades.includes(c);
                   return (
                     <button
+                      type="button"
                       key={c}
                       onClick={() => setColorGrades(prev => active ? (prev.length > 1 ? prev.filter(x => x !== c) : prev) : [...prev, c])}
                       style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${active ? "#635BFF" : "#E8E8F0"}`, background: active ? "#635BFF" : "#fff", color: active ? "#fff" : "#374151", fontSize: 11, fontWeight: 500, cursor: "pointer", transition: "all .15s" }}
@@ -381,6 +387,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
                   const active = clarityGrades.includes(c);
                   return (
                     <button
+                      type="button"
                       key={c}
                       onClick={() => setClarityGrades(prev => active ? (prev.length > 1 ? prev.filter(x => x !== c) : prev) : [...prev, c])}
                       style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${active ? "#635BFF" : "#E8E8F0"}`, background: active ? "#635BFF" : "#fff", color: active ? "#fff" : "#374151", fontSize: 11, fontWeight: 500, cursor: "pointer", transition: "all .15s" }}
@@ -410,6 +417,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
             </div>
 
             <button
+              type="button"
               onClick={handleSearch}
               disabled={loading}
               style={{ width: "100%", padding: "10px 0", borderRadius: 10, background: loading ? "#9CA3AF" : "#635BFF", color: "#fff", border: "none", cursor: loading ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 600, transition: "background .15s" }}
@@ -417,6 +425,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
           </div>
 
           {/* ── Right panel — grid or detail view ── */}
+          <div className="nivoda-results-wrap">
           <div className="nivoda-results">
 
             {/* ── Expanded detail view ── */}
@@ -432,15 +441,13 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
               <>
                 {/* Loading (initial) */}
                 {loading && results.length === 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 200, gap: 12, color: "#6B7280" }}>
-                    <div style={{ width: 32, height: 32, border: "3px solid #635BFF", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-                    <span style={{ fontSize: 14 }}>Searching…</span>
-                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                  <div className="nivoda-results-status">
+                    <ResultsSpinner label="Searching…" />
                   </div>
                 )}
 
                 {/* Error */}
-                {error && !loading && (
+                {error && !loading && results.length === 0 && (
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 200, gap: 8, textAlign: "center", padding: "0 32px" }}>
                     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path strokeLinecap="round" d="M12 8v4m0 4h.01"/></svg>
                     <span style={{ fontSize: 14, color: "#6B7280" }}>{error}</span>
@@ -469,6 +476,11 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
                     <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 14 }}>
                       Showing {results.length} of {totalCount.toLocaleString()} stones
                     </div>
+                    {error && !loading && (
+                      <div style={{ marginBottom: 14, padding: "8px 12px", borderRadius: 8, background: "#FEF2F2", border: "1px solid #FECACA", fontSize: 12, color: "#991B1B" }}>
+                        {error}
+                      </div>
+                    )}
                     {priceUnavailable && (
                       <div style={{ marginBottom: 14, padding: "8px 12px", borderRadius: 8, background: "#FEF9C3", border: "1px solid #FDE68A", fontSize: 12, color: "#92400E" }}>
                         Couldn&apos;t confirm AUD pricing from Nivoda right now — prices are showing as POA. Try again shortly.
@@ -490,6 +502,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
                     {results.length < totalCount && (
                       <div style={{ textAlign: "center", marginTop: 20 }}>
                         <button
+                          type="button"
                           onClick={handleLoadMore}
                           disabled={loading}
                           style={{ padding: "9px 28px", borderRadius: 8, border: "1px solid #635BFF", background: "#EEF2FF", color: "#635BFF", fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer" }}
@@ -501,9 +514,16 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
               </>
             )}
           </div>
+          {loading && replacing && results.length > 0 && !selectedStone && (
+            <div className="nivoda-results-loading" aria-live="polite">
+              <ResultsSpinner label="Searching…" />
+            </div>
+          )}
+          </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -559,6 +579,7 @@ function StoneCard({ stone, onSelect, onExpand, retailAud }: { stone: NivodaSton
 
       <div style={{ padding: "0 10px 10px" }}>
         <button
+          type="button"
           onClick={e => { e.stopPropagation(); onSelect(stone); }}
           style={{ width: "100%", padding: "7px 0", borderRadius: 8, background: "#635BFF", color: "#fff", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, transition: "background .15s" }}
           onMouseEnter={e => (e.currentTarget.style.background = "#4F46E5")}
@@ -605,6 +626,7 @@ function StoneDetailView({ stone, refId, onBack, onSelect, retailAud }: { stone:
     <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
       {/* Back link */}
       <button
+        type="button"
         onClick={onBack}
         style={{ alignSelf: "flex-start", background: "none", border: "none", cursor: "pointer", color: "#635BFF", fontSize: 13, fontWeight: 500, padding: "0 0 16px", display: "flex", alignItems: "center", gap: 4 }}
       >
@@ -651,6 +673,7 @@ function StoneDetailView({ stone, refId, onBack, onSelect, retailAud }: { stone:
               {r.value}
               {r.label === "Cert No." && r.value && (
                 <button
+                  type="button"
                   onClick={() => navigator.clipboard?.writeText(r.value!).catch(() => {})}
                   title="Copy to clipboard"
                   style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "#9CA3AF", display: "flex", alignItems: "center" }}
@@ -667,6 +690,7 @@ function StoneDetailView({ stone, refId, onBack, onSelect, retailAud }: { stone:
 
       {/* Select button */}
       <button
+        type="button"
         onClick={() => onSelect(stone)}
         style={{ width: "100%", padding: "12px 0", borderRadius: 10, background: "#635BFF", color: "#fff", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 600, transition: "background .15s" }}
         onMouseEnter={e => (e.currentTarget.style.background = "#4F46E5")}

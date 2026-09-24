@@ -804,3 +804,138 @@ table.ds-t tbody tr:last-child td { border-bottom: 0; }
 .app-content .sticky {
   background-color: #F9FAFB !important;
 }
+
+/* Browse Stones — viewport sheet. Portaled to document.body so it is not
+   trapped by .app-content (overflow + transform animation), which otherwise
+   lets filter taps and list scrolling move the quote page behind the modal. */
+html.nivoda-scroll-lock,
+html.nivoda-scroll-lock body {
+  overflow: hidden !important;
+  overscroll-behavior: none;
+  height: 100%;
+}
+html.nivoda-scroll-lock body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+}
+html.nivoda-scroll-lock .app-content {
+  overflow: hidden !important;
+  overscroll-behavior: none;
+}
+.nivoda-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+.nivoda-modal {
+  background: #fff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 1020px;
+  height: min(92dvh, 900px);
+  max-height: 92dvh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.25);
+  overflow: hidden;
+}
+.nivoda-header { padding: 18px 24px; flex-shrink: 0; }
+.nivoda-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: row;
+  min-height: 0;
+  overflow: hidden;
+}
+.nivoda-filters {
+  width: 240px;
+  flex: 0 0 240px;
+  min-height: 0;
+  border-right: 1px solid #E8E8F0;
+  padding: 20px 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  background: #FAFBFF;
+}
+.nivoda-results-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.nivoda-results {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  padding: 20px;
+}
+.nivoda-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.nivoda-spec-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.nivoda-spec-value { min-width: 0; overflow-wrap: anywhere; text-align: right; }
+.nivoda-results-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(255,255,255,0.78);
+  color: #6B7280;
+  font-size: 14px;
+}
+.nivoda-results-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  gap: 12px;
+  color: #6B7280;
+}
+@media (max-width: 1099px) {
+  .nivoda-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 767px) {
+  .nivoda-overlay { padding: 0; align-items: stretch; }
+  .nivoda-modal {
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+  }
+  .nivoda-header { padding: 14px 14px; }
+  .nivoda-body { flex-direction: column; }
+  .nivoda-filters {
+    width: 100%;
+    flex: 0 1 42%;
+    max-height: 42%;
+    border-right: none;
+    border-bottom: 1px solid #E8E8F0;
+    padding: 12px 14px;
+  }
+  .nivoda-results { padding: 12px; }
+  .nivoda-grid { grid-template-columns: 1fr; gap: 10px; }
+  .nivoda-hero, .nivoda-hero img { max-height: 220px !important; }
+}
+@media (min-width: 480px) and (max-width: 767px) {
+  .nivoda-grid { grid-template-columns: 1fr 1fr; }
+}
