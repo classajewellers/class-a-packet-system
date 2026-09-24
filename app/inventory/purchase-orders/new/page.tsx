@@ -6,6 +6,7 @@ import { useUser } from "@/context/UserContext";
 import { InventoryReferenceData } from "@/lib/types";
 import { loadXeroAccounts, XeroAccountsLoad } from "@/lib/xeroAccounts";
 import { XeroAccountSelect } from "@/components/XeroAccountSelect";
+import { PoLineSections } from "@/components/PoLineSections";
 import { ArrowLeft, Plus, X, Sparkles, Loader } from "lucide-react";
 
 interface OpenPacket {
@@ -373,102 +374,119 @@ export default function NewPurchaseOrderPage() {
                 </button>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px 16px" }}>
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <label style={LF}>Title</label>
-                  <input value={line.title} onChange={e => updateLine(line._id, { title: e.target.value })} placeholder="e.g. Round Brilliant Diamond Ring" style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Category</label>
-                  <select value={line.category_id} onChange={e => updateLine(line._id, { category_id: e.target.value })} style={{ ...IF, background: "#fff" }}>
-                    <option value="">—</option>
-                    {ref?.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={LF}>Xero Account</label>
-                  <XeroAccountSelect
-                    load={xeroAccounts}
-                    accountId={line.xero_account_id}
-                    accountCode={line.xero_account_code}
-                    accountName={line.xero_account_name}
-                    onChange={acc => updateLine(line._id, {
-                      xero_account_id:   acc?.id ?? "",
-                      xero_account_code: acc?.code ?? "",
-                      xero_account_name: acc?.name ?? "",
-                    })}
-                    style={{ ...IF, background: "#fff" }}
-                  />
-                </div>
-                <div>
-                  <label style={LF}>Metal Type</label>
-                  <input value={line.metal_type} onChange={e => updateLine(line._id, { metal_type: e.target.value })} placeholder="e.g. Yellow Gold" style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Carat</label>
-                  <input value={line.metal_karat} onChange={e => updateLine(line._id, { metal_karat: e.target.value })} placeholder="e.g. 18ct" style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Metal Colour</label>
-                  <input value={line.metal_colour} onChange={e => updateLine(line._id, { metal_colour: e.target.value })} placeholder="e.g. Yellow" style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Stone Type</label>
-                  <input value={line.stone_type} onChange={e => updateLine(line._id, { stone_type: e.target.value })} placeholder="e.g. Natural" style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Stone Carat</label>
-                  <input type="number" step="0.01" value={line.stone_carat} onChange={e => updateLine(line._id, { stone_carat: e.target.value })} placeholder="e.g. 0.50" style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Stone Colour</label>
-                  <input value={line.stone_colour} onChange={e => updateLine(line._id, { stone_colour: e.target.value })} placeholder="e.g. G" style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Stone Clarity</label>
-                  <input value={line.stone_clarity} onChange={e => updateLine(line._id, { stone_clarity: e.target.value })} placeholder="e.g. VS1" style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Finger Size</label>
-                  <input value={line.finger_size} onChange={e => updateLine(line._id, { finger_size: e.target.value })} placeholder="e.g. N" style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Qty</label>
-                  <input type="number" min="1" value={line.quantity} onChange={e => updateLine(line._id, { quantity: e.target.value })} style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Estimated Cost ($)</label>
-                  <input type="number" step="0.01" value={line.estimated_cost} onChange={e => updateLine(line._id, { estimated_cost: e.target.value })} placeholder="0.00" style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Supplier Design No.</label>
-                  <input value={line.supplier_design_no} onChange={e => updateLine(line._id, { supplier_design_no: e.target.value })} placeholder="Supplier's ref/job no." style={IF} />
-                </div>
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <label style={LF}>For</label>
-                  <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                    <select
-                      value={line.forOrder ? "order" : "stock"}
-                      onChange={e => updateLine(line._id, { forOrder: e.target.value === "order", packet_id: "" })}
-                      style={{ ...IF, width: "auto", minWidth: 120, background: "#fff" }}
-                    >
-                      <option value="stock">Stock</option>
-                      <option value="order">Customer Order</option>
-                    </select>
-                    {line.forOrder && (
-                      <PacketPicker
-                        packets={openPackets}
-                        value={line.packet_id}
-                        onChange={id => updateLine(line._id, { packet_id: id })}
+              <PoLineSections
+                categoryName={ref?.categories.find(c => c.id === line.category_id)?.name ?? null}
+                stonesHaveValues={[line.stone_type, line.stone_carat, line.stone_colour, line.stone_clarity].some(v => v.trim() !== "")}
+                what={
+                  <>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <label style={LF}>Title</label>
+                      <input value={line.title} onChange={e => updateLine(line._id, { title: e.target.value })} placeholder="e.g. Round Brilliant Diamond Ring" style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Category</label>
+                      <select value={line.category_id} onChange={e => updateLine(line._id, { category_id: e.target.value })} style={{ ...IF, background: "#fff" }}>
+                        <option value="">—</option>
+                        {ref?.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={LF}>Qty</label>
+                      <input type="number" min="1" value={line.quantity} onChange={e => updateLine(line._id, { quantity: e.target.value })} style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Finger Size</label>
+                      <input value={line.finger_size} onChange={e => updateLine(line._id, { finger_size: e.target.value })} placeholder="e.g. N" style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Supplier Design No.</label>
+                      <input value={line.supplier_design_no} onChange={e => updateLine(line._id, { supplier_design_no: e.target.value })} placeholder="Supplier's ref/job no." style={IF} />
+                    </div>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <label style={LF}>For</label>
+                      <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                        <select
+                          value={line.forOrder ? "order" : "stock"}
+                          onChange={e => updateLine(line._id, { forOrder: e.target.value === "order", packet_id: "" })}
+                          style={{ ...IF, width: "auto", minWidth: 120, background: "#fff" }}
+                        >
+                          <option value="stock">Stock</option>
+                          <option value="order">Customer Order</option>
+                        </select>
+                        {line.forOrder && (
+                          <PacketPicker
+                            packets={openPackets}
+                            value={line.packet_id}
+                            onChange={id => updateLine(line._id, { packet_id: id })}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </>
+                }
+                metal={
+                  <>
+                    <div>
+                      <label style={LF}>Metal Type</label>
+                      <input value={line.metal_type} onChange={e => updateLine(line._id, { metal_type: e.target.value })} placeholder="e.g. Yellow Gold" style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Metal carat</label>
+                      <input value={line.metal_karat} onChange={e => updateLine(line._id, { metal_karat: e.target.value })} placeholder="e.g. 18ct" style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Metal Colour</label>
+                      <input value={line.metal_colour} onChange={e => updateLine(line._id, { metal_colour: e.target.value })} placeholder="e.g. Yellow" style={IF} />
+                    </div>
+                  </>
+                }
+                stones={
+                  <>
+                    <div>
+                      <label style={LF}>Stone Type</label>
+                      <input value={line.stone_type} onChange={e => updateLine(line._id, { stone_type: e.target.value })} placeholder="e.g. Natural" style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Stone Carat</label>
+                      <input type="number" step="0.01" value={line.stone_carat} onChange={e => updateLine(line._id, { stone_carat: e.target.value })} placeholder="e.g. 0.50" style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Stone Colour</label>
+                      <input value={line.stone_colour} onChange={e => updateLine(line._id, { stone_colour: e.target.value })} placeholder="e.g. G" style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Stone Clarity</label>
+                      <input value={line.stone_clarity} onChange={e => updateLine(line._id, { stone_clarity: e.target.value })} placeholder="e.g. VS1" style={IF} />
+                    </div>
+                  </>
+                }
+                cost={
+                  <>
+                    <div>
+                      <label style={LF}>Estimated Cost ($)</label>
+                      <input type="number" step="0.01" value={line.estimated_cost} onChange={e => updateLine(line._id, { estimated_cost: e.target.value })} placeholder="0.00" style={IF} />
+                    </div>
+                    <div style={{ gridColumn: "span 2" }}>
+                      <label style={LF}>Xero Account</label>
+                      <XeroAccountSelect
+                        load={xeroAccounts}
+                        accountId={line.xero_account_id}
+                        accountCode={line.xero_account_code}
+                        accountName={line.xero_account_name}
+                        onChange={acc => updateLine(line._id, {
+                          xero_account_id:   acc?.id ?? "",
+                          xero_account_code: acc?.code ?? "",
+                          xero_account_name: acc?.name ?? "",
+                        })}
+                        style={{ ...IF, background: "#fff" }}
                       />
-                    )}
-                  </div>
-                </div>
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <label style={LF}>Notes</label>
+                    </div>
+                  </>
+                }
+                notes={
                   <input value={line.notes} onChange={e => updateLine(line._id, { notes: e.target.value })} placeholder="Optional…" style={IF} />
-                </div>
-              </div>
+                }
+              />
             </div>
           ))}
         </div>

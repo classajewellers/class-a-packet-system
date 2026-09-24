@@ -957,6 +957,26 @@ export default function WorkshopBoardPage() {
   }, [tenantId]);
 
   useEffect(() => { fetchPackets(); }, [fetchPackets]);
+
+  // Open the job a purchase-order line linked to, via ?packet=<id>.
+  const openedPacketFromUrl = useRef(false);
+  useEffect(() => {
+    if (openedPacketFromUrl.current || !tenantId || loading) return;
+    const packetId = new URLSearchParams(window.location.search).get("packet");
+    if (!packetId) return;
+    openedPacketFromUrl.current = true;
+    const onBoard = packets.find(p => p.id === packetId);
+    if (onBoard) {
+      setSelectedPacket(onBoard);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/workshop/packets/${packetId}`, { cache: "no-store", headers: { "x-tenant-id": tenantId } })
+      .then(r => r.ok ? r.json() : null)
+      .then(json => { if (!cancelled && json?.packet) setSelectedPacket(json.packet); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [tenantId, loading, packets]);
   useEffect(() => { fetchConfig(); }, [fetchConfig]);
   useEffect(() => {
     if (!tenantId) return;

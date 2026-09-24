@@ -80,7 +80,7 @@ export async function POST(
   const [{ data: po }, { data: line, error: lineErr }] = await Promise.all([
     tenantScoped(supabase, tenantId)
       .from("inventory_purchase_orders")
-      .select("po_number")
+      .select("po_number, supplier_id")
       .eq("id", params.id)
       .single(),
     tenantScoped(supabase, tenantId)
@@ -209,6 +209,8 @@ export async function POST(
     now,
     poLineId: line_id,
     receivingEventId: event.id,
+    supplierId: po?.supplier_id ?? null,
+    packetId: line.packet_id ?? null,
   };
 
   // ── Create inventory pieces ────────────────────────────────────────────────
@@ -309,6 +311,8 @@ const PIECE_FLAG_COLUMNS = [
   "actual_cost",
   "supplier_code",
   "created_at",
+  "supplier_id",
+  "packet_id",
 ] as const;
 
 // Any probe error means the column is absent. Same rule as the pieces
@@ -335,6 +339,8 @@ async function pieceColumnFlags(
     actual_cost: present.actual_cost,
     supplier_code: present.supplier_code,
     created_at: present.created_at,
+    supplier_id: present.supplier_id,
+    packet_id: present.packet_id,
   };
 }
 

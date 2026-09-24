@@ -51,6 +51,10 @@ export interface PieceColumnFlags {
   actual_cost: boolean;
   supplier_code: boolean;
   created_at: boolean;
+  // Vault is adding these. Absent on Preview until that migration lands.
+  // When false, the insert must not mention them (PostgREST rejects the row).
+  supplier_id: boolean;
+  packet_id: boolean;
 }
 
 export interface ReceiveLineSource {
@@ -163,6 +167,10 @@ export interface ReceivedPieceInput {
   poLineId: string;
   receivingEventId: string;
   quantity: number;
+  /** From the purchase order. Written only when the piece column exists. */
+  supplierId?: string | null;
+  /** From the PO line. Written only when the piece column exists. */
+  packetId?: string | null;
 }
 
 /**
@@ -240,6 +248,18 @@ export function buildReceivedPieceRow(input: ReceivedPieceInput): Record<string,
   if (flags.category_id) row.category_id = categoryId;
   if (flags.created_at) row.created_at = input.now;
   if (flags.updated_at) row.updated_at = input.now;
+
+  // Stamp provenance once Vault's columns exist. Omit the key entirely
+  // while the column is missing, and omit it when the PO has no value,
+  // so a null supplier does not fail a foreign key.
+  if (flags.supplier_id) {
+    const supplierId = firstUuid(input.supplierId);
+    if (supplierId) row.supplier_id = supplierId;
+  }
+  if (flags.packet_id) {
+    const packetId = firstUuid(input.packetId);
+    if (packetId) row.packet_id = packetId;
+  }
 
   return row;
 }

@@ -8,6 +8,7 @@ import { loadXeroAccounts, XeroAccountsLoad } from "@/lib/xeroAccounts";
 import { ArrowLeft, Package, CheckCircle2, SkipForward, Sparkles, Loader, X, ChevronDown, DollarSign, Pencil, Ban, AlertTriangle, Plus, Trash2 } from "lucide-react";
 import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
 import { XeroAccountSelect } from "@/components/XeroAccountSelect";
+import { PoLineSections } from "@/components/PoLineSections";
 import { fallbackReceiveTitle, inheritedReceiveTitle } from "@/lib/receiveStock";
 
 type POStatus = "draft" | "ordered" | "partially_received" | "received" | "cancelled";
@@ -403,7 +404,7 @@ function ReceiveCard({
           <input value={specs.metal_type} onChange={e => setSpecs(s => ({ ...s, metal_type: e.target.value }))} style={IF} />
         </div>
         <div>
-          <label style={LF}>Carat</label>
+          <label style={LF}>Metal carat</label>
           <input value={specs.metal_karat} onChange={e => setSpecs(s => ({ ...s, metal_karat: e.target.value }))} style={IF} />
         </div>
         <div>
@@ -922,83 +923,102 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                       This line has been invoiced (actual cost: ${Number(line.actual_cost).toLocaleString("en-AU", { minimumFractionDigits: 2 })}). Changes here are cosmetic only.
                     </div>
                   )}
-                  <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: "10px 16px", marginBottom: 12 }}>
-                    <div style={{ gridColumn: "1 / -1" }}>
-                      <label style={LF}>Title</label>
-                      <input value={line.title} onChange={e => setLine({ title: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Category</label>
-                      <select value={line.category_id} onChange={e => setLine({ category_id: e.target.value })} style={{ ...IF, background: "#fff" }}>
-                        <option value="">—</option>
-                        {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={LF}>Xero Account</label>
-                      <XeroAccountSelect
-                        load={xeroAccounts}
-                        accountId={line.xero_account_id}
-                        accountCode={line.xero_account_code}
-                        accountName={line.xero_account_name}
-                        onChange={acc => setLine({
-                          xero_account_id:   acc?.id ?? "",
-                          xero_account_code: acc?.code ?? "",
-                          xero_account_name: acc?.name ?? "",
-                        })}
-                        style={{ ...IF, background: "#fff" }}
-                      />
-                    </div>
-                    <div>
-                      <label style={LF}>Metal Type</label>
-                      <input value={line.metal_type} onChange={e => setLine({ metal_type: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Karat</label>
-                      <input value={line.metal_karat} onChange={e => setLine({ metal_karat: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Metal Colour</label>
-                      <input value={line.metal_colour} onChange={e => setLine({ metal_colour: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Stone Type</label>
-                      <input value={line.diamond_type} onChange={e => setLine({ diamond_type: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Stone Carat</label>
-                      <input type="number" step="0.01" value={line.diamond_carat} onChange={e => setLine({ diamond_carat: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Stone Colour</label>
-                      <input value={line.diamond_colour} onChange={e => setLine({ diamond_colour: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Stone Clarity</label>
-                      <input value={line.diamond_clarity} onChange={e => setLine({ diamond_clarity: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Finger Size</label>
-                      <input value={line.finger_size} onChange={e => setLine({ finger_size: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Qty</label>
-                      <input type="number" min="1" value={line.quantity} onChange={e => setLine({ quantity: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>
-                        Est. Cost ($){isInvoiced && <span style={{ color: "#D97706", marginLeft: 4 }}>⚠</span>}
-                      </label>
-                      <input type="number" step="0.01" min="0" value={line.estimated_cost} onChange={e => setLine({ estimated_cost: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Supplier Design No</label>
-                      <input value={line.supplier_design_no} onChange={e => setLine({ supplier_design_no: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Notes</label>
+                  <div style={{ marginBottom: 12 }}>
+                  <PoLineSections
+                    categoryName={categories.find((c: { id: string; name: string }) => c.id === line.category_id)?.name ?? null}
+                    stonesHaveValues={[line.diamond_type, line.diamond_carat, line.diamond_colour, line.diamond_clarity].some(v => String(v ?? "").trim() !== "")}
+                    what={
+                      <>
+                        <div style={{ gridColumn: "1 / -1" }}>
+                          <label style={LF}>Title</label>
+                          <input value={line.title} onChange={e => setLine({ title: e.target.value })} style={IF} />
+                        </div>
+                        <div>
+                          <label style={LF}>Category</label>
+                          <select value={line.category_id} onChange={e => setLine({ category_id: e.target.value })} style={{ ...IF, background: "#fff" }}>
+                            <option value="">—</option>
+                            {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={LF}>Qty</label>
+                          <input type="number" min="1" value={line.quantity} onChange={e => setLine({ quantity: e.target.value })} style={IF} />
+                        </div>
+                        <div>
+                          <label style={LF}>Finger Size</label>
+                          <input value={line.finger_size} onChange={e => setLine({ finger_size: e.target.value })} style={IF} />
+                        </div>
+                        <div>
+                          <label style={LF}>Supplier Design No</label>
+                          <input value={line.supplier_design_no} onChange={e => setLine({ supplier_design_no: e.target.value })} style={IF} />
+                        </div>
+                      </>
+                    }
+                    metal={
+                      <>
+                        <div>
+                          <label style={LF}>Metal Type</label>
+                          <input value={line.metal_type} onChange={e => setLine({ metal_type: e.target.value })} style={IF} />
+                        </div>
+                        <div>
+                          <label style={LF}>Metal carat</label>
+                          <input value={line.metal_karat} onChange={e => setLine({ metal_karat: e.target.value })} style={IF} />
+                        </div>
+                        <div>
+                          <label style={LF}>Metal Colour</label>
+                          <input value={line.metal_colour} onChange={e => setLine({ metal_colour: e.target.value })} style={IF} />
+                        </div>
+                      </>
+                    }
+                    stones={
+                      <>
+                        <div>
+                          <label style={LF}>Stone Type</label>
+                          <input value={line.diamond_type} onChange={e => setLine({ diamond_type: e.target.value })} style={IF} />
+                        </div>
+                        <div>
+                          <label style={LF}>Stone Carat</label>
+                          <input type="number" step="0.01" value={line.diamond_carat} onChange={e => setLine({ diamond_carat: e.target.value })} style={IF} />
+                        </div>
+                        <div>
+                          <label style={LF}>Stone Colour</label>
+                          <input value={line.diamond_colour} onChange={e => setLine({ diamond_colour: e.target.value })} style={IF} />
+                        </div>
+                        <div>
+                          <label style={LF}>Stone Clarity</label>
+                          <input value={line.diamond_clarity} onChange={e => setLine({ diamond_clarity: e.target.value })} style={IF} />
+                        </div>
+                      </>
+                    }
+                    cost={
+                      <>
+                        <div>
+                          <label style={LF}>
+                            Est. Cost ($){isInvoiced && <span style={{ color: "#D97706", marginLeft: 4 }}>⚠</span>}
+                          </label>
+                          <input type="number" step="0.01" min="0" value={line.estimated_cost} onChange={e => setLine({ estimated_cost: e.target.value })} style={IF} />
+                        </div>
+                        <div style={{ gridColumn: "span 2" }}>
+                          <label style={LF}>Xero Account</label>
+                          <XeroAccountSelect
+                            load={xeroAccounts}
+                            accountId={line.xero_account_id}
+                            accountCode={line.xero_account_code}
+                            accountName={line.xero_account_name}
+                            onChange={acc => setLine({
+                              xero_account_id:   acc?.id ?? "",
+                              xero_account_code: acc?.code ?? "",
+                              xero_account_name: acc?.name ?? "",
+                            })}
+                            style={{ ...IF, background: "#fff" }}
+                          />
+                        </div>
+                      </>
+                    }
+                    notes={
                       <input value={line.notes} onChange={e => setLine({ notes: e.target.value })} style={IF} />
-                    </div>
+                    }
+                  />
                   </div>
                   {/* Stock / Order toggle */}
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1233,7 +1253,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                         {line.packet ? (
                           <div style={{ marginTop: 4 }}>
                             <a
-                              href={`/workshop/board`}
+                              href={`/workshop/board?packet=${line.packet.id}`}
                               style={{
                                 display: "inline-flex", alignItems: "center", gap: 3,
                                 padding: "2px 7px", borderRadius: 6, fontSize: 11, fontWeight: 600,

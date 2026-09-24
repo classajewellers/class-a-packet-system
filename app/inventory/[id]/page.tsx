@@ -7,6 +7,8 @@ import { canManage } from "@/lib/userTypes";
 import { InventoryPiece, InventoryReferenceData } from "@/lib/types";
 // calculateLivePricing removed — pricing now uses calculate_price() RPC via /api/inventory/pieces/[id]/price
 import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
+import PiecePassportCard from "@/components/PiecePassportCard";
+import type { PiecePassport } from "@/lib/piecePassport";
 import {
   ArrowLeft, Edit2, Save, X, ArrowRight,
   Lock, AlertTriangle, TrendingDown, Package, MapPin, Clock, DollarSign, Bookmark, BookmarkX,
@@ -540,6 +542,8 @@ export default function InventoryItemPage({ params }: Params) {
   const isManager = hydrated ? canManage(user?.role) : false;
 
   const [piece, setPiece]     = useState<InventoryPiece | null>(null);
+  const [passport, setPassport] = useState<PiecePassport | null>(null);
+  const [passportError, setPassportError] = useState("");
   const [ref, setRef]         = useState<InventoryReferenceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -633,7 +637,7 @@ export default function InventoryItemPage({ params }: Params) {
   const fetchAll = useCallback(async () => {
     if (!tenantId) return;
     setLoading(true);
-    const [pieceRes, refRes, movRes, calcRes, prodRes, staffRes, resRes, meleeRes] = await Promise.all([
+    const [pieceRes, refRes, movRes, calcRes, prodRes, staffRes, resRes, meleeRes, passportRes] = await Promise.all([
       fetch(`/api/inventory/pieces/${params.id}`, { headers }),
       fetch("/api/inventory/reference", { headers }),
       fetch(`/api/inventory/movements?piece_id=${params.id}&limit=50`, { headers }),
@@ -642,6 +646,7 @@ export default function InventoryItemPage({ params }: Params) {
       fetch("/api/settings/users/list", { headers }),
       fetch(`/api/inventory/reservations?piece_id=${params.id}`, { headers }),
       fetch(`/api/inventory/pieces/${params.id}/melee-price`, { headers }),
+      fetch(`/api/inventory/pieces/${params.id}/passport`, { cache: "no-store", headers }),
     ]);
     if (!pieceRes.ok) { setLoading(false); return; }
     const [pieceJson, refJson, movJson] = await Promise.all([
@@ -669,6 +674,15 @@ export default function InventoryItemPage({ params }: Params) {
       setActiveRes(all.find(r => r.status === "active") ?? null);
     }
     setMeleePrice(meleeRes.ok ? await meleeRes.json() : null);
+    if (passportRes.ok) {
+      const pj = await passportRes.json();
+      setPassport(pj.passport ?? null);
+      setPassportError("");
+    } else {
+      const pj = await passportRes.json().catch(() => ({}));
+      setPassport(null);
+      setPassportError(pj.error ?? "Could not load passport");
+    }
     setLoading(false);
   }, [tenantId, params.id]);
 
@@ -1098,6 +1112,8 @@ export default function InventoryItemPage({ params }: Params) {
         style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: "#6B7280", fontSize: 14, marginBottom: 20, padding: 0 }}>
         <ArrowLeft size={16} /> Stock
       </button>
+
+      <PiecePassportCard passport={passport} error={passportError} />
 
       {/* ── Header strip ── */}
       <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: "16px 24px", marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>

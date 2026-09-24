@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
 import { formatDateAU, formatCurrency } from "@/lib/formatters";
 import AttachmentsSection from "@/components/AttachmentsSection";
+import WorkshopPurchasing from "@/components/WorkshopPurchasing";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -80,7 +81,7 @@ export interface WorkshopConfig {
 
 // ── Internal types ────────────────────────────────────────────────────────────
 
-type TabId = "overview" | "customer" | "items" | "notes" | "production" | "materials" | "pricing" | "qc" | "valuation" | "files" | "messages" | "history";
+type TabId = "overview" | "customer" | "items" | "notes" | "production" | "materials" | "purchasing" | "pricing" | "qc" | "valuation" | "files" | "messages" | "history";
 
 interface ActivityEvent {
   id: string;
@@ -108,6 +109,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "notes",       label: "Notes" },
   { id: "production",  label: "Production" },
   { id: "materials",   label: "Materials" },
+  { id: "purchasing",  label: "Purchasing" },
   { id: "pricing",     label: "Pricing" },
   { id: "qc",          label: "QC" },
   { id: "valuation",   label: "Valuation" },
@@ -453,6 +455,8 @@ export default function WorkshopJobDrawer({
           <div style={{ background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: 8, padding: "8px 12px", marginBottom: 14, fontSize: 13, color: "#DC2626" }}>{saveError}</div>
         )}
 
+        <WorkshopPurchasing packetId={local.id} tenantId={tenantId} />
+
         {LABEL("Stage")}
         <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 14 }}>
           {FLAT_STAGES.map(entry => {
@@ -678,6 +682,10 @@ export default function WorkshopJobDrawer({
         )}
       </div>
     );
+  }
+
+  function renderPurchasing() {
+    return <WorkshopPurchasing packetId={local.id} tenantId={tenantId} />;
   }
 
   function renderMaterials() {
@@ -1011,6 +1019,7 @@ export default function WorkshopJobDrawer({
           {activeTab === "notes"      && renderNotes()}
           {activeTab === "production" && renderProduction()}
           {activeTab === "materials"  && renderMaterials()}
+          {activeTab === "purchasing" && renderPurchasing()}
           {activeTab === "pricing"    && renderPricing()}
           {activeTab === "qc"         && renderQC()}
           {activeTab === "valuation"  && renderValuation()}
