@@ -19,6 +19,10 @@
  *   SUPABASE_SERVICE_ROLE_KEY='…' \
  *   node scripts/seed-workshop-team.mjs
  *
+ * Staging already has these six accounts (Jeweller only). Vault DB owns
+ * that apply. Re-running does not change an existing password: createUser
+ * runs only when the auth user is missing.
+ *
  * Sign in at /login with the email and that temporary password.
  * A manager can replace it from Settings → Team → Set password.
  *

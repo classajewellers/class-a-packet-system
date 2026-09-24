@@ -1,26 +1,31 @@
 -- 165_workshop_role_tags.sql
--- Aligns the Part C catalog with the approved Vault DB shape.
+-- Final Part C shape. Idempotent when the tables already exist.
 --
--- Approved:
---   workshop_role_tags (tenant_id, key, label, active, sort)
---     plus id uuid primary key so profile_workshop_roles can reference a row
---   profile_workshop_roles  M2M profile ↔ workshop_role_tags
---   profiles.role stays system access only (manager | staff). Not changed here.
+-- workshop_role_tags
+--   id uuid primary key, tenant_id, key, label, sort, active, created_at
+--   unique (tenant_id, key)
+-- profile_workshop_roles
+--   tenant_id, profile_id, workshop_role_tag_id, created_at
+--   primary key (profile_id, workshop_role_tag_id)
+-- profiles.role is unchanged (system access only).
 --
--- 164 created this catalog as workshop_roles (slug, name, sort_order).
--- This migration renames that table and those columns. It does not insert
--- accounts, does not tag anyone cad_designer, and does not touch Josh or
--- Staff Test. jeweller + cad_designer rows already seeded by 164 keep their
--- keys. workshop_team_members was dropped in 164 (cutover already done).
+-- 164 created the catalog as workshop_roles (slug, name, sort_order).
+-- This file renames that table when it is still present. It does not insert
+-- accounts and does not tag anyone cad_designer.
 --
--- STAGING APPLY (project aexfqkaayrcmdehuzpza). Not production.
---   1. 164_workshop_roles.sql must already be applied.
---   2. Apply this file.
---   3. No password re-seed. The six Class A practice logins already exist
---      and stay Jeweller-only.
---
--- RLS: enabled, no policies (deny-all for anon/authenticated). Service role
--- bypasses RLS. Same posture as the other workshop lookup tables.
+-- Staging apply is owned by Vault DB (project aexfqkaayrcmdehuzpza).
+-- Not production. Already applied there:
+--   workshop_roles                  version 20260924070528
+--   workshop_roles_tenant_isolation version 20260924071103
+--   workshop_role_tags              version 20260924071250
+-- The isolation migration ran before the rename. Policies are bound to the
+-- table, so they are already on workshop_role_tags and profile_workshop_roles:
+--   FORCE ROW LEVEL SECURITY
+--   policy tenant_isolation FOR ALL
+--     USING (tenant_id = public.current_tenant_id())
+--     WITH CHECK (tenant_id = public.current_tenant_id())
+-- Re-applying the policy block below replaces that same text.
+-- No remaining staging apply. Do not re-seed passwords.
 
 DO $$
 BEGIN
@@ -50,8 +55,24 @@ BEGIN
   ALTER INDEX profile_workshop_roles_role_idx RENAME TO profile_workshop_roles_tag_idx;
 END $$;
 
+-- Same statements Vault DB applied in workshop_roles_tenant_isolation,
+-- retargeted at the renamed tables. DROP + CREATE is a no-op replacement
+-- when the live policy text already matches.
 ALTER TABLE public.workshop_role_tags ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.workshop_role_tags FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON public.workshop_role_tags;
+CREATE POLICY tenant_isolation ON public.workshop_role_tags
+  FOR ALL
+  USING (tenant_id = public.current_tenant_id())
+  WITH CHECK (tenant_id = public.current_tenant_id());
+
 ALTER TABLE public.profile_workshop_roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profile_workshop_roles FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON public.profile_workshop_roles;
+CREATE POLICY tenant_isolation ON public.profile_workshop_roles
+  FOR ALL
+  USING (tenant_id = public.current_tenant_id())
+  WITH CHECK (tenant_id = public.current_tenant_id());
 
 CREATE OR REPLACE FUNCTION public.seed_workshop_role_tags_for_tenant()
 RETURNS trigger
