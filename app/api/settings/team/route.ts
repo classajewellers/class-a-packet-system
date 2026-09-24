@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requireManager } from "@/lib/require-auth";
-import { MIN_PASSWORD, replaceWorkshopRoles } from "@/lib/workshopTeam";
+import { MIN_PASSWORD, replaceWorkshopRoleTags } from "@/lib/workshopTeam";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -100,8 +100,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const email = String(body.email ?? "").toLowerCase().trim();
     const role = body.role === "manager" ? "manager" : body.role === "staff" ? "staff" : "";
     const password = String(body.password ?? "");
-    const workshopRoleIds: string[] = Array.isArray(body.workshop_role_ids)
-      ? body.workshop_role_ids.filter((id: unknown) => typeof id === "string")
+    const workshopRoleTagIds: string[] = Array.isArray(body.workshop_role_tag_ids)
+      ? body.workshop_role_tag_ids.filter((id: unknown) => typeof id === "string")
       : [];
 
     if (!fullName || !email || !role) {
@@ -164,8 +164,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "Failed to finish setting up the account" }, { status: 500 });
     }
 
-    if (workshopRoleIds.length > 0) {
-      const tagError = await replaceWorkshopRoles(supabase, tenantId, userId, workshopRoleIds);
+    if (workshopRoleTagIds.length > 0) {
+      const tagError = await replaceWorkshopRoleTags(supabase, tenantId, userId, workshopRoleTagIds);
       if (tagError) {
         return NextResponse.json(
           { error: `Account created, but workshop roles could not be saved: ${tagError}`, id: userId },

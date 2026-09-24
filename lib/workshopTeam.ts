@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export const MIN_PASSWORD = 8;
 
 /** Replace a profile's workshop tags. Role ids must belong to the tenant. Returns an error message, or null. */
-export async function replaceWorkshopRoles(
+export async function replaceWorkshopRoleTags(
   supabase: SupabaseClient,
   tenantId: string,
   profileId: string,

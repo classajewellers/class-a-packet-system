@@ -14,7 +14,7 @@
  * (aexfqkaayrcmdehuzpza), unless WORKSHOP_SEED_ALLOW_ANY_HOST=1.
  * Do not point this at production.
  *
- * Run this after supabase/migrations/165_workshop_role_tags.sql. That file
+ * Run this after supabase/migrations/166_workshop_role_tags.sql. That file
  * creates the catalog; it does not create these logins. Vault DB applies
  * both on staging (aexfqkaayrcmdehuzpza). Not production.
  *
@@ -102,8 +102,8 @@ const { data: jeweller, error: roleError } = await supabase
   .eq("key", "jeweller")
   .maybeSingle();
 
-if (roleError) fail(`workshop_role_tags lookup failed: ${roleError.message}. Apply supabase/migrations/165_workshop_role_tags.sql on staging first.`);
-if (!jeweller) fail("Jeweller tag is missing for Class A. Apply supabase/migrations/165_workshop_role_tags.sql on staging first.");
+if (roleError) fail(`workshop_role_tags lookup failed: ${roleError.message}. Apply supabase/migrations/166_workshop_role_tags.sql on staging first.`);
+if (!jeweller) fail("Jeweller tag is missing for Class A. Apply supabase/migrations/166_workshop_role_tags.sql on staging first.");
 
 for (const person of PEOPLE) {
   let userId = await findAuthUserId(person.email);

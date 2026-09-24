@@ -90,7 +90,7 @@ export default function TeamSettingsPage() {
       const res = await fetch(`/api/settings/team/${member.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workshop_role_ids: nextIds }),
+        body: JSON.stringify({ workshop_role_tag_ids: nextIds }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -295,7 +295,7 @@ function CreateModal({
           email: email.trim(),
           password,
           role,
-          workshop_role_ids: tagIds,
+          workshop_role_tag_ids: tagIds,
         }),
       });
       const json = await res.json();
