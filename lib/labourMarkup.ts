@@ -1,9 +1,9 @@
 // Labour & setting markup from pricing_component_rules (Settings → Pricing
-// Engine, label "Labour & setting markup"). Quote-builder labour and addons
-// are wholesale costs. Retail is cost × this multiplier — the same rule
-// calculate_price already applies to labour + setting outside ad-hoc mode.
-// A missing rule is not ×1. Callers must show that the markup did not load
-// instead of labelling the cost as "no multiplier".
+// Engine, label "Labour & setting markup"). Class A has one labour row
+// (1.80) and no addon, setting, plating, or bench component type. That
+// labour row is the live markup for quote-builder labour and addons.
+// Retail is cost × this multiplier. A missing rule is not ×1 and not a
+// hardcoded 1.50. Callers must show that the markup did not load.
 
 export function roundMoney(amount: number): number {
   if (!Number.isFinite(amount)) return 0;

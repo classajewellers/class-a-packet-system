@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { PacketFormData } from "@/lib/types";
 import { useUser } from "@/context/UserContext";
-import { activeWorkshopStaffNames, type WorkshopTeamMember } from "@/lib/jobStaff";
+import { jobStaffNames, type StaffProfileRow, type WorkshopTeamMember } from "@/lib/jobStaff";
 
 const REFERRAL_SOURCES = [
   { value: "instagram", label: "Instagram" },
@@ -40,18 +40,22 @@ function useWorkshopStaff(): StaffLoad {
       return;
     }
     setState({ status: "loading" });
-    fetch("/api/workshop/team-members", {
-      headers: { "x-tenant-id": tenantId },
-      cache: "no-store",
-    })
-      .then(async (response) => {
-        const body = await response.json().catch(() => null) as { members?: WorkshopTeamMember[]; error?: string } | null;
+    const headers = { "x-tenant-id": tenantId };
+    Promise.all([
+      fetch("/api/workshop/team-members", { headers, cache: "no-store" }),
+      fetch("/api/profiles", { headers, cache: "no-store" }),
+    ])
+      .then(async ([membersResponse, profilesResponse]) => {
+        const membersBody = await membersResponse.json().catch(() => null) as { members?: WorkshopTeamMember[] } | null;
+        const profilesBody = await profilesResponse.json().catch(() => null) as { profiles?: StaffProfileRow[]; error?: string } | null;
         if (cancelled) return;
-        if (!response.ok || !body || !Array.isArray(body.members)) {
+        const members = membersBody && Array.isArray(membersBody.members) ? membersBody.members : null;
+        const profiles = profilesBody && Array.isArray(profilesBody.profiles) && !profilesBody.error ? profilesBody.profiles : null;
+        if (!membersResponse.ok || !profilesResponse.ok || !members || !profiles) {
           setState({ status: "error", message: LOAD_FAILED });
           return;
         }
-        setState({ status: "ready", names: activeWorkshopStaffNames(body.members) });
+        setState({ status: "ready", names: jobStaffNames(members, profiles) });
       })
       .catch(() => {
         if (!cancelled) setState({ status: "error", message: LOAD_FAILED });
