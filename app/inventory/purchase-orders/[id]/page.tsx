@@ -11,6 +11,7 @@ import PurchaseInvoicePanel from "@/components/PurchaseInvoicePanel";
 import { XeroAccountSelect } from "@/components/XeroAccountSelect";
 import { PoLineSections } from "@/components/PoLineSections";
 import { fallbackReceiveTitle, inheritedReceiveTitle } from "@/lib/receiveStock";
+import { addCalendarDays, DEFAULT_PAYMENT_TERMS } from "@/lib/purchaseOrderDocument";
 
 type POStatus = "draft" | "ordered" | "partially_received" | "received" | "cancelled";
 
@@ -39,6 +40,7 @@ interface PoLine {
   estimated_cost: number | null;
   actual_cost: number | null;
   supplier_design_no: string | null;
+  sku: string | null;
   packet_id: string | null;
   packet?: {
     id: string;
@@ -73,6 +75,7 @@ interface EditPoLine {
   estimated_cost: string;
   actual_cost: number | null;
   supplier_design_no: string;
+  sku: string;
   packet_id: string;
   notes: string;
   received: boolean;
@@ -88,6 +91,8 @@ interface PurchaseOrder {
   status: POStatus;
   order_date: string | null;
   expected_date: string | null;
+  payment_terms: string | null;
+  ship_to_address: string | null;
   notes: string | null;
   lines: PoLine[];
   created_at: string;
@@ -545,7 +550,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   const [categories, setCategories] = useState<any[]>([]);
   const [locations, setLocations]   = useState<any[]>([]);
   const [products, setProducts]     = useState<any[]>([]);
-  const [suppliers, setSuppliers]   = useState<{ id: string; name: string }[]>([]);
+  const [suppliers, setSuppliers]   = useState<{ id: string; name: string; payment_terms?: string | null; lead_time_days?: number | null }[]>([]);
   const [xeroAccounts, setXeroAccounts] = useState<XeroAccountsLoad>({ status: "loading" });
   const [showReceive, setShowReceive] = useState(false);
   const [receivedCount, setReceivedCount] = useState(0);
@@ -562,7 +567,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
 
   // Edit mode
   const [editMode, setEditMode]     = useState(false);
-  const [editHeader, setEditHeader] = useState({ supplier_id: "", order_date: "", expected_date: "", notes: "" });
+  const [editHeader, setEditHeader] = useState({ supplier_id: "", order_date: "", expected_date: "", payment_terms: "", ship_to_address: "", notes: "" });
   const [editLines, setEditLines]   = useState<EditPoLine[]>([]);
   const [editSaving, setEditSaving]           = useState(false);
   const [editError, setEditError]             = useState("");
@@ -705,6 +710,8 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
       supplier_id:   po.supplier_id   ?? "",
       order_date:    po.order_date    ?? "",
       expected_date: po.expected_date ?? "",
+      payment_terms: po.payment_terms ?? "",
+      ship_to_address: po.ship_to_address ?? "",
       notes:         po.notes         ?? "",
     });
     setEditLines(po.lines.map(l => ({
@@ -726,6 +733,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
       estimated_cost:    l.estimated_cost != null ? String(l.estimated_cost) : "",
       actual_cost:       l.actual_cost,
       supplier_design_no: l.supplier_design_no ?? "",
+      sku:               l.sku               ?? "",
       packet_id:         l.packet_id         ?? "",
       notes:             l.notes             ?? "",
       received:          l.received,
@@ -769,6 +777,8 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
         supplier_id:      editHeader.supplier_id   || null,
         order_date:       editHeader.order_date    || null,
         expected_date:    editHeader.expected_date || null,
+        payment_terms:    editHeader.payment_terms || null,
+        ship_to_address:  editHeader.ship_to_address || null,
         notes:            editHeader.notes         || null,
         deleted_line_ids: deletedLineIds.length > 0 ? deletedLineIds : undefined,
         lines: editLines.map(l => ({
@@ -789,6 +799,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
           quantity:          Number(l.quantity)  || 1,
           estimated_cost:    l.estimated_cost    ? Number(l.estimated_cost) : null,
           supplier_design_no: l.supplier_design_no || null,
+          sku:               l.sku || null,
           packet_id:         l.forOrder ? (l.packet_id || null) : null,
           notes:             l.notes             || null,
         })),
@@ -882,7 +893,19 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
               <label style={LF}>Supplier</label>
               <select
                 value={editHeader.supplier_id}
-                onChange={e => setEditHeader(h => ({ ...h, supplier_id: e.target.value }))}
+                onChange={e => {
+                  const supplierId = e.target.value;
+                  const supplier = suppliers.find(s => s.id === supplierId);
+                  setEditHeader(h => {
+                    const next = { ...h, supplier_id: supplierId };
+                    if (!h.payment_terms.trim()) next.payment_terms = supplier?.payment_terms?.trim() || DEFAULT_PAYMENT_TERMS;
+                    if (!h.expected_date && supplier?.lead_time_days != null) {
+                      const base = h.order_date || new Date().toISOString().slice(0, 10);
+                      next.expected_date = addCalendarDays(base, Number(supplier.lead_time_days)) ?? h.expected_date;
+                    }
+                    return next;
+                  });
+                }}
                 style={{ ...IF, background: "#fff" }}
               >
                 <option value="">— No supplier —</option>
@@ -905,6 +928,25 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                 value={editHeader.expected_date}
                 onChange={e => setEditHeader(h => ({ ...h, expected_date: e.target.value }))}
                 style={IF}
+              />
+            </div>
+            <div>
+              <label style={LF}>Payment terms</label>
+              <input
+                value={editHeader.payment_terms}
+                onChange={e => setEditHeader(h => ({ ...h, payment_terms: e.target.value }))}
+                placeholder={DEFAULT_PAYMENT_TERMS}
+                style={IF}
+              />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={LF}>Ship to, if different from the business address</label>
+              <textarea
+                value={editHeader.ship_to_address}
+                onChange={e => setEditHeader(h => ({ ...h, ship_to_address: e.target.value }))}
+                rows={2}
+                placeholder="Leave blank to ship to the business address in Settings"
+                style={{ ...IF, resize: "vertical" as const }}
               />
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
@@ -986,6 +1028,10 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                         <div>
                           <label style={LF}>Finger Size</label>
                           <input value={line.finger_size} onChange={e => setLine({ finger_size: e.target.value })} style={IF} />
+                        </div>
+                        <div>
+                          <label style={LF}>SKU</label>
+                          <input value={line.sku} onChange={e => setLine({ sku: e.target.value })} placeholder="Product code" style={IF} />
                         </div>
                         <div>
                           <label style={LF}>Supplier Design No</label>
@@ -1106,7 +1152,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
             metal_type: "", metal_karat: "",
             metal_colour: "", diamond_type: "", diamond_carat: "", diamond_colour: "",
             diamond_clarity: "", finger_size: "", quantity: "1", estimated_cost: "",
-            actual_cost: null, supplier_design_no: "", packet_id: "", notes: "",
+            actual_cost: null, supplier_design_no: "", sku: "", packet_id: "", notes: "",
             received: false, forOrder: false,
           }])}
           style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, padding: "8px 16px", borderRadius: 8, border: "1px dashed #D1D5DB", background: "#fff", color: "#6B7280", fontSize: 13, cursor: "pointer", width: "100%" }}
@@ -1241,7 +1287,9 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px 24px" }}>
           <DetailItem label="Supplier" value={supplierName} />
           <DetailItem label="Order Date" value={po.order_date ? new Date(po.order_date).toLocaleDateString("en-AU") : null} />
-          <DetailItem label="Expected Delivery" value={po.expected_date ? new Date(po.expected_date).toLocaleDateString("en-AU") : null} />
+          <DetailItem label="Expected Delivery" value={po.expected_date ? new Date(po.expected_date).toLocaleDateString("en-AU") : "Uses the supplier lead time on the PDF"} />
+          <DetailItem label="Payment terms" value={po.payment_terms || DEFAULT_PAYMENT_TERMS} />
+          <DetailItem label="Ship to" value={po.ship_to_address || "Business address"} />
           <DetailItem label="Lines" value={`${po.lines.length} item${po.lines.length !== 1 ? "s" : ""}`} />
           <DetailItem label="Received" value={`${po.lines.filter(l => Number(l.received_quantity ?? 0) >= Number(l.quantity ?? 1)).length} of ${po.lines.length} lines`} />
           <DetailItem label="Created" value={new Date(po.created_at).toLocaleDateString("en-AU")} />
@@ -1288,6 +1336,11 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                         {(line.xero_account_code || line.xero_account_name) && (
                           <div style={{ fontSize: 11, color: "#1D4ED8", marginTop: 2 }}>
                             Xero: {[line.xero_account_code, line.xero_account_name].filter(Boolean).join(" — ")}
+                          </div>
+                        )}
+                        {line.sku && (
+                          <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2, fontFamily: "monospace" }}>
+                            SKU: {line.sku}
                           </div>
                         )}
                         {line.supplier_design_no && (

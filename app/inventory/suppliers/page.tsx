@@ -8,7 +8,7 @@ import { canManage } from "@/lib/userTypes";
 import { InventorySupplier } from "@/lib/types";
 import { Plus, Pencil, Trash2, X, Mail, Phone, Clock, Upload, RefreshCw } from "lucide-react";
 
-const BLANK_FORM = { name: "", contact_name: "", email: "", phone: "", lead_time_days: "", notes: "", connector_type: "" };
+const BLANK_FORM = { name: "", contact_name: "", email: "", phone: "", address: "", payment_terms: "", lead_time_days: "", notes: "", connector_type: "" };
 
 interface SupplierDrawerProps {
   supplier: InventorySupplier | null;
@@ -31,6 +31,8 @@ function SupplierDrawer({ supplier, isNew, onClose, onSaved, isAdmin }: Supplier
         contact_name: supplier.contact_name ?? "",
         email: supplier.email ?? "",
         phone: supplier.phone ?? "",
+        address: supplier.address ?? "",
+        payment_terms: supplier.payment_terms ?? "",
         lead_time_days: supplier.lead_time_days != null ? String(supplier.lead_time_days) : "",
         notes: supplier.notes ?? "",
         connector_type: supplier.connector_type ?? "",
@@ -97,8 +99,18 @@ function SupplierDrawer({ supplier, isNew, onClose, onSaved, isAdmin }: Supplier
             </div>
           </div>
           <div>
-            <label style={labelStyle}>Lead Time (days)</label>
-            <input style={inputStyle} type="number" value={form.lead_time_days} onChange={(e) => set("lead_time_days", e.target.value)} placeholder="e.g. 14" />
+            <label style={labelStyle}>Address</label>
+            <textarea style={{ ...inputStyle, height: 72, resize: "vertical" }} value={form.address} onChange={(e) => set("address", e.target.value)} placeholder="Street, suburb, state, postcode" />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <label style={labelStyle}>Lead Time (days)</label>
+              <input style={inputStyle} type="number" value={form.lead_time_days} onChange={(e) => set("lead_time_days", e.target.value)} placeholder="e.g. 14" />
+            </div>
+            <div>
+              <label style={labelStyle}>Payment terms</label>
+              <input style={inputStyle} value={form.payment_terms} onChange={(e) => set("payment_terms", e.target.value)} placeholder="e.g. Net 30" />
+            </div>
           </div>
           <div>
             <label style={labelStyle}>Notes</label>

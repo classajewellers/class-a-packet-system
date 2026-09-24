@@ -473,6 +473,8 @@ export interface InventorySupplier {
   contact_name: string | null;
   email: string | null;
   phone: string | null;
+  address?: string | null;
+  payment_terms?: string | null;
   notes: string | null;
   is_active?: boolean;
   // legacy fields

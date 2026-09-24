@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { tenantScoped } from "@/lib/tenantScoped";
 import { exposePoLineToClient, preparePoLineForWrite } from "@/lib/poLineColumns";
+import { poPdfSchemaError } from "@/lib/poPdfSchema";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -101,14 +102,21 @@ export async function PATCH(
   const body = await req.json();
   const { lines, deleted_line_ids, supplier: _sup, ...updateData } = body;
 
+  const header = { ...updateData, updated_at: new Date().toISOString() } as Record<string, unknown>;
+  if (header.payment_terms == null || header.payment_terms === "") delete header.payment_terms;
+  if (header.ship_to_address == null || header.ship_to_address === "") delete header.ship_to_address;
+
   const { data, error } = await tenantScoped(supabase, tenantId)
     .from("inventory_purchase_orders")
-    .update({ ...updateData, updated_at: new Date().toISOString() })
+    .update(header)
     .eq("id", params.id)
     .select("*")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    const hint = poPdfSchemaError(error);
+    return NextResponse.json({ error: hint ?? error.message }, { status: hint ? 503 : 500 });
+  }
 
   // Delete removed lines — only non-received lines belonging to this PO
   if (Array.isArray(deleted_line_ids) && deleted_line_ids.length > 0) {
@@ -148,7 +156,10 @@ export async function PATCH(
         } = line;
         const { error: luErr } = await tenantScoped(supabase, tenantId)
           .from("inventory_po_lines").update(lineUpdate).eq("id", lineId);
-        if (luErr) return NextResponse.json({ error: `Line update failed: ${luErr.message}` }, { status: 500 });
+        if (luErr) {
+          const hint = poPdfSchemaError(luErr);
+          return NextResponse.json({ error: hint ?? `Line update failed: ${luErr.message}` }, { status: hint ? 503 : 500 });
+        }
       } else {
         // Destructure id out so an empty-string id from the UI is never sent —
         // Postgres rejects "" for a UUID column; omitting it triggers the DB default.
@@ -165,7 +176,10 @@ export async function PATCH(
           .from("inventory_po_lines").insert({
             ...insertData, po_id: params.id, received: false,
           });
-        if (liErr) return NextResponse.json({ error: `Line insert failed: ${liErr.message}` }, { status: 500 });
+        if (liErr) {
+          const hint = poPdfSchemaError(liErr);
+          return NextResponse.json({ error: hint ?? `Line insert failed: ${liErr.message}` }, { status: hint ? 503 : 500 });
+        }
       }
     }
   }

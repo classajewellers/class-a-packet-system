@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createTenantSupabaseClient } from '@/lib/supabase-server'
+import { poPdfSchemaError } from '@/lib/poPdfSchema'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,17 +9,20 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const body = await req.json()
     const tenantId = req.headers.get('x-tenant-id') ?? ''
     const supabase = await createTenantSupabaseClient(tenantId)
+    const row: Record<string, unknown> = {
+      name: body.name,
+      contact_name: body.contact_name ?? null,
+      email: body.email ?? null,
+      phone: body.phone ?? null,
+      lead_time_days: body.lead_time_days ?? null,
+      notes: body.notes ?? null,
+      connector_type: body.connector_type || null,
+    }
+    if (body.address) row.address = body.address
+    if (body.payment_terms) row.payment_terms = body.payment_terms
     const { data, error } = await supabase
       .from('inventory_suppliers')
-      .update({
-        name: body.name,
-        contact_name: body.contact_name ?? null,
-        email: body.email ?? null,
-        phone: body.phone ?? null,
-        lead_time_days: body.lead_time_days ?? null,
-        notes: body.notes ?? null,
-        connector_type: body.connector_type || null,
-      })
+      .update(row)
       .eq('id', params.id)
       .eq('tenant_id', tenantId)
       .select()
@@ -27,7 +31,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     // it belongs to a different tenant. Same response either way: a 404, not
     // a raw Postgrest error that could hint at the row existing elsewhere.
     if (error?.code === 'PGRST116') return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) {
+      const hint = poPdfSchemaError(error)
+      return NextResponse.json({ error: hint ?? error.message }, { status: hint ? 503 : 500 })
+    }
     return NextResponse.json({ supplier: data })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

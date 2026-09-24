@@ -2,13 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { tenantScoped } from "@/lib/tenantScoped";
 import { exposePoLineToClient } from "@/lib/poLineColumns";
-import { generatePurchaseOrderHTML, type PoDocumentLine } from "@/lib/purchaseOrderDocument";
+import { generatePurchaseOrderHTML, resolveExpectedDate, resolvePaymentTerms, type PoDocumentLine } from "@/lib/purchaseOrderDocument";
 import { renderHtmlDocument } from "@/lib/htmlToPdf";
 import { logSuppressedOutbound, outboundBlock } from "@/lib/outbound-guard";
 
 export const dynamic = "force-dynamic";
 
 const SENT_STATUS = "ordered";
+
+async function logoForPdf(
+  supabase: Awaited<ReturnType<typeof createTenantSupabaseClient>>,
+  brandLogoUrl: string | null,
+): Promise<string | null> {
+  const value = brandLogoUrl?.trim() ?? "";
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value)) return value;
+  if (!value.startsWith("storage:attachments/")) return null;
+  const path = value.slice("storage:attachments/".length);
+  const { data, error } = await supabase.storage.from("attachments").download(path);
+  if (error || !data) return null;
+  const bytes = Buffer.from(await data.arrayBuffer()).toString("base64");
+  const ext = path.split(".").pop()?.toLowerCase();
+  const mime = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : ext === "gif" ? "image/gif" : "image/jpeg";
+  return `data:${mime};base64,${bytes}`;
+}
 
 function headerMessage(parts: string[]): string {
   return encodeURIComponent(parts.filter(Boolean).join(" "));
@@ -90,18 +107,34 @@ export async function POST(
     return NextResponse.json({ error: "Add at least one line before sending this purchase order." }, { status: 400 });
   }
 
-  let supplierName = "";
-  let supplierEmail: string | null = null;
+  let supplier: {
+    name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    contact_name?: string | null;
+    address?: string | null;
+    payment_terms?: string | null;
+    lead_time_days?: number | null;
+  } | null = null;
   if (po.supplier_id) {
-    const { data: supplier } = await tenantScoped(supabase, tenantId)
+    const full = await tenantScoped(supabase, tenantId)
       .from("inventory_suppliers")
-      .select("name, email")
+      .select("name, email, phone, contact_name, address, payment_terms, lead_time_days")
       .eq("id", po.supplier_id)
       .maybeSingle();
-    supplierName = supplier?.name ?? "";
-    const email = (supplier?.email ?? "").trim();
-    supplierEmail = email.includes("@") ? email : null;
+    if (full.error && /address|payment_terms/.test(full.error.message ?? "")) {
+      const basic = await tenantScoped(supabase, tenantId)
+        .from("inventory_suppliers")
+        .select("name, email, phone, contact_name, lead_time_days")
+        .eq("id", po.supplier_id)
+        .maybeSingle();
+      supplier = basic.data;
+    } else {
+      supplier = full.data;
+    }
   }
+  const supplierEmailRaw = (supplier?.email ?? "").trim();
+  const supplierEmail = supplierEmailRaw.includes("@") ? supplierEmailRaw : null;
 
   const categoryIds = lines.map(line => line.category_id).filter((id): id is string => typeof id === "string" && id.length > 0);
   const categoryName = new Map<string, string>();
@@ -113,14 +146,63 @@ export async function POST(
     for (const category of categories ?? []) categoryName.set(category.id, category.name);
   }
 
-  const { data: tenant } = await supabase.from("tenants").select("name").eq("id", tenantId).maybeSingle();
+  const tenantFull = await supabase
+    .from("tenants")
+    .select("name, phone, email, address, brand_logo_url, gst_registered, abn")
+    .eq("id", tenantId)
+    .maybeSingle();
+  const tenant = (tenantFull.error && /abn/.test(tenantFull.error.message ?? "")
+    ? (await supabase.from("tenants").select("name, phone, email, address, brand_logo_url, gst_registered").eq("id", tenantId).maybeSingle()).data
+    : tenantFull.data) as {
+      name?: string | null;
+      phone?: string | null;
+      email?: string | null;
+      address?: string | null;
+      brand_logo_url?: string | null;
+      gst_registered?: boolean | null;
+      abn?: string | null;
+    } | null;
+
+  const packetIds = lines.map(line => line.packet_id).filter((id): id is string => typeof id === "string" && id.length > 0);
+  const packetRef = new Map<string, string>();
+  if (packetIds.length > 0) {
+    const { data: packets } = await tenantScoped(supabase, tenantId)
+      .from("packets")
+      .select("id, reference_number")
+      .in("id", packetIds);
+    for (const packet of (packets ?? []) as { id: string; reference_number: string | null }[]) {
+      if (packet.reference_number) packetRef.set(packet.id, packet.reference_number);
+    }
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const expected = resolveExpectedDate(po.expected_date, po.order_date, supplier?.lead_time_days, today);
+  const logoSrc = await logoForPdf(supabase, tenant?.brand_logo_url ?? null);
 
   const html = generatePurchaseOrderHTML({
-    storeName: tenant?.name || "Purchase order",
+    business: {
+      legalName: tenant?.name || "Purchase order",
+      abn: tenant?.abn ?? null,
+      address: tenant?.address ?? null,
+      phone: tenant?.phone ?? null,
+      email: tenant?.email ?? null,
+      logoSrc,
+      gstRegistered: tenant?.gst_registered !== false,
+    },
     poNumber: po.po_number || "PO",
-    supplierName: supplierName || "Supplier",
+    supplier: {
+      name: supplier?.name ?? po.supplier_name ?? null,
+      address: supplier?.address ?? null,
+      contactName: supplier?.contact_name ?? null,
+      phone: supplier?.phone ?? null,
+      email: supplierEmail,
+    },
     orderDate: po.order_date ?? null,
-    expectedDate: po.expected_date ?? null,
+    expectedDate: expected.date,
+    expectedFromLeadTime: expected.fromLeadTime,
+    leadTimeDays: supplier?.lead_time_days ?? null,
+    paymentTerms: resolvePaymentTerms(po.payment_terms, supplier?.payment_terms),
+    shipToAddress: po.ship_to_address ?? null,
     notes: po.notes ?? null,
     lines: lines.map((line): PoDocumentLine => ({
       title: line.title as string | null,
@@ -132,6 +214,11 @@ export async function POST(
       quantity: line.quantity as number | null,
       estimated_cost: line.estimated_cost as number | null,
       unit_cost: line.unit_cost as number | null,
+      xero_account_code: line.xero_account_code as string | null,
+      xero_account_name: line.xero_account_name as string | null,
+      sku: line.sku as string | null,
+      supplier_design_no: line.supplier_design_no as string | null,
+      jobRef: line.packet_id ? packetRef.get(String(line.packet_id)) ?? null : null,
     })),
   });
 
@@ -143,7 +230,7 @@ export async function POST(
       tenantId,
       to: supplierEmail,
       poNumber: po.po_number || "PO",
-      supplierName,
+      supplierName: supplier?.name || tenant?.name || "us",
       filename: document.filename,
       bytes: document.bytes,
     }));

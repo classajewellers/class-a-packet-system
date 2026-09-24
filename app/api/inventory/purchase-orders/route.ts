@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { preparePoLineForWrite } from "@/lib/poLineColumns";
+import { poPdfSchemaError } from "@/lib/poPdfSchema";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -132,13 +133,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     ? clientPoNumber.trim()
     : await generatePoNumber(supabase, year);
 
+  const header = { ...poData, po_number, tenant_id: tenantId, status: poData.status ?? "draft" } as Record<string, unknown>;
+  if (header.payment_terms == null || header.payment_terms === "") delete header.payment_terms;
+  if (header.ship_to_address == null || header.ship_to_address === "") delete header.ship_to_address;
+
   const { data: po, error: poErr } = await supabase
     .from("inventory_purchase_orders")
-    .insert({ ...poData, po_number, tenant_id: tenantId, status: poData.status ?? "draft" })
+    .insert(header)
     .select()
     .single();
 
-  if (poErr) return NextResponse.json({ error: poErr.message }, { status: 500 });
+  if (poErr) {
+    const hint = poPdfSchemaError(poErr);
+    return NextResponse.json({ error: hint ?? poErr.message }, { status: hint ? 503 : 500 });
+  }
 
   // Insert lines if provided
   if (preparedLines.length > 0) {
@@ -152,7 +160,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const { error: lineErr } = await supabase
       .from("inventory_po_lines")
       .insert(lineInserts);
-    if (lineErr) return NextResponse.json({ error: `Line insert failed: ${lineErr.message}` }, { status: 500 });
+    if (lineErr) {
+      const hint = poPdfSchemaError(lineErr);
+      return NextResponse.json({ error: hint ?? `Line insert failed: ${lineErr.message}` }, { status: hint ? 503 : 500 });
+    }
   }
 
   return NextResponse.json({ purchase_order: po });
