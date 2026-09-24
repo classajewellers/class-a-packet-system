@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
         phone: body.phone || null,
         lead_time_days: body.lead_time_days ?? body.avg_lead_time_days ?? null,
         avg_lead_time_days: body.avg_lead_time_days ?? body.lead_time_days ?? null,
-        max_lead_time_days: body.max_lead_time_days ?? body.lead_time_days ?? null,
+        max_lead_time_days: body.max_lead_time_days ?? null,
         notes: body.notes || null,
         tenant_id: tenantId,
       })

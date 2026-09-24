@@ -19,7 +19,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const { data: variant, error: vErr } = await supabase
     .from("inventory_product_variants")
-    .select("id, name, tracking_mode, metal_karat, metal_colour, design_id, reorder_point, par_level, default_supplier_id, shopify_variant_id")
+    .select("id, name, tracking_mode, metal_karat, metal_colour, design_id, reorder_point, par_level, supplier_id, reorder_point_mode, shopify_variant_id")
     .eq("tenant_id", tenantId)
     .eq("id", variantId)
     .single();
@@ -61,7 +61,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       metal_colour:         variant.metal_colour,
       reorder_point:        variant.reorder_point,
       par_level:            variant.par_level,
-      default_supplier_id:  variant.default_supplier_id,
+      supplier_id:          variant.supplier_id,
+      reorder_point_mode:   variant.reorder_point_mode,
       shopify_variant_id:   variant.shopify_variant_id,
     },
     reorder:       snapshot,

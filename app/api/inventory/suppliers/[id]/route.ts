@@ -20,8 +20,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
     if ('max_lead_time_days' in body) {
       leadUpdate.max_lead_time_days = body.max_lead_time_days ?? null
-    } else if ('lead_time_days' in body && !('avg_lead_time_days' in body)) {
-      leadUpdate.max_lead_time_days = body.lead_time_days ?? null
     }
     const { data, error } = await supabase
       .from('inventory_suppliers')

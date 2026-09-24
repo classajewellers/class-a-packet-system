@@ -17,6 +17,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const variantId  = String(body?.variant_id ?? "");
   const locationId = String(body?.location_id ?? "");
   const quantity   = Number(body?.quantity);
+  const notes = body?.notes == null || String(body.notes).trim() === "" ? null : String(body.notes).trim();
 
   if (!variantId || !locationId) {
     return NextResponse.json({ error: "variant_id and location_id are required" }, { status: 400 });
@@ -34,7 +35,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       variantId,
       locationId,
       quantity,
-      source: "manual",
+      source: "app",
+      notes,
       strict: true,
     });
   } catch (err) {

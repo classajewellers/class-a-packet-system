@@ -8,8 +8,9 @@
 -- and on-hand in inventory_stock_levels. One-off pieces are out of scope.
 --
 -- Locked rules (approved 2026-09-24):
---   * Lead time is two fields per supplier: average and maximum, in days.
---     Existing lead_time_days is copied into both when those columns are empty.
+--   * Lead time is two fields per supplier: avg_lead_time_days and
+--     max_lead_time_days. lead_time_days stays. Where it is set, it is copied
+--     into avg_lead_time_days only.
 --   * Sales are recorded from the moment this ships. There is no Shopify
 --     history backfill. A Shopify line counts only when its variant id equals
 --     inventory_product_variants.shopify_variant_id for the same tenant.
@@ -17,8 +18,9 @@
 --     "collecting". Staff set a temporary manual reorder_point and a par_level.
 --     reorder_point is that temporary manual number. It is not the calculated
 --     reorder point.
---   * At 90 days Vault uses the calculated reorder point for that variant.
---     There is no manual switch back.
+--   * reorder_point_mode is 'manual' or 'calculated'. It defaults to manual.
+--     Vault writes 'calculated' when trailing history reaches 90 days
+--     (3 months). Staff cannot set this column. It is never switched back.
 --   * Par level is always manual.
 --   * Formula (units), once calculated and both lead times are set:
 --       lead months      = lead days / 30
@@ -78,12 +80,6 @@ BEGIN
     WHERE avg_lead_time_days IS NULL
       AND lead_time_days IS NOT NULL
       AND lead_time_days >= 0;
-
-    UPDATE inventory_suppliers
-    SET max_lead_time_days = lead_time_days
-    WHERE max_lead_time_days IS NULL
-      AND lead_time_days IS NOT NULL
-      AND lead_time_days >= 0;
   END IF;
 END $$;
 
@@ -93,10 +89,30 @@ ALTER TABLE inventory_product_variants
   ADD COLUMN IF NOT EXISTS reorder_point integer;
 
 ALTER TABLE inventory_product_variants
-  ADD COLUMN IF NOT EXISTS default_supplier_id uuid REFERENCES inventory_suppliers(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS supplier_id uuid REFERENCES inventory_suppliers(id) ON DELETE SET NULL;
+
+-- Fold a previous draft column name into supplier_id, then drop it.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'inventory_product_variants'
+      AND column_name = 'default_supplier_id'
+  ) THEN
+    UPDATE inventory_product_variants
+    SET supplier_id = default_supplier_id
+    WHERE supplier_id IS NULL
+      AND default_supplier_id IS NOT NULL;
+    ALTER TABLE inventory_product_variants DROP COLUMN default_supplier_id;
+  END IF;
+END $$;
 
 ALTER TABLE inventory_product_variants
   ADD COLUMN IF NOT EXISTS par_level integer;
+
+ALTER TABLE inventory_product_variants
+  ADD COLUMN IF NOT EXISTS reorder_point_mode text NOT NULL DEFAULT 'manual';
 
 DO $$
 BEGIN
@@ -114,6 +130,13 @@ BEGIN
       ADD CONSTRAINT inventory_product_variants_par_level_check
       CHECK (par_level IS NULL OR par_level >= 0);
   END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'inventory_product_variants_reorder_point_mode_check'
+  ) THEN
+    ALTER TABLE inventory_product_variants
+      ADD CONSTRAINT inventory_product_variants_reorder_point_mode_check
+      CHECK (reorder_point_mode IN ('manual', 'calculated'));
+  END IF;
 END $$;
 
 COMMENT ON COLUMN inventory_product_variants.reorder_point IS
@@ -122,12 +145,15 @@ COMMENT ON COLUMN inventory_product_variants.reorder_point IS
 COMMENT ON COLUMN inventory_product_variants.par_level IS
   'Manual target on-hand quantity. Always staff-set. Never calculated. A draft reorder PO orders enough to reach this level.';
 
-COMMENT ON COLUMN inventory_product_variants.default_supplier_id IS
-  'Supplier a draft reorder PO is raised against once the calculated reorder point is in use.';
+COMMENT ON COLUMN inventory_product_variants.supplier_id IS
+  'Preferred supplier. A draft reorder PO is raised against this supplier once reorder_point_mode is calculated.';
 
-CREATE INDEX IF NOT EXISTS inventory_product_variants_default_supplier_idx
-  ON inventory_product_variants (default_supplier_id)
-  WHERE default_supplier_id IS NOT NULL;
+COMMENT ON COLUMN inventory_product_variants.reorder_point_mode IS
+  'System-managed. manual while sales history is under 90 days; Vault sets calculated at 90 days and does not switch it back. Staff have no control for this column.';
+
+CREATE INDEX IF NOT EXISTS inventory_product_variants_supplier_idx
+  ON inventory_product_variants (supplier_id)
+  WHERE supplier_id IS NOT NULL;
 
 -- ── 3. Bulk sales ledger ─────────────────────────────────────────────────────
 -- One row per quantity sale from today forward. This is the only input to
@@ -140,14 +166,20 @@ CREATE TABLE IF NOT EXISTS inventory_variant_sales (
   variant_id  uuid        NOT NULL REFERENCES inventory_product_variants(id) ON DELETE CASCADE,
   quantity    integer     NOT NULL CHECK (quantity > 0),
   sold_at     timestamptz NOT NULL DEFAULT now(),
-  source      text        NOT NULL CHECK (source IN ('manual', 'shopify')),
-  external_id text,
-  packet_id   uuid        REFERENCES packets(id) ON DELETE SET NULL,
-  created_at  timestamptz NOT NULL DEFAULT now()
+  source      text        NOT NULL DEFAULT 'app',
+  notes       text,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  -- Optional. Shopify retries use this so the same line is not counted twice.
+  external_id text
 );
 
+ALTER TABLE inventory_variant_sales ADD COLUMN IF NOT EXISTS notes text;
+ALTER TABLE inventory_variant_sales ADD COLUMN IF NOT EXISTS external_id text;
+ALTER TABLE inventory_variant_sales ALTER COLUMN source SET DEFAULT 'app';
+ALTER TABLE inventory_variant_sales DROP CONSTRAINT IF EXISTS inventory_variant_sales_source_check;
+
 COMMENT ON TABLE inventory_variant_sales IS
-  'Quantity-tracked variant sales captured from the day this table ships. No historical backfill. source=shopify only when the order line variant id matched shopify_variant_id.';
+  'Quantity-tracked variant sales captured from the day this table ships. No historical backfill. source defaults to app. source=shopify only when the order line variant id matched shopify_variant_id.';
 
 ALTER TABLE inventory_variant_sales ENABLE ROW LEVEL SECURITY;
 
@@ -176,18 +208,69 @@ CREATE INDEX IF NOT EXISTS inventory_po_lines_variant_idx
 COMMENT ON COLUMN inventory_po_lines.variant_id IS
   'Set on draft reorder lines for a quantity-tracked variant. Piece lines leave this null.';
 
--- ── 5. Snapshot: collecting vs calculated ────────────────────────────────────
+-- ── 5. Reorder point mode (system-managed) ───────────────────────────────────
+-- Writes 'calculated' once the first ledger sale is 90 days old. Never writes
+-- 'manual'. Staff updates of the variant row must not include this column.
+
+CREATE OR REPLACE FUNCTION public.sync_reorder_point_mode(
+  p_tenant  uuid,
+  p_variant uuid
+) RETURNS text
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+DECLARE
+  v_tracking text;
+  v_mode     text;
+  v_first    timestamptz;
+BEGIN
+  SELECT tracking_mode, reorder_point_mode
+  INTO v_tracking, v_mode
+  FROM inventory_product_variants
+  WHERE id = p_variant AND tenant_id = p_tenant;
+
+  IF NOT FOUND OR v_tracking IS DISTINCT FROM 'quantity' THEN
+    RETURN COALESCE(v_mode, 'manual');
+  END IF;
+
+  IF v_mode = 'calculated' THEN
+    RETURN 'calculated';
+  END IF;
+
+  SELECT MIN(sold_at) INTO v_first
+  FROM inventory_variant_sales
+  WHERE tenant_id = p_tenant AND variant_id = p_variant;
+
+  IF v_first IS NOT NULL AND (CURRENT_DATE - v_first::date) >= 90 THEN
+    UPDATE inventory_product_variants
+    SET reorder_point_mode = 'calculated',
+        updated_at = now()
+    WHERE id = p_variant
+      AND tenant_id = p_tenant
+      AND reorder_point_mode IS DISTINCT FROM 'calculated';
+    RETURN 'calculated';
+  END IF;
+
+  RETURN 'manual';
+END;
+$$;
+
+COMMENT ON FUNCTION public.sync_reorder_point_mode(uuid, uuid) IS
+  'Sets reorder_point_mode to calculated when trailing sales history reaches 90 days. Does not switch it back. Not a staff control.';
+
+-- ── 6. Snapshot: collecting vs calculated ────────────────────────────────────
+-- Calls sync_reorder_point_mode first, then reads the column.
 
 CREATE OR REPLACE FUNCTION public.variant_reorder_snapshot(
   p_tenant  uuid,
   p_variant uuid
 ) RETURNS jsonb
 LANGUAGE plpgsql
-STABLE
 SET search_path = public
 AS $$
 DECLARE
   v_mode        text;
+  v_rp_mode     text;
   v_manual      integer;
   v_par         integer;
   v_supplier    uuid;
@@ -206,20 +289,23 @@ DECLARE
   v_block       text;
   v_supplier_ok boolean;
 BEGIN
-  SELECT tracking_mode, reorder_point, par_level, default_supplier_id
-  INTO v_mode, v_manual, v_par, v_supplier
+  PERFORM public.sync_reorder_point_mode(p_tenant, p_variant);
+
+  SELECT tracking_mode, reorder_point_mode, reorder_point, par_level, supplier_id
+  INTO v_mode, v_rp_mode, v_manual, v_par, v_supplier
   FROM inventory_product_variants
   WHERE id = p_variant AND tenant_id = p_tenant;
 
   IF NOT FOUND OR v_mode IS DISTINCT FROM 'quantity' THEN
     RETURN jsonb_build_object(
       'state', 'not_applicable',
+      'reorder_point_mode', NULL,
       'history_days', 0,
       'history_days_required', 90,
       'on_hand', 0,
       'manual_reorder_point', NULL,
       'par_level', NULL,
-      'default_supplier_id', NULL,
+      'supplier_id', NULL,
       'avg_lead_time_days', NULL,
       'max_lead_time_days', NULL,
       'avg_monthly_sales', NULL,
@@ -241,11 +327,11 @@ BEGIN
 
   IF v_first IS NULL THEN
     v_days := 0;
-    v_state := 'collecting';
   ELSE
     v_days := CURRENT_DATE - v_first::date;
-    v_state := CASE WHEN v_days >= 90 THEN 'calculated' ELSE 'collecting' END;
   END IF;
+  -- Mode is the column Vault writes. It is not a value the caller passes in.
+  v_state := CASE WHEN v_rp_mode = 'calculated' THEN 'calculated' ELSE 'collecting' END;
 
   v_avg_lead := NULL;
   v_max_lead := NULL;
@@ -297,12 +383,13 @@ BEGIN
 
   RETURN jsonb_build_object(
     'state', v_state,
+    'reorder_point_mode', v_rp_mode,
     'history_days', v_days,
     'history_days_required', 90,
     'on_hand', v_on_hand,
     'manual_reorder_point', v_manual,
     'par_level', v_par,
-    'default_supplier_id', v_supplier,
+    'supplier_id', v_supplier,
     'avg_lead_time_days', v_avg_lead,
     'max_lead_time_days', v_max_lead,
     'avg_monthly_sales', CASE WHEN v_state = 'calculated' THEN ROUND(v_avg, 2) ELSE NULL END,
@@ -316,16 +403,19 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.variant_reorder_snapshot(uuid, uuid) IS
-  'Collecting vs calculated reorder state for one quantity variant. Calculated reorder point is null until 90 days of ledger history AND a default supplier with both lead times.';
+  'Reorder state for one quantity variant. Switches reorder_point_mode to calculated at 90 days. Calculated reorder point stays null until that mode and a supplier with both lead times.';
 
--- ── 6. Sell quantity stock: ledger row + decrement on-hand ───────────────────
+-- ── 7. Sell quantity stock: ledger row + decrement on-hand ───────────────────
 -- FIFO layers (inventory_stock_receipts.quantity_remaining) are consumed for
 -- the units actually taken off the location. The ledger quantity is the units
 -- sold. Shopify calls with p_strict = false so a linked sale is still recorded
 -- when on-hand is short; the location is not taken below zero.
 -- sold_at is always now() — this function cannot be used to backfill history.
+-- source is 'app' for staff sales and 'shopify' for a linked order line.
 -- A repeated (tenant, source, external_id) returns the existing row and does
 -- not decrement again.
+
+DROP FUNCTION IF EXISTS public.sell_quantity_stock(uuid, uuid, uuid, integer, text, text, uuid, boolean);
 
 CREATE OR REPLACE FUNCTION public.sell_quantity_stock(
   p_tenant      uuid,
@@ -334,7 +424,7 @@ CREATE OR REPLACE FUNCTION public.sell_quantity_stock(
   p_qty         integer,
   p_source      text,
   p_external_id text DEFAULT NULL,
-  p_packet_id   uuid DEFAULT NULL,
+  p_notes       text DEFAULT NULL,
   p_strict      boolean DEFAULT true
 ) RETURNS uuid
 LANGUAGE plpgsql
@@ -353,8 +443,8 @@ BEGIN
   IF p_qty IS NULL OR p_qty <= 0 THEN
     RAISE EXCEPTION 'Quantity sold must be a positive integer';
   END IF;
-  IF p_source IS NULL OR p_source NOT IN ('manual', 'shopify') THEN
-    RAISE EXCEPTION 'Sale source must be manual or shopify';
+  IF p_source IS NULL OR p_source NOT IN ('app', 'shopify') THEN
+    RAISE EXCEPTION 'Sale source must be app or shopify';
   END IF;
 
   SELECT tracking_mode INTO v_mode
@@ -365,13 +455,6 @@ BEGIN
   END IF;
   IF v_mode IS DISTINCT FROM 'quantity' THEN
     RAISE EXCEPTION 'Variant is not quantity-tracked';
-  END IF;
-
-  IF p_packet_id IS NOT NULL THEN
-    PERFORM 1 FROM packets WHERE id = p_packet_id AND tenant_id = p_tenant;
-    IF NOT FOUND THEN
-      RAISE EXCEPTION 'Packet not found';
-    END IF;
   END IF;
 
   IF p_location IS NOT NULL THEN
@@ -394,6 +477,7 @@ BEGIN
       AND source = p_source
       AND external_id = p_external_id;
     IF v_existing IS NOT NULL THEN
+      PERFORM public.sync_reorder_point_mode(p_tenant, p_variant);
       RETURN v_existing;
     END IF;
   END IF;
@@ -412,9 +496,9 @@ BEGIN
   END IF;
 
   INSERT INTO inventory_variant_sales (
-    tenant_id, variant_id, quantity, sold_at, source, external_id, packet_id
+    tenant_id, variant_id, quantity, sold_at, source, notes, external_id
   ) VALUES (
-    p_tenant, p_variant, p_qty, now(), p_source, NULLIF(btrim(p_external_id), ''), p_packet_id
+    p_tenant, p_variant, p_qty, now(), p_source, NULLIF(btrim(p_notes), ''), NULLIF(btrim(p_external_id), '')
   )
   RETURNING id INTO v_sale_id;
 
@@ -448,14 +532,15 @@ BEGIN
     END IF;
   END IF;
 
+  PERFORM public.sync_reorder_point_mode(p_tenant, p_variant);
   RETURN v_sale_id;
 END;
 $$;
 
-COMMENT ON FUNCTION public.sell_quantity_stock(uuid, uuid, uuid, integer, text, text, uuid, boolean) IS
-  'Record a quantity-variant sale (sold_at = now()) and decrement inventory_stock_levels. Does not backfill. Repeated external_id is a no-op.';
+COMMENT ON FUNCTION public.sell_quantity_stock(uuid, uuid, uuid, integer, text, text, text, boolean) IS
+  'Record a quantity-variant sale (sold_at = now(), source app or shopify) and decrement inventory_stock_levels. Does not backfill. Repeated external_id is a no-op.';
 
--- ── 7. Draft reorder PO (never sent) ─────────────────────────────────────────
+-- ── 8. Draft reorder PO (never sent) ─────────────────────────────────────────
 
 CREATE OR REPLACE FUNCTION public.maybe_create_reorder_draft_po(
   p_tenant  uuid,
@@ -524,13 +609,13 @@ BEGIN
   END IF;
   v_par := (snap->>'par_level')::integer;
 
-  IF (snap->>'default_supplier_id') IS NULL THEN
+  IF (snap->>'supplier_id') IS NULL THEN
     RETURN jsonb_build_object(
       'purchase_order_id', NULL, 'po_number', NULL, 'quantity', NULL,
       'skipped', 'no_supplier'
     );
   END IF;
-  v_supplier := (snap->>'default_supplier_id')::uuid;
+  v_supplier := (snap->>'supplier_id')::uuid;
 
   v_needed := v_par - v_on_hand;
   IF v_needed <= 0 THEN
@@ -653,7 +738,7 @@ $$;
 COMMENT ON FUNCTION public.maybe_create_reorder_draft_po(uuid, uuid) IS
   'Insert a draft PO when a calculated quantity variant is at or below its reorder point. Never sets status to ordered and never sends.';
 
--- ── 8. Low-stock view follows the active threshold ───────────────────────────
+-- ── 9. Low-stock view follows the active threshold ───────────────────────────
 -- Serialized designs keep the manual product reorder_point from migration 141.
 -- Quantity variants use effective_reorder_point: the temporary manual column
 -- while collecting, the calculated number once history reaches 90 days.
@@ -693,7 +778,7 @@ CREATE OR REPLACE VIEW public.inventory_low_stock AS
 
 ALTER VIEW public.inventory_low_stock SET (security_invoker = true);
 
--- ── 9. Functions are service-role only ───────────────────────────────────────
+-- ── 10. Functions are service-role only ──────────────────────────────────────
 -- Same PUBLIC-grant gotcha as migration 155: a new function is executable by
 -- anon/authenticated through PUBLIC unless PUBLIC is revoked.
 
@@ -702,8 +787,9 @@ DECLARE
   fn text;
 BEGIN
   FOREACH fn IN ARRAY ARRAY[
-    'public.sell_quantity_stock(uuid, uuid, uuid, integer, text, text, uuid, boolean)',
+    'public.sell_quantity_stock(uuid, uuid, uuid, integer, text, text, text, boolean)',
     'public.variant_reorder_snapshot(uuid, uuid)',
+    'public.sync_reorder_point_mode(uuid, uuid)',
     'public.maybe_create_reorder_draft_po(uuid, uuid)'
   ]
   LOOP

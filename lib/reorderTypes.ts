@@ -2,15 +2,17 @@
 // (migration 164). Safe to import from client components — no server code.
 
 export type ReorderState = "collecting" | "calculated" | "not_applicable";
+export type ReorderPointMode = "manual" | "calculated";
 
 export interface ReorderSnapshot {
   state: ReorderState;
+  reorder_point_mode: ReorderPointMode | null;
   history_days: number;
   history_days_required: number;
   on_hand: number;
   manual_reorder_point: number | null;
   par_level: number | null;
-  default_supplier_id: string | null;
+  supplier_id: string | null;
   avg_lead_time_days: number | null;
   max_lead_time_days: number | null;
   avg_monthly_sales: number | null;

@@ -34,8 +34,15 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
   const manual = parseOptionalNonNegInt(body?.reorder_point, "Reorder point");
   if (!manual.ok) return NextResponse.json({ error: manual.error }, { status: 400 });
 
-  const supplierRaw = body?.default_supplier_id;
-  const defaultSupplierId =
+  if (body && typeof body === "object" && "reorder_point_mode" in body) {
+    return NextResponse.json(
+      { error: "Reorder point mode is set by Vault from sales history" },
+      { status: 400 },
+    );
+  }
+
+  const supplierRaw = body?.supplier_id;
+  const supplierId =
     supplierRaw == null || String(supplierRaw).trim() === "" ? null : String(supplierRaw).trim();
   const shopifyRaw = body?.shopify_variant_id;
   const shopifyVariantId =
@@ -54,21 +61,21 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Reorder setup applies to quantity-tracked variants" }, { status: 400 });
   }
 
-  if (defaultSupplierId) {
+  if (supplierId) {
     const { data: supplier, error: sErr } = await supabase
       .from("inventory_suppliers")
       .select("id")
       .eq("tenant_id", tenantId)
-      .eq("id", defaultSupplierId)
+      .eq("id", supplierId)
       .maybeSingle();
     if (sErr) return NextResponse.json({ error: sErr.message }, { status: 500 });
-    if (!supplier) return NextResponse.json({ error: "Default supplier not found" }, { status: 400 });
+    if (!supplier) return NextResponse.json({ error: "Supplier not found" }, { status: 400 });
   }
 
   const { error } = await supabase
     .from("inventory_product_variants")
     .update({
-      default_supplier_id: defaultSupplierId,
+      supplier_id: supplierId,
       par_level: par.value,
       reorder_point: manual.value,
       shopify_variant_id: shopifyVariantId,

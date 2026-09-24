@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import type { ReorderDraftResult, ReorderSnapshot } from "@/lib/reorderTypes";
 
-type SaleSource = "manual" | "shopify";
+type SaleSource = "app" | "shopify";
 
 export async function loadReorderSnapshot(
   supabase: SupabaseClient,
@@ -39,7 +39,7 @@ export async function sellQuantityStock(
     quantity: number;
     source: SaleSource;
     externalId?: string | null;
-    packetId?: string | null;
+    notes?: string | null;
     strict: boolean;
   },
 ): Promise<string> {
@@ -50,7 +50,7 @@ export async function sellQuantityStock(
     p_qty: args.quantity,
     p_source: args.source,
     p_external_id: args.externalId ?? null,
-    p_packet_id: args.packetId ?? null,
+    p_notes: args.notes ?? null,
     p_strict: args.strict,
   });
   if (error) throw new Error(error.message);
@@ -174,7 +174,6 @@ export async function captureShopifyQuantitySales(
         quantity: line.quantity,
         source: "shopify",
         externalId: `${orderKey}:${line.lineKey}`,
-        packetId,
         strict: false,
       });
       touched.add(variantId);

@@ -66,7 +66,7 @@ function mapRow(rawRow: Record<string, string>): MappedRow {
   }
   const legacy = days(out.lead_time_days)
   const avg = days(out.avg_lead_time_days) ?? legacy
-  const max = days(out.max_lead_time_days) ?? legacy
+  const max = days(out.max_lead_time_days)
   return {
     name:           out.name ?? null,
     email:          out.email ?? null,

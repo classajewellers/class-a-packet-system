@@ -36,7 +36,7 @@ function SupplierDrawer({ supplier, isNew, onClose, onSaved, isAdmin }: Supplier
           : supplier.lead_time_days != null ? String(supplier.lead_time_days) : "",
         max_lead_time_days: supplier.max_lead_time_days != null
           ? String(supplier.max_lead_time_days)
-          : supplier.lead_time_days != null ? String(supplier.lead_time_days) : "",
+          : "",
         notes: supplier.notes ?? "",
         connector_type: supplier.connector_type ?? "",
       });

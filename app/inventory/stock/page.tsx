@@ -18,7 +18,7 @@ interface StockData {
     metal_colour: string;
     reorder_point: number | null;
     par_level: number | null;
-    default_supplier_id: string | null;
+    supplier_id: string | null;
     shopify_variant_id: string | null;
   };
   locations: Location[];
@@ -56,12 +56,13 @@ function StockManager() {
   // sale form
   const [sellLoc, setSellLoc] = useState("");
   const [sellQty, setSellQty] = useState("");
+  const [sellNotes, setSellNotes] = useState("");
 
   const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [draftPoId, setDraftPoId] = useState<string | null>(null);
   const [reorderForm, setReorderForm] = useState({
-    default_supplier_id: "",
+    supplier_id: "",
     par_level: "",
     reorder_point: "",
     shopify_variant_id: "",
@@ -81,13 +82,13 @@ function StockManager() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const savedSupplier = data?.variant.default_supplier_id ?? "";
+  const savedSupplier = data?.variant.supplier_id ?? "";
   const savedPar = data?.variant.par_level != null ? String(data.variant.par_level) : "";
   const savedManual = data?.variant.reorder_point != null ? String(data.variant.reorder_point) : "";
   const savedShopify = data?.variant.shopify_variant_id ?? "";
   useEffect(() => {
     setReorderForm({
-      default_supplier_id: savedSupplier,
+      supplier_id: savedSupplier,
       par_level: savedPar,
       reorder_point: savedManual,
       shopify_variant_id: savedShopify,
@@ -145,7 +146,7 @@ function StockManager() {
   async function saveReorder() {
     const json = await post("/api/inventory/stock/reorder", {
       variant_id: variantId,
-      default_supplier_id: reorderForm.default_supplier_id || null,
+      supplier_id: reorderForm.supplier_id || null,
       par_level: reorderForm.par_level === "" ? null : Number(reorderForm.par_level),
       reorder_point: reorderForm.reorder_point === "" ? null : Number(reorderForm.reorder_point),
       shopify_variant_id: reorderForm.shopify_variant_id.trim() || null,
@@ -159,9 +160,10 @@ function StockManager() {
       variant_id: variantId,
       location_id: sellLoc,
       quantity: Number(sellQty),
+      notes: sellNotes.trim() || null,
     });
     if (!json) return;
-    setSellLoc(""); setSellQty("");
+    setSellLoc(""); setSellQty(""); setSellNotes("");
     noteDraft(json.draft_purchase_order as ReorderDraftResult | null);
     load();
   }
@@ -297,6 +299,7 @@ function StockManager() {
                 <option value="">Select…</option>{locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
               </select></Field>
               <Field label="Quantity"><input type="number" min={1} step={1} value={sellQty} onChange={e => setSellQty(e.target.value)} style={{ ...inp, width: 100 }} /></Field>
+              <Field label="Notes"><input value={sellNotes} onChange={e => setSellNotes(e.target.value)} placeholder="Optional" style={{ ...inp, width: 180 }} /></Field>
               <button disabled={busy || !sellLoc || !sellQty} onClick={doSell}
                 style={{ ...btn, opacity: (!sellLoc || !sellQty) ? 0.5 : 1 }}>Record sale</button>
             </div>
@@ -329,8 +332,8 @@ function ReorderCard({
   reorder: ReorderSnapshot | null;
   reorderError: string | null;
   suppliers: { id: string; name: string }[];
-  form: { default_supplier_id: string; par_level: string; reorder_point: string; shopify_variant_id: string };
-  setForm: React.Dispatch<React.SetStateAction<{ default_supplier_id: string; par_level: string; reorder_point: string; shopify_variant_id: string }>>;
+  form: { supplier_id: string; par_level: string; reorder_point: string; shopify_variant_id: string };
+  setForm: React.Dispatch<React.SetStateAction<{ supplier_id: string; par_level: string; reorder_point: string; shopify_variant_id: string }>>;
   busy: boolean;
   onSave: () => void;
 }) {
@@ -346,7 +349,7 @@ function ReorderCard({
       )}
       {reorder?.state === "collecting" && (
         <p style={{ fontSize: 13, color: "#92400E", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "8px 10px", margin: "0 0 12px" }}>
-          Collecting data — {collectingProgressLabel(reorder.history_days, reorder.history_days_required)}. Set a temporary manual reorder point and a par level. Vault switches this variant to the calculated reorder point once history reaches 90 days.
+          Collecting data — {collectingProgressLabel(reorder.history_days, reorder.history_days_required)}. Reorder point mode is Manual. Set a temporary manual reorder point and a par level. Vault switches the mode to Calculated once history reaches 90 days. There is no control to change the mode.
         </p>
       )}
       {calculated && reorder?.calculated_reorder_point != null && (
@@ -361,14 +364,17 @@ function ReorderCard({
         <p style={{ fontSize: 13, color: "#92400E", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "8px 10px", margin: "0 0 12px" }}>
           {reorder.history_days} days of sales history — this variant is on the calculated reorder point.
           {reorder.calc_block_reason === "no_supplier"
-            ? " Choose a default supplier that has both an average and a maximum lead time."
-            : " Set both an average and a maximum lead time on the default supplier."}
+            ? " Choose a supplier that has both an average and a maximum lead time."
+            : " Set both an average and a maximum lead time on the supplier."}
           {" "}The temporary manual reorder point is no longer the active threshold.
         </p>
       )}
+      <p style={{ fontSize: 12, color: "#6B7280", margin: "0 0 10px" }}>
+        Reorder point mode: {reorder?.reorder_point_mode === "calculated" ? "Calculated" : "Manual"}. Vault sets this from sales history.
+      </p>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
-        <Field label="Default supplier">
-          <select value={form.default_supplier_id} onChange={e => set("default_supplier_id", e.target.value)} style={{ ...inp, minWidth: 180 }}>
+        <Field label="Supplier">
+          <select value={form.supplier_id} onChange={e => set("supplier_id", e.target.value)} style={{ ...inp, minWidth: 180 }}>
             <option value="">None</option>
             {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
