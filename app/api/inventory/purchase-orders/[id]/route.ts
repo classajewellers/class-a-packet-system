@@ -31,7 +31,7 @@ export async function GET(
   if (po.supplier_id) {
     const { data: sup } = await tenantScoped(supabase, tenantId)
       .from("inventory_suppliers")
-      .select("id, name")
+      .select("id, name, email")
       .eq("id", po.supplier_id)
       .single();
     supplier = sup ?? null;

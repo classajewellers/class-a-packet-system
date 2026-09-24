@@ -85,13 +85,14 @@ interface UploadModalProps {
   entityType: InventoryEntityType;
   entityId: string;
   tenantId: string;
+  defaultAttachmentType?: AttachmentType;
   onClose: () => void;
   onUploaded: () => void;
 }
 
-function UploadModal({ entityType, entityId, tenantId, onClose, onUploaded }: UploadModalProps) {
+function UploadModal({ entityType, entityId, tenantId, defaultAttachmentType = "photo", onClose, onUploaded }: UploadModalProps) {
   const [files, setFiles]               = useState<File[]>([]);
-  const [attachmentType, setType]       = useState<AttachmentType>("photo");
+  const [attachmentType, setType]       = useState<AttachmentType>(defaultAttachmentType);
   const [displayName, setDisplayName]   = useState("");
   const [notes, setNotes]               = useState("");
   const [uploading, setUploading]       = useState(false);
@@ -271,9 +272,10 @@ interface Props {
   entityId: string;
   /** If true, hides upload/delete buttons (e.g. for staff-only view) */
   readOnly?: boolean;
+  defaultAttachmentType?: AttachmentType;
 }
 
-export default function InventoryAttachmentsPanel({ entityType, entityId, readOnly = false }: Props) {
+export default function InventoryAttachmentsPanel({ entityType, entityId, readOnly = false, defaultAttachmentType = "photo" }: Props) {
   const { user } = useUser();
   const tenantId = user?.tenantId ?? "";
 
@@ -486,6 +488,7 @@ export default function InventoryAttachmentsPanel({ entityType, entityId, readOn
           entityType={entityType}
           entityId={entityId}
           tenantId={tenantId}
+          defaultAttachmentType={defaultAttachmentType}
           onClose={() => setShowUpload(false)}
           onUploaded={() => fetchAttachments()}
         />

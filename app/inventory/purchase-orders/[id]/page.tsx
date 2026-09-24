@@ -7,6 +7,7 @@ import { canManage, canSeeCosts } from "@/lib/userTypes";
 import { loadXeroAccounts, XeroAccountsLoad } from "@/lib/xeroAccounts";
 import { ArrowLeft, Package, CheckCircle2, SkipForward, Sparkles, Loader, X, ChevronDown, DollarSign, Pencil, Ban, AlertTriangle, Plus, Trash2 } from "lucide-react";
 import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
+import PurchaseInvoicePanel from "@/components/PurchaseInvoicePanel";
 import { XeroAccountSelect } from "@/components/XeroAccountSelect";
 import { PoLineSections } from "@/components/PoLineSections";
 import { fallbackReceiveTitle, inheritedReceiveTitle } from "@/lib/receiveStock";
@@ -555,6 +556,8 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   const [confirmLine, setConfirmLine]     = useState<PoLine | null>(null);
   const [confirmCost, setConfirmCost]     = useState("");
   const [confirmSaving, setConfirmSaving] = useState(false);
+  const [sendingPo, setSendingPo] = useState(false);
+  const [sendNote, setSendNote] = useState<string | null>(null);
   const [confirmError, setConfirmError]   = useState("");
 
   // Edit mode
@@ -651,13 +654,35 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
     fetchPo();
   }
 
-  async function handleMarkOrdered() {
-    await fetch(`/api/inventory/purchase-orders/${params.id}`, {
-      method: "PATCH",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "ordered" }),
-    });
-    fetchPo();
+  async function handleSendToSupplier() {
+    setSendingPo(true);
+    setSendNote(null);
+    try {
+      const res = await fetch(`/api/inventory/purchase-orders/${params.id}/send`, {
+        method: "POST",
+        headers,
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({} as { error?: string }));
+        setSendNote(json.error ?? "Could not send this purchase order");
+        return;
+      }
+      const encoded = res.headers.get("X-Po-Message");
+      setSendNote(encoded ? decodeURIComponent(encoded) : "Purchase order downloaded.");
+      const blob = await res.blob();
+      const match = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "");
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = match?.[1] ?? `${po?.po_number ?? "purchase-order"}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+      fetchPo();
+    } catch {
+      setSendNote("Could not send this purchase order");
+    } finally {
+      setSendingPo(false);
+    }
   }
 
   async function enterEditMode() {
@@ -1172,12 +1197,13 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
               <Ban size={14} /> Cancel PO
             </button>
           )}
-          {isManager && po.status === "draft" && (
+          {isManager && po.status !== "cancelled" && (
             <button
-              onClick={handleMarkOrdered}
-              style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #BFDBFE", background: "#EFF6FF", color: "#1D4ED8", fontSize: 14, cursor: "pointer" }}
+              onClick={handleSendToSupplier}
+              disabled={sendingPo || po.lines.length === 0}
+              style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "#1D4ED8", color: "#fff", fontSize: 14, fontWeight: 600, cursor: sendingPo ? "wait" : "pointer", opacity: sendingPo || po.lines.length === 0 ? 0.6 : 1 }}
             >
-              Mark as Ordered
+              {sendingPo ? "Sending…" : po.status === "draft" ? "Send to supplier" : "Send again"}
             </button>
           )}
           {canReceive && (
@@ -1190,6 +1216,11 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
           )}
         </div>
       </div>
+      {sendNote && (
+        <div style={{ marginBottom: 16, padding: "10px 12px", borderRadius: 8, background: "#F9FAFB", border: "1px solid #E5E7EB", fontSize: 13, color: "#374151" }}>
+          {sendNote}
+        </div>
+      )}
 
       {/* Summary card */}
       <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 24, marginBottom: 16 }}>
@@ -1371,8 +1402,10 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
           entityType="purchase_order"
           entityId={po.id}
           readOnly={false}
+          defaultAttachmentType="invoice"
         />
       </div>
+      <PurchaseInvoicePanel poId={po.id} tenantId={tenantId} canSend={isManager && po.status !== "cancelled"} />
 
       {/* Confirm Actual Cost Modal */}
       {confirmLine && (
