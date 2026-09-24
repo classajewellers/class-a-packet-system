@@ -15,6 +15,9 @@ type PieceRow = Record<string, unknown> & {
   status_id?: string | null;
   quantity?: number | null;
   retail_price?: number | null;
+  stone_cost?: number | null;
+  diamond_carat?: number | null;
+  diamond_type?: string | null;
   product_id?: string | null;
   metal_karat?: string | null;
   metal_colour?: string | null;
@@ -83,7 +86,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const needle = q.toLowerCase();
 
   const pieces = await Promise.all(matches.map(async (piece) => {
-    const sell = await resolvePieceSellPrice(supabase, auth.ctx.tenantId, piece);
+    const sell = await resolvePieceSellPrice(supabase, auth.ctx.tenantId, {
+      id: piece.id,
+      sku: piece.sku,
+      retail_price: piece.retail_price,
+      stone_cost: piece.stone_cost,
+      diamond_carat: piece.diamond_carat,
+      diamond_type: piece.diamond_type,
+    });
     const product = productOf(piece);
     const sku = piece.sku ?? "";
     const barcode = piece.barcode ?? null;

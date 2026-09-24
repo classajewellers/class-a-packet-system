@@ -121,6 +121,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const sell = await resolvePieceSellPrice(supabase, auth.ctx.tenantId, {
       id: String(piece.id),
+      sku: piece.sku != null ? String(piece.sku) : null,
       retail_price: piece.retail_price as number | null,
       stone_cost: piece.stone_cost as number | null,
       diamond_carat: piece.diamond_carat as number | null,
@@ -137,7 +138,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       unitPrice = roundMoney(unitPrice);
     } else if (sell.price == null) {
       return NextResponse.json({
-        error: `${piece.sku ?? "Piece"} has no retail price. Enter a custom price.`,
+        error: `Price unavailable for ${piece.sku ?? piece.id}. Enter a custom price.`,
       }, { status: 422 });
     } else {
       unitPrice = sell.price;

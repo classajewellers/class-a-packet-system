@@ -94,7 +94,7 @@ function money(value: number | string | null | undefined): number {
 }
 
 function priceLabel(source: CartLine["price_source"], hasPrice: boolean): string {
-  if (!hasPrice) return "Enter price";
+  if (!hasPrice) return "Price unavailable";
   if (source === "calculate_price") return "Live price";
   if (source === "retail_price") return "Retail price";
   return "Custom price";
@@ -525,7 +525,7 @@ export default function PosPage() {
                           {piece.available > 1 ? ` · ${piece.available} in stock` : ""}
                         </span>
                       </span>
-                      <span>{piece.sell_price != null ? formatCurrency(piece.sell_price) : "Enter price"}</span>
+                      <span>{piece.sell_price != null ? formatCurrency(piece.sell_price) : "Price unavailable"}</span>
                     </span>
                   </button>
                 ))}
@@ -580,7 +580,7 @@ export default function PosPage() {
                         className="vault-input"
                         inputMode="decimal"
                         value={line.unit_price == null ? "" : String(line.unit_price)}
-                        placeholder="0.00"
+                        placeholder={line.list_price == null ? "Price unavailable" : ""}
                         disabled={!line.custom_price_override && line.list_price != null}
                         onChange={e => {
                           const raw = e.target.value.trim();
@@ -593,7 +593,7 @@ export default function PosPage() {
                     <div style={{ marginLeft: "auto", fontWeight: 600 }}>
                       {line.unit_price != null && line.unit_price > 0
                         ? formatCurrency(roundMoney(line.unit_price * line.quantity))
-                        : "Enter price"}
+                        : "Price unavailable"}
                     </div>
                   </div>
                 </li>
@@ -660,7 +660,7 @@ export default function PosPage() {
 
             {cartNeedsPrice && cart.length > 0 && (
               <p style={{ margin: "12px 0 0", fontSize: 13, color: "var(--vault-status-warning)" }}>
-                This piece has no retail price. Enter the price to charge before taking cash.
+                Price unavailable for a piece in the cart. Enter the price to charge before taking cash.
               </p>
             )}
             <button type="submit" className="vault-btn vault-btn-primary" disabled={!tenderedOk || paying || cart.length === 0} style={{ width: "100%", marginTop: 16 }}>

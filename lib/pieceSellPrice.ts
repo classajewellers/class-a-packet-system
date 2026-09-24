@@ -9,19 +9,28 @@ export interface SellPrice {
   source: SellPriceSource | null;
 }
 
+function unavailable(piece: { id: string; sku?: string | null }, reason: string): SellPrice {
+  console.warn("[pos] Price unavailable", {
+    piece_id: piece.id,
+    sku: piece.sku ?? null,
+    reason,
+  });
+  return { price: null, source: null };
+}
+
 /**
  * Counter price for a piece.
- * Ticket `retail_price` wins when it is a real amount — that is what Mark as
- * Sold and the stock list show. When the ticket is blank, fall back to
- * calculate_price().total_retail, the same RPC the piece page uses for live
- * retail. A zero total from a calc with no weight or components is not a
- * price: the counter must ask for a custom price instead of ringing $0.00.
+ * Ticket `retail_price` is the Mark as Sold prefill when it is a real amount.
+ * Otherwise use calculate_price().total_retail, the same RPC as
+ * GET /api/inventory/pieces/[id]/price. A missing, failed, or zero result is
+ * not a price — callers show "Price unavailable" instead of $0.00.
  */
 export async function resolvePieceSellPrice(
   supabase: SupabaseClient,
   tenantId: string,
   piece: {
     id: string;
+    sku?: string | null;
     retail_price?: number | string | null;
     stone_cost?: number | null;
     diamond_carat?: number | null;
@@ -44,13 +53,17 @@ export async function resolvePieceSellPrice(
     p_stone_origin: stoneOrigin,
   });
 
-  if (error || data == null) return { price: null, source: null };
+  if (error) return unavailable(piece, error.message || "calculate_price failed");
+  if (data == null) return unavailable(piece, "calculate_price returned null");
 
   const calc = data as { total_retail?: number | string | null; error?: string };
-  if (calc.error) return { price: null, source: null };
-  if (calc.total_retail == null || calc.total_retail === "") return { price: null, source: null };
+  if (calc.error) return unavailable(piece, `calculate_price error: ${calc.error}`);
+  if (calc.total_retail == null || calc.total_retail === "") {
+    return unavailable(piece, "calculate_price total_retail is null");
+  }
 
   const live = Number(calc.total_retail);
-  if (Number.isNaN(live) || live <= 0) return { price: null, source: null };
+  if (Number.isNaN(live)) return unavailable(piece, "calculate_price total_retail is not a number");
+  if (live <= 0) return unavailable(piece, `calculate_price total_retail=${live}`);
   return { price: roundMoney(live), source: "calculate_price" };
 }
