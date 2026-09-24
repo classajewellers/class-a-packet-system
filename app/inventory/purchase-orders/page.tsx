@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage, canSeeCosts } from "@/lib/userTypes";
-import { Plus, Package, AlertCircle } from "lucide-react";
+import { Plus, Package, AlertCircle, ChevronRight } from "lucide-react";
 
 type POStatus = "draft" | "ordered" | "partially_received" | "received" | "cancelled";
 
@@ -33,6 +34,11 @@ const STATUS_CONFIG: Record<POStatus, { label: string; bg: string; fg: string; b
   received:           { label: "Received",           bg: "#ECFDF5", fg: "#065F46", border: "#A7F3D0" },
   cancelled:          { label: "Cancelled",          bg: "#F9FAFB", fg: "#6B7280", border: "#E5E7EB" },
 };
+
+function fmtDate(value: string | null): string {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString("en-AU");
+}
 
 function StatusBadge({ status }: { status: POStatus }) {
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.draft;
@@ -105,7 +111,17 @@ export default function PurchaseOrdersPage() {
   const totalPendingCount   = activePOs.reduce((sum, p) => sum + (p.pending_invoice_count ?? 0), 0);
 
   return (
-    <div style={{ padding: "32px 32px 64px", maxWidth: 1200, margin: "0 auto" }}>
+    <div className="po-list-page" style={{ maxWidth: 1200, margin: "0 auto" }}>
+      <style>{`
+        .po-list-page { padding: 0 0 32px; }
+        .po-phone-list { display: flex; flex-direction: column; gap: 10px; }
+        .po-desk-list { display: none; }
+        @media (min-width: 768px) {
+          .po-list-page { padding: 32px 32px 64px; }
+          .po-phone-list { display: none; }
+          .po-desk-list { display: block; }
+        }
+      `}</style>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
         <div>
@@ -159,8 +175,77 @@ export default function PurchaseOrdersPage() {
         </div>
       )}
 
-      {/* Table */}
-      <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
+      {loading ? (
+        <>
+          <div className="po-phone-list" aria-hidden>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} style={{ height: 88, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12 }} />
+            ))}
+          </div>
+          <div className="po-desk-list" style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+              <tbody>
+                {Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} />)}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : displayedPos.length === 0 ? (
+        <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 48, textAlign: "center" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+            <Package size={32} style={{ color: "#D1D5DB" }} />
+            <div style={{ fontSize: 15, fontWeight: 500, color: "#374151" }}>
+              {loadError ? "Purchase orders could not be loaded" : "No purchase orders yet"}
+            </div>
+            {isManager && (
+              <button
+                onClick={() => router.push("/inventory/purchase-orders/new")}
+                style={{ padding: "8px 16px", borderRadius: 8, background: "#111827", color: "#fff", border: "none", cursor: "pointer", fontSize: 14, marginTop: 4 }}
+              >
+                Create your first PO
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="po-phone-list">
+            {displayedPos.map(po => (
+              <Link
+                key={po.id}
+                href={`/inventory/purchase-orders/${po.id}`}
+                aria-label={`Open ${po.po_number}`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "14px 14px",
+                  background: "#fff",
+                  border: "1px solid #E5E7EB",
+                  borderRadius: 12,
+                  textDecoration: "none",
+                  color: "inherit",
+                  opacity: po.status === "cancelled" ? 0.6 : 1,
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 16, color: "#111827", whiteSpace: "nowrap" }}>{po.po_number}</div>
+                  <div style={{ marginTop: 4, fontSize: 14, color: supplierName(po) === "—" ? "#9CA3AF" : "#374151" }}>
+                    {supplierName(po)}
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <StatusBadge status={po.status} />
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 12, color: "#6B7280" }}>
+                    Ordered {fmtDate(po.order_date)} · Expected {fmtDate(po.expected_date)} · {po.received_count}/{po.line_count} received
+                  </div>
+                </div>
+                <ChevronRight size={20} style={{ color: "#6B7280", flexShrink: 0 }} aria-hidden />
+              </Link>
+            ))}
+          </div>
+
+          <div className="po-desk-list" style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
           <thead>
             <tr style={{ background: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
@@ -170,28 +255,7 @@ export default function PurchaseOrdersPage() {
             </tr>
           </thead>
           <tbody>
-            {loading ? (
-              Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} />)
-            ) : displayedPos.length === 0 ? (
-              <tr>
-                <td colSpan={8} style={{ padding: 48, textAlign: "center" }}>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-                    <Package size={32} style={{ color: "#D1D5DB" }} />
-                    <div style={{ fontSize: 15, fontWeight: 500, color: "#374151" }}>
-                      {loadError ? "Purchase orders could not be loaded" : "No purchase orders yet"}
-                    </div>
-                    {isManager && (
-                      <button
-                        onClick={() => router.push("/inventory/purchase-orders/new")}
-                        style={{ padding: "8px 16px", borderRadius: 8, background: "#111827", color: "#fff", border: "none", cursor: "pointer", fontSize: 14, marginTop: 4 }}
-                      >
-                        Create your first PO
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ) : displayedPos.map((po, i) => (
+            {displayedPos.map((po, i) => (
               <tr
                 key={po.id}
                 onClick={() => router.push(`/inventory/purchase-orders/${po.id}`)}
@@ -203,21 +267,23 @@ export default function PurchaseOrdersPage() {
                 onMouseEnter={e => (e.currentTarget.style.background = "#F9FAFB")}
                 onMouseLeave={e => (e.currentTarget.style.background = "")}
               >
-                <td style={{ padding: "12px 16px", fontFamily: "monospace", fontWeight: 600, color: "#111827" }}>{po.po_number}</td>
+                <td style={{ padding: "12px 16px", fontFamily: "monospace", fontWeight: 600, color: "#111827", whiteSpace: "nowrap" }}>{po.po_number}</td>
                 <td style={{ padding: "12px 16px", color: "#374151" }}>{supplierName(po)}</td>
                 <td style={{ padding: "12px 16px" }}><StatusBadge status={po.status} /></td>
-                <td style={{ padding: "12px 16px", color: "#6B7280" }}>{po.order_date ? new Date(po.order_date).toLocaleDateString("en-AU") : "—"}</td>
-                <td style={{ padding: "12px 16px", color: "#6B7280" }}>{po.expected_date ? new Date(po.expected_date).toLocaleDateString("en-AU") : "—"}</td>
+                <td style={{ padding: "12px 16px", color: "#6B7280", whiteSpace: "nowrap" }}>{fmtDate(po.order_date)}</td>
+                <td style={{ padding: "12px 16px", color: "#6B7280", whiteSpace: "nowrap" }}>{fmtDate(po.expected_date)}</td>
                 <td style={{ padding: "12px 16px", color: "#374151", textAlign: "center" }}>{po.line_count}</td>
-                <td style={{ padding: "12px 16px", color: "#374151", textAlign: "center" }}>
+                <td style={{ padding: "12px 16px", color: "#374151", textAlign: "center", whiteSpace: "nowrap" }}>
                   {po.received_count}/{po.line_count}
                 </td>
-                <td style={{ padding: "12px 16px", color: "#6B7280", fontSize: 12 }}>View →</td>
+                <td style={{ padding: "12px 16px", color: "#6B7280", fontSize: 12, whiteSpace: "nowrap" }}>View →</td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
