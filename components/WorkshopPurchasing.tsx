@@ -39,35 +39,70 @@ function showDate(value: string | null | undefined): string {
   return `${d}/${m}/${y}`;
 }
 
-export default function WorkshopPurchasing({
-  packetId,
-  tenantId,
-}: {
-  packetId: string;
-  tenantId: string;
-}) {
+export function useJobPurchases(packetId: string, tenantId: string) {
   const [rows, setRows] = useState<PurchaseRow[] | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    let cancelled = false;
+    // One request for the open job. Tab switches must not cancel it: the
+    // overview and the Purchasing tab both read this result.
+    const ctrl = new AbortController();
+    let ignore = false;
+    const timeout = window.setTimeout(() => ctrl.abort(), 15000);
     setRows(null);
     setError("");
-    fetch(`/api/workshop/packets/${packetId}/purchasing`, {
-      cache: "no-store",
-      headers: { "x-tenant-id": tenantId },
-    })
-      .then(async (res) => {
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(json.error ?? `Could not load purchases (${res.status})`);
-        if (!cancelled) setRows(json.purchases ?? []);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load purchases");
-      });
-    return () => { cancelled = true; };
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/workshop/packets/${packetId}/purchasing?fresh=${Date.now()}`, {
+          cache: "no-store",
+          signal: ctrl.signal,
+          headers: tenantId ? { "x-tenant-id": tenantId } : {},
+        });
+        const text = await res.text();
+        let json: { purchases?: PurchaseRow[]; error?: unknown } = {};
+        try {
+          json = text ? JSON.parse(text) as { purchases?: PurchaseRow[]; error?: unknown } : {};
+        } catch {
+          json = {};
+        }
+        if (ignore) return;
+        if (!res.ok) {
+          const message = typeof json.error === "string" && json.error.trim()
+            ? json.error.trim()
+            : `Could not load purchases (${res.status})`;
+          setError(message);
+          setRows([]);
+          return;
+        }
+        setRows(Array.isArray(json.purchases) ? json.purchases : []);
+      } catch (err) {
+        if (ignore) return;
+        const aborted = err instanceof DOMException && err.name === "AbortError";
+        setError(aborted ? "Purchases took too long to load." : "Could not load purchases");
+        setRows([]);
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    })();
+
+    return () => {
+      ignore = true;
+      window.clearTimeout(timeout);
+      ctrl.abort();
+    };
   }, [packetId, tenantId]);
 
+  return { rows, error };
+}
+
+export default function WorkshopPurchasing({
+  rows,
+  error,
+}: {
+  rows: PurchaseRow[] | null;
+  error: string;
+}) {
   return (
     <section style={{ marginBottom: 16 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>

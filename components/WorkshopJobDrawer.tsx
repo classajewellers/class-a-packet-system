@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
 import { formatDateAU, formatCurrency } from "@/lib/formatters";
 import AttachmentsSection from "@/components/AttachmentsSection";
-import WorkshopPurchasing from "@/components/WorkshopPurchasing";
+import WorkshopPurchasing, { useJobPurchases } from "@/components/WorkshopPurchasing";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -238,6 +238,7 @@ export default function WorkshopJobDrawer({
 }) {
   const { user } = useUser();
   const [local,     setLocal]     = useState<WorkshopPacket>(packet);
+  const purchases = useJobPurchases(packet.id, tenantId);
   const [saving,    setSaving]    = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleting,  setDeleting]  = useState(false);
@@ -455,7 +456,7 @@ export default function WorkshopJobDrawer({
           <div style={{ background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: 8, padding: "8px 12px", marginBottom: 14, fontSize: 13, color: "#DC2626" }}>{saveError}</div>
         )}
 
-        <WorkshopPurchasing packetId={local.id} tenantId={tenantId} />
+        <WorkshopPurchasing rows={purchases.rows} error={purchases.error} />
 
         {LABEL("Stage")}
         <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 14 }}>
@@ -685,7 +686,7 @@ export default function WorkshopJobDrawer({
   }
 
   function renderPurchasing() {
-    return <WorkshopPurchasing packetId={local.id} tenantId={tenantId} />;
+    return <WorkshopPurchasing rows={purchases.rows} error={purchases.error} />;
   }
 
   function renderMaterials() {

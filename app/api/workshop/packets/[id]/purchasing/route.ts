@@ -10,12 +10,19 @@ export const revalidate = 0;
 // Every PO line whose packet_id is this workshop job. Castings, stones,
 // findings — not filtered by category. The link is packet_id, not the
 // free-text workshop_po_number on the packet.
+function errorMessage(error: { message?: string } | null, fallback: string): string {
+  const message = error?.message?.trim();
+  return message || fallback;
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
   if (!tenantId) return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
+
+  try {
   const supabase = await createTenantSupabaseClient(tenantId);
 
   const { data: packet, error: packetErr } = await tenantScoped(supabase, tenantId)
@@ -24,7 +31,7 @@ export async function GET(
     .eq("id", params.id)
     .maybeSingle();
 
-  if (packetErr) return NextResponse.json({ error: packetErr.message }, { status: 500 });
+  if (packetErr) return NextResponse.json({ error: errorMessage(packetErr, "Could not load this job") }, { status: 500 });
   if (!packet) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
   const { data: lines, error: linesErr } = await tenantScoped(supabase, tenantId)
@@ -33,7 +40,7 @@ export async function GET(
     .eq("packet_id", params.id)
     .order("created_at", { ascending: true });
 
-  if (linesErr) return NextResponse.json({ error: linesErr.message }, { status: 500 });
+  if (linesErr) return NextResponse.json({ error: errorMessage(linesErr, "Could not load purchase lines") }, { status: 500 });
 
   const lineRows = (lines ?? []) as Array<{
     id: string;
@@ -76,7 +83,9 @@ export async function GET(
       : Promise.resolve({ data: [] as never[], error: null }),
   ]);
 
-  if (poResult.error) return NextResponse.json({ error: poResult.error.message }, { status: 500 });
+  if (poResult.error) return NextResponse.json({ error: errorMessage(poResult.error, "Could not load purchase orders") }, { status: 500 });
+  if (categoryResult.error) return NextResponse.json({ error: errorMessage(categoryResult.error, "Could not load purchase categories") }, { status: 500 });
+  if (eventResult.error) return NextResponse.json({ error: errorMessage(eventResult.error, "Could not load receiving dates") }, { status: 500 });
 
   const supplierIds = Array.from(new Set(
     ((poResult.data ?? []) as Array<{ supplier_id: string | null }>)
@@ -148,4 +157,9 @@ export async function GET(
     packet: { id: packet.id, reference_number: packet.reference_number },
     purchases,
   });
+  } catch (err) {
+    const message = err instanceof Error && err.message.trim() ? err.message : "Could not load purchases";
+    console.error("[workshop/purchasing]", message);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
