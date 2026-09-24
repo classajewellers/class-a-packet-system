@@ -1,4 +1,4 @@
--- 168_cad_design_and_casting.sql
+-- 169_cad_design_and_casting.sql
 -- PART D. HOLD — do not apply from the app. Vault DB applies this after the tip is READY.
 --
 -- Extends the existing workshop stage system. Does not add a second stage table.
