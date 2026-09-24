@@ -52,7 +52,9 @@ const JOB_TYPE_LABELS: Record<string, string> = {
   online_order: "Online Order", collection_order: "Collection",
 };
 const STAGE_LABELS: Record<string, string> = {
-  intake: "Intake", on_bench: "Production", quality_check: "Quality Control",
+  intake: "Intake", cad_design: "CAD Design", casting: "Casting",
+  polish_finish: "Polish/Finish", polish_set: "Polish/Set",
+  on_bench: "Production", quality_check: "Quality Control",
   to_be_valued: "Valuation", ready: "Ready", collected: "Collected",
 };
 const BLOCKED_LABELS: Record<string, string> = {
@@ -503,6 +505,10 @@ export default function WorkshopPage() {
                   <select className="vault-input" value={stageFilter} onChange={e => setStageFilter(e.target.value)}>
                     <option value="all">All stages</option>
                     <option value="intake">Intake</option>
+                    <option value="cad_design">CAD Design</option>
+                    <option value="casting">Casting</option>
+                    <option value="polish_finish">Polish/Finish</option>
+                    <option value="polish_set">Polish/Set</option>
                     <option value="on_bench">Production</option>
                     <option value="quality_check">Quality control</option>
                     <option value="to_be_valued">Valuation</option>
