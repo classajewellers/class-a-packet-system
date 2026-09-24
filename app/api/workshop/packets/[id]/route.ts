@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { fireReadyForPickupZap } from "@/lib/zapier";
 import { cadVersionCount, latestApprovedCadVersion, nameIsCadDesigner, pathwayStepUpdate, profileIsCadDesigner } from "@/lib/cadAccess";
-import { CAD_DESIGN_STATUS, CASTING_STATUS } from "@/lib/cadStage";
+import { CAD_APPROVAL_STATUS, CAD_DESIGN_STATUS, CASTING_STATUS } from "@/lib/cadStage";
 
 export const dynamic = "force-dynamic";
 
@@ -169,6 +169,25 @@ export async function PATCH(
         }
         if (updates.workshop_step_index === undefined) {
           const step = await pathwayStepUpdate(supabase, tenantId, current?.workshop_pathway_id, CASTING_STATUS);
+          if (step !== null) updates.workshop_step_index = step;
+        }
+      }
+
+      if (nextStatus === CAD_APPROVAL_STATUS && current?.status !== CAD_APPROVAL_STATUS) {
+        let versions = 0;
+        try {
+          versions = await cadVersionCount(supabase, tenantId, params.id);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return NextResponse.json({ error: message }, { status: 422 });
+        }
+        if (versions === 0) {
+          return NextResponse.json({
+            error: "Upload a render and source file on CAD Design before CAD Approval.",
+          }, { status: 422 });
+        }
+        if (updates.workshop_step_index === undefined) {
+          const step = await pathwayStepUpdate(supabase, tenantId, current?.workshop_pathway_id, CAD_APPROVAL_STATUS);
           if (step !== null) updates.workshop_step_index = step;
         }
       }

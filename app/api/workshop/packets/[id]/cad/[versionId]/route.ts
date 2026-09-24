@@ -54,7 +54,7 @@ export async function POST(
     }
 
     const { data: version, error: versionErr } = await supabase
-      .from("workshop_cad_versions")
+      .from("packet_cad_versions")
       .select("id, status, version_number")
       .eq("tenant_id", tenantId)
       .eq("packet_id", params.id)
@@ -68,7 +68,7 @@ export async function POST(
 
     const decidedAt = new Date().toISOString();
     const { error: decideErr } = await supabase
-      .from("workshop_cad_versions")
+      .from("packet_cad_versions")
       .update({
         status: nextStatus(action),
         decision_note: note || null,

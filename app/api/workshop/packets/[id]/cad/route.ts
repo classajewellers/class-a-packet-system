@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { requireAuth } from "@/lib/require-auth";
-import { profileIsCadDesigner } from "@/lib/cadAccess";
-import { CAD_DESIGN_STATUS, cadRenderError, cadSourceError, fileExtension } from "@/lib/cadStage";
+import { profileIsCadDesigner, pathwayStepUpdate } from "@/lib/cadAccess";
+import { CAD_APPROVAL_STATUS, CAD_DESIGN_STATUS, cadRenderError, cadSourceError, fileExtension } from "@/lib/cadStage";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,7 @@ async function loadPacket(
 ) {
   const { data, error } = await supabase
     .from("packets")
-    .select("id, status, pending_customer_approval, cad_required")
+    .select("id, status, pending_customer_approval, cad_required, workshop_pathway_id")
     .eq("tenant_id", tenantId)
     .eq("id", packetId)
     .maybeSingle();
@@ -35,7 +35,7 @@ export async function GET(
     if (!packet) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
     const { data, error } = await supabase
-      .from("workshop_cad_versions")
+      .from("packet_cad_versions")
       .select("id, version_number, status, note, decision_note, render_filename, source_filename, render_storage_path, source_storage_path, created_at, decided_at")
       .eq("tenant_id", tenantId)
       .eq("packet_id", params.id)
@@ -85,7 +85,7 @@ export async function POST(
         { status: 422 }
       );
     }
-    if (packet.status !== CAD_DESIGN_STATUS) {
+    if (packet.status !== CAD_DESIGN_STATUS && packet.status !== CAD_APPROVAL_STATUS) {
       return NextResponse.json(
         { error: "Move the job to CAD Design before uploading a render and source file." },
         { status: 422 }
@@ -105,7 +105,7 @@ export async function POST(
     if (sourceErr) return NextResponse.json({ error: sourceErr }, { status: 400 });
 
     const { data: latest, error: latestErr } = await supabase
-      .from("workshop_cad_versions")
+      .from("packet_cad_versions")
       .select("version_number")
       .eq("tenant_id", tenantId)
       .eq("packet_id", params.id)
@@ -140,7 +140,7 @@ export async function POST(
     });
 
     const { data: version, error: versionErr } = await supabase
-      .from("workshop_cad_versions")
+      .from("packet_cad_versions")
       .insert({
         tenant_id: tenantId,
         packet_id: params.id,
@@ -163,7 +163,27 @@ export async function POST(
       return NextResponse.json({ error: versionErr?.message ?? "Could not save the CAD version" }, { status: 500 });
     }
 
-    return NextResponse.json({ version: { ...version, drives_casting: false } });
+    let updatedPacket = null;
+    if (packet.status === CAD_DESIGN_STATUS) {
+      const packetUpdate: Record<string, unknown> = {
+        status: CAD_APPROVAL_STATUS,
+        workshop_intake_substatus: null,
+        status_updated_at: new Date().toISOString(),
+      };
+      const step = await pathwayStepUpdate(supabase, tenantId, packet.workshop_pathway_id, CAD_APPROVAL_STATUS);
+      if (step !== null) packetUpdate.workshop_step_index = step;
+      const { data, error } = await supabase
+        .from("packets")
+        .update(packetUpdate)
+        .eq("tenant_id", tenantId)
+        .eq("id", params.id)
+        .select()
+        .single();
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      updatedPacket = data;
+    }
+
+    return NextResponse.json({ version: { ...version, drives_casting: false }, packet: updatedPacket });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }

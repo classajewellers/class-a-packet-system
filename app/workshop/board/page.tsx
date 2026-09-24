@@ -142,6 +142,7 @@ const BLOCKED_LABELS: Record<string, string> = {
 const STAGE_DEFS: { key: string; label: string; status: string; accent: string; colBg: string }[] = [
   { key: "intake",        label: "Intake",               status: "intake",        accent: "#378ADD", colBg: "#F0F7FF" },
   { key: "cad_design",    label: "CAD Design",           status: "cad_design",    accent: "#7F77DD", colBg: "#F5F3FF" },
+  { key: "cad_approval",  label: "CAD Approval",         status: "cad_approval",  accent: "#BA7517", colBg: "#FFFBEB" },
   { key: "casting",       label: "Casting",              status: "casting",       accent: "#D85A30", colBg: "#FFF5F3" },
   { key: "polish_finish", label: "Polish/Finish",        status: "polish_finish", accent: "#0F6E56", colBg: "#ECFDF5" },
   { key: "polish_set",    label: "Polish/Set",           status: "polish_set",    accent: "#0F6E56", colBg: "#ECFDF5" },

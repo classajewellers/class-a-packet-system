@@ -1,11 +1,13 @@
 /** Stage keys added on workshop_stages by migration 168. */
 export const CAD_DESIGN_STATUS = "cad_design";
+export const CAD_APPROVAL_STATUS = "cad_approval";
 export const CASTING_STATUS = "casting";
 export const CAD_DESIGNER_SLUG = "cad_designer";
 
 /** First matching pathway step name wins. Remodel already uses "CAD Drawing". */
 export const CAD_PATH_STEPS: Record<string, string[]> = {
   cad_design: ["CAD Design", "CAD Drawing"],
+  cad_approval: ["CAD Approval"],
   casting: ["Casting"],
   polish_finish: ["Polish/Finish"],
   polish_set: ["Polish/Set"],

@@ -106,6 +106,7 @@ export default function CadApprovalPanel({
       const res = await fetch(`/api/workshop/packets/${packetId}/cad`, { method: "POST", body });
       const json = await res.json();
       if (!res.ok) { setError(json.error ?? "Upload failed"); return; }
+      if (json.packet) onPacket(json.packet);
       setRenderFile(null);
       setSourceFile(null);
       setNote("");
@@ -151,8 +152,9 @@ export default function CadApprovalPanel({
   return (
     <div>
       <div style={{ fontSize: 13, color: "#4B5563", marginBottom: 12, lineHeight: 1.45 }}>
-        Upload a render and the source file. A manager approves that version to move the job to Casting.
-        Only the approved version is used for the casting order. Request Changes sends the job back to CAD Design with a note.
+        Upload a render and the source file on CAD Design. That moves the job to CAD Approval.
+        A manager approves that version to move the job to Casting. Only the approved version is used for the casting order.
+        Request Changes sends the job back to CAD Design with a note. Reject stays on CAD Approval.
       </div>
 
       {error && (

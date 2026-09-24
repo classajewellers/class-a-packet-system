@@ -52,7 +52,7 @@ const JOB_TYPE_LABELS: Record<string, string> = {
   online_order: "Online Order", collection_order: "Collection",
 };
 const STAGE_LABELS: Record<string, string> = {
-  intake: "Intake", cad_design: "CAD Design", casting: "Casting",
+  intake: "Intake", cad_design: "CAD Design", cad_approval: "CAD Approval", casting: "Casting",
   polish_finish: "Polish/Finish", polish_set: "Polish/Set",
   on_bench: "Production", quality_check: "Quality Control",
   to_be_valued: "Valuation", ready: "Ready", collected: "Collected",
@@ -506,6 +506,7 @@ export default function WorkshopPage() {
                     <option value="all">All stages</option>
                     <option value="intake">Intake</option>
                     <option value="cad_design">CAD Design</option>
+                    <option value="cad_approval">CAD Approval</option>
                     <option value="casting">Casting</option>
                     <option value="polish_finish">Polish/Finish</option>
                     <option value="polish_set">Polish/Set</option>

@@ -147,6 +147,7 @@ const BLOCKED_LABELS: Record<string, string> = {
 const STAGE_LABELS: Record<string, string> = {
   intake:        "Intake",
   cad_design:    "CAD Design",
+  cad_approval:  "CAD Approval",
   casting:       "Casting",
   polish_finish: "Polish/Finish",
   polish_set:    "Polish/Set",
@@ -171,7 +172,7 @@ const JOB_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
 };
 
 const STAGE_ACCENT: Record<string, string> = {
-  intake: "#378ADD", cad_design: "#7F77DD", casting: "#D85A30",
+  intake: "#378ADD", cad_design: "#7F77DD", cad_approval: "#BA7517", casting: "#D85A30",
   polish_finish: "#0F6E56", polish_set: "#0F6E56",
   on_bench: "#7F77DD", quality_check: "#D85A30",
   to_be_valued: "#BA7517", ready: "#1D9E75", collected: "#6B7280",
@@ -428,6 +429,7 @@ export default function WorkshopJobDrawer({
         { label: "Intake",               status: "intake",        substatus: "jobs_in",   accent: "#378ADD" },
         { label: "Pre-Check",            status: "intake",        substatus: "pre_check", accent: "#378ADD" },
         { label: "CAD Design",           status: "cad_design",    substatus: null,        accent: "#7F77DD" },
+        { label: "CAD Approval",         status: "cad_approval",  substatus: null,        accent: "#BA7517" },
         { label: "Casting",              status: "casting",       substatus: null,        accent: "#D85A30" },
         { label: "Polish/Finish",        status: "polish_finish", substatus: null,        accent: "#0F6E56" },
         { label: "Polish/Set",           status: "polish_set",    substatus: null,        accent: "#0F6E56" },
@@ -440,6 +442,7 @@ export default function WorkshopJobDrawer({
       ];
   const CAD_STAGE_FALLBACK: StageEntry[] = [
     { label: "CAD Design",    status: "cad_design",    substatus: null, accent: "#7F77DD" },
+    { label: "CAD Approval",  status: "cad_approval",  substatus: null, accent: "#BA7517" },
     { label: "Casting",       status: "casting",       substatus: null, accent: "#D85A30" },
     { label: "Polish/Finish", status: "polish_finish", substatus: null, accent: "#0F6E56" },
     { label: "Polish/Set",    status: "polish_set",    substatus: null, accent: "#0F6E56" },

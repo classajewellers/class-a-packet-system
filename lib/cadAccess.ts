@@ -66,7 +66,7 @@ export async function cadVersionCount(
   packetId: string
 ): Promise<number> {
   const { count, error } = await supabase
-    .from("workshop_cad_versions")
+    .from("packet_cad_versions")
     .select("id", { count: "exact", head: true })
     .eq("tenant_id", tenantId)
     .eq("packet_id", packetId);
@@ -81,7 +81,7 @@ export async function latestApprovedCadVersion(
   exceptId?: string
 ): Promise<{ id: string; version_number: number } | null> {
   const { data, error } = await supabase
-    .from("workshop_cad_versions")
+    .from("packet_cad_versions")
     .select("id, version_number")
     .eq("tenant_id", tenantId)
     .eq("packet_id", packetId)
