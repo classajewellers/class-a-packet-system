@@ -576,9 +576,9 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
 
   const headers = { "x-tenant-id": tenantId };
 
-  const fetchPo = useCallback(async () => {
+  const fetchPo = useCallback(async (opts?: { silent?: boolean }) => {
     if (!tenantId) return;
-    setLoading(true);
+    if (!opts?.silent) setLoading(true);
     const [poRes, refRes, prodRes, xeroLoad] = await Promise.all([
       fetch(`/api/inventory/purchase-orders/${params.id}`, { headers }),
       fetch("/api/inventory/reference", { headers }),
@@ -664,22 +664,36 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({} as { error?: string }));
-        setSendNote(json.error ?? "Could not send this purchase order");
+        setSendNote(json.error ?? "Could not send this purchase order. No file was saved.");
         return;
       }
-      const encoded = res.headers.get("X-Po-Message");
-      setSendNote(encoded ? decodeURIComponent(encoded) : "Purchase order downloaded.");
       const blob = await res.blob();
+      const contentType = res.headers.get("Content-Type") ?? blob.type;
       const match = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "");
+      const fallbackName = `${po?.po_number ?? "purchase-order"}${contentType.includes("pdf") ? ".pdf" : ".html"}`;
+      const filename = match?.[1] || fallbackName;
+      if (blob.size === 0) {
+        setSendNote("The purchase order file came back empty. Nothing was saved.");
+        return;
+      }
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = match?.[1] ?? `${po?.po_number ?? "purchase-order"}.pdf`;
+      link.download = filename;
+      link.rel = "noopener";
+      document.body.appendChild(link);
       link.click();
-      URL.revokeObjectURL(url);
-      fetchPo();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+      const encoded = res.headers.get("X-Po-Message");
+      let detail = "File downloaded.";
+      if (encoded) {
+        try { detail = `File downloaded. ${decodeURIComponent(encoded)}`; } catch { detail = "File downloaded."; }
+      }
+      setSendNote(detail);
+      fetchPo({ silent: true });
     } catch {
-      setSendNote("Could not send this purchase order");
+      setSendNote("Could not send this purchase order. No file was saved.");
     } finally {
       setSendingPo(false);
     }

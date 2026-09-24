@@ -23,17 +23,17 @@ async function emailPdf(opts: {
   bytes: ArrayBuffer;
 }): Promise<string> {
   if (!opts.to) {
-    return "This supplier has no email address. The purchase order was downloaded.";
+    return "This supplier has no email address, so it was not emailed.";
   }
   const block = outboundBlock("email", opts.tenantId);
   if (block) {
     logSuppressedOutbound("email", opts.tenantId, { to: opts.to, po: opts.poNumber }, block);
-    return "Email was held back on this test tenant. The purchase order was downloaded.";
+    return "Email was held back on this test tenant, so it was not emailed.";
   }
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM_EMAIL;
   if (!apiKey || !from) {
-    return "Email is not set up on this Preview. The purchase order was downloaded so you can send it yourself.";
+    return "Email is not set up on this Preview, so it was not emailed.";
   }
 
   const res = await fetch("https://api.resend.com/emails", {
@@ -56,7 +56,7 @@ async function emailPdf(opts: {
   if (!res.ok) {
     const body = await res.text();
     console.error("[po-send] email failed:", res.status, body.slice(0, 300));
-    return "The email could not be sent. The purchase order was downloaded so you can send it yourself.";
+    return "The email could not be sent.";
   }
   return `Emailed to ${opts.to}.`;
 }
@@ -135,13 +135,7 @@ export async function POST(
     })),
   });
 
-  let document;
-  try {
-    document = await renderHtmlDocument(html, po.po_number || "purchase-order");
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Could not build the purchase order file.";
-    return NextResponse.json({ error: message }, { status: 502 });
-  }
+  const document = await renderHtmlDocument(html, po.po_number || "purchase-order");
 
   const notes: string[] = [];
   if (document.kind === "pdf") {
@@ -155,7 +149,7 @@ export async function POST(
     }));
   } else {
     notes.push(document.message);
-    if (!supplierEmail) notes.push("This supplier has no email address.");
+    notes.push("It was not emailed.");
   }
 
   if (po.status === "draft") {
@@ -168,17 +162,22 @@ export async function POST(
         updated_at: new Date().toISOString(),
       })
       .eq("id", params.id);
-    if (statusErr) return NextResponse.json({ error: statusErr.message }, { status: 500 });
-    notes.push("Marked as ordered.");
+    notes.push(statusErr
+      ? "The file is ready, but the order could not be marked as ordered."
+      : "Marked as ordered.");
   }
 
-  const body = document.kind === "pdf" ? document.bytes : document.html;
+  const bytes = document.kind === "pdf"
+    ? new Uint8Array(document.bytes)
+    : new TextEncoder().encode(document.html);
   const contentType = document.kind === "pdf" ? "application/pdf" : "text/html; charset=utf-8";
-  return new NextResponse(body, {
+  return new NextResponse(bytes, {
     headers: {
       "Content-Type": contentType,
       "Content-Disposition": `attachment; filename="${document.filename}"`,
+      "Content-Length": String(bytes.byteLength),
       "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
       "X-Po-Message": headerMessage(notes),
     },
   });
