@@ -8,6 +8,7 @@ import { loadXeroAccounts, XeroAccountsLoad } from "@/lib/xeroAccounts";
 import { ArrowLeft, Package, CheckCircle2, SkipForward, Sparkles, Loader, X, ChevronDown, DollarSign, Pencil, Ban, AlertTriangle, Plus, Trash2 } from "lucide-react";
 import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
 import { XeroAccountSelect } from "@/components/XeroAccountSelect";
+import { inheritedReceiveTitle } from "@/lib/receiveStock";
 
 type POStatus = "draft" | "ordered" | "partially_received" | "received" | "cancelled";
 
@@ -26,6 +27,10 @@ interface PoLine {
   diamond_carat: number | null;
   diamond_colour: string | null;
   diamond_clarity: string | null;
+  stone_type?: string | null;
+  stone_carat?: number | null;
+  stone_colour?: string | null;
+  stone_clarity?: string | null;
   finger_size: string | null;
   quantity: number;
   unit_cost: number | null;
@@ -135,28 +140,33 @@ function ReceiveCard({
   const remaining       = orderedQty - alreadyReceived;
 
   const [specs, setSpecs] = useState({
-    title:           line.title          ?? "",
+    title:           inheritedReceiveTitle(line),
     category_id:     line.category_id    ?? "",
     metal_type:      line.metal_type     ?? "",
     metal_karat:     line.metal_karat    ?? "",
     metal_colour:    line.metal_colour   ?? "",
-    diamond_type:    line.diamond_type    ?? "",
-    diamond_carat:   line.diamond_carat != null ? String(line.diamond_carat) : "",
-    diamond_colour:  line.diamond_colour  ?? "",
-    diamond_clarity: line.diamond_clarity ?? "",
+    diamond_type:    line.diamond_type ?? line.stone_type ?? "",
+    diamond_carat:   line.diamond_carat != null
+      ? String(line.diamond_carat)
+      : line.stone_carat != null ? String(line.stone_carat) : "",
+    diamond_colour:  line.diamond_colour ?? line.stone_colour ?? "",
+    diamond_clarity: line.diamond_clarity ?? line.stone_clarity ?? "",
     finger_size:     line.finger_size    ?? "",
     notes:           line.notes          ?? "",
     location_id: "",
     product_id:  "",
   });
   const [actualUnitCost, setActualUnitCost] = useState(
-    line.estimated_cost != null ? String(line.estimated_cost) : ""
+    line.estimated_cost != null
+      ? String(line.estimated_cost)
+      : line.unit_cost != null ? String(line.unit_cost) : ""
   );
   const [receiveQty, setReceiveQty] = useState(remaining);
   // individual = one piece per unit; batch = one piece record with quantity > 1
   const [receiveMode, setReceiveMode] = useState<"individual" | "batch">("individual");
 
   const [saving, setSaving]     = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [skipping, setSkipping] = useState(false);
   const [done, setDone]         = useState(false);
   const [aiDesc, setAiDesc]     = useState("");
@@ -201,8 +211,11 @@ function ReceiveCard({
     }));
   }
 
+  const lineLabel = inheritedReceiveTitle(line) || "Untitled item";
+
   async function handleConfirm() {
     setSaving(true);
+    setSaveError("");
     const builtSpecs: Record<string, any> = {
       ...specs,
       diamond_carat: specs.diamond_carat ? parseFloat(specs.diamond_carat) : null,
@@ -229,6 +242,8 @@ function ReceiveCard({
       setCreatedPieces(json.pieces ?? []);
       setDone(true);
       onDone();
+    } else {
+      setSaveError(json.error ?? "Could not create stock");
     }
   }
 
@@ -257,7 +272,7 @@ function ReceiveCard({
                   : `Created ${createdPieces.length} pieces (${createdPieces.map(p => p.sku).join(", ")})`
                 : "Skipped"}
             </div>
-            <div style={{ fontSize: 13, color: "#6B7280", marginTop: 2 }}>{line.title ?? "Untitled item"}</div>
+            <div style={{ fontSize: 13, color: "#6B7280", marginTop: 2 }}>{lineLabel}</div>
           </div>
         </div>
         {createdPieces.length > 0 && (
@@ -291,7 +306,7 @@ function ReceiveCard({
     <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20 }}>
       {/* Header — title + qty summary */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4, gap: 12 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>{line.title ?? "Untitled item"}</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>{lineLabel}</div>
         <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#6B7280", flexShrink: 0 }}>
           <span>Ordered: <strong style={{ color: "#374151" }}>{orderedQty}</strong></span>
           {alreadyReceived > 0 && <span>Received: <strong style={{ color: "#059669" }}>{alreadyReceived}</strong></span>}
@@ -476,6 +491,12 @@ function ReceiveCard({
           )}
         </div>
       </div>
+
+      {saveError && (
+        <div style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 8, background: "#FEF2F2", color: "#B91C1C", fontSize: 13 }}>
+          {saveError}
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <button
@@ -1322,7 +1343,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                   {confirmLine.actual_cost != null ? "Update Actual Cost" : "Confirm Invoice Amount"}
                 </h2>
                 <p style={{ margin: "4px 0 0", fontSize: 13, color: "#6B7280" }}>
-                  {confirmLine.title ?? "Untitled item"}
+                  {inheritedReceiveTitle(confirmLine) || "Untitled item"}
                 </p>
               </div>
               <button onClick={() => setConfirmLine(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280", padding: 0 }}>
