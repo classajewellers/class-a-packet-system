@@ -5,8 +5,9 @@
 // (same failure as the PO-line diamond_carat insert). Staging pieces also
 // have no title, metal_type, category_id, status_id, or updated_at, and
 // metal_karat / metal_colour / diamond_type are check-constrained.
-// Callers probe those columns and pass the flags in. This module only
-// decides the row; it does not query.
+// Callers probe those columns and pass the flags in. supplier_id and
+// packet_id are always written (null when the order has none). invoice_id
+// is not written. This module only decides the row; it does not query.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -51,10 +52,6 @@ export interface PieceColumnFlags {
   actual_cost: boolean;
   supplier_code: boolean;
   created_at: boolean;
-  // Vault is adding these. Absent on Preview until that migration lands.
-  // When false, the insert must not mention them (PostgREST rejects the row).
-  supplier_id: boolean;
-  packet_id: boolean;
 }
 
 export interface ReceiveLineSource {
@@ -167,9 +164,9 @@ export interface ReceivedPieceInput {
   poLineId: string;
   receivingEventId: string;
   quantity: number;
-  /** From the purchase order. Written only when the piece column exists. */
+  /** Purchase order supplier. Always written; null when the order has none. */
   supplierId?: string | null;
-  /** From the PO line. Written only when the piece column exists. */
+  /** PO line packet. Always written; null when the line is for stock. */
   packetId?: string | null;
 }
 
@@ -223,6 +220,10 @@ export function buildReceivedPieceRow(input: ReceivedPieceInput): Record<string,
   const row: Record<string, unknown> = {
     po_line_id: input.poLineId,
     receiving_event_id: input.receivingEventId,
+    // Staging pieces have these foreign keys. Always send them.
+    // invoice_id stays unset until a later step creates the invoice.
+    supplier_id: firstUuid(input.supplierId),
+    packet_id: firstUuid(input.packetId),
     quantity: input.quantity,
     location_id: input.locationId ?? null,
     metal_karat: karatStored,
@@ -248,18 +249,6 @@ export function buildReceivedPieceRow(input: ReceivedPieceInput): Record<string,
   if (flags.category_id) row.category_id = categoryId;
   if (flags.created_at) row.created_at = input.now;
   if (flags.updated_at) row.updated_at = input.now;
-
-  // Stamp provenance once Vault's columns exist. Omit the key entirely
-  // while the column is missing, and omit it when the PO has no value,
-  // so a null supplier does not fail a foreign key.
-  if (flags.supplier_id) {
-    const supplierId = firstUuid(input.supplierId);
-    if (supplierId) row.supplier_id = supplierId;
-  }
-  if (flags.packet_id) {
-    const packetId = firstUuid(input.packetId);
-    if (packetId) row.packet_id = packetId;
-  }
 
   return row;
 }

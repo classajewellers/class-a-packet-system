@@ -3,7 +3,6 @@ import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { tenantScoped } from "@/lib/tenantScoped";
 import {
   assemblePiecePassport,
-  PassportColumns,
   PassportInvoice,
   PassportJob,
   PassportPacket,
@@ -11,38 +10,6 @@ import {
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
-const OPTIONAL_PIECE_COLUMNS = ["supplier_id", "packet_id", "invoice_id"] as const;
-
-async function pieceColumns(
-  supabase: Awaited<ReturnType<typeof createTenantSupabaseClient>>
-): Promise<PassportColumns> {
-  const probes = await Promise.all(
-    OPTIONAL_PIECE_COLUMNS.map(async (column) => {
-      const probe = await supabase.from("inventory_pieces").select(column).limit(1);
-      return [column, !probe.error] as const;
-    })
-  );
-  const present = Object.fromEntries(probes) as Record<(typeof OPTIONAL_PIECE_COLUMNS)[number], boolean>;
-  return {
-    supplier_id: present.supplier_id,
-    packet_id: present.packet_id,
-    invoice_id: present.invoice_id,
-  };
-}
-
-async function invoiceTableColumns(
-  supabase: Awaited<ReturnType<typeof createTenantSupabaseClient>>
-): Promise<{ po_id: boolean; tenant_id: boolean }> {
-  const probes = await Promise.all(
-    (["po_id", "tenant_id"] as const).map(async (column) => {
-      const probe = await supabase.from("inventory_purchase_invoices").select(column).limit(1);
-      return [column, !probe.error] as const;
-    })
-  );
-  const present = Object.fromEntries(probes) as Record<"po_id" | "tenant_id", boolean>;
-  return { po_id: present.po_id, tenant_id: present.tenant_id };
-}
 
 function invoiceFromRow(data: {
   id: string;
@@ -70,9 +37,9 @@ function customerName(row: {
 }
 
 // GET /api/inventory/pieces/[id]/passport
-// Joins the piece back to its PO line, purchase order, packet, and
-// receiving event. supplier_id / packet_id / invoice_id on the piece are
-// used only when those columns exist.
+// Reads supplier, packet, and invoice from the piece, then loads the
+// names. The purchase order and receive date still come from the line
+// and the goods receipt. invoice_id is empty until a later step.
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -81,15 +48,9 @@ export async function GET(
   if (!tenantId) return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
   const supabase = await createTenantSupabaseClient(tenantId);
 
-  const columns = await pieceColumns(supabase);
-  const selectCols = ["id", "po_line_id", "receiving_event_id", "sku"];
-  if (columns.supplier_id) selectCols.push("supplier_id");
-  if (columns.packet_id) selectCols.push("packet_id");
-  if (columns.invoice_id) selectCols.push("invoice_id");
-
   const { data: piece, error: pieceErr } = await tenantScoped(supabase, tenantId)
     .from("inventory_pieces")
-    .select(selectCols.join(", "))
+    .select("id, sku, po_line_id, receiving_event_id, supplier_id, packet_id, invoice_id")
     .eq("id", params.id)
     .maybeSingle();
 
@@ -162,9 +123,9 @@ export async function GET(
     categoryName = data?.name ?? null;
   }
 
-  const pieceSupplierId = columns.supplier_id ? (row.supplier_id ?? null) : null;
-  const piecePacketId = columns.packet_id ? (row.packet_id ?? null) : null;
-  const pieceInvoiceId = columns.invoice_id ? (row.invoice_id ?? null) : null;
+  const pieceSupplierId = row.supplier_id ?? null;
+  const piecePacketId = row.packet_id ?? null;
+  const pieceInvoiceId = row.invoice_id ?? null;
 
   const supplierIds = [pieceSupplierId, purchaseOrder?.supplier_id].filter((id): id is string => Boolean(id));
   const supplierById: Record<string, string> = {};
@@ -221,40 +182,17 @@ export async function GET(
     }
   }
 
-  // Invoice shows when one is already stored. Prefer the id stamped on
-  // the piece. Otherwise use an inventory_purchase_invoices row whose
-  // po_id is this order, and only if that column exists. This slice does
-  // not create invoices or send them to Xero.
-  const invoiceColumns = await invoiceTableColumns(supabase);
+  // invoice_id stays null until a later step. Show an invoice only
+  // when this piece already points at one.
   let invoice: PassportInvoice | null = null;
-  let invoiceSource: "piece" | "po" | null = null;
+  const invoiceSource = pieceInvoiceId ? "piece" as const : null;
   if (pieceInvoiceId) {
-    const lookup = invoiceColumns.tenant_id
-      ? tenantScoped(supabase, tenantId).from("inventory_purchase_invoices")
-      : supabase.from("inventory_purchase_invoices");
-    const { data } = await lookup
+    const { data } = await tenantScoped(supabase, tenantId)
+      .from("inventory_purchase_invoices")
       .select("id, invoice_number, invoice_date, status, total_amount")
       .eq("id", pieceInvoiceId)
       .maybeSingle();
-    if (data?.id) {
-      invoice = invoiceFromRow(data);
-      invoiceSource = "piece";
-    }
-  }
-  if (!invoice && invoiceColumns.po_id && purchaseOrder?.id) {
-    const lookup = invoiceColumns.tenant_id
-      ? tenantScoped(supabase, tenantId).from("inventory_purchase_invoices")
-      : supabase.from("inventory_purchase_invoices");
-    const { data } = await lookup
-      .select("id, invoice_number, invoice_date, status, total_amount")
-      .eq("po_id", purchaseOrder.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (data?.id) {
-      invoice = invoiceFromRow(data);
-      invoiceSource = "po";
-    }
+    if (data?.id) invoice = invoiceFromRow(data);
   }
 
   const passport = assemblePiecePassport({
@@ -262,7 +200,6 @@ export async function GET(
     receivingEventId,
     pieceSupplierId,
     piecePacketId,
-    columns,
     line: line
       ? {
           id: line.id,
@@ -295,8 +232,5 @@ export async function GET(
     job,
   });
 
-  return NextResponse.json({
-    passport,
-    columns,
-  });
+  return NextResponse.json({ passport });
 }

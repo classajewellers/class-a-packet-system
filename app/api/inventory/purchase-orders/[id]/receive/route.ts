@@ -311,8 +311,6 @@ const PIECE_FLAG_COLUMNS = [
   "actual_cost",
   "supplier_code",
   "created_at",
-  "supplier_id",
-  "packet_id",
 ] as const;
 
 // Any probe error means the column is absent. Same rule as the pieces
@@ -339,8 +337,6 @@ async function pieceColumnFlags(
     actual_cost: present.actual_cost,
     supplier_code: present.supplier_code,
     created_at: present.created_at,
-    supplier_id: present.supplier_id,
-    packet_id: present.packet_id,
   };
 }
 

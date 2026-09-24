@@ -1,17 +1,10 @@
 // Piece passport: where a stock piece came from.
 //
-// Staging pieces already store po_line_id and receiving_event_id. Vault is
-// adding supplier_id, packet_id, and invoice_id; those columns are not on
-// Preview yet. Callers feature-detect and pass `columns`. This module only
-// chooses which already-loaded row to show. It does not query.
+// inventory_pieces stores supplier_id, packet_id, and invoice_id, plus
+// po_line_id and receiving_event_id. invoice_id stays empty until a later
+// step. This module only chooses which already-loaded row to show.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export interface PassportColumns {
-  supplier_id: boolean;
-  packet_id: boolean;
-  invoice_id: boolean;
-}
 
 export interface PassportPacket {
   id: string;
@@ -79,7 +72,6 @@ export interface PassportAssembleInput {
   receivingEventId: string | null;
   pieceSupplierId: string | null;
   piecePacketId: string | null;
-  columns: PassportColumns;
   line: PassportLine | null;
   purchaseOrder: PassportPurchaseOrder | null;
   /** Supplier stored on the purchase order, when the order has one. */
@@ -106,11 +98,11 @@ function textOrNull(value: string | null | undefined): string | null {
 
 export function assemblePiecePassport(input: PassportAssembleInput): PiecePassport {
   const linePacketId = uuidOrNull(input.line?.packet_id);
-  const piecePacketId = input.columns.packet_id ? uuidOrNull(input.piecePacketId) : null;
+  const piecePacketId = uuidOrNull(input.piecePacketId);
   const packetId = piecePacketId ?? linePacketId;
   const packet = packetId ? (input.packetById[packetId] ?? null) : null;
 
-  const pieceSupplierId = input.columns.supplier_id ? uuidOrNull(input.pieceSupplierId) : null;
+  const pieceSupplierId = uuidOrNull(input.pieceSupplierId);
   const poSupplierId = uuidOrNull(input.poSupplierId);
   let supplier: PassportSupplier | null = null;
   let supplierSource: PiecePassport["supplier_source"] = null;
