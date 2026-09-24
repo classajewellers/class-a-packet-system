@@ -28,7 +28,7 @@ function BuildQuoteForkInner() {
 
       <p style={{ fontSize: 15, color: "#6B7280", marginBottom: 28 }}>What are you quoting?</p>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <button
           onClick={() => go("/quotes/builder/new")}
           style={{ background: "#fff", border: "2px solid #E8E8F0", borderRadius: 14, padding: "28px 24px", textAlign: "left", cursor: "pointer", transition: "all .15s" }}

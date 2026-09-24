@@ -127,7 +127,7 @@ export default function QuotePipelineBoard({ quotes, onQuoteClick, onUpdate, sho
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-      <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 16, minHeight: '60vh', alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 16, minHeight: '60vh', alignItems: 'flex-start', width: '100%', maxWidth: '100%', WebkitOverflowScrolling: 'touch' }}>
         {PIPELINE_STAGES.map((stage) => {
           const config = STAGE_CONFIG[stage];
           const cards = sortCards(

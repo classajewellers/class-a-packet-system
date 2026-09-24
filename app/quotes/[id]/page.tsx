@@ -587,10 +587,71 @@ export default function QuoteViewPage() {
 
   return (
     <div className="quote-print-wrapper" style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
+        <style>{`
+          .quote-toolbar {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px 16px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+          }
+          .quote-actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            flex: 1 1 320px;
+            justify-content: flex-end;
+          }
+          .quote-pay-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+          }
+          .quote-pay-input { flex: 1 1 220px; min-width: 0; }
+          .quote-pay-generate { margin-left: auto; }
+          .quote-price-bar { flex-wrap: wrap; gap: 8px; }
+          @media (max-width: 900px) {
+            .quote-toolbar { flex-direction: column; }
+            .quote-actions { justify-content: flex-start; width: 100%; }
+          }
+          @media (max-width: 1024px) {
+            .quote-actions > button,
+            .quote-actions > a {
+              flex: 1 1 calc(50% - 8px);
+              justify-content: center;
+              min-width: 0;
+            }
+          }
+          @media (max-width: 767px) {
+            .quote-print-wrapper { padding: 4px 0 16px !important; }
+            .quote-pay-input { flex-basis: 100%; }
+            .quote-pay-generate { margin-left: 0 !important; width: 100%; }
+            .quote-price-amount { font-size: 22px !important; }
+            .item-heading-bar { flex-wrap: wrap; gap: 6px; }
+            .stone-opts-outer-td { display: block; width: auto !important; border-right: none !important; }
+            .stone-opts-inner-table,
+            .stone-opts-inner-table thead,
+            .stone-opts-inner-table tbody,
+            .stone-opts-inner-table tr,
+            .stone-opts-inner-table th,
+            .stone-opts-inner-table td { display: block; width: auto !important; text-align: left !important; }
+            .stone-opts-inner-table thead { display: none; }
+            .stone-opts-inner-table tr {
+              border: 1px solid #E8E8F0;
+              border-radius: 8px;
+              margin-bottom: 8px;
+              padding: 4px 0;
+              background: #fff;
+            }
+          }
+        `}</style>
 
         {/* ── Header with nav + action buttons ────────────────────── */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div className="quote-toolbar">
+          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, flexWrap: "wrap" }}>
             <Link href="/quotes" style={{ color: "#6B7280", textDecoration: "none", fontSize: 14, display: "flex", alignItems: "center", gap: 4 }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <polyline points="15 18 9 12 15 6" />
@@ -601,7 +662,7 @@ export default function QuoteViewPage() {
             <span style={{ fontFamily: "monospace", fontSize: 13, color: "#6B7280" }}>{quote.reference_number}</span>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="quote-actions">
             {isManager && (
               <button
                 onClick={handleDelete}
@@ -701,11 +762,12 @@ export default function QuoteViewPage() {
                     </span>
                   </div>
                 )}
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <div className="quote-pay-row">
                   <input
                     readOnly
                     value={paymentLinkUrl}
-                    style={{ flex: 1, padding: "8px 12px", border: "1px solid #E8E8F0", borderRadius: 8, fontSize: 13, color: "#374151", background: "#F9FAFB", fontFamily: "monospace", minWidth: 0 }}
+                    className="quote-pay-input"
+                    style={{ padding: "8px 12px", border: "1px solid #E8E8F0", borderRadius: 8, fontSize: 13, color: "#374151", background: "#F9FAFB", fontFamily: "monospace" }}
                   />
                   <button
                     onClick={handleCopyLink}
@@ -733,7 +795,7 @@ export default function QuoteViewPage() {
               /* Generate form */
               <div>
                 <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 8 }}>Deposit percentage</div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <div className="quote-pay-row">
                   <input
                     type="number"
                     min={1}
@@ -752,7 +814,8 @@ export default function QuoteViewPage() {
                   <button
                     onClick={handleGeneratePaymentLink}
                     disabled={generatingLink}
-                    style={{ marginLeft: "auto", padding: "8px 20px", background: "#000", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: generatingLink ? "wait" : "pointer", opacity: generatingLink ? 0.7 : 1, whiteSpace: "nowrap" }}
+                    className="quote-pay-generate"
+                    style={{ padding: "8px 20px", background: "#000", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: generatingLink ? "wait" : "pointer", opacity: generatingLink ? 0.7 : 1, whiteSpace: "nowrap" }}
                   >
                     {generatingLink ? "Generating…" : "Generate Link"}
                   </button>

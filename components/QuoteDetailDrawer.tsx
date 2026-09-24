@@ -153,11 +153,18 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex' }}>
+      <style>{`
+        .quote-drawer { width: min(100%, 480px); max-width: 480px; flex-shrink: 0; }
+        @media (max-width: 640px) {
+          .quote-drawer-backdrop { display: none; }
+          .quote-drawer { width: 100%; max-width: none; }
+        }
+      `}</style>
       {/* Backdrop */}
-      <div style={{ flex: 1, background: 'rgba(0,0,0,0.3)' }} onClick={onClose} />
+      <div className="quote-drawer-backdrop" style={{ flex: 1, background: 'rgba(0,0,0,0.3)' }} onClick={onClose} />
 
       {/* Drawer */}
-      <div style={{ width: 480, background: '#FFFFFF', borderLeft: '1px solid #E8E8F0', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+      <div className="quote-drawer" style={{ background: '#FFFFFF', borderLeft: '1px solid #E8E8F0', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 20, background: '#FFFFFF', borderBottom: '1px solid #E8E8F0', position: 'sticky', top: 0, zIndex: 10 }}>

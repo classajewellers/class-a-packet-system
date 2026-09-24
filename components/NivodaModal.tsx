@@ -241,15 +241,63 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
 
   return (
     <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}
+      className="nivoda-overlay"
       onClick={onClose}
     >
+      <style>{`
+        .nivoda-overlay {
+          position: fixed; inset: 0; z-index: 200;
+          background: rgba(0,0,0,0.6);
+          display: flex; align-items: center; justify-content: center;
+          padding: 16px;
+        }
+        .nivoda-modal {
+          background: #fff; border-radius: 16px; width: 100%; max-width: 1020px;
+          height: min(92dvh, 900px); max-height: 92dvh;
+          display: flex; flex-direction: column;
+          box-shadow: 0 24px 80px rgba(0,0,0,0.25); overflow: hidden;
+        }
+        .nivoda-header { padding: 18px 24px; }
+        .nivoda-body {
+          display: flex; flex: 1; min-height: 0; overflow: hidden;
+          flex-direction: row;
+        }
+        .nivoda-filters {
+          width: 240px; flex-shrink: 0;
+          border-right: 1px solid #E8E8F0;
+          padding: 20px 16px; overflow-y: auto; background: #FAFBFF;
+        }
+        .nivoda-results { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; padding: 20px; }
+        .nivoda-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+        .nivoda-spec-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+        .nivoda-spec-value { min-width: 0; overflow-wrap: anywhere; text-align: right; }
+        @media (max-width: 1099px) {
+          .nivoda-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 767px) {
+          .nivoda-overlay { padding: 8px; align-items: stretch; }
+          .nivoda-modal { height: 100%; max-height: none; border-radius: 12px; }
+          .nivoda-header { padding: 14px 14px; }
+          .nivoda-body { flex-direction: column; }
+          .nivoda-filters {
+            width: 100%; max-height: 38%;
+            border-right: none; border-bottom: 1px solid #E8E8F0;
+            padding: 12px 14px;
+          }
+          .nivoda-results { padding: 12px; }
+          .nivoda-grid { grid-template-columns: 1fr; gap: 10px; }
+          .nivoda-hero, .nivoda-hero img { max-height: 220px !important; }
+        }
+        @media (min-width: 480px) and (max-width: 767px) {
+          .nivoda-grid { grid-template-columns: 1fr 1fr; }
+        }
+      `}</style>
       <div
-        style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 1020, maxHeight: "92vh", display: "flex", flexDirection: "column", boxShadow: "0 24px 80px rgba(0,0,0,0.25)", overflow: "hidden" }}
+        className="nivoda-modal"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 24px", borderBottom: "1px solid #E8E8F0", flexShrink: 0 }}>
+        <div className="nivoda-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #E8E8F0", flexShrink: 0, gap: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 36, height: 36, borderRadius: 8, background: "#EEF2FF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <svg width="18" height="18" viewBox="0 0 64 64" fill="none"><path d="M32 6L6 28l26 30 26-30L32 6z" stroke="#635BFF" strokeWidth="3" fill="#C7D2FE" /></svg>
@@ -262,10 +310,10 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
         </div>
 
         {/* Body */}
-        <div style={{ display: "flex", flex: 1, overflow: "hidden", minHeight: 0 }}>
+        <div className="nivoda-body">
 
           {/* ── Filters panel ── */}
-          <div style={{ width: 240, flexShrink: 0, borderRight: "1px solid #E8E8F0", padding: "20px 16px", overflowY: "auto", background: "#FAFBFF" }}>
+          <div className="nivoda-filters">
             <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 14 }}>Filters</div>
 
             {/* Stone type */}
@@ -369,7 +417,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
           </div>
 
           {/* ── Right panel — grid or detail view ── */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "20px", minWidth: 0 }}>
+          <div className="nivoda-results">
 
             {/* ── Expanded detail view ── */}
             {selectedStone ? (
@@ -426,7 +474,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
                         Couldn&apos;t confirm AUD pricing from Nivoda right now — prices are showing as POA. Try again shortly.
                       </div>
                     )}
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+                    <div className="nivoda-grid">
                       {results.map(stone => (
                         <StoneCard
                           key={stone.id}
@@ -494,7 +542,7 @@ function StoneCard({ stone, onSelect, onExpand, retailAud }: { stone: NivodaSton
 
       {/* Details */}
       <div style={{ padding: "10px 10px 6px", flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "#1A1A2E" }}>{stone.carats ?? "?"}ct {SHAPE_LABELS[stone.shape] ?? stone.shape ?? "Unknown"}</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#1A1A2E", overflowWrap: "anywhere" }}>{stone.carats ?? "?"}ct {SHAPE_LABELS[stone.shape] ?? stone.shape ?? "Unknown"}</div>
         <div style={{ fontSize: 12, color: "#6B7280" }}>
           {stone.color}/{stone.clarity}{stone.cut ? ` · ${stone.cut}` : ""}
         </div>
@@ -565,7 +613,7 @@ function StoneDetailView({ stone, refId, onBack, onSelect, retailAud }: { stone:
 
       {/* Image */}
       {stone.image && (
-        <div style={{ background: "#F3F4F6", borderRadius: 10, overflow: "hidden", marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center", maxHeight: 500 }}>
+        <div className="nivoda-hero" style={{ background: "#F3F4F6", borderRadius: 10, overflow: "hidden", marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center", maxHeight: 500 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={stone.image} alt={`${stone.carats ?? "?"}ct ${stone.shape ?? ""}`} style={{ width: "100%", maxHeight: 500, objectFit: "contain" }} />
         </div>
@@ -595,10 +643,11 @@ function StoneDetailView({ stone, refId, onBack, onSelect, retailAud }: { stone:
         {[...rows.filter(r => r.value), ...(dimensionsStr ? [{ label: "Dimensions", value: dimensionsStr }] : []), ...(ratio ? [{ label: "Ratio", value: `${ratio} : 1` }] : []), ...(retail != null ? [{ label: "Retail", value: `A$${retail.toLocaleString("en-AU")}` }] : [])].map((r, i, arr) => (
           <div
             key={r.label}
-            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderBottom: i < arr.length - 1 ? "1px solid #E8E8F0" : "none", background: i % 2 === 0 ? "#fff" : "#FAFBFF" }}
+            className="nivoda-spec-row"
+            style={{ padding: "10px 14px", borderBottom: i < arr.length - 1 ? "1px solid #E8E8F0" : "none", background: i % 2 === 0 ? "#fff" : "#FAFBFF" }}
           >
-            <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 500 }}>{r.label}</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: r.label === "Ref" ? "#9CA3AF" : r.label === "Retail" ? "#635BFF" : "#1A1A2E", fontWeight: r.label === "Ref" ? 400 : r.label === "Retail" ? 600 : 500, fontFamily: r.label === "Ref" ? "monospace" : "inherit" }}>
+            <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 500, flexShrink: 0 }}>{r.label}</span>
+            <span className="nivoda-spec-value" style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, fontSize: 13, color: r.label === "Ref" ? "#9CA3AF" : r.label === "Retail" ? "#635BFF" : "#1A1A2E", fontWeight: r.label === "Ref" ? 400 : r.label === "Retail" ? 600 : 500, fontFamily: r.label === "Ref" ? "monospace" : "inherit" }}>
               {r.value}
               {r.label === "Cert No." && r.value && (
                 <button

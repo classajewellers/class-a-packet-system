@@ -1057,7 +1057,20 @@ export default function RepairQuotingSettingsPage() {
   const tenantId = user.tenantId ?? "";
 
   return (
-    <div style={s.page}>
+    <div className="qs-page" style={s.page}>
+      <style>{`
+        @media (max-width: 767px) {
+          .qs-page { padding: 16px 12px !important; }
+          .qs-page [style*="repeat(3"],
+          .qs-page [style*="repeat(4"],
+          .qs-page [style*="1fr 160px"] { grid-template-columns: 1fr !important; }
+          .qs-page table { display: block; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        }
+        @media (min-width: 768px) and (max-width: 1099px) {
+          .qs-page [style*="repeat(3"],
+          .qs-page [style*="repeat(4"] { grid-template-columns: 1fr 1fr !important; }
+        }
+      `}</style>
       <div style={s.container}>
         <h1 style={s.heading}>Repair Quoting Settings</h1>
         <p style={s.subheading}>Configure parts catalogue, claw rates, pricing brackets, and actions for repair quotes.</p>
