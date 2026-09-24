@@ -14,16 +14,26 @@
  * (aexfqkaayrcmdehuzpza), unless WORKSHOP_SEED_ALLOW_ANY_HOST=1.
  * Do not point this at production.
  *
- *   WORKSHOP_SEED_PASSWORD='…' \
+ * Run this after supabase/migrations/165_workshop_role_tags.sql. That file
+ * creates the catalog; it does not create these logins. Vault DB applies
+ * both on staging (aexfqkaayrcmdehuzpza). Not production.
+ *
+ *   WORKSHOP_SEED_PASSWORD='VaultTeam-Practice1' \
  *   NEXT_PUBLIC_SUPABASE_URL='https://aexfqkaayrcmdehuzpza.supabase.co' \
  *   SUPABASE_SERVICE_ROLE_KEY='…' \
  *   node scripts/seed-workshop-team.mjs
  *
- * Staging already has these six accounts (Jeweller only). Vault DB owns
- * that apply. Re-running does not change an existing password: createUser
- * runs only when the auth user is missing.
+ * People (Class A, system role staff, tag jeweller only — never cad_designer):
+ *   Ben ben@classa.com.au, Viv viv@classa.com.au, Joe joseph@classa.com.au,
+ *   David david@classa.com.au, Jack jack@classa.com.au,
+ *   Shahzad shahrzad@classa.com.au.
+ * Josh and Staff Test are not in this list.
  *
- * Sign in at /login with the email and that temporary password.
+ * Re-running does not change an existing password: createUser runs only
+ * when the auth user is missing. Auth users are created here, not with
+ * raw SQL (auth.identities.email is generated).
+ *
+ * Sign in at /login with the email and WORKSHOP_SEED_PASSWORD.
  * A manager can replace it from Settings → Team → Set password.
  *
  * Display names stay the short workshop names so jobs stored against
@@ -92,8 +102,8 @@ const { data: jeweller, error: roleError } = await supabase
   .eq("key", "jeweller")
   .maybeSingle();
 
-if (roleError) fail(`workshop_role_tags lookup failed: ${roleError.message}. Apply migrations 164 and 165 on staging first.`);
-if (!jeweller) fail("Jeweller tag is missing for Class A. Apply migrations 164 and 165 on staging first.");
+if (roleError) fail(`workshop_role_tags lookup failed: ${roleError.message}. Apply supabase/migrations/165_workshop_role_tags.sql on staging first.`);
+if (!jeweller) fail("Jeweller tag is missing for Class A. Apply supabase/migrations/165_workshop_role_tags.sql on staging first.");
 
 for (const person of PEOPLE) {
   let userId = await findAuthUserId(person.email);
