@@ -14,10 +14,9 @@
  * (aexfqkaayrcmdehuzpza), unless WORKSHOP_SEED_ALLOW_ANY_HOST=1.
  * Do not point this at production.
  *
- * Expects staging table workshop_roles (slug, name, sort_order, active)
- * and profile_workshop_roles.workshop_role_id. Does not create or rename
- * those tables. Migration workshop_roles is already applied on staging.
- * Not production. A later rename to workshop_role_tags is on hold.
+ * Boss decision A is final: workshop_roles (slug, name, sort_order, active)
+ * and profile_workshop_roles.workshop_role_id. This script does not rename
+ * tables and does not tag anyone cad_designer. Not production.
  *
  *   WORKSHOP_SEED_PASSWORD='VaultTeam-Practice1' \
  *   NEXT_PUBLIC_SUPABASE_URL='https://aexfqkaayrcmdehuzpza.supabase.co' \
