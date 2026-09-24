@@ -138,7 +138,7 @@ export function assemblePiecePassport(input: PassportAssembleInput): PiecePasspo
     category: textOrNull(input.line?.category_name),
     packet: packet ?? (packetId ? { id: packetId, reference_number: null, customer_name: null } : null),
     packet_source: piecePacketId ? "piece" : linePacketId ? "line" : null,
-    job: packetId ? input.job : null,
+    job: input.job?.id ? input.job : null,
     purchase_order: input.purchaseOrder,
     supplier,
     supplier_source: supplier ? supplierSource : null,

@@ -49,9 +49,12 @@ export default function PiecePassportCard({
   if (!passport || !passport.linked) return null;
 
   const po = passport.purchase_order;
-  const packetLabel = passport.packet?.reference_number
-    || passport.job?.reference_number
-    || "Workshop job";
+  const job = passport.job?.id ? passport.job : null;
+  const jobLabel = job
+    ? (job.reference_number?.trim()
+      || [job.job_type, job.stage].filter(Boolean).join(" · ")
+      || "Workshop job")
+    : null;
 
   return (
     <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20, marginBottom: 16 }}>
@@ -61,11 +64,12 @@ export default function PiecePassportCard({
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 20px" }}>
         <Field label="What">{passport.what || "—"}{passport.category ? ` · ${passport.category}` : ""}</Field>
         <Field label="Job">
-          {passport.packet ? (
-            <a href={`/workshop/board?packet=${passport.packet.id}`} style={{ color: "#4338CA", fontWeight: 600 }}>
-              {packetLabel}
-            </a>
-          ) : "—"}
+          {jobLabel ? jobLabel : <span style={{ color: "#9CA3AF" }}>No job</span>}
+        </Field>
+        <Field label="Packet">
+          {passport.packet?.reference_number
+            ? passport.packet.reference_number
+            : <span style={{ color: "#9CA3AF" }}>—</span>}
           {passport.packet?.customer_name ? <div style={{ fontSize: 12, color: "#6B7280" }}>{passport.packet.customer_name}</div> : null}
         </Field>
         <Field label="Purchase order">
