@@ -122,7 +122,7 @@ export async function PATCH(
   // Non-fatal: a reservation-wiring failure must not block the quote status
   // update itself (same tolerance pattern as the FK-clear/notification
   // cleanup in DELETE below).
-  if (body.status === "converted" || body.status === "job_won" || body.status === "paid") {
+  if (body.status === "converted" || body.status === "job_won") {
     try {
       const result = await autoReserveQuoteItems(supabase, tenantId, data as { id: string; quote_builder_data?: unknown; customer_id?: string | null });
       if (result.skipped.length > 0) {

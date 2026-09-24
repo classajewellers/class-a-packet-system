@@ -150,21 +150,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const supabase = createServerSupabaseClient();
     const now = new Date().toISOString();
 
-    // Mark deposit as paid on the quote
+    // Record the deposit only. Job Won (status, job_won_at) is written inside
+    // createPacket after the order packet exists. A failed create leaves the
+    // quote in its current stage.
     const { data: updatedQuote, error: updateErr } = await supabase
       .from("quotes")
       .update({
         deposit_paid: true,
         deposit_paid_at: now,
         ...(amountPaid != null ? { deposit_amount: amountPaid } : {}),
-        // "paid" is the real, Stripe-driven signal — distinct from "job_won",
-        // which used to be set here directly but is a sales-pipeline concept
-        // staff can also set manually. quoteStage() in lib/pipeline.ts treats
-        // "paid" as the job_won pipeline stage for kanban/follow-up purposes.
-        // Auto-order-creation below moves this on to "converted" on success.
-        status: "paid",
-        job_won_at: now,
-        status_changed_at: now,
       })
       .eq("id", quoteId)
       .select("*")
@@ -209,17 +203,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     if (!packet) {
       console.error("[stripe/webhook] Auto packet creation FAILED:", JSON.stringify(errors));
-      // Money is real regardless — quote already marked "paid" above. Flag
-      // for manual handling rather than losing the payment record.
+      // Deposit is recorded. The quote is not Job Won and no packet remains.
       // Broadcast (user_id null) — no packet exists yet to assign this to
       // a specific person, and any manager needs to see it and act.
+      const failReason = errors.payment ?? errors.quote ?? errors.supabase ?? errors.reference ?? "unknown error";
       const { error: notifErr } = await tenantScoped(supabase, resolvedTenantId)
         .from("notifications")
         .insert({
           user_id: null,
           type: "deposit_paid_packet_failed",
           title: `Deposit received, order creation FAILED — ${quote.reference_number}`,
-          message: `${customerName ? customerName + " has" : "A customer has"} paid ${amountStr} deposit, but the order could not be auto-created (${errors.supabase ?? errors.reference ?? "unknown error"}). Please create the order manually.`,
+          message: `${customerName ? customerName + " has" : "A customer has"} paid ${amountStr} deposit, but the order could not be created (${failReason}). The quote was not marked Job Won.`,
           link_type: "quote",
           link_id: quoteId,
         });
