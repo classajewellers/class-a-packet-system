@@ -85,7 +85,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       if (!line || typeof line !== "object") {
         return NextResponse.json({ error: "Each purchase order line must be an object" }, { status: 400 });
       }
-      const prepared = await preparePoLineForWrite(supabase, line as Record<string, unknown>);
+      const prepared = preparePoLineForWrite(line as Record<string, unknown>);
       if (!prepared.ok) return NextResponse.json({ error: prepared.error }, { status: 400 });
       preparedLines.push(prepared.line);
     }

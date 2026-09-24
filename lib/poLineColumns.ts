@@ -1,6 +1,36 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Staging inventory_po_lines (verified): stone_* columns, no diamond_*.
+// PostgREST rejects the entire insert if any key is an unknown column, even
+// when the value is null — so diamond_carat: null is enough to drop
+// xero_account_* as well. These are the only line columns this write path
+// may send. id is kept only so the route can tell an update from an insert;
+// the route strips it before the query.
+const STAGING_LINE_COLUMNS = [
+  "title",
+  "category_id",
+  "metal_type",
+  "metal_karat",
+  "metal_colour",
+  "stone_type",
+  "stone_carat",
+  "stone_colour",
+  "stone_clarity",
+  "finger_size",
+  "quantity",
+  "unit_cost",
+  "notes",
+  "received",
+  "piece_id",
+  "estimated_cost",
+  "actual_cost",
+  "supplier_design_no",
+  "packet_id",
+  "received_quantity",
+  "xero_account_id",
+  "xero_account_code",
+  "xero_account_name",
+] as const;
 
 const DIAMOND_TO_STONE: Record<string, string> = {
   diamond_type: "stone_type",
@@ -9,35 +39,7 @@ const DIAMOND_TO_STONE: Record<string, string> = {
   diamond_clarity: "stone_clarity",
 };
 
-let stoneNamesProbe: Promise<boolean> | null = null;
-
-/**
- * Production purchase-order lines store stone details as diamond_type /
- * diamond_carat / diamond_colour / diamond_clarity (migration 086). Staging
- * was created from migration 084, which named those columns stone_*.
- * PostgREST rejects an entire insert or update when any key is an unknown
- * column, so a payload that includes diamond_* never persists xero_account_*
- * either. Probe once per process and rename only when diamond_* is absent.
- */
-export function poLinesUseStoneColumnNames(supabase: SupabaseClient): Promise<boolean> {
-  if (stoneNamesProbe) return stoneNamesProbe;
-  const probe = (async (): Promise<boolean> => {
-    const { error } = await supabase
-      .from("inventory_po_lines")
-      .select("diamond_type")
-      .limit(1);
-    if (!error) return false;
-    const missing = error.code === "PGRST204" && /diamond_type/i.test(error.message ?? "");
-    if (!missing) {
-      console.error("[po-lines] diamond_type probe failed:", error.message);
-      stoneNamesProbe = null;
-      return false;
-    }
-    return true;
-  })();
-  stoneNamesProbe = probe;
-  return probe;
-}
+const UUID_COLUMNS = new Set(["category_id", "packet_id", "piece_id", "xero_account_id"]);
 
 export function exposePoLineToClient<T extends Record<string, unknown>>(line: T): T {
   return {
@@ -98,22 +100,49 @@ export function renameDiamondColumnsToStone(line: Record<string, unknown>): Reco
   const next: Record<string, unknown> = { ...line };
   for (const [from, to] of Object.entries(DIAMOND_TO_STONE)) {
     if (from in next) {
-      next[to] = next[from];
+      // A form key wins over a stone_* key already on the object.
+      if (!(to in next) || next[from] !== undefined) next[to] = next[from];
       delete next[from];
     }
+  }
+  for (const key of Object.keys(next)) {
+    if (key.startsWith("diamond_")) delete next[key];
   }
   return next;
 }
 
-export async function preparePoLineForWrite(
-  supabase: SupabaseClient,
+function coerceColumn(key: string, value: unknown): unknown {
+  if (UUID_COLUMNS.has(key)) return blankToNull(value);
+  if (typeof value === "string" && value.trim() === "") return null;
+  return value;
+}
+
+/**
+ * Always map diamond_* → stone_* and then keep only columns that exist on
+ * staging. There is no probe: a previous probe failed closed (any error
+ * other than an exact PGRST204 was treated as "diamond_* columns exist"),
+ * so diamond_carat stayed on the insert and PostgREST rejected the line.
+ */
+export function preparePoLineForWrite(
   line: Record<string, unknown>
-): Promise<{ ok: true; line: Record<string, unknown> } | { ok: false; error: string }> {
+): { ok: true; line: Record<string, unknown> } | { ok: false; error: string } {
   const xero = xeroFieldsForWrite(line);
   if (!xero.ok) return xero;
-  let next: Record<string, unknown> = xero.fields ? { ...line, ...xero.fields } : { ...line };
-  if (await poLinesUseStoneColumnNames(supabase)) {
-    next = renameDiamondColumnsToStone(next);
+
+  const renamed = renameDiamondColumnsToStone(xero.fields ? { ...line, ...xero.fields } : { ...line });
+  const next: Record<string, unknown> = {};
+  const id = blankToNull(line.id);
+  if (id) next.id = id;
+
+  for (const key of STAGING_LINE_COLUMNS) {
+    if (key in renamed) next[key] = coerceColumn(key, renamed[key]);
   }
+
+  for (const key of Object.keys(next)) {
+    if (key.startsWith("diamond_")) {
+      return { ok: false, error: "Purchase order line still included a diamond_* column. Save was stopped before it reached the database." };
+    }
+  }
+
   return { ok: true, line: next };
 }

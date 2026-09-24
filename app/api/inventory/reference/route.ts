@@ -19,7 +19,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const [statuses, locations, categories, suppliers] = await Promise.all([
     supabase.from("inventory_statuses").select("*").eq("is_active", true).order("sort_order"),
     supabase.from("inventory_locations").select("*").eq("is_active", true).order("sort_order"),
-    supabase.from("inventory_categories").select("*").eq("is_active", true).order("sort_order"),
+    supabase.from("inventory_categories").select("*").eq("tenant_id", tenantId).eq("is_active", true).order("sort_order"),
     supabase.from("inventory_suppliers").select("*").eq("is_active", true).order("name"),
   ]);
 
