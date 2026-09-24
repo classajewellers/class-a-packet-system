@@ -6,11 +6,12 @@ import { MIN_PASSWORD, replaceWorkshopRoles } from "@/lib/workshopTeam";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-interface WorkshopRole {
+interface WorkshopRoleTag {
   id: string;
-  slug: string;
-  name: string;
-  sort_order: number;
+  key: string;
+  label: string;
+  active: boolean;
+  sort: number;
 }
 
 interface ProfileRow {
@@ -24,21 +25,21 @@ interface ProfileRow {
 
 interface LinkRow {
   profile_id: string;
-  workshop_role_id: string;
+  workshop_role_tag_id: string;
 }
 
 function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-async function loadRoles(supabase: ReturnType<typeof createServerSupabaseClient>, tenantId: string) {
+async function loadRoleTags(supabase: ReturnType<typeof createServerSupabaseClient>, tenantId: string) {
   const { data, error } = await supabase
-    .from("workshop_roles")
-    .select("id, slug, name, sort_order")
+    .from("workshop_role_tags")
+    .select("id, key, label, active, sort")
     .eq("tenant_id", tenantId)
     .eq("active", true)
-    .order("sort_order", { ascending: true });
-  return { roles: (data ?? []) as WorkshopRole[], error };
+    .order("sort", { ascending: true });
+  return { tags: (data ?? []) as WorkshopRoleTag[], error };
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -48,8 +49,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const tenantId = auth.ctx.tenantId;
     const supabase = createServerSupabaseClient();
 
-    const [rolesRes, profilesRes, linksRes] = await Promise.all([
-      loadRoles(supabase, tenantId),
+    const [tagsRes, profilesRes, linksRes] = await Promise.all([
+      loadRoleTags(supabase, tenantId),
       supabase
         .from("profiles")
         .select("id, full_name, email, role, auth_user_id, created_at")
@@ -57,32 +58,32 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         .order("full_name", { ascending: true }),
       supabase
         .from("profile_workshop_roles")
-        .select("profile_id, workshop_role_id")
+        .select("profile_id, workshop_role_tag_id")
         .eq("tenant_id", tenantId),
     ]);
 
-    const error = rolesRes.error ?? profilesRes.error ?? linksRes.error;
+    const error = tagsRes.error ?? profilesRes.error ?? linksRes.error;
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const roles = rolesRes.roles;
-    const roleById = new Map(roles.map((r) => [r.id, r]));
-    const tagsByProfile = new Map<string, WorkshopRole[]>();
+    const tags = tagsRes.tags;
+    const tagById = new Map(tags.map((r) => [r.id, r]));
+    const tagsByProfile = new Map<string, WorkshopRoleTag[]>();
     for (const link of (linksRes.data ?? []) as LinkRow[]) {
-      const role = roleById.get(link.workshop_role_id);
-      if (!role) continue;
+      const tag = tagById.get(link.workshop_role_tag_id);
+      if (!tag) continue;
       const list = tagsByProfile.get(link.profile_id) ?? [];
-      list.push(role);
+      list.push(tag);
       tagsByProfile.set(link.profile_id, list);
     }
 
     const members = ((profilesRes.data ?? []) as ProfileRow[]).map((p) => ({
       ...p,
-      workshop_roles: (tagsByProfile.get(p.id) ?? []).sort((a, b) => a.sort_order - b.sort_order),
+      workshop_role_tags: (tagsByProfile.get(p.id) ?? []).sort((a, b) => a.sort - b.sort),
     }));
 
-    return NextResponse.json({ roles, members });
+    return NextResponse.json({ tags, members });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }

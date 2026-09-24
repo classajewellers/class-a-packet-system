@@ -1,5 +1,8 @@
 -- 164_workshop_roles.sql
 -- Part C — real staff accounts + workshop role tags.
+-- Column names here (slug, name, sort_order) are renamed by
+-- 165_workshop_role_tags.sql to the approved shape:
+-- workshop_role_tags (key, label, active, sort). Apply 165 immediately after.
 -- Replaces workshop_team_members (a name list) with:
 --   workshop_roles            — tenant-scoped role catalog (Jeweller, CAD Designer, …)
 --   profile_workshop_roles    — which profiles hold which workshop roles

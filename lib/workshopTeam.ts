@@ -12,9 +12,10 @@ export async function replaceWorkshopRoles(
   const unique = Array.from(new Set(roleIds));
   if (unique.length > 0) {
     const { data, error } = await supabase
-      .from("workshop_roles")
+      .from("workshop_role_tags")
       .select("id")
       .eq("tenant_id", tenantId)
+      .eq("active", true)
       .in("id", unique);
     if (error) return error.message;
     if ((data ?? []).length !== unique.length) {
@@ -32,10 +33,10 @@ export async function replaceWorkshopRoles(
   if (unique.length === 0) return null;
 
   const { error: insErr } = await supabase.from("profile_workshop_roles").insert(
-    unique.map((workshop_role_id) => ({
+    unique.map((workshop_role_tag_id) => ({
       tenant_id: tenantId,
       profile_id: profileId,
-      workshop_role_id,
+      workshop_role_tag_id,
     }))
   );
   return insErr?.message ?? null;
@@ -61,19 +62,19 @@ export interface WorkshopTeamMember {
   profile_id: null;
   sort_order: number;
   active: boolean;
-  workshop_role_slugs: string[];
+  workshop_role_keys: string[];
 }
 
 interface RoleRow {
   id: string;
-  slug: string;
-  name: string;
+  key: string;
+  label: string;
   active: boolean;
 }
 
 interface LinkRow {
   profile_id: string;
-  workshop_role_id: string;
+  workshop_role_tag_id: string;
 }
 
 interface ProfileRow {
@@ -87,13 +88,13 @@ export async function loadWorkshopTeamMembers(
 ): Promise<{ members: WorkshopTeamMember[]; error: { message: string } | null }> {
   const [rolesRes, linksRes, profilesRes] = await Promise.all([
     supabase
-      .from("workshop_roles")
-      .select("id, slug, name, active")
+      .from("workshop_role_tags")
+      .select("id, key, label, active")
       .eq("tenant_id", tenantId)
       .eq("active", true),
     supabase
       .from("profile_workshop_roles")
-      .select("profile_id, workshop_role_id")
+      .select("profile_id, workshop_role_tag_id")
       .eq("tenant_id", tenantId),
     supabase
       .from("profiles")
@@ -111,20 +112,20 @@ export async function loadWorkshopTeamMembers(
   const profiles = (profilesRes.data ?? []) as ProfileRow[];
   const profileById = new Map(profiles.map((p) => [p.id, p]));
 
-  const slugsByProfile = new Map<string, string[]>();
+  const keysByProfile = new Map<string, string[]>();
   for (const link of (linksRes.data ?? []) as LinkRow[]) {
-    const role = roleById.get(link.workshop_role_id);
+    const role = roleById.get(link.workshop_role_tag_id);
     const profile = profileById.get(link.profile_id);
     if (!role || !profile) continue;
     const name = (profile.full_name ?? "").trim();
     if (!name) continue;
-    const list = slugsByProfile.get(link.profile_id) ?? [];
-    list.push(role.slug);
-    slugsByProfile.set(link.profile_id, list);
+    const list = keysByProfile.get(link.profile_id) ?? [];
+    list.push(role.key);
+    keysByProfile.set(link.profile_id, list);
   }
 
   const members: WorkshopTeamMember[] = [];
-  for (const [profileId, slugs] of Array.from(slugsByProfile.entries())) {
+  for (const [profileId, keys] of Array.from(keysByProfile.entries())) {
     const profile = profileById.get(profileId);
     if (!profile) continue;
     members.push({
@@ -134,7 +135,7 @@ export async function loadWorkshopTeamMembers(
       profile_id: null,
       sort_order: 0,
       active: true,
-      workshop_role_slugs: slugs,
+      workshop_role_keys: keys,
     });
   }
 

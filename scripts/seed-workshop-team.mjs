@@ -82,14 +82,14 @@ async function findAuthUserId(email) {
 }
 
 const { data: jeweller, error: roleError } = await supabase
-  .from("workshop_roles")
+  .from("workshop_role_tags")
   .select("id")
   .eq("tenant_id", CLASS_A_TENANT)
-  .eq("slug", "jeweller")
+  .eq("key", "jeweller")
   .maybeSingle();
 
-if (roleError) fail(`workshop_roles lookup failed: ${roleError.message}. Apply migration 164 on staging first.`);
-if (!jeweller) fail("Jeweller role is missing for Class A. Apply migration 164 on staging first.");
+if (roleError) fail(`workshop_role_tags lookup failed: ${roleError.message}. Apply migrations 164 and 165 on staging first.`);
+if (!jeweller) fail("Jeweller tag is missing for Class A. Apply migrations 164 and 165 on staging first.");
 
 for (const person of PEOPLE) {
   let userId = await findAuthUserId(person.email);
@@ -149,9 +149,9 @@ for (const person of PEOPLE) {
     {
       tenant_id: CLASS_A_TENANT,
       profile_id: userId,
-      workshop_role_id: jeweller.id,
+      workshop_role_tag_id: jeweller.id,
     },
-    { onConflict: "profile_id,workshop_role_id" }
+    { onConflict: "profile_id,workshop_role_tag_id" }
   );
   if (linkError) {
     console.error(`FAIL tag ${person.email}: ${linkError.message}`);
