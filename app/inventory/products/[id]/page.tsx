@@ -34,6 +34,7 @@ export default function ProductDetailPage({ params }: Params) {
 
   const [product, setProduct] = useState<any>(null);
   const [pieces, setPieces]   = useState<any[]>([]);
+  const [variants, setVariants] = useState<Array<{ id: string; name: string | null; metal_karat: string; metal_colour: string; tracking_mode?: string; shopify_variant_id: string | null }>>([]);
   const [atp, setAtp]         = useState<{ in_stock: number; committed: number; available_to_sell_today: number; in_production: Array<{ job_id: string; packet_id: string | null; stage: string; due_date: string | null; workshop_link: string }> } | null>(null);
   const [loading, setLoading] = useState(true);
   const [ref, setRef]         = useState<any>(null);
@@ -57,15 +58,20 @@ export default function ProductDetailPage({ params }: Params) {
   const fetchAll = useCallback(async () => {
     if (!tenantId) return;
     setLoading(true);
-    const [prodRes, refRes] = await Promise.all([
+    const [prodRes, refRes, varRes] = await Promise.all([
       fetch(`/api/inventory/products/${params.id}`, { headers }),
       fetch("/api/inventory/reference", { headers }),
+      fetch(`/api/inventory/products/${params.id}/variants`, { headers }),
     ]);
     if (prodRes.ok) {
       const json = await prodRes.json();
       setProduct(json.product);
       setPieces(json.pieces ?? []);
       setAtp(json.atp ?? null);
+    }
+    if (varRes.ok) {
+      const json = await varRes.json();
+      setVariants(json.variants ?? []);
     }
     if (refRes.ok) setRef(await refRes.json());
     setLoading(false);
@@ -328,6 +334,36 @@ export default function ProductDetailPage({ params }: Params) {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {variants.length > 0 && (
+        <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20, marginBottom: 20 }}>
+          <h2 style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700, color: "#111827" }}>Variants</h2>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {variants.map((variant) => (
+              <div key={variant.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "8px 0", borderTop: "1px solid #F3F4F6" }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>
+                    {variant.name || `${variant.metal_karat} ${variant.metal_colour}`}
+                  </div>
+                  <div style={{ fontSize: 12, color: "#6B7280" }}>
+                    {variant.metal_karat} · {variant.metal_colour}
+                    {variant.tracking_mode === "quantity" ? " · Quantity" : " · Serialized"}
+                    {variant.shopify_variant_id ? ` · Shopify ${variant.shopify_variant_id}` : ""}
+                  </div>
+                </div>
+                {isManager && (
+                  <button
+                    onClick={() => router.push(`/inventory/stock?variant_id=${variant.id}`)}
+                    style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", color: "#374151" }}
+                  >
+                    Stock & reorder
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

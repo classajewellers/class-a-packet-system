@@ -475,8 +475,11 @@ export interface InventorySupplier {
   phone: string | null;
   notes: string | null;
   is_active?: boolean;
-  // legacy fields
+  // legacy single lead time — kept in sync with avg_lead_time_days
   lead_time_days?: number | null;
+  // Reorder points: separate average and maximum, in days (migration 164)
+  avg_lead_time_days?: number | null;
+  max_lead_time_days?: number | null;
   created_at?: string;
   // Supplier Connector Framework (migration 140)
   connector_type?: string | null;

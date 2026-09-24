@@ -8,6 +8,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const body = await req.json()
     const tenantId = req.headers.get('x-tenant-id') ?? ''
     const supabase = await createTenantSupabaseClient(tenantId)
+    const leadUpdate: {
+      lead_time_days?: number | null
+      avg_lead_time_days?: number | null
+      max_lead_time_days?: number | null
+    } = {}
+    if ('avg_lead_time_days' in body || 'lead_time_days' in body) {
+      const avg = 'avg_lead_time_days' in body ? body.avg_lead_time_days : body.lead_time_days
+      leadUpdate.avg_lead_time_days = avg ?? null
+      leadUpdate.lead_time_days = avg ?? null
+    }
+    if ('max_lead_time_days' in body) {
+      leadUpdate.max_lead_time_days = body.max_lead_time_days ?? null
+    }
     const { data, error } = await supabase
       .from('inventory_suppliers')
       .update({
@@ -15,9 +28,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         contact_name: body.contact_name ?? null,
         email: body.email ?? null,
         phone: body.phone ?? null,
-        lead_time_days: body.lead_time_days ?? null,
         notes: body.notes ?? null,
         connector_type: body.connector_type || null,
+        ...leadUpdate,
       })
       .eq('id', params.id)
       .eq('tenant_id', tenantId)

@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { captureShopifyQuantitySales } from "@/lib/quantitySales";
 import { generateReferenceNumber } from "@/lib/referenceNumber";
 import { todayISO } from "@/lib/formatters";
 import { fileVaultBrainSystemReport } from "@/lib/vaultBrainSystemReport";
@@ -547,6 +548,7 @@ async function processOrder(rawBody: Record<string, unknown>, tenantId: string, 
       .maybeSingle();
     if (existing) {
       console.log("[shopify/webhook] duplicate delivery — packet already exists:", existing.reference_number, "id:", existing.id);
+      await captureShopifyQuantitySales(tenantId, rawBody, existing.id);
       await markWebhookEvent(webhookEventId, {
         status: "processed",
         packet_id: existing.id,
@@ -617,6 +619,7 @@ async function processOrder(rawBody: Record<string, unknown>, tenantId: string, 
   }
 
   console.log("[shopify/webhook] Packet saved successfully:", data?.reference_number, "id:", data?.id);
+  await captureShopifyQuantitySales(tenantId, rawBody, data?.id ?? null);
   await markWebhookEvent(webhookEventId, {
     status: "processed",
     packet_id: data?.id ?? null,
