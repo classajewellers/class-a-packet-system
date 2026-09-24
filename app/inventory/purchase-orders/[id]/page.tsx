@@ -1193,7 +1193,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                         {line.packet ? (
                           <div style={{ marginTop: 4 }}>
                             <a
-                              href={`/workshop/board`}
+                              href={`/workshop/board?packet=${line.packet.id}`}
                               style={{
                                 display: "inline-flex", alignItems: "center", gap: 3,
                                 padding: "2px 7px", borderRadius: 6, fontSize: 11, fontWeight: 600,

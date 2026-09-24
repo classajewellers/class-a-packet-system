@@ -131,8 +131,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     let unitPrice: number;
     if (override) {
       unitPrice = Number(line.unit_price);
-      if (Number.isNaN(unitPrice) || unitPrice < 0) {
-        return NextResponse.json({ error: "Custom price must be zero or more" }, { status: 400 });
+      if (Number.isNaN(unitPrice) || unitPrice <= 0) {
+        return NextResponse.json({ error: `${piece.sku ?? "This piece"} needs a price greater than zero` }, { status: 400 });
       }
       unitPrice = roundMoney(unitPrice);
     } else if (sell.price == null) {

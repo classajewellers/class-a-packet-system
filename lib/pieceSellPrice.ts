@@ -11,9 +11,11 @@ export interface SellPrice {
 
 /**
  * Counter price for a piece.
- * Ticket `retail_price` wins — that is what Mark as Sold and the stock list show.
- * When the ticket is blank, fall back to calculate_price().total_retail, the same
- * RPC the piece page uses for live / suggested retail.
+ * Ticket `retail_price` wins when it is a real amount — that is what Mark as
+ * Sold and the stock list show. When the ticket is blank, fall back to
+ * calculate_price().total_retail, the same RPC the piece page uses for live
+ * retail. A zero total from a calc with no weight or components is not a
+ * price: the counter must ask for a custom price instead of ringing $0.00.
  */
 export async function resolvePieceSellPrice(
   supabase: SupabaseClient,
@@ -28,7 +30,7 @@ export async function resolvePieceSellPrice(
 ): Promise<SellPrice> {
   if (piece.retail_price != null && piece.retail_price !== "") {
     const ticket = Number(piece.retail_price);
-    if (!Number.isNaN(ticket)) {
+    if (!Number.isNaN(ticket) && ticket > 0) {
       return { price: roundMoney(ticket), source: "retail_price" };
     }
   }
@@ -49,6 +51,6 @@ export async function resolvePieceSellPrice(
   if (calc.total_retail == null || calc.total_retail === "") return { price: null, source: null };
 
   const live = Number(calc.total_retail);
-  if (Number.isNaN(live)) return { price: null, source: null };
+  if (Number.isNaN(live) || live <= 0) return { price: null, source: null };
   return { price: roundMoney(live), source: "calculate_price" };
 }

@@ -45,7 +45,7 @@ interface CartLine {
   list_price: number | null;
   price_source: SearchPiece["price_source"];
   custom_price_override: boolean;
-  unit_price: number;
+  unit_price: number | null;
 }
 
 interface Receipt {
@@ -93,7 +93,8 @@ function money(value: number | string | null | undefined): number {
   return Number.isNaN(n) ? 0 : n;
 }
 
-function priceLabel(source: CartLine["price_source"]): string {
+function priceLabel(source: CartLine["price_source"], hasPrice: boolean): string {
+  if (!hasPrice) return "Enter price";
   if (source === "calculate_price") return "Live price";
   if (source === "retail_price") return "Retail price";
   return "Custom price";
@@ -203,12 +204,13 @@ export default function PosPage() {
   }, [custQuery]);
 
   const subtotal = useMemo(
-    () => roundMoney(cart.reduce((sum, line) => sum + line.unit_price * line.quantity, 0)),
+    () => roundMoney(cart.reduce((sum, line) => sum + (line.unit_price ?? 0) * line.quantity, 0)),
     [cart]
   );
+  const cartNeedsPrice = cart.some(line => line.unit_price == null || line.unit_price <= 0);
   const total = subtotal;
   const tenderedAmount = tendered.trim() === "" ? null : Number(tendered);
-  const tenderedOk = tenderedAmount != null && !Number.isNaN(tenderedAmount) && toCents(tenderedAmount) >= toCents(total) && toCents(total) > 0;
+  const tenderedOk = !cartNeedsPrice && tenderedAmount != null && !Number.isNaN(tenderedAmount) && toCents(tenderedAmount) >= toCents(total) && toCents(total) > 0;
   const change = tenderedOk && tenderedAmount != null ? roundMoney(tenderedAmount - total) : 0;
 
   const floatAmount = money(session?.expected_cash_float);
@@ -236,7 +238,7 @@ export default function PosPage() {
         list_price: piece.sell_price,
         price_source: piece.price_source,
         custom_price_override: piece.sell_price == null,
-        unit_price: piece.sell_price ?? 0,
+        unit_price: piece.sell_price,
       }];
     });
     setQuery("");
@@ -523,7 +525,7 @@ export default function PosPage() {
                           {piece.available > 1 ? ` · ${piece.available} in stock` : ""}
                         </span>
                       </span>
-                      <span>{piece.sell_price != null ? formatCurrency(piece.sell_price) : "No price"}</span>
+                      <span>{piece.sell_price != null ? formatCurrency(piece.sell_price) : "Enter price"}</span>
                     </span>
                   </button>
                 ))}
@@ -538,7 +540,7 @@ export default function PosPage() {
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                     <div>
                       <div style={{ fontWeight: 600 }}>{line.name}</div>
-                      <div style={{ fontSize: 12, color: "var(--vault-text-secondary)" }}>{line.sku} · {priceLabel(line.custom_price_override ? null : line.price_source)}</div>
+                      <div style={{ fontSize: 12, color: "var(--vault-text-secondary)" }}>{line.sku} · {priceLabel(line.custom_price_override ? null : line.price_source, line.unit_price != null && line.unit_price > 0)}</div>
                     </div>
                     <button type="button" className="vault-btn vault-btn-tertiary" onClick={() => setCart(prev => prev.filter(item => item.piece_id !== line.piece_id))}>
                       Remove
@@ -566,8 +568,8 @@ export default function PosPage() {
                         type="checkbox"
                         checked={line.custom_price_override}
                         onChange={e => updateLine(line.piece_id, {
-                          custom_price_override: e.target.checked,
-                          unit_price: e.target.checked ? line.unit_price : (line.list_price ?? line.unit_price),
+                          custom_price_override: e.target.checked || line.list_price == null,
+                          unit_price: e.target.checked ? line.unit_price : line.list_price,
                         })}
                       />
                       Custom price
@@ -577,14 +579,22 @@ export default function PosPage() {
                       <input
                         className="vault-input"
                         inputMode="decimal"
-                        value={String(line.unit_price)}
-                        disabled={!line.custom_price_override}
-                        onChange={e => updateLine(line.piece_id, { unit_price: Number(e.target.value) || 0 })}
+                        value={line.unit_price == null ? "" : String(line.unit_price)}
+                        placeholder="0.00"
+                        disabled={!line.custom_price_override && line.list_price != null}
+                        onChange={e => {
+                          const raw = e.target.value.trim();
+                          updateLine(line.piece_id, { unit_price: raw === "" ? null : Number(raw) });
+                        }}
                         style={{ width: 120, marginTop: 4 }}
                         aria-label={`Unit price for ${line.name}`}
                       />
                     </label>
-                    <div style={{ marginLeft: "auto", fontWeight: 600 }}>{formatCurrency(roundMoney(line.unit_price * line.quantity))}</div>
+                    <div style={{ marginLeft: "auto", fontWeight: 600 }}>
+                      {line.unit_price != null && line.unit_price > 0
+                        ? formatCurrency(roundMoney(line.unit_price * line.quantity))
+                        : "Enter price"}
+                    </div>
                   </div>
                 </li>
               ))}
@@ -648,6 +658,11 @@ export default function PosPage() {
             </button>
             {tenderedOk && <p style={{ margin: "8px 0 0" }}>Change {formatCurrency(change)}</p>}
 
+            {cartNeedsPrice && cart.length > 0 && (
+              <p style={{ margin: "12px 0 0", fontSize: 13, color: "var(--vault-status-warning)" }}>
+                This piece has no retail price. Enter the price to charge before taking cash.
+              </p>
+            )}
             <button type="submit" className="vault-btn vault-btn-primary" disabled={!tenderedOk || paying || cart.length === 0} style={{ width: "100%", marginTop: 16 }}>
               {paying ? "Taking cash…" : "Take cash"}
             </button>
