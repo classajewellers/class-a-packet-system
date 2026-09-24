@@ -8,12 +8,12 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
 
-interface WorkshopRoleTag {
+interface WorkshopRole {
   id: string;
-  key: string;
-  label: string;
+  slug: string;
+  name: string;
   active: boolean;
-  sort: number;
+  sort_order: number;
 }
 
 interface TeamMember {
@@ -22,7 +22,7 @@ interface TeamMember {
   email: string | null;
   role: string | null;
   auth_user_id: string | null;
-  workshop_role_tags: WorkshopRoleTag[];
+  workshop_roles: WorkshopRole[];
 }
 
 const ROLE_BADGE: Record<string, { bg: string; text: string }> = {
@@ -34,7 +34,7 @@ const ROLE_BADGE: Record<string, { bg: string; text: string }> = {
 export default function TeamSettingsPage() {
   const { user, hydrated } = useUser();
   const router = useRouter();
-  const [tags, setTags] = useState<WorkshopRoleTag[]>([]);
+  const [tags, setTags] = useState<WorkshopRole[]>([]);
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -64,7 +64,7 @@ export default function TeamSettingsPage() {
         setTags([]);
         return;
       }
-      setTags(json.tags ?? []);
+      setTags(json.roles ?? []);
       setMembers(json.members ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load team");
@@ -77,29 +77,29 @@ export default function TeamSettingsPage() {
     if (hydrated && user && canManage(user.role)) load();
   }, [hydrated, user, load]);
 
-  async function toggleTag(member: TeamMember, role: WorkshopRoleTag) {
-    const has = member.workshop_role_tags.some((r) => r.id === role.id);
+  async function toggleTag(member: TeamMember, role: WorkshopRole) {
+    const has = member.workshop_roles.some((r) => r.id === role.id);
     const nextIds = has
-      ? member.workshop_role_tags.filter((r) => r.id !== role.id).map((r) => r.id)
-      : [...member.workshop_role_tags.map((r) => r.id), role.id];
-    const previous = member.workshop_role_tags;
+      ? member.workshop_roles.filter((r) => r.id !== role.id).map((r) => r.id)
+      : [...member.workshop_roles.map((r) => r.id), role.id];
+    const previous = member.workshop_roles;
     const nextRoles = tags.filter((r) => nextIds.includes(r.id));
-    setMembers((list) => list.map((m) => (m.id === member.id ? { ...m, workshop_role_tags: nextRoles } : m)));
+    setMembers((list) => list.map((m) => (m.id === member.id ? { ...m, workshop_roles: nextRoles } : m)));
     setSavingTags(member.id);
     try {
       const res = await fetch(`/api/settings/team/${member.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workshop_role_tag_ids: nextIds }),
+        body: JSON.stringify({ workshop_role_ids: nextIds }),
       });
       const json = await res.json();
       if (!res.ok) {
-        setMembers((list) => list.map((m) => (m.id === member.id ? { ...m, workshop_role_tags: previous } : m)));
+        setMembers((list) => list.map((m) => (m.id === member.id ? { ...m, workshop_roles: previous } : m)));
         showToast(json.error ?? "Could not update workshop roles");
         return;
       }
     } catch {
-      setMembers((list) => list.map((m) => (m.id === member.id ? { ...m, workshop_role_tags: previous } : m)));
+      setMembers((list) => list.map((m) => (m.id === member.id ? { ...m, workshop_roles: previous } : m)));
       showToast("Could not update workshop roles");
     } finally {
       setSavingTags(null);
@@ -174,7 +174,7 @@ export default function TeamSettingsPage() {
                     <td style={td}>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                         {tags.map((role) => {
-                          const on = m.workshop_role_tags.some((r) => r.id === role.id);
+                          const on = m.workshop_roles.some((r) => r.id === role.id);
                           return (
                             <button
                               key={role.id}
@@ -193,7 +193,7 @@ export default function TeamSettingsPage() {
                                 cursor: savingTags === m.id ? "wait" : "pointer",
                               }}
                             >
-                              {role.label}
+                              {role.name}
                             </button>
                           );
                         })}
@@ -261,7 +261,7 @@ function CreateModal({
   onClose,
   onCreated,
 }: {
-  roles: WorkshopRoleTag[];
+  roles: WorkshopRole[];
   onClose: () => void;
   onCreated: (name: string) => void;
 }) {
@@ -295,7 +295,7 @@ function CreateModal({
           email: email.trim(),
           password,
           role,
-          workshop_role_tag_ids: tagIds,
+          workshop_role_ids: tagIds,
         }),
       });
       const json = await res.json();
@@ -348,7 +348,7 @@ function CreateModal({
                   checked={on}
                   onChange={() => setTagIds((ids) => on ? ids.filter((id) => id !== r.id) : [...ids, r.id])}
                 />
-                {r.label}
+                {r.name}
               </label>
             );
           })}

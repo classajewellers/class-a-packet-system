@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requireManager } from "@/lib/require-auth";
-import { MIN_PASSWORD, replaceWorkshopRoleTags } from "@/lib/workshopTeam";
+import { MIN_PASSWORD, replaceWorkshopRoles } from "@/lib/workshopTeam";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-interface WorkshopRoleTag {
+interface WorkshopRole {
   id: string;
-  key: string;
-  label: string;
+  slug: string;
+  name: string;
   active: boolean;
-  sort: number;
+  sort_order: number;
 }
 
 interface ProfileRow {
@@ -25,7 +25,7 @@ interface ProfileRow {
 
 interface LinkRow {
   profile_id: string;
-  workshop_role_tag_id: string;
+  workshop_role_id: string;
 }
 
 function isEmail(value: string): boolean {
@@ -34,12 +34,12 @@ function isEmail(value: string): boolean {
 
 async function loadRoleTags(supabase: ReturnType<typeof createServerSupabaseClient>, tenantId: string) {
   const { data, error } = await supabase
-    .from("workshop_role_tags")
-    .select("id, key, label, active, sort")
+    .from("workshop_roles")
+    .select("id, slug, name, active, sort_order")
     .eq("tenant_id", tenantId)
     .eq("active", true)
-    .order("sort", { ascending: true });
-  return { tags: (data ?? []) as WorkshopRoleTag[], error };
+    .order("sort_order", { ascending: true });
+  return { roles: (data ?? []) as WorkshopRole[], error };
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -58,7 +58,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         .order("full_name", { ascending: true }),
       supabase
         .from("profile_workshop_roles")
-        .select("profile_id, workshop_role_tag_id")
+        .select("profile_id, workshop_role_id")
         .eq("tenant_id", tenantId),
     ]);
 
@@ -67,23 +67,23 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const tags = tagsRes.tags;
-    const tagById = new Map(tags.map((r) => [r.id, r]));
-    const tagsByProfile = new Map<string, WorkshopRoleTag[]>();
+    const roles = tagsRes.roles;
+    const roleById = new Map(roles.map((r) => [r.id, r]));
+    const rolesByProfile = new Map<string, WorkshopRole[]>();
     for (const link of (linksRes.data ?? []) as LinkRow[]) {
-      const tag = tagById.get(link.workshop_role_tag_id);
-      if (!tag) continue;
-      const list = tagsByProfile.get(link.profile_id) ?? [];
-      list.push(tag);
-      tagsByProfile.set(link.profile_id, list);
+      const role = roleById.get(link.workshop_role_id);
+      if (!role) continue;
+      const list = rolesByProfile.get(link.profile_id) ?? [];
+      list.push(role);
+      rolesByProfile.set(link.profile_id, list);
     }
 
     const members = ((profilesRes.data ?? []) as ProfileRow[]).map((p) => ({
       ...p,
-      workshop_role_tags: (tagsByProfile.get(p.id) ?? []).sort((a, b) => a.sort - b.sort),
+      workshop_roles: (rolesByProfile.get(p.id) ?? []).sort((a, b) => a.sort_order - b.sort_order),
     }));
 
-    return NextResponse.json({ tags, members });
+    return NextResponse.json({ roles, members });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
@@ -100,8 +100,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const email = String(body.email ?? "").toLowerCase().trim();
     const role = body.role === "manager" ? "manager" : body.role === "staff" ? "staff" : "";
     const password = String(body.password ?? "");
-    const workshopRoleTagIds: string[] = Array.isArray(body.workshop_role_tag_ids)
-      ? body.workshop_role_tag_ids.filter((id: unknown) => typeof id === "string")
+    const workshopRoleIds: string[] = Array.isArray(body.workshop_role_ids)
+      ? body.workshop_role_ids.filter((id: unknown) => typeof id === "string")
       : [];
 
     if (!fullName || !email || !role) {
@@ -164,8 +164,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "Failed to finish setting up the account" }, { status: 500 });
     }
 
-    if (workshopRoleTagIds.length > 0) {
-      const tagError = await replaceWorkshopRoleTags(supabase, tenantId, userId, workshopRoleTagIds);
+    if (workshopRoleIds.length > 0) {
+      const tagError = await replaceWorkshopRoles(supabase, tenantId, userId, workshopRoleIds);
       if (tagError) {
         return NextResponse.json(
           { error: `Account created, but workshop roles could not be saved: ${tagError}`, id: userId },

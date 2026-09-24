@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export const MIN_PASSWORD = 8;
 
 /** Replace a profile's workshop tags. Role ids must belong to the tenant. Returns an error message, or null. */
-export async function replaceWorkshopRoleTags(
+export async function replaceWorkshopRoles(
   supabase: SupabaseClient,
   tenantId: string,
   profileId: string,
@@ -12,7 +12,7 @@ export async function replaceWorkshopRoleTags(
   const unique = Array.from(new Set(roleIds));
   if (unique.length > 0) {
     const { data, error } = await supabase
-      .from("workshop_role_tags")
+      .from("workshop_roles")
       .select("id")
       .eq("tenant_id", tenantId)
       .eq("active", true)
@@ -33,10 +33,10 @@ export async function replaceWorkshopRoleTags(
   if (unique.length === 0) return null;
 
   const { error: insErr } = await supabase.from("profile_workshop_roles").insert(
-    unique.map((workshop_role_tag_id) => ({
+    unique.map((workshop_role_id) => ({
       tenant_id: tenantId,
       profile_id: profileId,
-      workshop_role_tag_id,
+      workshop_role_id,
     }))
   );
   return insErr?.message ?? null;
@@ -67,14 +67,14 @@ export interface WorkshopTeamMember {
 
 interface RoleRow {
   id: string;
-  key: string;
-  label: string;
+  slug: string;
+  name: string;
   active: boolean;
 }
 
 interface LinkRow {
   profile_id: string;
-  workshop_role_tag_id: string;
+  workshop_role_id: string;
 }
 
 interface ProfileRow {
@@ -88,13 +88,13 @@ export async function loadWorkshopTeamMembers(
 ): Promise<{ members: WorkshopTeamMember[]; error: { message: string } | null }> {
   const [rolesRes, linksRes, profilesRes] = await Promise.all([
     supabase
-      .from("workshop_role_tags")
-      .select("id, key, label, active")
+      .from("workshop_roles")
+      .select("id, slug, name, active")
       .eq("tenant_id", tenantId)
       .eq("active", true),
     supabase
       .from("profile_workshop_roles")
-      .select("profile_id, workshop_role_tag_id")
+      .select("profile_id, workshop_role_id")
       .eq("tenant_id", tenantId),
     supabase
       .from("profiles")
@@ -114,13 +114,13 @@ export async function loadWorkshopTeamMembers(
 
   const keysByProfile = new Map<string, string[]>();
   for (const link of (linksRes.data ?? []) as LinkRow[]) {
-    const role = roleById.get(link.workshop_role_tag_id);
+    const role = roleById.get(link.workshop_role_id);
     const profile = profileById.get(link.profile_id);
     if (!role || !profile) continue;
     const name = (profile.full_name ?? "").trim();
     if (!name) continue;
     const list = keysByProfile.get(link.profile_id) ?? [];
-    list.push(role.key);
+    list.push(role.slug);
     keysByProfile.set(link.profile_id, list);
   }
 

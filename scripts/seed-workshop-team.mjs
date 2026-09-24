@@ -14,9 +14,10 @@
  * (aexfqkaayrcmdehuzpza), unless WORKSHOP_SEED_ALLOW_ANY_HOST=1.
  * Do not point this at production.
  *
- * Run this after supabase/migrations/166_workshop_role_tags.sql. That file
- * creates the catalog; it does not create these logins. Vault DB applies
- * both on staging (aexfqkaayrcmdehuzpza). Not production.
+ * Expects staging table workshop_roles (slug, name, sort_order, active)
+ * and profile_workshop_roles.workshop_role_id. Does not create or rename
+ * those tables. Migration workshop_roles is already applied on staging.
+ * Not production. A later rename to workshop_role_tags is on hold.
  *
  *   WORKSHOP_SEED_PASSWORD='VaultTeam-Practice1' \
  *   NEXT_PUBLIC_SUPABASE_URL='https://aexfqkaayrcmdehuzpza.supabase.co' \
@@ -96,14 +97,14 @@ async function findAuthUserId(email) {
 }
 
 const { data: jeweller, error: roleError } = await supabase
-  .from("workshop_role_tags")
+  .from("workshop_roles")
   .select("id")
   .eq("tenant_id", CLASS_A_TENANT)
-  .eq("key", "jeweller")
+  .eq("slug", "jeweller")
   .maybeSingle();
 
-if (roleError) fail(`workshop_role_tags lookup failed: ${roleError.message}. Apply supabase/migrations/166_workshop_role_tags.sql on staging first.`);
-if (!jeweller) fail("Jeweller tag is missing for Class A. Apply supabase/migrations/166_workshop_role_tags.sql on staging first.");
+if (roleError) fail(`workshop_roles lookup failed: ${roleError.message}. Table workshop_roles (slug, name, sort_order, active) must already exist. This script does not rename it.`);
+if (!jeweller) fail("Jeweller row is missing for Class A on workshop_roles (slug = jeweller).");
 
 for (const person of PEOPLE) {
   let userId = await findAuthUserId(person.email);
@@ -163,9 +164,9 @@ for (const person of PEOPLE) {
     {
       tenant_id: CLASS_A_TENANT,
       profile_id: userId,
-      workshop_role_tag_id: jeweller.id,
+      workshop_role_id: jeweller.id,
     },
-    { onConflict: "profile_id,workshop_role_tag_id" }
+    { onConflict: "profile_id,workshop_role_id" }
   );
   if (linkError) {
     console.error(`FAIL tag ${person.email}: ${linkError.message}`);

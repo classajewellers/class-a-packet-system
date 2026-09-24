@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requireManager } from "@/lib/require-auth";
-import { MIN_PASSWORD, replaceWorkshopRoleTags } from "@/lib/workshopTeam";
+import { MIN_PASSWORD, replaceWorkshopRoles } from "@/lib/workshopTeam";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -53,9 +53,9 @@ export async function PATCH(
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    if (Array.isArray(body.workshop_role_tag_ids)) {
-      const roleIds = body.workshop_role_tag_ids.filter((id: unknown) => typeof id === "string") as string[];
-      const tagError = await replaceWorkshopRoleTags(supabase, tenantId, profileId, roleIds);
+    if (Array.isArray(body.workshop_role_ids)) {
+      const roleIds = body.workshop_role_ids.filter((id: unknown) => typeof id === "string") as string[];
+      const tagError = await replaceWorkshopRoles(supabase, tenantId, profileId, roleIds);
       if (tagError) return NextResponse.json({ error: tagError }, { status: 400 });
     }
 
