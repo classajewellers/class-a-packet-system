@@ -1217,7 +1217,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
               disabled={sendingPo || po.lines.length === 0}
               style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "#1D4ED8", color: "#fff", fontSize: 14, fontWeight: 600, cursor: sendingPo ? "wait" : "pointer", opacity: sendingPo || po.lines.length === 0 ? 0.6 : 1 }}
             >
-              {sendingPo ? "Sending…" : po.status === "draft" ? "Send to supplier" : "Send again"}
+              {po.status === "draft" ? (sendingPo ? "Sending…" : "Send to supplier") : "Download attachment"}
             </button>
           )}
           {canReceive && (
