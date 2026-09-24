@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { preparePoLineForWrite } from "@/lib/poLineColumns";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -76,6 +77,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const body = await req.json();
   const { lines, po_number: clientPoNumber, ...poData } = body;
 
+  // Validate line writes (including Xero account id/code/name) before creating
+  // the header, so a rejected account does not leave an empty purchase order.
+  const preparedLines: Record<string, unknown>[] = [];
+  if (Array.isArray(lines)) {
+    for (const line of lines) {
+      if (!line || typeof line !== "object") {
+        return NextResponse.json({ error: "Each purchase order line must be an object" }, { status: 400 });
+      }
+      const prepared = await preparePoLineForWrite(supabase, line as Record<string, unknown>);
+      if (!prepared.ok) return NextResponse.json({ error: prepared.error }, { status: 400 });
+      preparedLines.push(prepared.line);
+    }
+  }
+
   const year = new Date().getFullYear();
   const po_number = clientPoNumber?.trim()
     ? clientPoNumber.trim()
@@ -90,8 +105,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (poErr) return NextResponse.json({ error: poErr.message }, { status: 500 });
 
   // Insert lines if provided
-  if (Array.isArray(lines) && lines.length > 0) {
-    const lineInserts = lines.map((l: any) => ({
+  if (preparedLines.length > 0) {
+    const lineInserts = preparedLines.map(l => ({
       ...l,
       po_id:     po.id,
       tenant_id: tenantId,

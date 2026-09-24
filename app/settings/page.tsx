@@ -25,7 +25,23 @@ interface XeroConnection {
   xero_tenant_name?: string | null;
   scopes?: string | null;
   connected_at?: string | null;
+  missing_scopes?: string[];
+  reconnect_required?: boolean;
+  error?: string;
 }
+
+const XERO_OAUTH_ERRORS: Record<string, string> = {
+  missing_params: "Xero did not return a login code. Start the connection again from this page.",
+  invalid_state: "The Xero login link expired or did not match this site. Start the connection again from this page.",
+  oauth_not_configured: "Xero login is not configured on this site.",
+  token_exchange_failed: "Xero rejected the login. On a Preview link, that link’s callback address must be saved in the Xero app. Connect again from this same address.",
+  no_access_token: "Xero did not return an access token. Connect again.",
+  token_exchange_error: "Xero login failed before a token was saved. Connect again.",
+  connections_lookup_failed: "Xero signed in, but Vault could not read which organisation you picked. Connect again.",
+  no_xero_organisation: "No Xero organisation was authorised. Connect again and choose an organisation.",
+  connections_lookup_error: "Vault could not reach Xero to confirm the organisation. Connect again.",
+  db_error: "Xero authorised the connection, but Vault could not save it. Connect again.",
+};
 type Section = 'integrations' | 'pricing' | 'store';
 type PricingTab = 'metal' | 'fixed' | 'margin' | 'melee';
 
@@ -66,6 +82,7 @@ export default function SettingsPage() {
   const [xeroConn, setXeroConn] = useState<XeroConnection | null>(null);
   const [xeroConnLoading, setXeroConnLoading] = useState(false);
   const [xeroDisconnecting, setXeroDisconnecting] = useState(false);
+  const [xeroNotice, setXeroNotice] = useState<{ kind: "ok" | "error"; message: string } | null>(null);
 
 
   /* Pricing state */
@@ -101,9 +118,17 @@ export default function SettingsPage() {
   /* Shopify/Xero: read query params on load (success/error redirected back from OAuth) */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const xeroError = params.get("xero_error");
+    const xeroConnected = params.get("xero_connected");
+    if (xeroError) {
+      setXeroNotice({ kind: "error", message: XERO_OAUTH_ERRORS[xeroError] ?? `Xero connection failed (${xeroError}).` });
+    } else if (xeroConnected) {
+      setXeroNotice({ kind: "ok", message: "Xero connected. Purchase order lines can now pick a Chart of Accounts account." });
+      setXeroConn(null);
+    }
     if (
       params.get("shopify_connected") || params.get("shopify_error") || params.get("webhook_warning") ||
-      params.get("xero_connected") || params.get("xero_error")
+      xeroConnected || xeroError
     ) {
       setSection('integrations');
       // Remove query params without full reload
@@ -143,22 +168,40 @@ export default function SettingsPage() {
     if (section !== 'integrations' || !user?.tenantId || xeroConn !== null || xeroConnLoading) return;
     setXeroConnLoading(true);
     fetch('/api/xero/connection', { headers: { 'x-tenant-id': user.tenantId } })
-      .then(r => r.json())
-      .then((json: XeroConnection) => setXeroConn(json))
-      .catch(() => setXeroConn({ connected: false }))
+      .then(async r => {
+        const json = await r.json() as XeroConnection;
+        if (!r.ok) {
+          setXeroNotice({ kind: "error", message: json.error || "Could not load the Xero connection." });
+          setXeroConn({ connected: false });
+          return;
+        }
+        setXeroConn(json);
+      })
+      .catch(() => {
+        setXeroNotice({ kind: "error", message: "Could not load the Xero connection." });
+        setXeroConn({ connected: false });
+      })
       .finally(() => setXeroConnLoading(false));
   }, [section, user, xeroConn, xeroConnLoading]);
 
   /* Xero: disconnect */
   async function disconnectXero() {
-    if (!confirm('Disconnect Xero? Purchase order sync will stop.')) return;
+    if (!confirm('Disconnect Xero? Saved account choices on existing purchase orders stay as they are. New lines cannot pick an account until you connect again.')) return;
     setXeroDisconnecting(true);
     try {
-      await fetch('/api/xero/connection', {
+      const res = await fetch('/api/xero/connection', {
         method: 'DELETE',
         headers: { 'x-tenant-id': user?.tenantId ?? '' },
       });
+      const json = await res.json().catch(() => ({} as { error?: string }));
+      if (!res.ok) {
+        setXeroNotice({ kind: "error", message: json.error || "Could not disconnect Xero." });
+        return;
+      }
       setXeroConn({ connected: false });
+      setXeroNotice({ kind: "ok", message: "Xero disconnected." });
+    } catch {
+      setXeroNotice({ kind: "error", message: "Could not disconnect Xero." });
     } finally {
       setXeroDisconnecting(false);
     }
@@ -511,6 +554,16 @@ export default function SettingsPage() {
 
             {/* ── Xero Connect ── */}
             <div style={{ ...card, padding: 24, marginTop: 16 }}>
+              {xeroNotice && (
+                <div style={{
+                  marginBottom: 14, padding: '10px 14px', borderRadius: 8, fontSize: 13,
+                  background: xeroNotice.kind === 'error' ? '#FEF2F2' : '#F0FDF4',
+                  border: `1px solid ${xeroNotice.kind === 'error' ? '#FECACA' : '#BBF7D0'}`,
+                  color: xeroNotice.kind === 'error' ? '#B91C1C' : '#166534',
+                }}>
+                  {xeroNotice.message}
+                </div>
+              )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
                 <div style={{ width: 32, height: 32, borderRadius: 8, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth={1.8}>
@@ -538,10 +591,21 @@ export default function SettingsPage() {
                       Connected {formatDateAU(xeroConn.connected_at.split('T')[0])}
                     </p>
                   )}
+                  {xeroConn.reconnect_required ? (
+                    <div style={{ marginBottom: 12, padding: '10px 12px', borderRadius: 8, background: '#FFFBEB', border: '1px solid #FDE68A', fontSize: 13, color: '#92400E', lineHeight: 1.45 }}>
+                      Reconnect Xero to grant permissions this connection is missing: {(xeroConn.missing_scopes ?? []).join(', ')}.
+                      Chart of Accounts needs accounting.settings.read. Contacts and attachments are included so later supplier-bill work does not need another reconnect.
+                      Reconnecting replaces the saved tokens. Purchase orders already saved are unchanged.
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: 12, color: '#6B7280', marginBottom: 12 }}>
+                      Chart of Accounts is available on each purchase order line.
+                    </p>
+                  )}
                   <div style={{ display: 'flex', gap: 8 }}>
                     <a
                       href="/api/xero/oauth/install"
-                      style={{ fontSize: 13, fontWeight: 600, color: 'var(--vault-text)', background: 'var(--vault-surface-selected)', border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', textDecoration: 'none' }}
+                      style={{ fontSize: 13, fontWeight: 600, color: '#fff', background: '#2563EB', border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', textDecoration: 'none' }}
                     >
                       Reconnect
                     </a>
@@ -556,8 +620,10 @@ export default function SettingsPage() {
                 </div>
               ) : (
                 <div>
-                  <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 12 }}>
-                    Connect Xero to sync purchase orders.
+                  <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 12, lineHeight: 1.45 }}>
+                    Connect Xero so each purchase order line can pick an expense account.
+                    Vault asks for invoices, contacts, Chart of Accounts, and attachments.
+                    If you connected before those permissions were added, use Reconnect — refreshing the token does not add them.
                   </p>
                   <a
                     href="/api/xero/oauth/install"

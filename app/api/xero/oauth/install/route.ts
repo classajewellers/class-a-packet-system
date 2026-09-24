@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createHmac, randomBytes } from "crypto";
 import { resolveEffectiveRole, EFFECTIVE_ROLE_COOKIE } from "@/lib/effective-role";
+import { oauthAppUrl, XERO_OAUTH_SCOPES } from "@/lib/xero";
 
 export const dynamic = "force-dynamic";
 
@@ -31,9 +32,9 @@ export const dynamic = "force-dynamic";
 // uploaded supplier invoice PDF/photo to the created bill) requires it.
 // Write scope, not .read, since we're uploading a file, not just viewing
 // existing ones. Confirmed with Josh: another reconnect is required and
-// accepted.
-const SCOPES = "openid profile email offline_access accounting.invoices accounting.contacts accounting.settings.read accounting.attachments";
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://jewelleryvault.com.au";
+// accepted. The live list is XERO_OAUTH_SCOPES in lib/xero.ts so the
+// Settings "reconnect" check cannot drift from what install requests.
+const SCOPES = XERO_OAUTH_SCOPES;
 
 // Encode { tenantId, nonce, exp } signed with XERO_CLIENT_SECRET — same
 // stateless-state pattern as app/api/shopify/oauth/install/route.ts.
@@ -99,7 +100,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   // ── 3. Build signed state and redirect to Xero's hosted consent screen ──────
   const state       = buildState(profile.tenant_id);
-  const redirectUri = `${APP_URL}/api/xero/oauth/callback`;
+  const redirectUri = `${oauthAppUrl(req)}/api/xero/oauth/callback`;
   const authUrl     = new URL("https://login.xero.com/identity/connect/authorize");
   authUrl.searchParams.set("response_type", "code");
   authUrl.searchParams.set("client_id",     clientId);

@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { InventoryReferenceData } from "@/lib/types";
+import { loadXeroAccounts, XeroAccountsLoad } from "@/lib/xeroAccounts";
+import { XeroAccountSelect } from "@/components/XeroAccountSelect";
 import { ArrowLeft, Plus, X, Sparkles, Loader } from "lucide-react";
 
 interface OpenPacket {
@@ -13,8 +15,6 @@ interface OpenPacket {
   customer_last_name: string | null;
   packet_type: string | null;
 }
-
-interface XeroAccountOption { id: string; code: string; name: string; type: string; }
 
 interface PoLine {
   _id: string; // local only
@@ -131,20 +131,16 @@ export default function NewPurchaseOrderPage() {
   const [saveAs, setSaveAs]     = useState<"draft" | "ordered">("draft");
   const [error, setError]       = useState("");
 
-  // Xero accounts for the per-line "Xero Account" dropdown — fetched once;
-  // null while loading, empty array if Xero isn't connected or the fetch
-  // failed (the dropdown degrades to "not connected", not an error state,
-  // since Xero is optional).
-  const [xeroAccounts, setXeroAccounts] = useState<XeroAccountOption[] | null>(null);
+  const [xeroAccounts, setXeroAccounts] = useState<XeroAccountsLoad>({ status: "loading" });
 
   const headers = { "x-tenant-id": tenantId };
 
   const fetchRef = useCallback(async () => {
     if (!tenantId) return;
-    const [refRes, pktsRes, xeroRes] = await Promise.all([
+    const [refRes, pktsRes, xeroLoad] = await Promise.all([
       fetch("/api/inventory/reference", { headers }),
       fetch("/api/inventory/open-packets", { headers }),
-      fetch("/api/xero/accounts", { headers }),
+      loadXeroAccounts(headers),
     ]);
     if (refRes.ok) {
       const json = await refRes.json();
@@ -155,12 +151,7 @@ export default function NewPurchaseOrderPage() {
       const json = await pktsRes.json();
       setOpenPackets(json.packets ?? []);
     }
-    if (xeroRes.ok) {
-      const json = await xeroRes.json();
-      setXeroAccounts(json.accounts ?? []);
-    } else {
-      setXeroAccounts([]);
-    }
+    setXeroAccounts(xeroLoad);
   }, [tenantId]);
 
   useEffect(() => { fetchRef(); }, [fetchRef]);
@@ -387,25 +378,18 @@ export default function NewPurchaseOrderPage() {
                 </div>
                 <div>
                   <label style={LF}>Xero Account</label>
-                  <select
-                    value={line.xero_account_id}
-                    onChange={e => {
-                      const acc = xeroAccounts?.find(a => a.id === e.target.value);
-                      updateLine(line._id, {
-                        xero_account_id:   acc?.id ?? "",
-                        xero_account_code: acc?.code ?? "",
-                        xero_account_name: acc?.name ?? "",
-                      });
-                    }}
+                  <XeroAccountSelect
+                    load={xeroAccounts}
+                    accountId={line.xero_account_id}
+                    accountCode={line.xero_account_code}
+                    accountName={line.xero_account_name}
+                    onChange={acc => updateLine(line._id, {
+                      xero_account_id:   acc?.id ?? "",
+                      xero_account_code: acc?.code ?? "",
+                      xero_account_name: acc?.name ?? "",
+                    })}
                     style={{ ...IF, background: "#fff" }}
-                  >
-                    <option value="">
-                      {xeroAccounts === null ? "Loading…" : xeroAccounts.length === 0 ? "Xero not connected" : "—"}
-                    </option>
-                    {xeroAccounts?.map(a => (
-                      <option key={a.id} value={a.id}>{a.code ? `${a.code} — ${a.name}` : a.name}</option>
-                    ))}
-                  </select>
+                  />
                 </div>
                 <div>
                   <label style={LF}>Metal Type</label>

@@ -4,12 +4,12 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage, canSeeCosts } from "@/lib/userTypes";
+import { loadXeroAccounts, XeroAccountsLoad } from "@/lib/xeroAccounts";
 import { ArrowLeft, Package, CheckCircle2, SkipForward, Sparkles, Loader, X, ChevronDown, DollarSign, Pencil, Ban, AlertTriangle, Plus, Trash2 } from "lucide-react";
 import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
+import { XeroAccountSelect } from "@/components/XeroAccountSelect";
 
 type POStatus = "draft" | "ordered" | "partially_received" | "received" | "cancelled";
-
-interface XeroAccountOption { id: string; code: string; name: string; type: string; }
 
 interface PoLine {
   id: string;
@@ -511,7 +511,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   const [locations, setLocations]   = useState<any[]>([]);
   const [products, setProducts]     = useState<any[]>([]);
   const [suppliers, setSuppliers]   = useState<{ id: string; name: string }[]>([]);
-  const [xeroAccounts, setXeroAccounts] = useState<XeroAccountOption[] | null>(null);
+  const [xeroAccounts, setXeroAccounts] = useState<XeroAccountsLoad>({ status: "loading" });
   const [showReceive, setShowReceive] = useState(false);
   const [receivedCount, setReceivedCount] = useState(0);
   const [allDone, setAllDone] = useState(false);
@@ -542,11 +542,11 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   const fetchPo = useCallback(async () => {
     if (!tenantId) return;
     setLoading(true);
-    const [poRes, refRes, prodRes, xeroRes] = await Promise.all([
+    const [poRes, refRes, prodRes, xeroLoad] = await Promise.all([
       fetch(`/api/inventory/purchase-orders/${params.id}`, { headers }),
       fetch("/api/inventory/reference", { headers }),
       fetch("/api/inventory/products?limit=500", { headers }),
-      fetch("/api/xero/accounts", { headers }),
+      loadXeroAccounts(headers),
     ]);
     if (poRes.ok) {
       const json = await poRes.json();
@@ -562,7 +562,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
       const json = await prodRes.json();
       setProducts(json.products ?? []);
     }
-    setXeroAccounts(xeroRes.ok ? (await xeroRes.json()).accounts ?? [] : []);
+    setXeroAccounts(xeroLoad);
     setLoading(false);
   }, [tenantId, params.id]);
 
@@ -903,25 +903,18 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                     </div>
                     <div>
                       <label style={LF}>Xero Account</label>
-                      <select
-                        value={line.xero_account_id}
-                        onChange={e => {
-                          const acc = xeroAccounts?.find(a => a.id === e.target.value);
-                          setLine({
-                            xero_account_id:   acc?.id ?? "",
-                            xero_account_code: acc?.code ?? "",
-                            xero_account_name: acc?.name ?? "",
-                          });
-                        }}
+                      <XeroAccountSelect
+                        load={xeroAccounts}
+                        accountId={line.xero_account_id}
+                        accountCode={line.xero_account_code}
+                        accountName={line.xero_account_name}
+                        onChange={acc => setLine({
+                          xero_account_id:   acc?.id ?? "",
+                          xero_account_code: acc?.code ?? "",
+                          xero_account_name: acc?.name ?? "",
+                        })}
                         style={{ ...IF, background: "#fff" }}
-                      >
-                        <option value="">
-                          {xeroAccounts === null ? "Loading…" : xeroAccounts.length === 0 ? "Xero not connected" : "—"}
-                        </option>
-                        {xeroAccounts?.map(a => (
-                          <option key={a.id} value={a.id}>{a.code ? `${a.code} — ${a.name}` : a.name}</option>
-                        ))}
-                      </select>
+                      />
                     </div>
                     <div>
                       <label style={LF}>Metal Type</label>
@@ -1185,6 +1178,11 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                       <td style={{ padding: "10px 16px", color: "#374151", maxWidth: 240 }}>
                         <div>{line.title ?? <span style={{ color: "#D1D5DB" }}>—</span>}</div>
                         {(() => { const catName = categories.find(c => c.id === line.category_id)?.name; return catName ? <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>{catName}</div> : null; })()}
+                        {(line.xero_account_code || line.xero_account_name) && (
+                          <div style={{ fontSize: 11, color: "#1D4ED8", marginTop: 2 }}>
+                            Xero: {[line.xero_account_code, line.xero_account_name].filter(Boolean).join(" — ")}
+                          </div>
+                        )}
                         {line.supplier_design_no && (
                           <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2, fontFamily: "monospace" }}>
                             Ref: {line.supplier_design_no}

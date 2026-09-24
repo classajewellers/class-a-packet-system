@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { tenantScoped } from "@/lib/tenantScoped";
+import { exposePoLineToClient, preparePoLineForWrite } from "@/lib/poLineColumns";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -48,7 +49,7 @@ export async function GET(
     return NextResponse.json({ error: linesErr.message }, { status: 500 });
   }
 
-  const lineRows = lines ?? [];
+  const lineRows = (lines ?? []).map((line: Record<string, unknown>) => exposePoLineToClient(line));
   const lineIds   = lineRows.map((l: any) => l.id);
   const packetIds = lineRows.map((l: any) => l.packet_id).filter(Boolean);
 
@@ -120,18 +121,46 @@ export async function PATCH(
     if (delErr) return NextResponse.json({ error: `Line delete failed: ${delErr.message}` }, { status: 500 });
   }
 
-  // Upsert lines if provided — lines with id are updated, lines without id are inserted
+  // Upsert lines if provided — lines with id are updated, lines without id are inserted.
+  // Prepare every line first so a bad Xero account fails the request before
+  // any line is written.
   if (Array.isArray(lines)) {
+    const preparedLines: Record<string, unknown>[] = [];
     for (const line of lines) {
+      if (!line || typeof line !== "object") {
+        return NextResponse.json({ error: "Each purchase order line must be an object" }, { status: 400 });
+      }
+      const prepared = await preparePoLineForWrite(supabase, line as Record<string, unknown>);
+      if (!prepared.ok) return NextResponse.json({ error: prepared.error }, { status: 400 });
+      preparedLines.push(prepared.line);
+    }
+
+    for (const line of preparedLines) {
       if (line.id) {
-        const { id: lineId, category: _cat, piece: _pc, packet: _pkt, ...lineUpdate } = line;
+        const {
+          id: lineId,
+          category: _cat,
+          piece: _pc,
+          pieces: _pcs,
+          packet: _pkt,
+          forOrder: _forOrder,
+          ...lineUpdate
+        } = line;
         const { error: luErr } = await tenantScoped(supabase, tenantId)
           .from("inventory_po_lines").update(lineUpdate).eq("id", lineId);
         if (luErr) return NextResponse.json({ error: `Line update failed: ${luErr.message}` }, { status: 500 });
       } else {
         // Destructure id out so an empty-string id from the UI is never sent —
         // Postgres rejects "" for a UUID column; omitting it triggers the DB default.
-        const { id: _newLineId, ...insertData } = line;
+        const {
+          id: _newLineId,
+          category: _cat,
+          piece: _pc,
+          pieces: _pcs,
+          packet: _pkt,
+          forOrder: _forOrder,
+          ...insertData
+        } = line;
         const { error: liErr } = await tenantScoped(supabase, tenantId)
           .from("inventory_po_lines").insert({
             ...insertData, po_id: params.id, received: false,

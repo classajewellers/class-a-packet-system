@@ -35,8 +35,9 @@ const PUBLIC_PAGE_PATTERNS = [/^\/quote\/[^/]+\/order$/];
 //   (verify-pin is NOT here — it requires a session so the tenant can be derived)
 //   Inbound webhooks (server-to-server; verify their own signature/HMAC):
 //     /api/shopify/webhook, /api/twilio/webhook, /api/stripe/webhook, /api/billing/webhook
-//   OAuth redirect (browser redirect from Shopify; verifies HMAC + state itself):
+//   OAuth redirect (browser redirect from the provider; verifies HMAC + state itself):
 //     /api/shopify/oauth/callback
+//     /api/xero/oauth/callback
 //   Public store list (pre-auth login store selector; GET-only, non-sensitive):
 //     /api/tenants
 const API_PUBLIC_ROUTES = new Set([
@@ -49,6 +50,7 @@ const API_PUBLIC_ROUTES = new Set([
   // authenticated.
   "/api/shopify/webhook",
   "/api/shopify/oauth/callback",
+  "/api/xero/oauth/callback",
   "/api/twilio/webhook",
   "/api/stripe/webhook",
   "/api/billing/webhook",
