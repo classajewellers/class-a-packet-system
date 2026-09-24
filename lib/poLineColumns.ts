@@ -25,7 +25,6 @@ const STAGING_LINE_COLUMNS = [
   "estimated_cost",
   "actual_cost",
   "supplier_design_no",
-  "sku",
   "packet_id",
   "received_quantity",
   "xero_account_id",
@@ -144,9 +143,5 @@ export function preparePoLineForWrite(
       return { ok: false, error: "Purchase order line still included a diamond_* column. Save was stopped before it reached the database." };
     }
   }
-  // A blank SKU is omitted so a purchase order can still save before the
-  // SKU column exists. A typed SKU is sent and fails clearly if it is missing.
-  if (next.sku == null) delete next.sku;
-
   return { ok: true, line: next };
 }

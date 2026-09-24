@@ -216,7 +216,6 @@ export async function POST(
       unit_cost: line.unit_cost as number | null,
       xero_account_code: line.xero_account_code as string | null,
       xero_account_name: line.xero_account_name as string | null,
-      sku: line.sku as string | null,
       supplier_design_no: line.supplier_design_no as string | null,
       jobRef: line.packet_id ? packetRef.get(String(line.packet_id)) ?? null : null,
     })),

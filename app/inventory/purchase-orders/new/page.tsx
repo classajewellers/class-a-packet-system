@@ -33,7 +33,6 @@ interface PoLine {
   quantity: string;
   estimated_cost: string;
   supplier_design_no: string;
-  sku: string;
   forOrder: boolean; // local state only — tracks "Stock" vs "Customer Order" mode
   packet_id: string; // uuid when an order is selected, "" when none yet chosen
   notes: string;
@@ -55,7 +54,7 @@ function blankLine(): PoLine {
     _id: crypto.randomUUID(),
     title: "", category_id: "", metal_type: "", metal_karat: "", metal_colour: "",
     stone_type: "", stone_carat: "", stone_colour: "", stone_clarity: "",
-    finger_size: "", quantity: "1", estimated_cost: "", supplier_design_no: "", sku: "",
+    finger_size: "", quantity: "1", estimated_cost: "", supplier_design_no: "",
     forOrder: false, packet_id: "", notes: "",
     xero_account_id: "", xero_account_code: "", xero_account_name: "",
     aiDesc: "", aiLoading: false,
@@ -231,7 +230,6 @@ export default function NewPurchaseOrderPage() {
         quantity:           parseInt(l.quantity)  || 1,
         estimated_cost:     l.estimated_cost ? parseFloat(l.estimated_cost) : null,
         supplier_design_no: l.supplier_design_no || null,
-        sku:                l.sku || null,
         packet_id:          l.packet_id          || null,
         notes:              l.notes              || null,
       })),
@@ -430,11 +428,7 @@ export default function NewPurchaseOrderPage() {
                     </div>
                     <div>
                       <label style={LF}>SKU</label>
-                      <input value={line.sku} onChange={e => updateLine(line._id, { sku: e.target.value })} placeholder="Product code" style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Supplier Design No.</label>
-                      <input value={line.supplier_design_no} onChange={e => updateLine(line._id, { supplier_design_no: e.target.value })} placeholder="Supplier's ref/job no." style={IF} />
+                      <input value={line.supplier_design_no} onChange={e => updateLine(line._id, { supplier_design_no: e.target.value })} placeholder="Product code" style={IF} />
                     </div>
                     <div style={{ gridColumn: "1 / -1" }}>
                       <label style={LF}>For</label>

@@ -40,7 +40,6 @@ interface PoLine {
   estimated_cost: number | null;
   actual_cost: number | null;
   supplier_design_no: string | null;
-  sku: string | null;
   packet_id: string | null;
   packet?: {
     id: string;
@@ -75,7 +74,6 @@ interface EditPoLine {
   estimated_cost: string;
   actual_cost: number | null;
   supplier_design_no: string;
-  sku: string;
   packet_id: string;
   notes: string;
   received: boolean;
@@ -733,7 +731,6 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
       estimated_cost:    l.estimated_cost != null ? String(l.estimated_cost) : "",
       actual_cost:       l.actual_cost,
       supplier_design_no: l.supplier_design_no ?? "",
-      sku:               l.sku               ?? "",
       packet_id:         l.packet_id         ?? "",
       notes:             l.notes             ?? "",
       received:          l.received,
@@ -799,7 +796,6 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
           quantity:          Number(l.quantity)  || 1,
           estimated_cost:    l.estimated_cost    ? Number(l.estimated_cost) : null,
           supplier_design_no: l.supplier_design_no || null,
-          sku:               l.sku || null,
           packet_id:         l.forOrder ? (l.packet_id || null) : null,
           notes:             l.notes             || null,
         })),
@@ -1031,11 +1027,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                         </div>
                         <div>
                           <label style={LF}>SKU</label>
-                          <input value={line.sku} onChange={e => setLine({ sku: e.target.value })} placeholder="Product code" style={IF} />
-                        </div>
-                        <div>
-                          <label style={LF}>Supplier Design No</label>
-                          <input value={line.supplier_design_no} onChange={e => setLine({ supplier_design_no: e.target.value })} style={IF} />
+                          <input value={line.supplier_design_no} onChange={e => setLine({ supplier_design_no: e.target.value })} placeholder="Product code" style={IF} />
                         </div>
                       </>
                     }
@@ -1152,7 +1144,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
             metal_type: "", metal_karat: "",
             metal_colour: "", diamond_type: "", diamond_carat: "", diamond_colour: "",
             diamond_clarity: "", finger_size: "", quantity: "1", estimated_cost: "",
-            actual_cost: null, supplier_design_no: "", sku: "", packet_id: "", notes: "",
+            actual_cost: null, supplier_design_no: "", packet_id: "", notes: "",
             received: false, forOrder: false,
           }])}
           style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, padding: "8px 16px", borderRadius: 8, border: "1px dashed #D1D5DB", background: "#fff", color: "#6B7280", fontSize: 13, cursor: "pointer", width: "100%" }}
@@ -1338,14 +1330,9 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                             Xero: {[line.xero_account_code, line.xero_account_name].filter(Boolean).join(" — ")}
                           </div>
                         )}
-                        {line.sku && (
-                          <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2, fontFamily: "monospace" }}>
-                            SKU: {line.sku}
-                          </div>
-                        )}
                         {line.supplier_design_no && (
                           <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2, fontFamily: "monospace" }}>
-                            Ref: {line.supplier_design_no}
+                            SKU: {line.supplier_design_no}
                           </div>
                         )}
                         {line.packet ? (

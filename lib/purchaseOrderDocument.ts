@@ -15,7 +15,7 @@ export interface PoDocumentLine {
   unit_cost?: number | string | null;
   xero_account_code?: string | null;
   xero_account_name?: string | null;
-  sku?: string | null;
+  /** Printed in the SKU column. Stored as supplier_design_no. */
   supplier_design_no?: string | null;
   /** Short packet or job code. Never a customer name. */
   jobRef?: string | null;
@@ -152,13 +152,12 @@ export function generatePurchaseOrderHTML(input: PoDocumentInput): string {
   const rows = input.lines.map((line, index) => {
     const cost = poLineCost(line);
     const what = poLineDescription(line);
-    const supplierRef = textOrNull(line.supplier_design_no);
     const account = [textOrNull(line.xero_account_code), textOrNull(line.xero_account_name)].filter(Boolean).join(" ");
     return `
       <tr>
         <td>${index + 1}</td>
-        <td>${escapeHtml(textOrNull(line.sku) ?? "—")}</td>
-        <td>${escapeHtml(what)}${supplierRef ? `<div class="sub">Supplier ref ${escapeHtml(supplierRef)}</div>` : ""}</td>
+        <td>${escapeHtml(textOrNull(line.supplier_design_no) ?? "—")}</td>
+        <td>${escapeHtml(what)}</td>
         ${showJob ? `<td>${escapeHtml(textOrNull(line.jobRef) ?? "—")}</td>` : ""}
         <td class="right">${cost.quantity}</td>
         <td>${escapeHtml(account || "—")}</td>
