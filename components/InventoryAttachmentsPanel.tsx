@@ -96,8 +96,10 @@ function UploadModal({ entityType, entityId, tenantId, onClose, onUploaded }: Up
 
   async function handleUpload() {
     if (!files.length) { setError("Select at least one file."); return; }
+    if (!entityId) { setError("Save the record first, then attach the file."); return; }
     setUploading(true); setError(""); setProgress(0);
 
+    let failed = false;
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const fd = new FormData();
@@ -108,28 +110,37 @@ function UploadModal({ entityType, entityId, tenantId, onClose, onUploaded }: Up
       if (displayName && files.length === 1) fd.append("display_name", displayName);
       if (notes) fd.append("notes", notes);
 
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.upload.addEventListener("progress", (e) => {
-          if (e.lengthComputable) {
-            const fileBase = (i / files.length) * 100;
-            const fileShare = (e.loaded / e.total) * (100 / files.length);
-            setProgress(Math.round(fileBase + fileShare));
-          }
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.timeout = 60000;
+          xhr.upload.addEventListener("progress", (e) => {
+            if (e.lengthComputable) {
+              const fileBase = (i / files.length) * 100;
+              const fileShare = (e.loaded / e.total) * (100 / files.length);
+              setProgress(Math.round(fileBase + fileShare));
+            }
+          });
+          xhr.addEventListener("load", () => {
+            if (xhr.status >= 200 && xhr.status < 300) { resolve(); return; }
+            try { reject(new Error(JSON.parse(xhr.responseText).error ?? `Upload failed (${xhr.status})`)); }
+            catch { reject(new Error(`Upload failed (${xhr.status})`)); }
+          });
+          xhr.addEventListener("error", () => reject(new Error("Network error")));
+          xhr.addEventListener("timeout", () => reject(new Error("Upload timed out. Try again.")));
+          xhr.open("POST", "/api/attachments");
+          xhr.setRequestHeader("x-tenant-id", tenantId);
+          xhr.send(fd);
         });
-        xhr.addEventListener("load", () => {
-          if (xhr.status >= 200 && xhr.status < 300) { resolve(); return; }
-          try { reject(new Error(JSON.parse(xhr.responseText).error ?? `Upload failed (${xhr.status})`)); }
-          catch { reject(new Error(`Upload failed (${xhr.status})`)); }
-        });
-        xhr.addEventListener("error", () => reject(new Error("Network error")));
-        xhr.open("POST", "/api/attachments");
-        xhr.setRequestHeader("x-tenant-id", tenantId);
-        xhr.send(fd);
-      }).catch(err => { setError(err instanceof Error ? err.message : "Upload failed"); });
+      } catch (err) {
+        failed = true;
+        setError(err instanceof Error ? err.message : "Upload failed");
+        break;
+      }
     }
 
     setUploading(false);
+    if (failed) return;
     onUploaded();
     onClose();
   }
@@ -234,6 +245,7 @@ export default function InventoryAttachmentsPanel({ entityType, entityId, readOn
 
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loading, setLoading]         = useState(true);
+  const [listError, setListError]     = useState("");
   const [showUpload, setShowUpload]   = useState(false);
   const [typeFilter, setTypeFilter]   = useState<AttachmentType | "">("");
 
@@ -244,10 +256,17 @@ export default function InventoryAttachmentsPanel({ entityType, entityId, readOn
       const params = new URLSearchParams({ record_type: entityType, record_id: entityId });
       if (typeFilter) params.set("attachment_type", typeFilter);
       const res = await fetch(`/api/attachments?${params}`, { headers: { "x-tenant-id": tenantId } });
-      const json = await res.json();
-      setAttachments(json.attachments ?? []);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAttachments([]);
+        setListError(json.error ?? "Could not load files");
+      } else {
+        setListError("");
+        setAttachments(json.attachments ?? []);
+      }
     } catch {
       setAttachments([]);
+      setListError("Could not load files");
     } finally {
       setLoading(false);
     }
@@ -304,6 +323,12 @@ export default function InventoryAttachmentsPanel({ entityType, entityId, readOn
               </button>
             );
           })}
+        </div>
+      )}
+
+      {listError && (
+        <div style={{ padding: "8px 10px", background: "#FEF2F2", color: "#B91C1C", borderRadius: 8, fontSize: 13, marginBottom: 12 }}>
+          {listError}
         </div>
       )}
 

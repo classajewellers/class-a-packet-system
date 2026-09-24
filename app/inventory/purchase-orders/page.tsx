@@ -67,6 +67,7 @@ export default function PurchaseOrdersPage() {
 
   const [pos, setPos]               = useState<PurchaseOrder[]>([]);
   const [loading, setLoading]       = useState(true);
+  const [loadError, setLoadError]   = useState("");
   const [showCancelled, setShowCancelled] = useState(false);
 
   const headers = { "x-tenant-id": tenantId };
@@ -74,10 +75,19 @@ export default function PurchaseOrdersPage() {
   const fetchPos = useCallback(async () => {
     if (!tenantId) return;
     setLoading(true);
-    const res = await fetch("/api/inventory/purchase-orders", { headers });
-    if (res.ok) {
-      const json = await res.json();
-      setPos(json.purchase_orders ?? []);
+    setLoadError("");
+    try {
+      const res = await fetch("/api/inventory/purchase-orders", { headers });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPos([]);
+        setLoadError(json.error ?? "Could not load purchase orders");
+      } else {
+        setPos(json.purchase_orders ?? []);
+      }
+    } catch (err) {
+      setPos([]);
+      setLoadError(err instanceof Error ? err.message : "Could not load purchase orders");
     }
     setLoading(false);
   }, [tenantId]);
@@ -143,6 +153,12 @@ export default function PurchaseOrdersPage() {
         </div>
       )}
 
+      {loadError && (
+        <div style={{ padding: "12px 16px", background: "#FEF2F2", color: "#B91C1C", borderRadius: 10, fontSize: 14, marginBottom: 16 }}>
+          {loadError}
+        </div>
+      )}
+
       {/* Table */}
       <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
@@ -161,7 +177,9 @@ export default function PurchaseOrdersPage() {
                 <td colSpan={8} style={{ padding: 48, textAlign: "center" }}>
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
                     <Package size={32} style={{ color: "#D1D5DB" }} />
-                    <div style={{ fontSize: 15, fontWeight: 500, color: "#374151" }}>No purchase orders yet</div>
+                    <div style={{ fontSize: 15, fontWeight: 500, color: "#374151" }}>
+                      {loadError ? "Purchase orders could not be loaded" : "No purchase orders yet"}
+                    </div>
                     {isManager && (
                       <button
                         onClick={() => router.push("/inventory/purchase-orders/new")}

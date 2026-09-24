@@ -113,6 +113,38 @@ export function inheritedReceiveTitle(line: { title?: string | null; notes?: str
   return firstText(line.title, line.notes) ?? "";
 }
 
+/**
+ * When the line has no title and no notes, show the details it does have:
+ * category, metal, and expected cost. Blank fields are left out.
+ */
+export function fallbackReceiveTitle(line: {
+  title?: string | null;
+  notes?: string | null;
+  categoryName?: string | null;
+  metal_karat?: string | null;
+  metal_colour?: string | null;
+  metal_type?: string | null;
+  estimated_cost?: number | string | null;
+  unit_cost?: number | string | null;
+}): string {
+  const explicit = inheritedReceiveTitle(line);
+  if (explicit) return explicit;
+  const metal = [line.metal_karat, line.metal_colour, line.metal_type]
+    .map((value) => (value ?? "").trim())
+    .filter(Boolean)
+    .join(" ");
+  const costRaw = line.estimated_cost ?? line.unit_cost;
+  let cost = "";
+  if (costRaw != null && String(costRaw).trim() !== "") {
+    const amount = Number(costRaw);
+    if (Number.isFinite(amount)) {
+      cost = `$${amount.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+  }
+  const category = (line.categoryName ?? "").trim();
+  return [category, metal, cost].filter(Boolean).join(" · ");
+}
+
 export function pieceMetalKarat(raw: string | null): string | null {
   if (!raw) return null;
   const compact = raw.trim().toLowerCase().replace(/\s+/g, "");

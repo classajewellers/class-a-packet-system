@@ -229,15 +229,23 @@ export default function NewPurchaseOrderPage() {
       })),
     };
 
-    const res = await fetch("/api/inventory/purchase-orders", {
-      method: "POST",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const json = await res.json();
-    setSaving(false);
-    if (!res.ok) { setError(json.error ?? "Failed to save"); return; }
-    router.push(`/inventory/purchase-orders/${json.purchase_order.id}`);
+    try {
+      const res = await fetch("/api/inventory/purchase-orders", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json().catch(() => ({}));
+      setSaving(false);
+      if (!res.ok || !json.purchase_order?.id) {
+        setError(json.error ?? "Could not save the purchase order");
+        return;
+      }
+      router.push(`/inventory/purchase-orders/${json.purchase_order.id}`);
+    } catch (err) {
+      setSaving(false);
+      setError(err instanceof Error ? err.message : "Could not save the purchase order");
+    }
   }
 
   if (!hydrated) return null;
@@ -270,15 +278,16 @@ export default function NewPurchaseOrderPage() {
             />
           </div>
           <div>
-            <label style={LF}>Supplier</label>
+            <label style={LF}>Supplier <span style={{ fontWeight: 400, color: "#9CA3AF" }}>(optional)</span></label>
             <select
               value={supplierId}
               onChange={e => setSupplierId(e.target.value)}
               style={{ ...IF, background: "#fff" }}
             >
-              <option value="">— Select supplier or enter below —</option>
+              <option value="">— No supplier yet —</option>
               {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
+            <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>A blank supplier still saves. You can name one below, or add it later.</div>
           </div>
           {!supplierId && (
             <div>

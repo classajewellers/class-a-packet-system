@@ -142,8 +142,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const supabase = await createTenantSupabaseClient(tenantId);
 
-  // Ensure private bucket exists (no-op if already present)
-  await supabase.storage.createBucket("attachments", { public: false }).catch(() => {});
+  // The attachments bucket already exists on staging. Creating it on every
+  // upload can sit forever when the bucket is already there, which leaves
+  // the dialog on "Uploading… 100%". A missing bucket fails the upload below
+  // with a real error instead.
 
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
   const storagePath = `${tenantId}/${recordType}/${recordId}/${crypto.randomUUID()}.${ext}`;
@@ -180,8 +182,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .single();
 
   if (dbError) {
-    // Roll back storage upload on DB failure
-    await supabase.storage.from("attachments").remove([storagePath]).catch(() => {});
+    // Don't let storage cleanup hold the response open. The dialog stays on
+    // "Uploading…" until this handler returns.
+    await Promise.race([
+      supabase.storage.from("attachments").remove([storagePath]).catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, 4000)),
+    ]);
     return NextResponse.json({ error: `Database insert failed: ${dbError.message}` }, { status: 500 });
   }
 

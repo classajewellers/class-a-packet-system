@@ -5,11 +5,10 @@ import { preparePoLineForWrite } from "@/lib/poLineColumns";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const PO_SELECT = `
-  *,
-  supplier:inventory_suppliers(id,name),
-  lines:inventory_po_lines(id,received,estimated_cost,actual_cost)
-`.trim();
+// Do not embed supplier here. Staging has no foreign key from
+// inventory_purchase_orders.supplier_id to inventory_suppliers, and PostgREST
+// rejects the whole list when that relationship is missing. The detail route
+// already loads the supplier in a separate query for the same reason.
 
 async function generatePoNumber(
   supabase: Awaited<ReturnType<typeof createTenantSupabaseClient>>,
@@ -42,7 +41,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   let query = supabase
     .from("inventory_purchase_orders")
-    .select(PO_SELECT)
+    .select("id, po_number, supplier_id, supplier_name, status, order_date, expected_date, notes, created_at")
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false });
 
@@ -51,16 +50,53 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  const rows = data ?? [];
+  const poIds = rows.map((po: { id: string }) => po.id);
+  const supplierIds = Array.from(new Set(
+    rows.map((po: { supplier_id: string | null }) => po.supplier_id).filter((id): id is string => !!id)
+  ));
+
+  const [linesRes, suppliersRes] = await Promise.all([
+    poIds.length
+      ? supabase
+          .from("inventory_po_lines")
+          .select("id, po_id, received, estimated_cost, actual_cost")
+          .eq("tenant_id", tenantId)
+          .in("po_id", poIds)
+      : Promise.resolve({ data: [], error: null }),
+    supplierIds.length
+      ? supabase
+          .from("inventory_suppliers")
+          .select("id, name")
+          .eq("tenant_id", tenantId)
+          .in("id", supplierIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (linesRes.error) return NextResponse.json({ error: linesRes.error.message }, { status: 500 });
+  if (suppliersRes.error) return NextResponse.json({ error: suppliersRes.error.message }, { status: 500 });
+
+  const linesByPo = new Map<string, { received: boolean; estimated_cost: number | null; actual_cost: number | null }[]>();
+  for (const line of linesRes.data ?? []) {
+    const list = linesByPo.get(line.po_id) ?? [];
+    list.push(line);
+    linesByPo.set(line.po_id, list);
+  }
+  const suppliersById = new Map(
+    (suppliersRes.data ?? []).map((supplier: { id: string; name: string }) => [supplier.id, supplier])
+  );
+
   // Annotate each PO with line counts and pending invoice total
-  const pos = (data ?? []).map((po: any) => {
-    const lines: any[] = po.lines ?? [];
-    const pendingLines = lines.filter((l: any) => l.actual_cost == null);
+  const pos = rows.map((po: any) => {
+    const lines = linesByPo.get(po.id) ?? [];
+    const pendingLines = lines.filter((l) => l.actual_cost == null);
     return {
       ...po,
+      supplier: po.supplier_id ? (suppliersById.get(po.supplier_id) ?? null) : null,
       line_count:            lines.length,
-      received_count:        lines.filter((l: any) => l.received).length,
+      received_count:        lines.filter((l) => l.received).length,
       pending_invoice_total: pendingLines.reduce(
-        (sum: number, l: any) => sum + Number(l.estimated_cost ?? 0), 0
+        (sum: number, l) => sum + Number(l.estimated_cost ?? 0), 0
       ),
       pending_invoice_count: pendingLines.length,
     };

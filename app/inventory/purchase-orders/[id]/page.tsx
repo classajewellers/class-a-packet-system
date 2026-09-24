@@ -8,7 +8,7 @@ import { loadXeroAccounts, XeroAccountsLoad } from "@/lib/xeroAccounts";
 import { ArrowLeft, Package, CheckCircle2, SkipForward, Sparkles, Loader, X, ChevronDown, DollarSign, Pencil, Ban, AlertTriangle, Plus, Trash2 } from "lucide-react";
 import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
 import { XeroAccountSelect } from "@/components/XeroAccountSelect";
-import { inheritedReceiveTitle } from "@/lib/receiveStock";
+import { fallbackReceiveTitle, inheritedReceiveTitle } from "@/lib/receiveStock";
 
 type POStatus = "draft" | "ordered" | "partially_received" | "received" | "cancelled";
 
@@ -139,8 +139,15 @@ function ReceiveCard({
   const orderedQty      = Number(line.quantity ?? 1);
   const remaining       = orderedQty - alreadyReceived;
 
+  const categoryName =
+    line.category?.name
+    ?? categories.find((c: { id: string; name: string }) => c.id === line.category_id)?.name
+    ?? null;
+  const prefilledTitle = fallbackReceiveTitle({ ...line, categoryName });
+
+  const [titleTouched, setTitleTouched] = useState(false);
   const [specs, setSpecs] = useState({
-    title:           inheritedReceiveTitle(line),
+    title:           prefilledTitle,
     category_id:     line.category_id    ?? "",
     metal_type:      line.metal_type     ?? "",
     metal_karat:     line.metal_karat    ?? "",
@@ -156,6 +163,11 @@ function ReceiveCard({
     location_id: "",
     product_id:  "",
   });
+  useEffect(() => {
+    if (titleTouched) return;
+    setSpecs(s => s.title === prefilledTitle ? s : { ...s, title: prefilledTitle });
+  }, [prefilledTitle, titleTouched]);
+
   const [actualUnitCost, setActualUnitCost] = useState(
     line.estimated_cost != null
       ? String(line.estimated_cost)
@@ -211,7 +223,7 @@ function ReceiveCard({
     }));
   }
 
-  const lineLabel = inheritedReceiveTitle(line) || "Untitled item";
+  const lineLabel = prefilledTitle || "Untitled item";
 
   async function handleConfirm() {
     setSaving(true);
@@ -377,7 +389,7 @@ function ReceiveCard({
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px 16px", marginBottom: 14 }}>
         <div style={{ gridColumn: "1 / -1" }}>
           <label style={LF}>Title</label>
-          <input value={specs.title} onChange={e => setSpecs(s => ({ ...s, title: e.target.value }))} style={IF} />
+          <input value={specs.title} onChange={e => { setTitleTouched(true); setSpecs(s => ({ ...s, title: e.target.value })); }} style={IF} />
         </div>
         <div>
           <label style={LF}>Category</label>
@@ -1057,7 +1069,16 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
             <X size={20} />
           </button>
           <div>
-            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "#111827" }}>Receive Stock — {po.po_number}</h1>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "#111827" }}>
+              Receive Stock —{" "}
+              <a
+                href={`/inventory/purchase-orders/${po.id}`}
+                onClick={(e) => { e.preventDefault(); fetchPo(); setShowReceive(false); setAllDone(false); setReceivedCount(0); }}
+                style={{ color: "#111827", textDecoration: "underline" }}
+              >
+                {po.po_number}
+              </a>
+            </h1>
             <p style={{ margin: "2px 0 0", fontSize: 13, color: "#6B7280" }}>{unreceived.length} item{unreceived.length !== 1 ? "s" : ""} to receive</p>
           </div>
         </div>
@@ -1343,7 +1364,12 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                   {confirmLine.actual_cost != null ? "Update Actual Cost" : "Confirm Invoice Amount"}
                 </h2>
                 <p style={{ margin: "4px 0 0", fontSize: 13, color: "#6B7280" }}>
-                  {inheritedReceiveTitle(confirmLine) || "Untitled item"}
+                  {fallbackReceiveTitle({
+                    ...confirmLine,
+                    categoryName: confirmLine.category?.name
+                      ?? categories.find((c: { id: string }) => c.id === confirmLine.category_id)?.name
+                      ?? null,
+                  }) || "Untitled item"}
                 </p>
               </div>
               <button onClick={() => setConfirmLine(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280", padding: 0 }}>
