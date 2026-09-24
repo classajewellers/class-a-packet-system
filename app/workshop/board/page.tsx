@@ -397,12 +397,13 @@ function ManagerNoticeboard({ messages, leadTimes, tenantId, onRefresh }: { mess
 
 // ── Job Card ──────────────────────────────────────────────────────────────────
 
-function JobCard({ packet, config, accent, grouping, draggingDisabled, onDragStart, onClick, onMove }: {
+function JobCard({ packet, config, accent, grouping, draggingDisabled, focused, onDragStart, onClick, onMove }: {
   packet: WorkshopPacket;
   config: WorkshopConfig;
   accent: string;
   grouping: GroupingKey;
   draggingDisabled?: boolean;
+  focused?: boolean;
   onDragStart: (e: React.DragEvent, id: string) => void;
   onClick: (p: WorkshopPacket) => void;
   onMove: (fields: Record<string, unknown>) => void;
@@ -439,9 +440,10 @@ function JobCard({ packet, config, accent, grouping, draggingDisabled, onDragSta
       draggable={!draggingDisabled}
       onDragStart={e => !draggingDisabled && onDragStart(e, packet.id)}
       onClick={() => onClick(packet)}
-      style={{ background: "#fff", border: "1px solid #E8E8F0", borderLeft: leftBorder, borderRadius: 10, padding: "10px 12px", cursor: draggingDisabled ? "pointer" : "grab", userSelect: "none" }}
+      data-job-id={packet.id}
+      style={{ background: "#fff", border: focused ? "1px solid #635BFF" : "1px solid #E8E8F0", borderLeft: leftBorder, borderRadius: 10, padding: "10px 12px", cursor: draggingDisabled ? "pointer" : "grab", userSelect: "none", boxShadow: focused ? "0 0 0 3px rgba(99,91,255,0.35)" : undefined }}
       onMouseEnter={e => ((e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)")}
-      onMouseLeave={e => ((e.currentTarget as HTMLDivElement).style.boxShadow = "none")}
+      onMouseLeave={e => ((e.currentTarget as HTMLDivElement).style.boxShadow = focused ? "0 0 0 3px rgba(99,91,255,0.35)" : "none")}
     >
       {/* Header row */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 6, marginBottom: 5 }}>
@@ -958,25 +960,69 @@ export default function WorkshopBoardPage() {
 
   useEffect(() => { fetchPackets(); }, [fetchPackets]);
 
-  // Open the job a purchase-order line linked to, via ?packet=<id>.
+  // Open the job detail for ?job= or ?packet=. Those params are a packet id
+  // from the jobs list and purchase orders, or a workshop_jobs.id from stock.
   const openedPacketFromUrl = useRef(false);
+  const scrollToJobId = useRef<string | null>(null);
   useEffect(() => {
     if (openedPacketFromUrl.current || !tenantId || loading) return;
-    const packetId = new URLSearchParams(window.location.search).get("packet");
-    if (!packetId) return;
+    const params = new URLSearchParams(window.location.search);
+    const rawId = params.get("job") || params.get("packet");
+    if (!rawId) return;
     openedPacketFromUrl.current = true;
-    const onBoard = packets.find(p => p.id === packetId);
+
+    const openPacket = (packet: WorkshopPacket) => {
+      scrollToJobId.current = packet.id;
+      setSelectedPacket(packet);
+    };
+
+    const onBoard = packets.find(p => p.id === rawId);
     if (onBoard) {
-      setSelectedPacket(onBoard);
+      openPacket(onBoard);
       return;
     }
+
     let cancelled = false;
-    fetch(`/api/workshop/packets/${packetId}`, { cache: "no-store", headers: { "x-tenant-id": tenantId } })
-      .then(r => r.ok ? r.json() : null)
-      .then(json => { if (!cancelled && json?.packet) setSelectedPacket(json.packet); })
-      .catch(() => {});
+    const headers = { "x-tenant-id": tenantId };
+    (async () => {
+      try {
+        const jobRes = await fetch(`/api/workshop/jobs/${rawId}`, { cache: "no-store", headers });
+        if (cancelled) return;
+        if (jobRes.ok) {
+          const jobJson = await jobRes.json() as { job?: { packet_id?: string | null } };
+          const packetId = jobJson.job?.packet_id;
+          if (packetId) {
+            const linked = packets.find(p => p.id === packetId);
+            if (linked) {
+              openPacket(linked);
+              return;
+            }
+            const linkedRes = await fetch(`/api/workshop/packets/${packetId}`, { cache: "no-store", headers });
+            if (cancelled) return;
+            if (linkedRes.ok) {
+              const linkedJson = await linkedRes.json() as { packet?: WorkshopPacket };
+              if (linkedJson.packet) openPacket(linkedJson.packet);
+            }
+            return;
+          }
+        }
+        const packetRes = await fetch(`/api/workshop/packets/${rawId}`, { cache: "no-store", headers });
+        if (cancelled || !packetRes.ok) return;
+        const packetJson = await packetRes.json() as { packet?: WorkshopPacket };
+        if (packetJson.packet) openPacket(packetJson.packet);
+      } catch { /* leave the board closed if the id cannot be resolved */ }
+    })();
     return () => { cancelled = true; };
   }, [tenantId, loading, packets]);
+
+  useEffect(() => {
+    const id = scrollToJobId.current;
+    if (!id || selectedPacket?.id !== id || loading) return;
+    scrollToJobId.current = null;
+    requestAnimationFrame(() => {
+      document.querySelector(`[data-job-id="${id}"]`)?.scrollIntoView({ block: "center", inline: "center" });
+    });
+  }, [selectedPacket, loading]);
   useEffect(() => { fetchConfig(); }, [fetchConfig]);
   useEffect(() => {
     if (!tenantId) return;
@@ -1220,6 +1266,7 @@ export default function WorkshopBoardPage() {
                         accent={col.accent}
                         grouping={grouping}
                         draggingDisabled={col.dragDisabled}
+                        focused={selectedPacket?.id === p.id}
                         onDragStart={handleDragStart}
                         onClick={() => setSelectedPacket(p)}
                         onMove={fields => handleMove(p.id, fields)}
