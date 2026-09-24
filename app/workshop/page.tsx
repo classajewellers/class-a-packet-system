@@ -30,7 +30,7 @@ interface WorkshopPacket {
   workshop_intake_substatus: string | null;
   blocked_reason: string | null;
   blocked_note: string | null;
-  quality_issue_at?: string | null;
+  quality_issue?: boolean | null;
   delivery_method: string | null;
   pending_customer_approval?: boolean | null;
 }
@@ -287,7 +287,7 @@ function JobRow({
           <span style={{ fontSize: 13.5, fontWeight: 500, color: "var(--vault-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {p.articles || JOB_TYPE_LABELS[p.job_type ?? ""] || "Job"}
           </span>
-          {p.quality_issue_at && (
+          {p.quality_issue && (
             <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: "#FEF2F2", color: "#B91C1C", border: "1px solid #FECACA", flexShrink: 0 }}>
               Quality issue
             </span>

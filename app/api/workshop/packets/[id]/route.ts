@@ -37,8 +37,7 @@ const ALLOWED_FIELDS = [
   "delivery_method",
   "shopify_order_id",
   "pending_customer_approval",
-  "quality_issue_at",
-  "quality_issue_note",
+  "quality_issue",
 ];
 
 // Fields that trigger a revert to intake/pre_check when the packet is not already in intake
@@ -188,10 +187,8 @@ export async function PATCH(
     if (current) {
       const activityLogs: Record<string, unknown>[] = [];
 
-      // Step moves and quality-issue flag changes are written by the
-      // packets update trigger (migration 168), including updates that do
-      // not come through this route. Logging them here as well would
-      // double-write.
+      // Step moves and quality_issue flips are written by the packets
+      // update trigger (migration 168). Logging them here would double-write.
 
       const assigneeChanged =
         (updates.assigned_to !== undefined && updates.assigned_to !== current.assigned_to) ||

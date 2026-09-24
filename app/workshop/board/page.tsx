@@ -55,7 +55,7 @@ interface WorkshopPacket {
   workshop_po_number: string | null;
   blocked_reason: string | null;
   blocked_note: string | null;
-  quality_issue_at?: string | null;
+  quality_issue?: boolean | null;
   blocked_at: string | null;
   delivery_method: string | null;
   shopify_order_id: string | null;
@@ -468,7 +468,7 @@ function JobCard({ packet, config, accent, grouping, draggingDisabled, onDragSta
             🚫 {BLOCKED_LABELS[packet.blocked_reason] ?? packet.blocked_reason}
           </span>
         )}
-        {packet.quality_issue_at && (
+        {packet.quality_issue && (
           <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: "#FEF2F2", color: "#B91C1C", border: "1px solid #FECACA" }}>
             Quality issue
           </span>

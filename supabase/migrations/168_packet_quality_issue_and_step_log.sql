@@ -1,31 +1,30 @@
--- 168: quality-issue flag on packets, and activity log for step moves.
+-- 168: one quality-issue flag, and activity log for step moves.
+--
+-- Does not add packets.assigned_to. That uuid already references profiles.id.
+-- Does not add CAD or casting columns.
+--
+-- Choice: one boolean on packets, not a packet_quality_issues table and not
+-- a second note/timestamp column. History of the flag is a packet_activity_log
+-- row (event_type quality_issue), which Part F can count. assigned_to is
+-- copied onto that row.
 --
 -- Status changes already log via clear_blocked_on_status_change
--- (072 / 094 / 148). Verified on staging 2026-09-24: a status update
--- inserts event_type status_change. This replaces that function so the
--- same trigger also logs workshop_step_index moves and quality-issue
--- flag changes. Blocked-field clearing on status change is unchanged.
+-- (072 / 094 / 148). Checked on staging 2026-09-24: a status update inserts
+-- event_type status_change. This replaces that function so the same trigger
+-- also logs workshop_step_index moves and quality_issue flips. Blocked-field
+-- clearing on status change is unchanged.
 --
--- quality_issue_at null means no open quality issue. A timestamp means
--- the job is flagged. quality_issue_note is optional detail.
--- Each set or clear is a packet_activity_log row (event_type
--- quality_issue) so a later per-person rework count can use the log
--- without another schema change. assigned_to is copied onto that row.
+-- A draft of this file added quality_issue_at and quality_issue_note.
+-- Those are not the lock. Drop them if present.
 --
--- Number 168: 166 and 167 are workshop roles. Do not reuse them.
+-- Number 168: 167 is taken. Do not reuse it.
+-- HOLD: do not apply until the tip is marked READY.
 
 ALTER TABLE public.packets
-  ADD COLUMN IF NOT EXISTS quality_issue_at timestamptz,
-  ADD COLUMN IF NOT EXISTS quality_issue_note text;
+  ADD COLUMN IF NOT EXISTS quality_issue boolean NOT NULL DEFAULT false;
 
-COMMENT ON COLUMN public.packets.quality_issue_at IS
-  'Set when a quality issue is flagged. Null means no open issue.';
-COMMENT ON COLUMN public.packets.quality_issue_note IS
-  'Optional note stored with the open quality issue.';
-
-CREATE INDEX IF NOT EXISTS packets_quality_issue_at_idx
-  ON public.packets (tenant_id, quality_issue_at)
-  WHERE quality_issue_at IS NOT NULL;
+COMMENT ON COLUMN public.packets.quality_issue IS
+  'True when this job has an open rework/quality issue. False means no open issue.';
 
 CREATE OR REPLACE FUNCTION public.clear_blocked_on_status_change()
 RETURNS TRIGGER
@@ -73,20 +72,15 @@ BEGIN
     );
   END IF;
 
-  IF NEW.quality_issue_at IS DISTINCT FROM OLD.quality_issue_at
-     OR NEW.quality_issue_note IS DISTINCT FROM OLD.quality_issue_note THEN
+  IF NEW.quality_issue IS DISTINCT FROM OLD.quality_issue THEN
     INSERT INTO public.packet_activity_log (packet_id, tenant_id, event_type, old_value, new_value)
     VALUES (
       NEW.id,
       NEW.tenant_id,
       'quality_issue',
+      jsonb_build_object('quality_issue', OLD.quality_issue),
       jsonb_build_object(
-        'quality_issue_at', OLD.quality_issue_at,
-        'quality_issue_note', OLD.quality_issue_note
-      ),
-      jsonb_build_object(
-        'quality_issue_at', NEW.quality_issue_at,
-        'quality_issue_note', NEW.quality_issue_note,
+        'quality_issue', NEW.quality_issue,
         'assigned_to', NEW.assigned_to
       )
     );
@@ -97,6 +91,10 @@ END;
 $$;
 
 REVOKE EXECUTE ON FUNCTION public.clear_blocked_on_status_change() FROM anon, authenticated;
+
+DROP INDEX IF EXISTS public.packets_quality_issue_at_idx;
+ALTER TABLE public.packets DROP COLUMN IF EXISTS quality_issue_at;
+ALTER TABLE public.packets DROP COLUMN IF EXISTS quality_issue_note;
 
 DROP TRIGGER IF EXISTS trg_clear_blocked_on_status_change ON public.packets;
 CREATE TRIGGER trg_clear_blocked_on_status_change
