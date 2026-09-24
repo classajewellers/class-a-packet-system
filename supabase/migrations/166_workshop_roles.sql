@@ -108,6 +108,8 @@ CREATE INDEX IF NOT EXISTS profile_workshop_roles_tenant_idx
 CREATE INDEX IF NOT EXISTS profile_workshop_roles_role_idx
   ON public.profile_workshop_roles (workshop_role_id);
 
+-- Row level security is enabled here. 167_workshop_roles_tenant_isolation.sql
+-- is the applied posture: FORCE plus tenant_isolation USING and WITH CHECK.
 ALTER TABLE public.workshop_roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profile_workshop_roles ENABLE ROW LEVEL SECURITY;
 

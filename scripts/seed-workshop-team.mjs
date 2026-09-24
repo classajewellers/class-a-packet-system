@@ -18,16 +18,18 @@
  * and profile_workshop_roles.workshop_role_id. This script does not rename
  * tables and does not tag anyone cad_designer. Not production.
  *
- *   WORKSHOP_SEED_PASSWORD='VaultTeam-Practice1' \
- *   NEXT_PUBLIC_SUPABASE_URL='https://aexfqkaayrcmdehuzpza.supabase.co' \
- *   SUPABASE_SERVICE_ROLE_KEY='…' \
- *   node scripts/seed-workshop-team.mjs
- *
- * People (Class A, system role staff, tag jeweller only — never cad_designer):
+ * The six Class A jewellers already exist. Do not recreate them.
  *   Ben ben@classa.com.au, Viv viv@classa.com.au, Joe joseph@classa.com.au,
  *   David david@classa.com.au, Jack jack@classa.com.au,
  *   Shahzad shahrzad@classa.com.au.
+ * Their temporary passwords are not stored in this repo. Boss gets them
+ * from whoever seeded the accounts, or asks Vault DB to rotate.
  * Josh and Staff Test are not in this list.
+ *
+ *   WORKSHOP_SEED_PASSWORD='…' \
+ *   NEXT_PUBLIC_SUPABASE_URL='https://aexfqkaayrcmdehuzpza.supabase.co' \
+ *   SUPABASE_SERVICE_ROLE_KEY='…' \
+ *   node scripts/seed-workshop-team.mjs
  *
  * Re-running does not change an existing password: createUser runs only
  * when the auth user is missing. Auth users are created here, not with
