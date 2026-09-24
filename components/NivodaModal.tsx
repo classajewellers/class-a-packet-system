@@ -101,9 +101,36 @@ function ResultsSpinner({ label }: { label: string }) {
   );
 }
 
+type PhoneScreen = "browse" | "filters" | "results";
+type StoneSort = { type: "price" | "size"; direction: "ASC" | "DESC" };
+
+const SORT_OPTIONS: { sort: StoneSort; label: string }[] = [
+  { sort: { type: "price", direction: "ASC" }, label: "Price: low to high" },
+  { sort: { type: "price", direction: "DESC" }, label: "Price: high to low" },
+  { sort: { type: "size", direction: "DESC" }, label: "Carat: high to low" },
+  { sort: { type: "size", direction: "ASC" }, label: "Carat: low to high" },
+];
+
+function usePhoneLayout(): boolean {
+  const [phone, setPhone] = useState(false);
+  useLayoutEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const apply = () => setPhone(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+  return phone;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: Props) {
+  const isPhone = usePhoneLayout();
+  const [phoneScreen, setPhoneScreen] = useState<PhoneScreen>("browse");
+  const [sort, setSort] = useState<StoneSort>({ type: "price", direction: "ASC" });
+  const [sortOpen, setSortOpen] = useState(false);
+  const sortRef = useRef<StoneSort>({ type: "price", direction: "ASC" });
   // Filters
   const [labgrown, setLabgrown]             = useState(true);
   const [shapes, setShapes]                 = useState<string[]>(["ROUND"]);
@@ -147,7 +174,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
     const onStart = (e: TouchEvent) => { startY = e.touches[0]?.clientY ?? 0; };
     const onMove = (e: TouchEvent) => {
       const target = e.target as HTMLElement | null;
-      const scroller = target?.closest(".nivoda-filters, .nivoda-results") as HTMLElement | null;
+      const scroller = target?.closest(".nivoda-filters-scroll, .nivoda-filters, .nivoda-results") as HTMLElement | null;
       if (!scroller) {
         e.preventDefault();
         return;
@@ -210,13 +237,32 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
     if (!open) { setRetailPrices({}); }
   }, [open]);
 
+  const wasOpen = useRef(false);
+  useLayoutEffect(() => {
+    if (open && !wasOpen.current && window.matchMedia("(max-width: 767px)").matches) {
+      searchSeq.current += 1;
+      setPhoneScreen("browse");
+      setSortOpen(false);
+      setSelectedStone(null);
+      setResults([]);
+      setRefIds({});
+      setTotalCount(0);
+      setSearched(false);
+      setError(null);
+      setLoading(false);
+    }
+    wasOpen.current = open;
+  }, [open]);
+
   function toggleShape(s: string) {
     setShapes(prev => prev.includes(s) ? (prev.length > 1 ? prev.filter(x => x !== s) : prev) : [...prev, s]);
   }
 
-  const runSearch = useCallback(async (offset = 0) => {
+  const runSearch = useCallback(async (offset = 0, sortOverride?: StoneSort) => {
     const seq = ++searchSeq.current;
     const replace = offset === 0;
+    const activeSort = sortOverride ?? sortRef.current;
+    if (sortOverride) sortRef.current = sortOverride;
     setLoading(true);
     setReplacing(replace);
     setError(null);
@@ -233,6 +279,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
           labgrown,
           ...(hasImage ? { has_image: true } : {}),
           budget: budget ? parseFloat(budget) * 100 : undefined,
+          sort: { type: activeSort.type, direction: activeSort.direction },
           limit: PAGE_SIZE,
           offset,
         }),
@@ -269,9 +316,19 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
     }
   }, [shapes, caratFrom, caratTo, colorGrades, clarityGrades, labgrown, hasImage, budget, tenantId]);
 
-  function handleSearch() {
+  function handleApplyFilters() {
     setSelectedStone(null);
+    setSortOpen(false);
+    if (isPhone) setPhoneScreen("results");
     runSearch(0);
+  }
+
+  function handleChooseSort(next: StoneSort) {
+    sortRef.current = next;
+    setSort(next);
+    setSortOpen(false);
+    setSelectedStone(null);
+    if (isPhone && phoneScreen === "results") runSearch(0, next);
   }
 
   function handleLoadMore() {
@@ -294,7 +351,8 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
       onClick={onClose}
     >
       <div
-        className="nivoda-modal"
+        className={`nivoda-modal${isPhone ? " nivoda-phone" : ""}`}
+        data-screen={isPhone ? phoneScreen : "split"}
         onClick={e => e.stopPropagation()}
         onMouseDown={e => {
           if ((e.target as HTMLElement).closest("button")) e.preventDefault();
@@ -302,12 +360,19 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
       >
         {/* Header */}
         <div className="nivoda-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #E8E8F0", flexShrink: 0, gap: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+            {isPhone && phoneScreen === "filters" && (
+              <button
+                type="button"
+                onClick={() => { setSortOpen(false); setPhoneScreen(searched ? "results" : "browse"); }}
+                style={{ border: "none", background: "none", cursor: "pointer", fontSize: 18, color: "#635BFF", lineHeight: 1, padding: "4px 2px" }}
+              >←</button>
+            )}
             <div style={{ width: 36, height: 36, borderRadius: 8, background: "#EEF2FF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <svg width="18" height="18" viewBox="0 0 64 64" fill="none"><path d="M32 6L6 28l26 30 26-30L32 6z" stroke="#635BFF" strokeWidth="3" fill="#C7D2FE" /></svg>
             </div>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "#1A1A2E" }}>Browse Stones</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#1A1A2E" }}>
+              {isPhone ? (phoneScreen === "filters" ? "Filters" : phoneScreen === "results" ? "Results" : "Browse Stones") : "Browse Stones"}
             </div>
           </div>
           <button type="button" onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 20, color: "#9CA3AF", lineHeight: 1, padding: "4px 8px" }}>×</button>
@@ -316,8 +381,25 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
         {/* Body */}
         <div className="nivoda-body">
 
+          {isPhone && phoneScreen === "browse" && (
+            <div className="nivoda-phone-home">
+              <DiamondIcon />
+              <div style={{ fontSize: 15, fontWeight: 600, color: "#1A1A2E" }}>Choose your stone</div>
+              <div style={{ fontSize: 13, lineHeight: 1.5, maxWidth: 280 }}>
+                Open Filters and set carat, colour, clarity, shape, and lab or natural. Nothing searches until you tap Apply filters.
+              </div>
+              <button
+                type="button"
+                onClick={() => setPhoneScreen("filters")}
+                style={{ minWidth: 180, padding: "12px 20px", borderRadius: 10, background: "#635BFF", color: "#fff", border: "none", cursor: "pointer", fontSize: 15, fontWeight: 600 }}
+              >Filters</button>
+            </div>
+          )}
+
           {/* ── Filters panel ── */}
+          {(!isPhone || phoneScreen === "filters") && (
           <div className="nivoda-filters">
+          <div className={isPhone ? "nivoda-filters-scroll" : undefined}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 14 }}>Filters</div>
 
             {/* Stone type */}
@@ -416,16 +498,65 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
               </label>
             </div>
 
-            <button
-              type="button"
-              onClick={handleSearch}
-              disabled={loading}
-              style={{ width: "100%", padding: "10px 0", borderRadius: 10, background: loading ? "#9CA3AF" : "#635BFF", color: "#fff", border: "none", cursor: loading ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 600, transition: "background .15s" }}
-            >{loading && !results.length ? "Searching…" : "Search"}</button>
+            {!isPhone && (
+              <button
+                type="button"
+                onClick={handleApplyFilters}
+                disabled={loading}
+                style={{ width: "100%", padding: "10px 0", borderRadius: 10, background: loading ? "#9CA3AF" : "#635BFF", color: "#fff", border: "none", cursor: loading ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 600, transition: "background .15s" }}
+              >{loading && !results.length ? "Searching…" : "Search"}</button>
+            )}
           </div>
+          {isPhone && (
+            <div className="nivoda-apply-bar">
+              <button
+                type="button"
+                onClick={handleApplyFilters}
+                disabled={loading}
+                style={{ width: "100%", padding: "12px 0", borderRadius: 10, background: loading ? "#9CA3AF" : "#635BFF", color: "#fff", border: "none", cursor: loading ? "not-allowed" : "pointer", fontSize: 15, fontWeight: 600 }}
+              >Apply filters</button>
+            </div>
+          )}
+          </div>
+          )}
 
           {/* ── Right panel — grid or detail view ── */}
+          {(!isPhone || phoneScreen === "results") && (
           <div className="nivoda-results-wrap">
+          {isPhone && !selectedStone && (
+            <div className="nivoda-results-chrome">
+              <button
+                type="button"
+                onClick={() => { setSortOpen(false); setPhoneScreen("filters"); }}
+                style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid #635BFF", background: "#EEF2FF", color: "#635BFF", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+              >Filters</button>
+              <button
+                type="button"
+                aria-expanded={sortOpen}
+                onClick={() => setSortOpen(v => !v)}
+                style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid #E8E8F0", background: "#fff", color: "#1A1A2E", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+              >Sort</button>
+              <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 600, color: "#374151" }}>
+                {searched ? `${totalCount.toLocaleString()} stones` : ""}
+              </span>
+              {sortOpen && (
+                <div className="nivoda-sort-menu" role="menu">
+                  {SORT_OPTIONS.map(option => {
+                    const active = option.sort.type === sort.type && option.sort.direction === sort.direction;
+                    return (
+                      <button
+                        type="button"
+                        key={option.label}
+                        role="menuitem"
+                        onClick={() => handleChooseSort(option.sort)}
+                        style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 12px", border: "none", borderRadius: 8, background: active ? "#EEF2FF" : "transparent", color: active ? "#635BFF" : "#1A1A2E", fontSize: 13, fontWeight: active ? 700 : 500, cursor: "pointer" }}
+                      >{option.label}</button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
           <div className="nivoda-results">
 
             {/* ── Expanded detail view ── */}
@@ -520,6 +651,7 @@ export default function NivodaModal({ open, onClose, onSelectStone, tenantId }: 
             </div>
           )}
           </div>
+          )}
         </div>
       </div>
     </div>,
@@ -551,10 +683,10 @@ function StoneCard({ stone, onSelect, onExpand, retailAud }: { stone: NivodaSton
       style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 10, overflow: "hidden", display: "flex", flexDirection: "column", cursor: "pointer" }}
     >
       {/* Image */}
-      <div style={{ height: 110, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
+      <div className="nivoda-card-image">
         {stone.image ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={stone.image} alt={`${stone.carats ?? "?"}ct ${stone.shape ?? ""}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          <img className="nivoda-card-photo" src={stone.image} alt={`${stone.carats ?? "?"}ct ${stone.shape ?? ""}`} />
         ) : (
           <DiamondIcon />
         )}

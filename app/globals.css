@@ -939,3 +939,89 @@ html.nivoda-scroll-lock .app-content {
 @media (min-width: 480px) and (max-width: 767px) {
   .nivoda-grid { grid-template-columns: 1fr 1fr; }
 }
+
+/* Phone Browse Stones is two screens: filters, then results. The list is not
+   mounted under the filter screen, so Apply cannot refresh stones in place
+   behind an open filter sheet. */
+.nivoda-card-image {
+  height: 110px;
+  background: #F3F4F6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.nivoda-card-photo { width: 100%; height: 100%; object-fit: cover; }
+.nivoda-filters-scroll {
+  min-height: 0;
+}
+.nivoda-apply-bar { display: none; }
+.nivoda-results-chrome { display: none; }
+.nivoda-phone-home { display: none; }
+
+@media (max-width: 767px) {
+  .nivoda-phone .nivoda-filters {
+    width: 100%;
+    flex: 1 1 auto;
+    max-height: none;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
+    border-right: none;
+    border-bottom: none;
+  }
+  .nivoda-phone .nivoda-filters-scroll {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    padding: 12px 14px 16px;
+  }
+  .nivoda-phone .nivoda-apply-bar {
+    display: block;
+    flex-shrink: 0;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+    border-top: 1px solid #E8E8F0;
+    background: #fff;
+  }
+  .nivoda-phone .nivoda-results-wrap { flex: 1 1 auto; }
+  .nivoda-phone .nivoda-results-chrome {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    flex-shrink: 0;
+    padding: 10px 12px;
+    border-bottom: 1px solid #E8E8F0;
+    background: #fff;
+  }
+  .nivoda-phone .nivoda-sort-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 12px;
+    z-index: 3;
+    min-width: 210px;
+    background: #fff;
+    border: 1px solid #E8E8F0;
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(26,26,46,0.12);
+    padding: 6px;
+  }
+  .nivoda-phone .nivoda-phone-home {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 28px 24px;
+    text-align: center;
+  }
+  .nivoda-phone .nivoda-grid { grid-template-columns: 1fr; }
+  .nivoda-phone .nivoda-card-image { height: 220px; }
+  .nivoda-phone .nivoda-card-photo { object-fit: contain; }
+}
