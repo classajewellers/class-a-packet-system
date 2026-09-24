@@ -30,6 +30,7 @@ interface WorkshopPacket {
   workshop_intake_substatus: string | null;
   blocked_reason: string | null;
   blocked_note: string | null;
+  quality_issue_at?: string | null;
   delivery_method: string | null;
   pending_customer_approval?: boolean | null;
 }
@@ -91,6 +92,9 @@ function resolveAssignee(p: WorkshopPacket) {
   if (p.assigned_to_name) return p.assigned_to_name;
   if (p.workshop_subcontractor_name) return p.workshop_subcontractor_name;
   return null;
+}
+function isMyJob(p: WorkshopPacket, userId: string | null | undefined) {
+  return !!userId && p.assigned_to === userId;
 }
 function resolvePathwaySteps(p: WorkshopPacket, config: WorkshopConfig): { name: string }[] | null {
   if (!p.workshop_pathway_id) return null;
@@ -283,6 +287,11 @@ function JobRow({
           <span style={{ fontSize: 13.5, fontWeight: 500, color: "var(--vault-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {p.articles || JOB_TYPE_LABELS[p.job_type ?? ""] || "Job"}
           </span>
+          {p.quality_issue_at && (
+            <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: "#FEF2F2", color: "#B91C1C", border: "1px solid #FECACA", flexShrink: 0 }}>
+              Quality issue
+            </span>
+          )}
         </div>
         <div style={{ fontSize: 13, color: "var(--vault-text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {displayName(p)}
@@ -401,10 +410,10 @@ export default function WorkshopPage() {
     return true;
   });
 
-  // My work — a real filter against the already-fetched assignee data, not
-  // a new endpoint.
+  // My jobs — packets whose assigned_to is this login, not a name match
+  // on staff_member or the assignee label.
   const tabFiltered = tab === "mine"
-    ? filtered.filter(p => resolveAssignee(p) === user?.name)
+    ? filtered.filter(p => isMyJob(p, user?.id))
     : filtered;
 
   // ── Sort (identical logic to the prior version) ───────────────────────────
@@ -467,7 +476,7 @@ export default function WorkshopPage() {
             Active <span style={{ marginLeft: 5 }}><CountBadge n={filtered.length} /></span>
           </button>
           <button className={"vault-tab" + (tab === "mine" ? " vault-tab-active" : "")} onClick={() => setTab("mine")}>
-            My work <span style={{ marginLeft: 5 }}><CountBadge n={filtered.filter(p => resolveAssignee(p) === user?.name).length} /></span>
+            My jobs <span style={{ marginLeft: 5 }}><CountBadge n={filtered.filter(p => isMyJob(p, user?.id)).length} /></span>
           </button>
           <a href="/workshop/history" className="vault-tab" style={{ textDecoration: "none", display: "inline-block" }}>
             Completed

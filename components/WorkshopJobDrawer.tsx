@@ -49,6 +49,8 @@ export interface WorkshopPacket {
   blocked_reason: string | null;
   blocked_note: string | null;
   blocked_at: string | null;
+  quality_issue_at?: string | null;
+  quality_issue_note?: string | null;
   delivery_method: string | null;
   shopify_order_id: string | null;
   shopify_fulfillment_id: string | null;
@@ -198,7 +200,12 @@ function activityLabel(event: ActivityEvent): string {
       return `QC ${label}${inspector}${notes}`;
     }
     case "step_advanced":
-      return `Step advanced: Step ${Number(ov.step_index ?? 0) + 1} → Step ${Number(nv.step_index ?? 0) + 1}`;
+    case "step_change":
+      return `Step: Step ${Number(ov.step_index ?? 0) + 1} → Step ${Number(nv.step_index ?? 0) + 1}`;
+    case "quality_issue": {
+      const note = nv.quality_issue_note ? `: "${nv.quality_issue_note}"` : "";
+      return nv.quality_issue_at ? `Quality issue flagged${note}` : "Quality issue cleared";
+    }
     case "assignment_changed":
       return `Assigned to: ${(nv.subcontractor as string | null) ?? (nv.assigned_to ? "team member" : "Unassigned")}`;
     case "valuation_assigned":
@@ -245,6 +252,8 @@ export default function WorkshopJobDrawer({
   const [blockingOpen, setBlockingOpen] = useState(false);
   const [blockReason,  setBlockReason]  = useState("");
   const [blockNote,    setBlockNote]    = useState("");
+  const [qualityOpen,  setQualityOpen]  = useState(false);
+  const [qualityNote,  setQualityNote]  = useState("");
 
   // QC
   const [qcNotes,      setQcNotes]      = useState("");
@@ -271,6 +280,7 @@ export default function WorkshopJobDrawer({
   useEffect(() => {
     setLocal(packet);
     setBlockingOpen(false); setBlockReason(""); setBlockNote("");
+    setQualityOpen(false); setQualityNote("");
     setSaveError(null);
     setQcError(null); setQcAction(null); setQcNotes(""); setQcRevertStep(0);
   }, [packet]);
@@ -544,6 +554,46 @@ export default function WorkshopJobDrawer({
             <button onClick={() => setBlockingOpen(true)}
               style={{ fontSize: 12, fontWeight: 600, color: "#EA580C", background: "#FFF5F3", border: "1px solid #FDBA74", borderRadius: 6, padding: "4px 12px", cursor: "pointer" }}>
               + Flag as Blocked
+            </button>
+          )}
+        </div>
+
+        {LABEL("Quality issue")}
+        <div style={{ marginBottom: 14 }}>
+          {local.quality_issue_at ? (
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "#FEF2F2", color: "#B91C1C", border: "1px solid #FECACA" }}>
+                Quality issue
+              </span>
+              {local.quality_issue_note && <span style={{ fontSize: 12, color: "#6B7280", alignSelf: "center" }}>{local.quality_issue_note}</span>}
+              <button onClick={() => patch({ quality_issue_at: null, quality_issue_note: null })}
+                style={{ fontSize: 12, fontWeight: 600, color: "#374151", background: "#F9FAFB", border: "1px solid #E8E8F0", borderRadius: 6, padding: "3px 10px", cursor: "pointer" }}>
+                Clear flag
+              </button>
+            </div>
+          ) : qualityOpen ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <textarea rows={2} value={qualityNote} onChange={e => setQualityNote(e.target.value)} placeholder="What went wrong (optional)" style={TEXTAREA} />
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={() => {
+                    patch({ quality_issue_at: new Date().toISOString(), quality_issue_note: qualityNote.trim() || null });
+                    setQualityOpen(false);
+                    setQualityNote("");
+                  }}
+                  style={{ flex: 1, background: "#B91C1C", color: "#fff", border: "none", borderRadius: 8, padding: "7px 0", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                  Flag quality issue
+                </button>
+                <button onClick={() => { setQualityOpen(false); setQualityNote(""); }}
+                  style={{ background: "#F9FAFB", color: "#6B7280", border: "1px solid #E8E8F0", borderRadius: 8, padding: "7px 12px", fontSize: 13, cursor: "pointer" }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setQualityOpen(true)}
+              style={{ fontSize: 12, fontWeight: 600, color: "#B91C1C", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 6, padding: "4px 12px", cursor: "pointer" }}>
+              + Flag quality issue
             </button>
           )}
         </div>
@@ -979,6 +1029,11 @@ export default function WorkshopJobDrawer({
             {local.blocked_reason && (
               <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#FFF5F3", color: "#EA580C", border: "1px solid #FDBA74" }}>
                 🚫 {BLOCKED_LABELS[local.blocked_reason] ?? "Blocked"}
+              </span>
+            )}
+            {local.quality_issue_at && (
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#FEF2F2", color: "#B91C1C", border: "1px solid #FECACA" }}>
+                Quality issue
               </span>
             )}
             {local.workshop_needs_valuation && (

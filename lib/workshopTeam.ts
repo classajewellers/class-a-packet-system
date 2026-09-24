@@ -49,17 +49,14 @@ export async function replaceWorkshopRoles(
  * role tag (Jeweller, CAD Designer, or a later tag). System role
  * (admin/manager/staff) is not a workshop tag.
  *
- * profile_id is intentionally null on this projection. The workshop Assign To
- * control already writes packets.assigned_to when profile_id is set, and
- * writes workshop_subcontractor_name when it is not. Part C keeps the name
- * path the old list used. Part E is the change that points Assign To at the
- * real profile id.
+ * profile_id is the real login. Assign To writes packets.assigned_to from it.
+ * Subcontractors stay on workshop_subcontractor_name; they are not profiles.
  */
 export interface WorkshopTeamMember {
   id: string;
   tenant_id: string;
   name: string;
-  profile_id: null;
+  profile_id: string;
   sort_order: number;
   active: boolean;
   workshop_role_keys: string[];
@@ -132,7 +129,7 @@ export async function loadWorkshopTeamMembers(
       id: profileId,
       tenant_id: tenantId,
       name: (profile.full_name ?? "").trim(),
-      profile_id: null,
+      profile_id: profileId,
       sort_order: 0,
       active: true,
       workshop_role_keys: keys,
