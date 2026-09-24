@@ -33,14 +33,6 @@ interface WorkshopLocation {
   sort_order: number;
 }
 
-interface TeamMember {
-  id: string;
-  name: string;
-  profile_id: string | null;
-  sort_order: number;
-  active: boolean;
-}
-
 interface Subcontractor {
   id: string;
   name: string;
@@ -1186,203 +1178,6 @@ function LocationsTab({ tenantId }: { tenantId: string }) {
   );
 }
 
-// ─── Team Members Tab ─────────────────────────────────────────────────────────
-
-function TeamMembersTab({ tenantId }: { tenantId: string }) {
-  const [members, setMembers] = useState<TeamMember[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<Partial<TeamMember>>({});
-  const [editError, setEditError] = useState<string | null>(null);
-  const [deleteErrors, setDeleteErrors] = useState<Record<string, string>>({});
-  const [addOpen, setAddOpen] = useState(false);
-  const [addForm, setAddForm] = useState({ name: "", sort_order: 0, active: true });
-  const [addError, setAddError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [adding, setAdding] = useState(false);
-
-  const headers = { "Content-Type": "application/json", "x-tenant-id": tenantId };
-
-  const fetchMembers = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/workshop/team-members", { headers: { "x-tenant-id": tenantId } });
-      const data = await res.json();
-      setMembers(Array.isArray(data) ? data : data.members ?? []);
-    } finally {
-      setLoading(false);
-    }
-  }, [tenantId]);
-
-  useEffect(() => { fetchMembers(); }, [fetchMembers]);
-
-  const startEdit = (m: TeamMember) => {
-    setEditingId(m.id);
-    setEditForm({ name: m.name, sort_order: m.sort_order, active: m.active });
-    setEditError(null);
-  };
-
-  const cancelEdit = () => { setEditingId(null); setEditForm({}); setEditError(null); };
-
-  const saveEdit = async (id: string) => {
-    setSaving(true);
-    setEditError(null);
-    try {
-      const res = await fetch(`/api/workshop/team-members/${id}`, {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify(editForm),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        setEditError(d.error ?? d.message ?? "Failed to save");
-        return;
-      }
-      await fetchMembers();
-      cancelEdit();
-    } catch {
-      setEditError("Network error");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const deleteMember = async (id: string) => {
-    if (!confirm("Delete this team member? Jobs currently assigned to them will need to be reassigned.")) return;
-    setDeleteErrors((p) => ({ ...p, [id]: "" }));
-    try {
-      const res = await fetch(`/api/workshop/team-members/${id}`, { method: "DELETE", headers });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        setDeleteErrors((p) => ({ ...p, [id]: d.error ?? d.message ?? "Failed to delete" }));
-        return;
-      }
-      await fetchMembers();
-    } catch {
-      setDeleteErrors((p) => ({ ...p, [id]: "Network error" }));
-    }
-  };
-
-  const moveItem = async (idx: number, dir: -1 | 1) => {
-    const newIdx = idx + dir;
-    if (newIdx < 0 || newIdx >= members.length) return;
-    const a = members[idx];
-    const b = members[newIdx];
-    const reordered = [...members];
-    reordered[idx] = b;
-    reordered[newIdx] = a;
-    setMembers(reordered);
-    try {
-      await Promise.all([
-        fetch(`/api/workshop/team-members/${a.id}`, { method: "PATCH", headers, body: JSON.stringify({ sort_order: newIdx }) }),
-        fetch(`/api/workshop/team-members/${b.id}`, { method: "PATCH", headers, body: JSON.stringify({ sort_order: idx }) }),
-      ]);
-    } catch { fetchMembers(); }
-  };
-
-  const submitAdd = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAdding(true);
-    setAddError(null);
-    try {
-      const res = await fetch("/api/workshop/team-members", {
-        method: "POST",
-        headers,
-        body: JSON.stringify(addForm),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        setAddError(d.error ?? d.message ?? "Failed to add");
-        return;
-      }
-      setAddForm({ name: "", sort_order: 0, active: true });
-      setAddOpen(false);
-      await fetchMembers();
-    } catch {
-      setAddError("Network error");
-    } finally {
-      setAdding(false);
-    }
-  };
-
-  if (loading) return <p style={s.loadingText}>Loading team members…</p>;
-
-  return (
-    <div>
-      <p style={s.tabDesc}>Team members each get their own column on the board when a job is assigned to them. They show up in the "Assign To" dropdown on every job.</p>
-      <div style={s.topBar}>
-        <button style={s.btnAdd} onClick={() => { setAddOpen(o => !o); setAddError(null); }}>
-          {addOpen ? "Cancel" : "+ Add Team Member"}
-        </button>
-      </div>
-
-      {addOpen && (
-        <div style={{ ...s.addFormCard, marginTop: 0, marginBottom: 12 }}>
-          <form onSubmit={submitAdd}>
-            <div style={s.formGrid}>
-              <div style={s.fieldGroup}>
-                <label style={s.label}>Name *</label>
-                <input style={s.input} required autoFocus value={addForm.name}
-                  onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))} />
-              </div>
-            </div>
-            {addError && <p style={s.errorText}>{addError}</p>}
-            <div style={s.btnRow}>
-              <button type="submit" style={s.btnPrimary} disabled={adding}>{adding ? "Adding…" : "Add Team Member"}</button>
-              <button type="button" style={s.btnSecondary} onClick={() => setAddOpen(false)}>Cancel</button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {members.length === 0 && <p style={{ color: "#9CA3AF", fontSize: 14 }}>No team members yet. Add one above.</p>}
-
-      {members.map((m, i) => (
-        <div key={m.id}>
-          {editingId === m.id ? (
-            <div style={s.editRow}>
-              <div style={s.formGrid}>
-                <div style={s.fieldGroup}>
-                  <label style={s.label}>Name</label>
-                  <input style={s.input} autoFocus value={editForm.name ?? ""}
-                    onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} />
-                </div>
-                <div style={{ ...s.fieldGroup, justifyContent: "center" as const }}>
-                  <label style={{ ...s.label, marginBottom: 8 }}>Active</label>
-                  <input type="checkbox" checked={editForm.active ?? true}
-                    onChange={(e) => setEditForm((f) => ({ ...f, active: e.target.checked }))}
-                    style={{ width: 16, height: 16, cursor: "pointer" }} />
-                </div>
-              </div>
-              {editError && <p style={s.errorText}>{editError}</p>}
-              <div style={s.btnRow}>
-                <button style={s.btnPrimary} onClick={() => saveEdit(m.id)} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
-                <button style={s.btnSecondary} onClick={cancelEdit}>Cancel</button>
-              </div>
-            </div>
-          ) : (
-            <div style={s.row(i % 2 === 1)}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                <button style={s.sortBtn(i === 0)} onClick={() => moveItem(i, -1)} disabled={i === 0} title="Move up">▲</button>
-                <button style={s.sortBtn(i === members.length - 1)} onClick={() => moveItem(i, 1)} disabled={i === members.length - 1} title="Move down">▼</button>
-              </div>
-              <span style={{ flex: 1, fontSize: 14, fontWeight: 500, color: "#1A1A2E" }}>{m.name}</span>
-              <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 12, background: m.active ? "#D1FAE5" : "#F3F4F6", color: m.active ? "#065F46" : "#6B7280" }}>
-                {m.active ? "Active" : "Inactive"}
-              </span>
-              <button style={s.btnEdit} onClick={() => startEdit(m)}>Edit</button>
-              <button style={s.btnDanger} onClick={() => deleteMember(m.id)}>Delete</button>
-              {deleteErrors[m.id] && (
-                <span style={{ ...s.errorText, width: "100%", fontWeight: 500 }}>⚠ {deleteErrors[m.id]}</span>
-              )}
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // ─── Sub-contractors Tab ──────────────────────────────────────────────────────
 
 function SubcontractorsTab({ tenantId }: { tenantId: string }) {
@@ -1582,13 +1377,12 @@ function SubcontractorsTab({ tenantId }: { tenantId: string }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-type Tab = "categories" | "stages" | "locations" | "team" | "subcontractors";
+type Tab = "categories" | "stages" | "locations" | "subcontractors";
 
 const TAB_LABELS: Record<Tab, string> = {
   categories:    "Categories",
   stages:        "Stages",
   locations:     "Locations",
-  team:          "Team Members",
   subcontractors: "Sub-contractors",
 };
 
@@ -1621,11 +1415,11 @@ export default function WorkshopSettingsPage() {
           ← Back to Workshop
         </a>
         <h1 style={s.heading}>Workshop Settings</h1>
-        <p style={s.subheading}>Configure categories, stages, locations, team members, and sub-contractors for your workshop board.</p>
+        <p style={s.subheading}>Configure categories, stages, locations, and sub-contractors. Workshop staff and role tags are in Settings → Team.</p>
 
         <div style={s.card}>
           <div style={s.tabBar}>
-            {(["categories", "stages", "locations", "team", "subcontractors"] as Tab[]).map((tab) => (
+            {(["categories", "stages", "locations", "subcontractors"] as Tab[]).map((tab) => (
               <button
                 key={tab}
                 style={s.tabBtn(activeTab === tab)}
@@ -1639,7 +1433,6 @@ export default function WorkshopSettingsPage() {
             {activeTab === "categories"    && <CategoriesTab    tenantId={tenantId} />}
             {activeTab === "stages"        && <StagesTab        tenantId={tenantId} />}
             {activeTab === "locations"     && <LocationsTab     tenantId={tenantId} />}
-            {activeTab === "team"          && <TeamMembersTab   tenantId={tenantId} />}
             {activeTab === "subcontractors" && <SubcontractorsTab tenantId={tenantId} />}
           </div>
         </div>

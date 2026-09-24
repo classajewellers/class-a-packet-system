@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { loadWorkshopTeamMembers } from "@/lib/workshopTeam";
 
 export const dynamic = "force-dynamic";
 
@@ -7,8 +8,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
   try {
     const supabase = await createTenantSupabaseClient(tenantId);
+    const teamResult = await loadWorkshopTeamMembers(supabase, tenantId);
     const [
-      { data: teamMembers,    error: e1 },
       { data: subcontractors, error: e2 },
       { data: valuers,        error: e3 },
       { data: pathways,       error: e4 },
@@ -19,7 +20,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       { data: locations,      error: e9 },
       { data: settingsRow,    error: e10 },
     ] = await Promise.all([
-      supabase.from("workshop_team_members").select("*").eq("tenant_id", tenantId).order("sort_order"),
       supabase.from("workshop_subcontractors").select("*").eq("tenant_id", tenantId).order("sort_order"),
       supabase.from("workshop_valuers").select("*").eq("tenant_id", tenantId).order("name"),
       supabase.from("workshop_pathways").select("*").eq("tenant_id", tenantId).order("name"),
@@ -32,13 +32,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     ]);
 
     // Log any query-level errors — these don't throw, so they're invisible without this
+    const e1 = teamResult.error ? { code: "team", message: teamResult.error.message, details: null } : null;
     const queryErrors = { e1, e2, e3, e4, e5, e6, e7, e8, e9, e10 };
     for (const [key, err] of Object.entries(queryErrors)) {
       if (err) console.error(`[workshop/config] query ${key} failed:`, err.code, err.message, err.details);
     }
 
     return NextResponse.json({
-      teamMembers:    teamMembers    ?? [],
+      teamMembers:    teamResult.members,
       subcontractors: subcontractors ?? [],
       valuers:        valuers        ?? [],
       pathways:       pathways       ?? [],
