@@ -79,7 +79,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     })
   );
 
-  return NextResponse.json({ attachments: withUrls });
+  return NextResponse.json(
+    { attachments: withUrls },
+    { headers: { "Cache-Control": "no-store" } }
+  );
 }
 
 // ── POST /api/attachments (multipart) ─────────────────────────────────────────
