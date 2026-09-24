@@ -100,19 +100,27 @@ CREATE TRIGGER tenants_seed_workshop_roles
 -- If a profile in the same tenant already matches a team-member name, tag
 -- them Jeweller before the name list is dropped. Staging has no such
 -- profiles (confirmed 2026-09-24); this is for any environment that does.
-INSERT INTO public.profile_workshop_roles (tenant_id, profile_id, workshop_role_id)
-SELECT DISTINCT wtm.tenant_id, p.id, wr.id
-FROM public.workshop_team_members wtm
-JOIN public.profiles p
-  ON p.tenant_id = wtm.tenant_id
- AND (
-      lower(btrim(p.full_name)) = lower(btrim(wtm.name))
-   OR lower(split_part(btrim(coalesce(p.full_name, '')), ' ', 1)) = lower(btrim(wtm.name))
- )
-JOIN public.workshop_roles wr
-  ON wr.tenant_id = wtm.tenant_id
- AND wr.slug = 'jeweller'
-WHERE coalesce(wtm.active, true)
-ON CONFLICT DO NOTHING;
+-- Guarded so a second apply (table already gone) is a no-op.
+DO $$
+BEGIN
+  IF to_regclass('public.workshop_team_members') IS NULL THEN
+    RETURN;
+  END IF;
 
-DROP TABLE IF EXISTS public.workshop_team_members;
+  INSERT INTO public.profile_workshop_roles (tenant_id, profile_id, workshop_role_id)
+  SELECT DISTINCT wtm.tenant_id, p.id, wr.id
+  FROM public.workshop_team_members wtm
+  JOIN public.profiles p
+    ON p.tenant_id = wtm.tenant_id
+   AND (
+        lower(btrim(p.full_name)) = lower(btrim(wtm.name))
+     OR lower(split_part(btrim(coalesce(p.full_name, '')), ' ', 1)) = lower(btrim(wtm.name))
+   )
+  JOIN public.workshop_roles wr
+    ON wr.tenant_id = wtm.tenant_id
+   AND wr.slug = 'jeweller'
+  WHERE coalesce(wtm.active, true)
+  ON CONFLICT DO NOTHING;
+
+  DROP TABLE public.workshop_team_members;
+END $$;
