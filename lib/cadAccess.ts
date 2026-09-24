@@ -60,6 +60,20 @@ export async function nameIsCadDesigner(
   return (profiles ?? []).some((row) => (row.full_name ?? "").trim().toLowerCase() === wanted);
 }
 
+export async function cadVersionCount(
+  supabase: SupabaseClient,
+  tenantId: string,
+  packetId: string
+): Promise<number> {
+  const { count, error } = await supabase
+    .from("workshop_cad_versions")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", tenantId)
+    .eq("packet_id", packetId);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
 export async function latestApprovedCadVersion(
   supabase: SupabaseClient,
   tenantId: string,

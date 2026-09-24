@@ -5,7 +5,7 @@ import { useUser } from "@/context/UserContext";
 import { formatDateAU, formatCurrency } from "@/lib/formatters";
 import AttachmentsSection from "@/components/AttachmentsSection";
 import CadApprovalPanel from "@/components/CadApprovalPanel";
-import { isCastingOverdue, pathwayStepIndex } from "@/lib/cadStage";
+import { castingDueDate, isCastingOverdue, pathwayStepIndex } from "@/lib/cadStage";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -47,10 +47,9 @@ export interface WorkshopPacket {
   workshop_needs_valuation: boolean;
   workshop_valuer: string | null;
   workshop_supplier: string | null;
-  workshop_supplier_sent_date?: string | null;
-  workshop_supplier_expected_return?: string | null;
-  workshop_supplier_returned?: boolean | null;
-  workshop_casting_cad_version_id?: string | null;
+  workshop_due_date?: string | null;
+  workshop_due_date_overridden?: boolean | null;
+  cad_required?: boolean | null;
   workshop_po_number: string | null;
   blocked_reason: string | null;
   blocked_note: string | null;
@@ -486,7 +485,7 @@ export default function WorkshopJobDrawer({
         )}
         {isCastingOverdue(local) && (
           <div style={{ background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: 8, padding: "8px 12px", marginBottom: 14, fontSize: 13, fontWeight: 600, color: "#DC2626" }}>
-            Casting overdue — expected back {local.workshop_supplier_expected_return ? formatDateAU(local.workshop_supplier_expected_return) : ""} and not marked returned.
+            Casting overdue — expected back {castingDueDate(local) ? formatDateAU(castingDueDate(local) as string) : ""} and still in Casting.
           </div>
         )}
         {(overdue || dueToday) && (
@@ -737,21 +736,17 @@ export default function WorkshopJobDrawer({
         {FIELD("PO Number",
           <input type="text" defaultValue={local.workshop_po_number ?? ""} onBlur={e => { if (e.target.value !== (local.workshop_po_number ?? "")) patch({ workshop_po_number: e.target.value || null }); }} style={INPUT} placeholder="PO-…" />
         )}
-        {FIELD("Sent to supplier",
-          <input type="date" value={local.workshop_supplier_sent_date ?? ""} onChange={e => patch({ workshop_supplier_sent_date: e.target.value || null })} style={INPUT} />
-        )}
         {FIELD("Expected return",
-          <input type="date" value={local.workshop_supplier_expected_return ?? ""} onChange={e => patch({ workshop_supplier_expected_return: e.target.value || null })} style={INPUT} />
+          <input type="date" value={local.workshop_due_date ?? ""} onChange={e => patch({ workshop_due_date: e.target.value || null, workshop_due_date_overridden: !!e.target.value })} style={INPUT} />
         )}
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#374151", marginBottom: 10 }}>
-          <input type="checkbox" checked={!!local.workshop_supplier_returned} onChange={e => patch({ workshop_supplier_returned: e.target.checked })} />
-          Casting is back in the workshop
-        </label>
+        {local.due_date && local.due_date !== local.workshop_due_date && (
+          <div style={{ fontSize: 12, color: "#6B7280", marginTop: -8, marginBottom: 10 }}>Customer due date: {formatDateAU(local.due_date)}</div>
+        )}
         {local.status === "casting" && (
           <div style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.45 }}>
             {isCastingOverdue(local)
-              ? "This casting is overdue. When it is back, tick the box above, then move the stage to Polish/Finish or Polish/Set."
-              : "When the casting is back, tick the box above, then move the stage to Polish/Finish or Polish/Set."}
+              ? "This casting is overdue. It is still in Casting, so it is not back. When it returns, move the stage to Polish/Finish or Polish/Set."
+              : "Expected return is the workshop due date. While the job stays in Casting past that date, it is overdue. When it returns, move the stage to Polish/Finish or Polish/Set."}
           </div>
         )}
       </div>
@@ -1072,6 +1067,9 @@ export default function WorkshopJobDrawer({
               <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#FFF5F3", color: "#EA580C", border: "1px solid #FDBA74" }}>
                 🚫 {BLOCKED_LABELS[local.blocked_reason] ?? "Blocked"}
               </span>
+            )}
+            {local.cad_required && (
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#F5F3FF", color: "#5B21B6", border: "1px solid #DDD6FE" }}>CAD required</span>
             )}
             {isCastingOverdue(local) && (
               <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#FEE2E2", color: "#DC2626", border: "1px solid #FECACA" }}>Casting overdue</span>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { fireReadyForPickupZap } from "@/lib/zapier";
-import { latestApprovedCadVersion, nameIsCadDesigner, pathwayStepUpdate, profileIsCadDesigner } from "@/lib/cadAccess";
+import { cadVersionCount, latestApprovedCadVersion, nameIsCadDesigner, pathwayStepUpdate, profileIsCadDesigner } from "@/lib/cadAccess";
 import { CAD_DESIGN_STATUS, CASTING_STATUS } from "@/lib/cadStage";
 
 export const dynamic = "force-dynamic";
@@ -32,9 +32,9 @@ const ALLOWED_FIELDS = [
   "workshop_needs_valuation",
   "workshop_valuer",
   "workshop_supplier",
-  "workshop_supplier_sent_date",
-  "workshop_supplier_expected_return",
-  "workshop_supplier_returned",
+  "workshop_due_date",
+  "workshop_due_date_overridden",
+  "cad_required",
   "workshop_po_number",
   "blocked_reason",
   "blocked_note",
@@ -106,13 +106,14 @@ export async function PATCH(
       workshop_subcontractor_name?: string | null;
       workshop_step_index?: number | null;
       workshop_pathway_id?: string | null;
+      cad_required?: boolean | null;
       pending_customer_approval?: boolean | null;
     } | null = null;
 
     if (needsCurrent) {
       const { data } = await supabase
         .from("packets")
-        .select("status, total_charges, deposit, workshop_needs_valuation, workshop_valuer, assigned_to, workshop_subcontractor_name, workshop_step_index, workshop_pathway_id, pending_customer_approval")
+        .select("status, total_charges, deposit, workshop_needs_valuation, workshop_valuer, assigned_to, workshop_subcontractor_name, workshop_step_index, workshop_pathway_id, cad_required, pending_customer_approval")
         .eq("id", params.id)
         .single();
       current = data;
@@ -152,18 +153,20 @@ export async function PATCH(
       const nextStatus = (updates.status as string | undefined) ?? current?.status ?? null;
       if (nextStatus === CASTING_STATUS && current?.status !== CASTING_STATUS) {
         let approved: { id: string } | null = null;
+        let versions = 0;
         try {
           approved = await latestApprovedCadVersion(supabase, tenantId, params.id);
+          if (!approved) versions = await cadVersionCount(supabase, tenantId, params.id);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           return NextResponse.json({ error: message }, { status: 422 });
         }
-        if (!approved) {
+        const needsApprovedCad = current?.cad_required === true || versions > 0;
+        if (needsApprovedCad && !approved) {
           return NextResponse.json({
             error: "Casting needs an approved CAD version. Approve a render and source file on the CAD tab first.",
           }, { status: 422 });
         }
-        updates.workshop_casting_cad_version_id = approved.id;
         if (updates.workshop_step_index === undefined) {
           const step = await pathwayStepUpdate(supabase, tenantId, current?.workshop_pathway_id, CASTING_STATUS);
           if (step !== null) updates.workshop_step_index = step;

@@ -3,11 +3,12 @@ export const CAD_DESIGN_STATUS = "cad_design";
 export const CASTING_STATUS = "casting";
 export const CAD_DESIGNER_SLUG = "cad_designer";
 
-export const CAD_PATH_STEPS: Record<string, string> = {
-  cad_design: "CAD Design",
-  casting: "Casting",
-  polish_finish: "Polish/Finish",
-  polish_set: "Polish/Set",
+/** First matching pathway step name wins. Remodel already uses "CAD Drawing". */
+export const CAD_PATH_STEPS: Record<string, string[]> = {
+  cad_design: ["CAD Design", "CAD Drawing"],
+  casting: ["Casting"],
+  polish_finish: ["Polish/Finish"],
+  polish_set: ["Polish/Set"],
 };
 
 export type CadVersionStatus = "pending" | "approved" | "changes_requested" | "rejected";
@@ -16,20 +17,28 @@ export function pathwayStepIndex(
   steps: { name?: string }[] | null | undefined,
   stageKey: string
 ): number | null {
-  const name = CAD_PATH_STEPS[stageKey];
-  if (!name || !steps) return null;
-  const idx = steps.findIndex((step) => step?.name === name);
+  const names = CAD_PATH_STEPS[stageKey];
+  if (!names || !steps) return null;
+  const idx = steps.findIndex((step) => names.includes(step?.name ?? ""));
   return idx >= 0 ? idx : null;
 }
 
+/** Expected back date: workshop due date, then the packet due date. */
+export function castingDueDate(packet: {
+  workshop_due_date?: string | null;
+  due_date?: string | null;
+}): string | null {
+  return packet.workshop_due_date || packet.due_date || null;
+}
+
+/** Overdue while the job is still in Casting (not back yet). */
 export function isCastingOverdue(packet: {
   status?: string | null;
-  workshop_supplier_expected_return?: string | null;
-  workshop_supplier_returned?: boolean | null;
+  workshop_due_date?: string | null;
+  due_date?: string | null;
 }): boolean {
   if (packet.status !== CASTING_STATUS) return false;
-  if (packet.workshop_supplier_returned) return false;
-  const due = packet.workshop_supplier_expected_return;
+  const due = castingDueDate(packet);
   if (!due) return false;
   const today = new Date().toISOString().slice(0, 10);
   return due.slice(0, 10) < today;

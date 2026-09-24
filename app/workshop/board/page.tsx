@@ -53,10 +53,9 @@ interface WorkshopPacket {
   workshop_needs_valuation: boolean;
   workshop_valuer: string | null;
   workshop_supplier: string | null;
-  workshop_supplier_sent_date?: string | null;
-  workshop_supplier_expected_return?: string | null;
-  workshop_supplier_returned?: boolean | null;
-  workshop_casting_cad_version_id?: string | null;
+  workshop_due_date?: string | null;
+  workshop_due_date_overridden?: boolean | null;
+  cad_required?: boolean | null;
   workshop_po_number: string | null;
   blocked_reason: string | null;
   blocked_note: string | null;

@@ -253,7 +253,6 @@ export interface Packet {
   workshop_supplier_sent_date: string | null;
   workshop_supplier_expected_return: string | null;
   workshop_supplier_returned: boolean | null;
-  workshop_casting_cad_version_id?: string | null;
 
   // Workshop kanban (migration 058)
   status: string | null;

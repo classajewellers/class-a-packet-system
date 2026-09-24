@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { requireManager } from "@/lib/require-auth";
-import { latestApprovedCadVersion, pathwayStepUpdate } from "@/lib/cadAccess";
+import { pathwayStepUpdate } from "@/lib/cadAccess";
 import { CAD_DESIGN_STATUS, CASTING_STATUS, type CadVersionStatus } from "@/lib/cadStage";
 
 export const dynamic = "force-dynamic";
@@ -40,7 +40,7 @@ export async function POST(
     const supabase = await createTenantSupabaseClient(tenantId);
     const { data: packet, error: packetErr } = await supabase
       .from("packets")
-      .select("id, status, pending_customer_approval, workshop_pathway_id, workshop_casting_cad_version_id")
+      .select("id, status, pending_customer_approval, workshop_pathway_id, cad_required")
       .eq("tenant_id", tenantId)
       .eq("id", params.id)
       .maybeSingle();
@@ -83,7 +83,6 @@ export async function POST(
     if (action === "approve") {
       packetUpdate.status = CASTING_STATUS;
       packetUpdate.workshop_intake_substatus = null;
-      packetUpdate.workshop_casting_cad_version_id = version.id;
       packetUpdate.status_updated_at = decidedAt;
       const step = await pathwayStepUpdate(supabase, tenantId, packet.workshop_pathway_id, CASTING_STATUS);
       if (step !== null) packetUpdate.workshop_step_index = step;
@@ -91,18 +90,8 @@ export async function POST(
       packetUpdate.status = CAD_DESIGN_STATUS;
       packetUpdate.workshop_intake_substatus = null;
       packetUpdate.status_updated_at = decidedAt;
-      const stillApproved = await latestApprovedCadVersion(supabase, tenantId, params.id, version.id);
-      packetUpdate.workshop_casting_cad_version_id = stillApproved?.id ?? null;
       const step = await pathwayStepUpdate(supabase, tenantId, packet.workshop_pathway_id, CAD_DESIGN_STATUS);
       if (step !== null) packetUpdate.workshop_step_index = step;
-    } else if (packet.workshop_casting_cad_version_id === version.id) {
-      const stillApproved = await latestApprovedCadVersion(supabase, tenantId, params.id, version.id);
-      packetUpdate.workshop_casting_cad_version_id = stillApproved?.id ?? null;
-      if (!stillApproved && packet.status === CASTING_STATUS) {
-        packetUpdate.status = CAD_DESIGN_STATUS;
-        packetUpdate.workshop_intake_substatus = null;
-        packetUpdate.status_updated_at = decidedAt;
-      }
     }
 
     let updatedPacket = null;

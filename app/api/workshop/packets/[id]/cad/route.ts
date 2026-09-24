@@ -13,7 +13,7 @@ async function loadPacket(
 ) {
   const { data, error } = await supabase
     .from("packets")
-    .select("id, status, pending_customer_approval, workshop_casting_cad_version_id")
+    .select("id, status, pending_customer_approval, cad_required")
     .eq("tenant_id", tenantId)
     .eq("id", packetId)
     .maybeSingle();
@@ -42,11 +42,16 @@ export async function GET(
       .order("version_number", { ascending: false });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+    const drivingVersion = (data ?? []).reduce((best, row) => {
+      if (row.status !== "approved") return best;
+      if (!best || row.version_number > best) return row.version_number;
+      return best;
+    }, 0);
     const versions = (data ?? []).map((row) => ({
       ...row,
-      drives_casting: row.id === packet.workshop_casting_cad_version_id && row.status === "approved",
+      drives_casting: row.status === "approved" && row.version_number === drivingVersion,
     }));
-    return NextResponse.json({ versions });
+    return NextResponse.json({ versions, cad_required: packet.cad_required === true });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }

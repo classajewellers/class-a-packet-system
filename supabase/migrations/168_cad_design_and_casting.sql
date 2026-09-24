@@ -12,17 +12,18 @@
 --   (existing pathway step arrays are not rewritten, so workshop_step_index stays put):
 --     CAD Design inhouse → Casting external → Polish/Finish inhouse → Polish/Set inhouse
 --
--- Casting reuses packets.workshop_supplier (069). These columns are new because
--- they are not in any earlier migration (lib/types.ts already named the three dates):
---   packets.workshop_supplier_sent_date          date
---   packets.workshop_supplier_expected_return    date
---   packets.workshop_supplier_returned           boolean NOT NULL DEFAULT false
---   packets.workshop_casting_cad_version_id      uuid → workshop_cad_versions.id
--- Overdue: status = 'casting'
---   AND workshop_supplier_expected_return < current_date
---   AND workshop_supplier_returned = false.
--- Only the version id in workshop_casting_cad_version_id drives the casting order.
--- That pointer is set when a version is approved, and only while that row stays approved.
+-- Reused packet columns (already live — this file does not ADD them):
+--   packets.workshop_supplier              external casting supplier
+--   packets.workshop_due_date              expected return while status is casting
+--   packets.workshop_due_date_overridden   set when a person edits that date
+--   packets.due_date                       fallback when workshop_due_date is empty
+--   packets.cad_required                   job must have an approved CAD version before Casting
+-- Overdue: status = 'casting' AND coalesce(workshop_due_date, due_date) < current_date.
+-- Still in Casting means it is not back. No returned flag and no new date column.
+-- The casting order is the latest workshop_cad_versions row with status = 'approved'.
+-- No pointer column on packets. Approval is that version status, not a stage key.
+-- Pre-Check already exists as workshop_stages key intake + intake_substatus pre_check.
+-- Remodel pathway step "CAD Drawing" is left as-is so workshop_step_index does not shift.
 --
 -- New table workshop_cad_versions. RLS matches workshop_roles (167):
 --   ENABLE + FORCE, policy tenant_isolation FOR ALL
@@ -64,33 +65,8 @@ CREATE POLICY tenant_isolation ON public.workshop_cad_versions
   USING (tenant_id = public.current_tenant_id())
   WITH CHECK (tenant_id = public.current_tenant_id());
 
-ALTER TABLE public.packets
-  ADD COLUMN IF NOT EXISTS workshop_supplier_sent_date date,
-  ADD COLUMN IF NOT EXISTS workshop_supplier_expected_return date,
-  ADD COLUMN IF NOT EXISTS workshop_supplier_returned boolean NOT NULL DEFAULT false,
-  ADD COLUMN IF NOT EXISTS workshop_casting_cad_version_id uuid;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'packets_workshop_casting_cad_version_id_fkey'
-  ) THEN
-    ALTER TABLE public.packets
-      ADD CONSTRAINT packets_workshop_casting_cad_version_id_fkey
-      FOREIGN KEY (workshop_casting_cad_version_id)
-      REFERENCES public.workshop_cad_versions(id)
-      ON DELETE SET NULL;
-  END IF;
-END $$;
-
-COMMENT ON COLUMN public.packets.workshop_supplier_sent_date IS
-  'Date the job was sent to the external casting supplier.';
-COMMENT ON COLUMN public.packets.workshop_supplier_expected_return IS
-  'Expected return from the external caster. Overdue when this is before today, status is casting, and workshop_supplier_returned is false.';
-COMMENT ON COLUMN public.packets.workshop_supplier_returned IS
-  'True once the casting is back in the workshop.';
-COMMENT ON COLUMN public.packets.workshop_casting_cad_version_id IS
-  'Approved workshop_cad_versions row that drives the casting order.';
+COMMENT ON TABLE public.workshop_cad_versions IS
+  'CAD render + source history. decided_by is the reviewer. The latest status=approved row drives the casting order. Supplier is packets.workshop_supplier. Expected return is packets.workshop_due_date (else due_date).';
 
 CREATE OR REPLACE FUNCTION public.seed_cad_stages_for_tenant(p_tenant uuid)
 RETURNS void
