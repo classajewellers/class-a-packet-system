@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
+import { safeInternalPath } from "@/lib/safeNext";
 
 // Exact public PAGE paths that bypass the session redirect. API publics are a
 // separate, tighter list (API_PUBLIC_ROUTES) applied in the /api/* branch —
@@ -320,6 +321,17 @@ export async function middleware(request: NextRequest) {
 
   // ── Auth checks (pages) ─────────────────────────────────────────────────────
 
+  // Old workshop links (?job= / ?packet=) open the full-page traveler, not the board.
+  if (pathname === "/workshop/board") {
+    const jobId = request.nextUrl.searchParams.get("job") || request.nextUrl.searchParams.get("packet");
+    if (jobId && !jobId.includes("/") && !jobId.includes("\\") && !jobId.includes("..")) {
+      const url = request.nextUrl.clone();
+      url.pathname = `/workshop/jobs/${encodeURIComponent(jobId)}`;
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+  }
+
   // 3. Completely public — return immediately, no Supabase client created
   if (
     PUBLIC_ROUTES.has(pathname) ||
@@ -367,7 +379,10 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    const loginUrl = new URL("/login", request.url);
+    const next = safeInternalPath(`${pathname}${request.nextUrl.search}`);
+    if (next) loginUrl.searchParams.set("next", next);
+    return NextResponse.redirect(loginUrl);
   }
 
   return response;

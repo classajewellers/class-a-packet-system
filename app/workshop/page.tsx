@@ -243,7 +243,7 @@ function ExpandedDetail({ p, config }: { p: WorkshopPacket; config: WorkshopConf
         <div style={{ flexShrink: 0 }}>
           <button
             className="vault-btn vault-btn-secondary"
-            onClick={(e) => { e.stopPropagation(); router.push(`/workshop/board?job=${p.id}`); }}
+            onClick={(e) => { e.stopPropagation(); router.push(`/workshop/jobs/${p.id}`); }}
           >
             Open job
           </button>

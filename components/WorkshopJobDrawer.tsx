@@ -102,20 +102,23 @@ interface SmsMessage {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const TABS: { id: TabId; label: string }[] = [
-  { id: "overview",    label: "Overview" },
-  { id: "customer",    label: "Customer" },
-  { id: "items",       label: "Items" },
-  { id: "notes",       label: "Notes" },
-  { id: "production",  label: "Production" },
-  { id: "materials",   label: "Materials" },
-  { id: "purchasing",  label: "Purchasing" },
-  { id: "pricing",     label: "Pricing" },
-  { id: "qc",          label: "QC" },
-  { id: "valuation",   label: "Valuation" },
-  { id: "files",       label: "Files" },
-  { id: "messages",    label: "Messages" },
-  { id: "history",     label: "History" },
+const FRONT_SECTIONS: { id: TabId; label: string }[] = [
+  { id: "overview",   label: "Job" },
+  { id: "items",      label: "Items" },
+  { id: "production", label: "Production" },
+  { id: "materials",  label: "Materials" },
+];
+
+const MORE_SECTIONS: { id: TabId; label: string }[] = [
+  { id: "customer",   label: "Customer" },
+  { id: "notes",      label: "Notes" },
+  { id: "purchasing", label: "Purchasing" },
+  { id: "pricing",    label: "Pricing" },
+  { id: "qc",         label: "QC" },
+  { id: "valuation",  label: "Valuation" },
+  { id: "files",      label: "Files" },
+  { id: "messages",   label: "Messages" },
+  { id: "history",    label: "History" },
 ];
 
 const BLOCKED_REASON_OPTIONS = [
@@ -184,6 +187,22 @@ function isDueToday(p: WorkshopPacket) {
   return !!p.due_date && p.due_date === today && p.status !== "collected";
 }
 
+const STAGE_SHORT: Record<string, string> = {
+  "Pre-Check": "Pre",
+  "On Order": "Order",
+  "On Bench": "Bench",
+  "Quality Control": "QC",
+  "To-Be-Valued": "Value",
+  "Valuation": "Value",
+  "Ready for Collection": "Ready",
+};
+
+function stageShort(label: string): string {
+  if (STAGE_SHORT[label]) return STAGE_SHORT[label];
+  if (label.length <= 10) return label;
+  return label.split(/[\s-]+/)[0]?.slice(0, 8) || label.slice(0, 8);
+}
+
 function activityLabel(event: ActivityEvent): string {
   const nv = event.new_value ?? {};
   const ov = event.old_value ?? {};
@@ -245,7 +264,17 @@ export default function WorkshopJobDrawer({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [narrow, setNarrow] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("overview");
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 720px)");
+    const apply = () => setNarrow(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
 
   // Blocked control
   const [blockingOpen, setBlockingOpen] = useState(false);
@@ -477,7 +506,7 @@ export default function WorkshopJobDrawer({
         <WorkshopPurchasing rows={purchases.rows} error={purchases.error} />
 
         {LABEL("Stage")}
-        <div style={{ display: "flex", alignItems: "flex-start", overflowX: "auto", marginBottom: 14, paddingBottom: 4 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", width: "100%", overflowX: "auto", marginBottom: 16, padding: "2px 0 8px" }}>
           {FLAT_STAGES.map((entry, index) => {
             const active = isStageActive(entry);
             const currentIndex = FLAT_STAGES.findIndex(isStageActive);
@@ -487,20 +516,24 @@ export default function WorkshopJobDrawer({
             if (entry.substatus !== null) payload.workshop_intake_substatus = entry.substatus;
             const blockedByApproval = !!local.pending_customer_approval && isNext;
             const canAdvance = isNext && !blockedByApproval;
+            const label = (narrow && !active && !isNext) ? stageShort(entry.label) : entry.label;
             return (
-              <div key={`${entry.status}_${entry.substatus ?? ""}`} style={{ display: "flex", alignItems: "flex-start", flex: "0 0 auto" }}>
+              <div key={`${entry.status}_${entry.substatus ?? ""}`} style={{ display: "flex", alignItems: "flex-start", flex: index === 0 ? "0 0 auto" : "1 1 0", minWidth: active || isNext ? 72 : 44 }}>
                 {index > 0 && (
-                  <div style={{ width: 18, height: 2, marginTop: 8, background: done || active ? "#635BFF" : "#E5E7EB", flexShrink: 0 }} />
+                  <div style={{ flex: 1, height: 2, marginTop: 15, background: done || active ? "#635BFF" : "#E5E7EB", minWidth: 8 }} />
                 )}
                 <button
                   type="button"
                   onClick={() => { if (canAdvance) patch(payload); }}
                   disabled={!canAdvance}
                   title={blockedByApproval ? "Approve this order before changing its stage" : canAdvance ? `Move to ${entry.label}` : entry.label}
-                  style={{ border: "none", background: "transparent", padding: "0 2px", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: canAdvance ? "pointer" : "default", maxWidth: 88 }}
+                  style={{ border: isNext ? "1px solid #C7C4FF" : "none", background: isNext ? "#F5F3FF" : "transparent", borderRadius: 10, padding: isNext ? "4px 8px 6px" : "0 2px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, cursor: canAdvance ? "pointer" : "default", maxWidth: active || isNext ? 120 : 88 }}
                 >
-                  <span style={{ width: active ? 12 : 8, height: active ? 12 : 8, borderRadius: "50%", background: active || done ? "#635BFF" : "#E5E7EB", boxShadow: active ? "0 0 0 3px rgba(99,91,255,0.28)" : undefined }} />
-                  <span style={{ fontSize: 10, lineHeight: 1.2, fontWeight: active ? 700 : 500, color: active ? "#1A1A2E" : "#6B7280", textAlign: "center" }}>{entry.label}</span>
+                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.04em", color: "#635BFF", lineHeight: 1, minHeight: 9 }}>
+                    {active ? "NOW" : isNext ? "NEXT" : ""}
+                  </span>
+                  <span style={{ width: active ? 14 : 8, height: active ? 14 : 8, borderRadius: "50%", background: active || done ? "#635BFF" : isNext ? "#fff" : "#E5E7EB", border: isNext ? "2px solid #635BFF" : "none", boxShadow: active ? "0 0 0 4px rgba(99,91,255,0.22)" : undefined, boxSizing: "content-box" }} />
+                  <span style={{ fontSize: active || isNext ? 12 : 10, lineHeight: 1.2, fontWeight: active || isNext ? 700 : 500, color: active || isNext ? "#1A1A2E" : "#6B7280", textAlign: "center" }}>{label}</span>
                 </button>
               </div>
             );
@@ -970,16 +1003,21 @@ export default function WorkshopJobDrawer({
   const stageLabel  = STAGE_LABELS[local.status ?? ""] ?? local.status ?? "Unknown";
   const jt          = local.job_type ?? "repair";
   const jtColor     = JOB_TYPE_COLORS[jt] ?? JOB_TYPE_COLORS.repair;
+  const moreActive  = MORE_SECTIONS.find(section => section.id === activeTab);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <>
-      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 100 }} onClick={onClose} />
-      <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, zIndex: 101, width: "min(580px, 100vw)", background: "#fff", display: "flex", flexDirection: "column", boxShadow: "-4px 0 24px rgba(0,0,0,0.15)" }}>
+    <div style={{ maxWidth: 920, margin: "0 auto", paddingBottom: 32 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <button type="button" onClick={onClose} style={{ background: "none", border: "none", padding: 0, fontSize: 13, fontWeight: 600, color: "#635BFF", cursor: "pointer" }}>
+          ← Board
+        </button>
+        <a href="/workshop" style={{ fontSize: 13, fontWeight: 600, color: "#6B7280", textDecoration: "none" }}>All jobs</a>
+      </div>
 
         {/* Header */}
-        <div style={{ padding: "14px 20px", borderBottom: "1px solid #E8E8F0", flexShrink: 0 }}>
+        <div style={{ padding: "14px 20px", border: "1px solid #E8E8F0", borderRadius: 12, background: "#fff" }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontFamily: "monospace", fontSize: 11, color: "#9CA3AF", marginBottom: 1 }}>{local.reference_number}</div>
@@ -1018,9 +1056,6 @@ export default function WorkshopJobDrawer({
                   )}
                 </div>
               )}
-              <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "#9CA3AF", flexShrink: 0, marginTop: 2 }}>
-                <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
             </div>
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
@@ -1048,18 +1083,52 @@ export default function WorkshopJobDrawer({
           </div>
         </div>
 
-        {/* Tab bar */}
-        <div style={{ display: "flex", borderBottom: "1px solid #E8E8F0", overflowX: "auto", flexShrink: 0, scrollbarWidth: "none" as React.CSSProperties["scrollbarWidth"] }}>
-          {TABS.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              style={{ padding: "10px 14px", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", border: "none", background: "transparent", cursor: "pointer", flexShrink: 0, color: activeTab === tab.id ? "#635BFF" : "#6B7280", borderBottom: activeTab === tab.id ? "2px solid #635BFF" : "2px solid transparent", transition: "color .12s" }}>
-              {tab.label}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 14, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 2, background: "#F3F4F6", borderRadius: 10, padding: 3 }}>
+            {FRONT_SECTIONS.map(section => {
+              const on = activeTab === section.id;
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => { setActiveTab(section.id); setMoreOpen(false); }}
+                  style={{ padding: "6px 12px", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: on ? "#fff" : "transparent", color: on ? "#1A1A2E" : "#6B7280", boxShadow: on ? "0 1px 3px rgba(0,0,0,0.08)" : "none" }}
+                >
+                  {section.label}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ position: "relative" }}>
+            <button
+              type="button"
+              onClick={() => setMoreOpen(open => !open)}
+              style={{ padding: "6px 12px", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "1px solid #E8E8F0", cursor: "pointer", background: moreActive ? "#fff" : "#F9FAFB", color: moreActive ? "#1A1A2E" : "#6B7280" }}
+            >
+              {moreActive ? moreActive.label : "More"}
             </button>
-          ))}
+            {moreOpen && (
+              <>
+                <button type="button" aria-label="Close sections" onClick={() => setMoreOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 4, background: "transparent", border: "none", cursor: "default" }} />
+                <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 5, background: "#fff", border: "1px solid #E8E8F0", borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.08)", minWidth: 160, padding: 4 }}>
+                  {MORE_SECTIONS.map(section => (
+                    <button
+                      key={section.id}
+                      type="button"
+                      onClick={() => { setActiveTab(section.id); setMoreOpen(false); }}
+                      style={{ display: "block", width: "100%", textAlign: "left", background: activeTab === section.id ? "#F5F3FF" : "transparent", border: "none", borderRadius: 6, padding: "8px 10px", fontSize: 13, fontWeight: activeTab === section.id ? 700 : 500, color: "#374151", cursor: "pointer" }}
+                    >
+                      {section.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
-        {/* Tab content */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
+        {/* Section */}
+        <div style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, padding: "16px 20px", marginTop: 12 }}>
           {activeTab === "overview"   && renderOverview()}
           {activeTab === "customer"   && renderCustomer()}
           {activeTab === "items"      && renderItems()}
@@ -1114,7 +1183,6 @@ export default function WorkshopJobDrawer({
             </div>
           </div>
         )}
-      </div>
-    </>
+    </div>
   );
 }
