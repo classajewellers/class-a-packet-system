@@ -13,6 +13,8 @@ const FIELD_ALIASES: Record<string, string[]> = {
   contact_name:   ['contact_name', 'contact', 'account_manager', 'first name', 'firstname'],
   notes:          ['notes', 'note'],
   lead_time_days: ['lead_time_days', 'lead_time'],
+  avg_lead_time_days: ['avg_lead_time_days', 'average_lead_time_days', 'avg_lead_time', 'average_lead_time'],
+  max_lead_time_days: ['max_lead_time_days', 'maximum_lead_time_days', 'max_lead_time', 'maximum_lead_time'],
 }
 
 // Strip BOM, leading non-alphanumeric chars (e.g. Xero's "*ContactName"),
@@ -45,6 +47,8 @@ type MappedRow = {
   contact_name:   string | null
   notes:          string | null
   lead_time_days: number | null
+  avg_lead_time_days: number | null
+  max_lead_time_days: number | null
 }
 
 function mapRow(rawRow: Record<string, string>): MappedRow {
@@ -55,18 +59,23 @@ function mapRow(rawRow: Record<string, string>): MappedRow {
       out[field] = rawVal.trim() || null
     }
   }
-  let lead_time_days: number | null = null
-  if (out.lead_time_days) {
-    const n = parseInt(out.lead_time_days, 10)
-    if (!isNaN(n) && n >= 0) lead_time_days = n
+  const days = (raw: string | null | undefined): number | null => {
+    if (!raw) return null
+    const n = parseInt(raw, 10)
+    return !isNaN(n) && n >= 0 ? n : null
   }
+  const legacy = days(out.lead_time_days)
+  const avg = days(out.avg_lead_time_days) ?? legacy
+  const max = days(out.max_lead_time_days) ?? legacy
   return {
     name:           out.name ?? null,
     email:          out.email ?? null,
     phone:          out.phone ?? null,
     contact_name:   out.contact_name ?? null,
     notes:          out.notes ?? null,
-    lead_time_days,
+    lead_time_days: avg,
+    avg_lead_time_days: avg,
+    max_lead_time_days: max,
   }
 }
 
@@ -124,6 +133,8 @@ export async function POST(req: NextRequest) {
           contact_name:   mapped.contact_name,
           notes:          mapped.notes,
           lead_time_days: mapped.lead_time_days,
+          avg_lead_time_days: mapped.avg_lead_time_days,
+          max_lead_time_days: mapped.max_lead_time_days,
         })
 
       if (insertErr) {

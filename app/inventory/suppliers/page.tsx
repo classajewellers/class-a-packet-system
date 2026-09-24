@@ -8,7 +8,7 @@ import { canManage } from "@/lib/userTypes";
 import { InventorySupplier } from "@/lib/types";
 import { Plus, Pencil, Trash2, X, Mail, Phone, Clock, Upload, RefreshCw } from "lucide-react";
 
-const BLANK_FORM = { name: "", contact_name: "", email: "", phone: "", lead_time_days: "", notes: "", connector_type: "" };
+const BLANK_FORM = { name: "", contact_name: "", email: "", phone: "", avg_lead_time_days: "", max_lead_time_days: "", notes: "", connector_type: "" };
 
 interface SupplierDrawerProps {
   supplier: InventorySupplier | null;
@@ -31,7 +31,12 @@ function SupplierDrawer({ supplier, isNew, onClose, onSaved, isAdmin }: Supplier
         contact_name: supplier.contact_name ?? "",
         email: supplier.email ?? "",
         phone: supplier.phone ?? "",
-        lead_time_days: supplier.lead_time_days != null ? String(supplier.lead_time_days) : "",
+        avg_lead_time_days: supplier.avg_lead_time_days != null
+          ? String(supplier.avg_lead_time_days)
+          : supplier.lead_time_days != null ? String(supplier.lead_time_days) : "",
+        max_lead_time_days: supplier.max_lead_time_days != null
+          ? String(supplier.max_lead_time_days)
+          : supplier.lead_time_days != null ? String(supplier.lead_time_days) : "",
         notes: supplier.notes ?? "",
         connector_type: supplier.connector_type ?? "",
       });
@@ -44,10 +49,19 @@ function SupplierDrawer({ supplier, isNew, onClose, onSaved, isAdmin }: Supplier
 
   async function handleSave() {
     if (!form.name.trim()) { setError("Name is required."); return; }
+    const avgDays = form.avg_lead_time_days !== "" ? parseInt(form.avg_lead_time_days, 10) : null;
+    const maxDays = form.max_lead_time_days !== "" ? parseInt(form.max_lead_time_days, 10) : null;
+    if ((avgDays != null && (Number.isNaN(avgDays) || avgDays < 0)) || (maxDays != null && (Number.isNaN(maxDays) || maxDays < 0))) {
+      setError("Lead times must be whole days, 0 or more.");
+      return;
+    }
     setSaving(true); setError("");
     const payload = {
       ...form,
-      lead_time_days: form.lead_time_days !== "" ? parseInt(form.lead_time_days) : null,
+      avg_lead_time_days: avgDays,
+      max_lead_time_days: maxDays,
+      // Keep the original single field aligned with the average.
+      lead_time_days: avgDays,
     };
     const url = isNew ? "/api/inventory/suppliers" : `/api/inventory/suppliers/${supplier!.id}`;
     const method = isNew ? "POST" : "PATCH";
@@ -96,10 +110,19 @@ function SupplierDrawer({ supplier, isNew, onClose, onSaved, isAdmin }: Supplier
               <input style={inputStyle} type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="02 XXXX XXXX" />
             </div>
           </div>
-          <div>
-            <label style={labelStyle}>Lead Time (days)</label>
-            <input style={inputStyle} type="number" value={form.lead_time_days} onChange={(e) => set("lead_time_days", e.target.value)} placeholder="e.g. 14" />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <label style={labelStyle}>Average lead time (days)</label>
+              <input style={inputStyle} type="number" min={0} value={form.avg_lead_time_days} onChange={(e) => set("avg_lead_time_days", e.target.value)} placeholder="e.g. 14" />
+            </div>
+            <div>
+              <label style={labelStyle}>Maximum lead time (days)</label>
+              <input style={inputStyle} type="number" min={0} value={form.max_lead_time_days} onChange={(e) => set("max_lead_time_days", e.target.value)} placeholder="e.g. 21" />
+            </div>
           </div>
+          <p style={{ fontSize: 11.5, color: "#9CA3AF", margin: "-6px 0 0" }}>
+            Reorder points use these separately. The average is also stored in the original lead time field.
+          </p>
           <div>
             <label style={labelStyle}>Notes</label>
             <textarea style={{ ...inputStyle, height: 80, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Ordering notes, payment terms, etc." />
@@ -351,9 +374,12 @@ export default function InventorySuppliersPage() {
                   ) : "—"}
                 </td>
                 <td style={{ padding: "11px 14px", fontSize: 13, color: "#6B7280" }}>
-                  {s.lead_time_days != null ? (
+                  {(s.avg_lead_time_days != null || s.max_lead_time_days != null || s.lead_time_days != null) ? (
                     <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <Clock size={12} />{s.lead_time_days}d
+                      <Clock size={12} />
+                      {s.avg_lead_time_days != null || s.max_lead_time_days != null
+                        ? `${s.avg_lead_time_days ?? "—"}d avg · ${s.max_lead_time_days ?? "—"}d max`
+                        : `${s.lead_time_days}d`}
                     </span>
                   ) : "—"}
                 </td>

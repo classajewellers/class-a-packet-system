@@ -15,7 +15,7 @@ export async function GET(req: NextRequest, { params }: Params): Promise<NextRes
 
   const { data, error } = await supabase
     .from("inventory_product_variants")
-    .select("id, name, metal_karat, metal_colour, band_width_mm, claw_config, shopify_variant_id, is_active, created_at")
+    .select("id, name, metal_karat, metal_colour, band_width_mm, claw_config, shopify_variant_id, tracking_mode, is_active, created_at")
     .eq("design_id", params.id)
     .eq("tenant_id", tenantId)
     .eq("is_active", true)
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest, { params }: Params): Promise<NextRe
       name:               (body.name ?? "").trim() || autoName,
       is_active:          true,
     })
-    .select("id, name, metal_karat, metal_colour, band_width_mm, claw_config, shopify_variant_id, is_active, created_at")
+    .select("id, name, metal_karat, metal_colour, band_width_mm, claw_config, shopify_variant_id, tracking_mode, is_active, created_at")
     .single();
 
   if (error) {

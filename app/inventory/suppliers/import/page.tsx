@@ -50,6 +50,8 @@ const FIELD_ALIASES: Record<string, string[]> = {
   contact_name:   ["contact_name", "contact", "account_manager", "first name", "firstname"],
   notes:          ["notes", "note"],
   lead_time_days: ["lead_time_days", "lead_time"],
+  avg_lead_time_days: ["avg_lead_time_days", "average_lead_time_days", "avg_lead_time", "average_lead_time"],
+  max_lead_time_days: ["max_lead_time_days", "maximum_lead_time_days", "max_lead_time", "maximum_lead_time"],
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -58,7 +60,9 @@ const FIELD_LABELS: Record<string, string> = {
   phone:          "Phone",
   contact_name:   "Contact Name",
   notes:          "Notes",
-  lead_time_days: "Lead Time (days)",
+  lead_time_days: "Lead Time (days, legacy)",
+  avg_lead_time_days: "Average Lead Time (days)",
+  max_lead_time_days: "Maximum Lead Time (days)",
 };
 
 // Strip BOM, leading non-alphanumeric chars (e.g. Xero's "*ContactName"),

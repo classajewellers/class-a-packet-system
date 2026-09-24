@@ -1,17 +1,31 @@
 "use client";
 
 import { useState, useEffect, useCallback, Suspense } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
+import { collectingProgressLabel, type ReorderDraftResult, type ReorderSnapshot } from "@/lib/reorderTypes";
 
 interface Location { id: string; name: string; }
 interface Level { location_id: string; location_name: string; quantity: number; }
 interface StockData {
-  variant: { id: string; name: string | null; tracking_mode: "serialized" | "quantity"; metal_karat: string; metal_colour: string };
+  variant: {
+    id: string;
+    name: string | null;
+    tracking_mode: "serialized" | "quantity";
+    metal_karat: string;
+    metal_colour: string;
+    reorder_point: number | null;
+    par_level: number | null;
+    default_supplier_id: string | null;
+    shopify_variant_id: string | null;
+  };
   locations: Location[];
   levels: Level[];
   total_on_hand: number;
+  reorder: ReorderSnapshot | null;
+  reorder_error: string | null;
 }
 
 const ACCENT = "#635BFF";
@@ -39,6 +53,20 @@ function StockManager() {
   const [movTo, setMovTo]     = useState("");
   const [movQty, setMovQty]   = useState("");
 
+  // sale form
+  const [sellLoc, setSellLoc] = useState("");
+  const [sellQty, setSellQty] = useState("");
+
+  const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [draftPoId, setDraftPoId] = useState<string | null>(null);
+  const [reorderForm, setReorderForm] = useState({
+    default_supplier_id: "",
+    par_level: "",
+    reorder_point: "",
+    shopify_variant_id: "",
+  });
+
   const load = useCallback(async () => {
     if (!variantId) { setError("No variant_id provided"); setLoad(false); return; }
     setLoad(true);
@@ -53,14 +81,42 @@ function StockManager() {
 
   useEffect(() => { void load(); }, [load]);
 
-  async function post(url: string, body: unknown): Promise<boolean> {
+  const savedSupplier = data?.variant.default_supplier_id ?? "";
+  const savedPar = data?.variant.par_level != null ? String(data.variant.par_level) : "";
+  const savedManual = data?.variant.reorder_point != null ? String(data.variant.reorder_point) : "";
+  const savedShopify = data?.variant.shopify_variant_id ?? "";
+  useEffect(() => {
+    setReorderForm({
+      default_supplier_id: savedSupplier,
+      par_level: savedPar,
+      reorder_point: savedManual,
+      shopify_variant_id: savedShopify,
+    });
+  }, [savedSupplier, savedPar, savedManual, savedShopify]);
+
+  useEffect(() => {
+    if (!user?.tenantId) return;
+    fetch("/api/inventory/suppliers", { headers: { "x-tenant-id": user.tenantId } })
+      .then((r) => r.json())
+      .then((j) => setSuppliers(j.suppliers ?? []))
+      .catch(() => { /* supplier list is optional for the rest of the page */ });
+  }, [user?.tenantId]);
+
+  async function post(url: string, body: unknown): Promise<Record<string, unknown> | null> {
     setBusy(true); setError(null);
     try {
-      const res = await fetch(url, { method: url.includes("tracking-mode") ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const method = url.includes("tracking-mode") || url.includes("/reorder") ? "PATCH" : "POST";
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const json = await res.json();
-      if (!res.ok) { setError(json.error ?? "Action failed"); setBusy(false); return false; }
-      setBusy(false); return true;
-    } catch { setError("Network error"); setBusy(false); return false; }
+      if (!res.ok) { setError(json.error ?? "Action failed"); setBusy(false); return null; }
+      setBusy(false); return json;
+    } catch { setError("Network error"); setBusy(false); return null; }
+  }
+
+  function noteDraft(draft: ReorderDraftResult | null | undefined) {
+    if (!draft?.purchase_order_id || !draft.po_number) return;
+    setDraftPoId(draft.purchase_order_id);
+    setNotice(`Draft ${draft.po_number} created for ${draft.quantity}. It has not been sent.`);
   }
 
   async function setTrackingMode(mode: "serialized" | "quantity") {
@@ -86,6 +142,29 @@ function StockManager() {
       setMovFrom(""); setMovTo(""); setMovQty(""); load();
     }
   }
+  async function saveReorder() {
+    const json = await post("/api/inventory/stock/reorder", {
+      variant_id: variantId,
+      default_supplier_id: reorderForm.default_supplier_id || null,
+      par_level: reorderForm.par_level === "" ? null : Number(reorderForm.par_level),
+      reorder_point: reorderForm.reorder_point === "" ? null : Number(reorderForm.reorder_point),
+      shopify_variant_id: reorderForm.shopify_variant_id.trim() || null,
+    });
+    if (!json) return;
+    noteDraft(json.draft_purchase_order as ReorderDraftResult | null);
+    load();
+  }
+  async function doSell() {
+    const json = await post("/api/inventory/stock/sell", {
+      variant_id: variantId,
+      location_id: sellLoc,
+      quantity: Number(sellQty),
+    });
+    if (!json) return;
+    setSellLoc(""); setSellQty("");
+    noteDraft(json.draft_purchase_order as ReorderDraftResult | null);
+    load();
+  }
 
   if (!user) return null;
   if (!canManage(user.role)) return <div style={wrap}><p style={{ color: "#6B7280" }}>Stock management is available to managers only.</p></div>;
@@ -104,6 +183,12 @@ function StockManager() {
       <p style={{ color: "#6B7280", fontSize: 13, margin: "0 0 20px" }}>{variant.metal_karat} · {variant.metal_colour}</p>
 
       {error && <div style={errBox}>{error}</div>}
+      {notice && (
+        <div style={{ background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 8, padding: "10px 14px", marginBottom: 16, color: "#3730A3", fontSize: 13 }}>
+          {notice}{" "}
+          {draftPoId && <Link href={`/inventory/purchase-orders/${draftPoId}`} style={{ fontWeight: 600 }}>Open draft</Link>}
+        </div>
+      )}
 
       {/* Tracking mode */}
       <div style={card}>
@@ -133,6 +218,16 @@ function StockManager() {
         </div>
       ) : (
         <>
+          <ReorderCard
+            reorder={data.reorder}
+            reorderError={data.reorder_error}
+            suppliers={suppliers}
+            form={reorderForm}
+            setForm={setReorderForm}
+            busy={busy}
+            onSave={saveReorder}
+          />
+
           {/* Grid */}
           <div style={card}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
@@ -191,6 +286,22 @@ function StockManager() {
             </div>
           </div>
 
+          {/* Sell */}
+          <div style={card}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Record a sale</div>
+            <p style={{ fontSize: 12, color: "#9CA3AF", margin: "0 0 12px" }}>
+              Writes a sales-ledger row from today and reduces on-hand at this location. Shopify orders do the same when the line&apos;s variant id matches the Shopify variant id below.
+            </p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <Field label="Location"><select value={sellLoc} onChange={e => setSellLoc(e.target.value)} style={inp}>
+                <option value="">Select…</option>{locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select></Field>
+              <Field label="Quantity"><input type="number" min={1} step={1} value={sellQty} onChange={e => setSellQty(e.target.value)} style={{ ...inp, width: 100 }} /></Field>
+              <button disabled={busy || !sellLoc || !sellQty} onClick={doSell}
+                style={{ ...btn, opacity: (!sellLoc || !sellQty) ? 0.5 : 1 }}>Record sale</button>
+            </div>
+          </div>
+
           {/* Move */}
           <div style={card}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 12 }}>Move stock between locations</div>
@@ -208,6 +319,78 @@ function StockManager() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function ReorderCard({
+  reorder, reorderError, suppliers, form, setForm, busy, onSave,
+}: {
+  reorder: ReorderSnapshot | null;
+  reorderError: string | null;
+  suppliers: { id: string; name: string }[];
+  form: { default_supplier_id: string; par_level: string; reorder_point: string; shopify_variant_id: string };
+  setForm: React.Dispatch<React.SetStateAction<{ default_supplier_id: string; par_level: string; reorder_point: string; shopify_variant_id: string }>>;
+  busy: boolean;
+  onSave: () => void;
+}) {
+  const calculated = reorder?.state === "calculated";
+  const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  return (
+    <div style={card}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>Reorder</div>
+      {reorderError && (
+        <p style={{ fontSize: 12, color: "#B91C1C", margin: "0 0 10px" }}>
+          Reorder status is unavailable ({reorderError}). Apply migration 164 on staging, then reload.
+        </p>
+      )}
+      {reorder?.state === "collecting" && (
+        <p style={{ fontSize: 13, color: "#92400E", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "8px 10px", margin: "0 0 12px" }}>
+          Collecting data — {collectingProgressLabel(reorder.history_days, reorder.history_days_required)}. Set a temporary manual reorder point and a par level. Vault switches this variant to the calculated reorder point once history reaches 90 days.
+        </p>
+      )}
+      {calculated && reorder?.calculated_reorder_point != null && (
+        <div style={{ fontSize: 13, color: "#065F46", background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: 8, padding: "8px 10px", margin: "0 0 12px" }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Calculated reorder point: {reorder.calculated_reorder_point}</div>
+          <div>On hand {reorder.on_hand}. Average monthly sales {reorder.avg_monthly_sales} (trailing 3 months). Highest month {reorder.max_monthly_sales} (trailing 12 months). Safety stock {reorder.safety_stock}.</div>
+          <div style={{ marginTop: 4 }}>Lead time is in days and is divided by 30 inside the formula so monthly sales × lead time is a quantity. Par level stays the number you enter. A draft purchase order is created when on-hand is at or below this reorder point. It is never sent automatically.</div>
+          <div style={{ marginTop: 4, color: "#6B7280" }}>{reorder.history_days} days of sales history. The calculated number needs real accumulated sales before it can be checked against a spreadsheet.</div>
+        </div>
+      )}
+      {calculated && reorder?.calculated_reorder_point == null && (
+        <p style={{ fontSize: 13, color: "#92400E", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "8px 10px", margin: "0 0 12px" }}>
+          {reorder.history_days} days of sales history — this variant is on the calculated reorder point.
+          {reorder.calc_block_reason === "no_supplier"
+            ? " Choose a default supplier that has both an average and a maximum lead time."
+            : " Set both an average and a maximum lead time on the default supplier."}
+          {" "}The temporary manual reorder point is no longer the active threshold.
+        </p>
+      )}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <Field label="Default supplier">
+          <select value={form.default_supplier_id} onChange={e => set("default_supplier_id", e.target.value)} style={{ ...inp, minWidth: 180 }}>
+            <option value="">None</option>
+            {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Par level">
+          <input type="number" min={0} step={1} value={form.par_level} onChange={e => set("par_level", e.target.value)} style={{ ...inp, width: 100 }} />
+        </Field>
+        <Field label={calculated ? "Saved manual reorder point" : "Temporary manual reorder point"}>
+          <input type="number" min={0} step={1} value={form.reorder_point} disabled={calculated}
+            onChange={e => set("reorder_point", e.target.value)} style={{ ...inp, width: 120, background: calculated ? "#F3F4F6" : "#fff" }} />
+        </Field>
+        <Field label="Shopify variant ID">
+          <input value={form.shopify_variant_id} onChange={e => set("shopify_variant_id", e.target.value)} placeholder="Linked Shopify variant" style={{ ...inp, width: 180 }} />
+        </Field>
+        <button disabled={busy} onClick={onSave} style={btn}>Save reorder setup</button>
+      </div>
+      <p style={{ fontSize: 12, color: "#9CA3AF", margin: "10px 0 0" }}>
+        {calculated
+          ? "The manual reorder point is kept for reference. The active threshold is the calculated number."
+          : "The manual reorder point is only the active threshold while this variant is collecting data. Par level is always manual."}
+        {" "}Shopify sales count only after this variant id is linked. Older Shopify orders are not imported.
+      </p>
     </div>
   );
 }

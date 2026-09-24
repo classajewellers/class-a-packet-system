@@ -27,7 +27,9 @@ export async function POST(req: NextRequest) {
         contact_name: body.contact_name || null,
         email: body.email || null,
         phone: body.phone || null,
-        lead_time_days: body.lead_time_days ?? null,
+        lead_time_days: body.lead_time_days ?? body.avg_lead_time_days ?? null,
+        avg_lead_time_days: body.avg_lead_time_days ?? body.lead_time_days ?? null,
+        max_lead_time_days: body.max_lead_time_days ?? body.lead_time_days ?? null,
         notes: body.notes || null,
         tenant_id: tenantId,
       })

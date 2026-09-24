@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requireManager } from "@/lib/require-auth";
+import { loadReorderSnapshot } from "@/lib/quantitySales";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const { data: variant, error: vErr } = await supabase
     .from("inventory_product_variants")
-    .select("id, name, tracking_mode, metal_karat, metal_colour, design_id")
+    .select("id, name, tracking_mode, metal_karat, metal_colour, design_id, reorder_point, par_level, default_supplier_id, shopify_variant_id")
     .eq("tenant_id", tenantId)
     .eq("id", variantId)
     .single();
@@ -47,15 +48,24 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     updated_at:    l.updated_at,
   }));
   const totalOnHand = rows.reduce((sum, r) => sum + r.quantity, 0);
+  const { snapshot, error: reorderError } = variant.tracking_mode === "quantity"
+    ? await loadReorderSnapshot(supabase, tenantId, variantId)
+    : { snapshot: null, error: null };
 
   return NextResponse.json({
     variant: {
-      id:            variant.id,
-      name:          variant.name,
-      tracking_mode: variant.tracking_mode,
-      metal_karat:   variant.metal_karat,
-      metal_colour:  variant.metal_colour,
+      id:                   variant.id,
+      name:                 variant.name,
+      tracking_mode:        variant.tracking_mode,
+      metal_karat:          variant.metal_karat,
+      metal_colour:         variant.metal_colour,
+      reorder_point:        variant.reorder_point,
+      par_level:            variant.par_level,
+      default_supplier_id:  variant.default_supplier_id,
+      shopify_variant_id:   variant.shopify_variant_id,
     },
+    reorder:       snapshot,
+    reorder_error: reorderError,
     locations:     locations ?? [],
     levels:        rows,
     total_on_hand: totalOnHand,
