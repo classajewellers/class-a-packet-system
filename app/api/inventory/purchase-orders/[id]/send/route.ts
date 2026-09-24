@@ -163,6 +163,8 @@ export async function POST(
       abn?: string | null;
     } | null;
 
+  // Job number is packets.reference_number (workshop Job #, e.g. CA-20260729-0003).
+  // inventory_po_lines only stores packet_id. Do not select customer names.
   const packetIds = lines.map(line => line.packet_id).filter((id): id is string => typeof id === "string" && id.length > 0);
   const packetRef = new Map<string, string>();
   if (packetIds.length > 0) {

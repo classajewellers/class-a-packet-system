@@ -17,7 +17,11 @@ export interface PoDocumentLine {
   xero_account_name?: string | null;
   /** Printed in the SKU column. Stored as supplier_design_no. */
   supplier_design_no?: string | null;
-  /** Short packet or job code. Never a customer name. */
+  /**
+   * Job number for a linked line. This is packets.reference_number
+   * (the workshop Job #). Never a customer name. Empty when the line
+   * has no packet.
+   */
   jobRef?: string | null;
 }
 
@@ -158,7 +162,7 @@ export function generatePurchaseOrderHTML(input: PoDocumentInput): string {
         <td>${index + 1}</td>
         <td>${escapeHtml(textOrNull(line.supplier_design_no) ?? "—")}</td>
         <td>${escapeHtml(what)}</td>
-        ${showJob ? `<td>${escapeHtml(textOrNull(line.jobRef) ?? "—")}</td>` : ""}
+        ${showJob ? `<td>${escapeHtml(textOrNull(line.jobRef) ?? "")}</td>` : ""}
         <td class="right">${cost.quantity}</td>
         <td>${escapeHtml(account || "—")}</td>
         <td class="right">${money(cost.lineTotal)}</td>
@@ -250,7 +254,7 @@ export function generatePurchaseOrderHTML(input: PoDocumentInput): string {
         <th>#</th>
         <th>SKU</th>
         <th>What</th>
-        ${showJob ? "<th>Job</th>" : ""}
+        ${showJob ? "<th>Job no.</th>" : ""}
         <th class="right">Qty</th>
         <th>Account</th>
         <th class="right">Cost</th>
