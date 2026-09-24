@@ -15,6 +15,7 @@ import {
   Sparkles,
   ChevronDown,
   Package,
+  ShoppingBag,
   X,
   Eye,
 } from "lucide-react";
@@ -331,6 +332,10 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
                 </div>
               )}
             </div>
+          )}
+
+          {(can("quotes") || can("inventory")) && (
+            <NavLink href="/pos" icon={ShoppingBag} label="POS" />
           )}
 
           {can("workshop")  && <NavLink href="/workshop"  icon={Wrench} label="Workshop" />}
