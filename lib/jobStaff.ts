@@ -6,9 +6,8 @@
 // staff_member on a job is plain text, not a login id, so a profile does
 // not need auth_user_id to be selectable.
 //
-// Two real sources, both read through service-role APIs (workshop_team_members
-// has RLS and no policy, so a browser select returns []):
-//   - active workshop_team_members (Ben, Viv, Joe, David, Jack)
+// Two real sources, both read through service-role APIs:
+//   - active workshop team (role-tagged profiles from GET /api/workshop/team-members)
 //   - profiles, labelled full_name → email → role → "Staff"
 //     (Staff Test, and the nameless manager as "Manager")
 

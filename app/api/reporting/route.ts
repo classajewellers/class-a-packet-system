@@ -68,11 +68,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     // ── WORKSHOP ───────────────────────────────────────────────────────────────
-    // Migrated onto the reporting engine — 2026-09-22. Verified byte-for-byte
-    // identical against the original hardcoded implementation on real
-    // staging data, plus a simulated table-not-found (42P01) case since
-    // workshop_jobs exists but is empty on staging so that branch couldn't
-    // be exercised for real.
+    // Reads packets. workshop_jobs is empty and is not the live job list.
     if (section === "workshop") {
       try {
         const report = await buildWorkshopReport(supabase, { tenantId, start, end });

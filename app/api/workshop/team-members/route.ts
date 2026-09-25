@@ -1,48 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { loadWorkshopTeamMembers } from "@/lib/workshopTeam";
 
 export const dynamic = "force-dynamic";
 
+// New Job staff names. Migration 166 dropped workshop_team_members.
+// Role-tagged logins are the roster now. An empty tenant must not look
+// like an empty roster.
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
-  // An empty tenant must not look like an empty roster. Browser selects on
-  // workshop_team_members also return [] while RLS has no policy; this route
-  // uses the service role so the saved names are returned either way.
   if (!tenantId) {
     return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
   }
   try {
     const supabase = await createTenantSupabaseClient(tenantId);
-    const { data: members, error } = await supabase
-      .from("workshop_team_members")
-      .select("*")
-      .eq("tenant_id", tenantId)
-      .order("sort_order");
-    if (error) throw error;
-    return NextResponse.json({ members: members ?? [] });
-  } catch (err: unknown) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
-  }
-}
-
-export async function POST(req: NextRequest): Promise<NextResponse> {
-  const tenantId = req.headers.get("x-tenant-id") ?? "";
-  try {
-    const body = await req.json();
-    const supabase = await createTenantSupabaseClient(tenantId);
-    const { data: member, error } = await supabase
-      .from("workshop_team_members")
-      .insert({
-        tenant_id: tenantId,
-        name: body.name,
-        sort_order: 0,
-        active: true,
-        profile_id: body.profile_id ?? null,
-      })
-      .select()
-      .single();
-    if (error) throw error;
-    return NextResponse.json({ member });
+    const { members, error } = await loadWorkshopTeamMembers(supabase, tenantId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ members });
   } catch (err: unknown) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }

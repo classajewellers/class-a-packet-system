@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { fireReadyForPickupZap } from "@/lib/zapier";
+import { cadVersionCount, latestApprovedCadVersion, nameIsCadDesigner, pathwayStepUpdate, profileIsCadDesigner } from "@/lib/cadAccess";
+import { CAD_APPROVAL_STATUS, CAD_DESIGN_STATUS, CASTING_STATUS } from "@/lib/cadStage";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +32,9 @@ const ALLOWED_FIELDS = [
   "workshop_needs_valuation",
   "workshop_valuer",
   "workshop_supplier",
+  "workshop_due_date",
+  "workshop_due_date_overridden",
+  "cad_required",
   "workshop_po_number",
   "blocked_reason",
   "blocked_note",
@@ -37,6 +42,7 @@ const ALLOWED_FIELDS = [
   "delivery_method",
   "shopify_order_id",
   "pending_customer_approval",
+  "quality_issue",
 ];
 
 // Fields that trigger a revert to intake/pre_check when the packet is not already in intake
@@ -86,7 +92,6 @@ export async function PATCH(
       updates.total_charges !== undefined ||
       updates.deposit !== undefined ||
       intakeTriggerPresent ||
-      updates.workshop_step_index !== undefined ||
       updates.assigned_to !== undefined ||
       updates.workshop_subcontractor_name !== undefined ||
       updates.workshop_valuer !== undefined;
@@ -100,13 +105,15 @@ export async function PATCH(
       assigned_to?: string | null;
       workshop_subcontractor_name?: string | null;
       workshop_step_index?: number | null;
+      workshop_pathway_id?: string | null;
+      cad_required?: boolean | null;
       pending_customer_approval?: boolean | null;
     } | null = null;
 
     if (needsCurrent) {
       const { data } = await supabase
         .from("packets")
-        .select("status, total_charges, deposit, workshop_needs_valuation, workshop_valuer, assigned_to, workshop_subcontractor_name, workshop_step_index, pending_customer_approval")
+        .select("status, total_charges, deposit, workshop_needs_valuation, workshop_valuer, assigned_to, workshop_subcontractor_name, workshop_step_index, workshop_pathway_id, cad_required, pending_customer_approval")
         .eq("id", params.id)
         .single();
       current = data;
@@ -142,6 +149,53 @@ export async function PATCH(
       if (!updates.status_updated_at) {
         updates.status_updated_at = new Date().toISOString();
       }
+
+      const nextStatus = (updates.status as string | undefined) ?? current?.status ?? null;
+      if (nextStatus === CASTING_STATUS && current?.status !== CASTING_STATUS) {
+        let approved: { id: string } | null = null;
+        let versions = 0;
+        try {
+          approved = await latestApprovedCadVersion(supabase, tenantId, params.id);
+          if (!approved) versions = await cadVersionCount(supabase, tenantId, params.id);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return NextResponse.json({ error: message }, { status: 422 });
+        }
+        const needsApprovedCad = current?.cad_required === true || versions > 0;
+        if (needsApprovedCad && !approved) {
+          return NextResponse.json({
+            error: "Casting needs an approved CAD version. Approve a render and source file on the CAD tab first.",
+          }, { status: 422 });
+        }
+        if (updates.workshop_step_index === undefined) {
+          const step = await pathwayStepUpdate(supabase, tenantId, current?.workshop_pathway_id, CASTING_STATUS);
+          if (step !== null) updates.workshop_step_index = step;
+        }
+      }
+
+      if (nextStatus === CAD_APPROVAL_STATUS && current?.status !== CAD_APPROVAL_STATUS) {
+        let versions = 0;
+        try {
+          versions = await cadVersionCount(supabase, tenantId, params.id);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return NextResponse.json({ error: message }, { status: 422 });
+        }
+        if (versions === 0) {
+          return NextResponse.json({
+            error: "Upload a render and source file on CAD Design before CAD Approval.",
+          }, { status: 422 });
+        }
+        if (updates.workshop_step_index === undefined) {
+          const step = await pathwayStepUpdate(supabase, tenantId, current?.workshop_pathway_id, CAD_APPROVAL_STATUS);
+          if (step !== null) updates.workshop_step_index = step;
+        }
+      }
+
+      if (nextStatus === CAD_DESIGN_STATUS && current?.status !== CAD_DESIGN_STATUS && updates.workshop_step_index === undefined) {
+        const step = await pathwayStepUpdate(supabase, tenantId, current?.workshop_pathway_id, CAD_DESIGN_STATUS);
+        if (step !== null) updates.workshop_step_index = step;
+      }
       if (incomingStatus === "ready") {
         // Valuation gate: job must have passed through 'to_be_valued' if it requires valuation
         const needsVal = updates.workshop_needs_valuation !== undefined
@@ -160,6 +214,36 @@ export async function PATCH(
         if (!("blocked_reason" in updates)) updates.blocked_reason = null;
         if (!("blocked_note"   in updates)) updates.blocked_note   = null;
         if (!("blocked_at"     in updates)) updates.blocked_at     = null;
+      }
+    }
+
+    const resolvedStatus = (updates.status as string | undefined) ?? current?.status ?? null;
+    const assignmentTouched =
+      Object.prototype.hasOwnProperty.call(updates, "workshop_subcontractor_name") ||
+      Object.prototype.hasOwnProperty.call(updates, "assigned_to");
+    const enteringCad = resolvedStatus === CAD_DESIGN_STATUS && current?.status !== CAD_DESIGN_STATUS;
+    if (tenantId && resolvedStatus === CAD_DESIGN_STATUS && (assignmentTouched || enteringCad)) {
+      const explicitName = Object.prototype.hasOwnProperty.call(updates, "workshop_subcontractor_name");
+      const explicitAssign = Object.prototype.hasOwnProperty.call(updates, "assigned_to");
+      const name = (explicitName ? updates.workshop_subcontractor_name : current?.workshop_subcontractor_name) as string | null;
+      const assignId = (explicitAssign ? updates.assigned_to : current?.assigned_to) as string | null;
+      if (assignId) {
+        const ok = await profileIsCadDesigner(supabase, tenantId, assignId);
+        if (!ok) {
+          if (explicitAssign) {
+            return NextResponse.json({ error: "CAD Design can only be assigned to a CAD Designer." }, { status: 422 });
+          }
+          updates.assigned_to = null;
+        }
+      }
+      if (typeof name === "string" && name.trim()) {
+        const ok = await nameIsCadDesigner(supabase, tenantId, name);
+        if (!ok) {
+          if (explicitName) {
+            return NextResponse.json({ error: "CAD Design can only be assigned to a CAD Designer." }, { status: 422 });
+          }
+          updates.workshop_subcontractor_name = null;
+        }
       }
     }
 
@@ -188,16 +272,8 @@ export async function PATCH(
     if (current) {
       const activityLogs: Record<string, unknown>[] = [];
 
-      if (updates.workshop_step_index !== undefined &&
-          Number(updates.workshop_step_index) !== Number(current.workshop_step_index)) {
-        activityLogs.push({
-          packet_id: params.id,
-          tenant_id: tenantId || null,
-          event_type: "step_advanced",
-          old_value: { step_index: current.workshop_step_index ?? 0 },
-          new_value: { step_index: updates.workshop_step_index },
-        });
-      }
+      // Step moves and quality_issue flips are written by the packets
+      // update trigger (migration 168). Logging them here would double-write.
 
       const assigneeChanged =
         (updates.assigned_to !== undefined && updates.assigned_to !== current.assigned_to) ||
