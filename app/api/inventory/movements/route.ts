@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { tenantScoped } from "@/lib/tenantScoped";
+import { missingLocationColumn } from "@/lib/load-locations";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -15,21 +16,37 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const pieceId = searchParams.get("piece_id") ?? "";
   const limit   = Math.min(200, parseInt(searchParams.get("limit") ?? "50", 10));
 
-  let query = tenantScoped(supabase, tenantId)
-    .from("inventory_movements")
-    .select(`
+  const withCode = `
+      *,
+      from_location:inventory_locations!from_location_id(id,name,code),
+      to_location:inventory_locations!to_location_id(id,name,code),
+      from_status:inventory_statuses!from_status_id(id,name,colour),
+      to_status:inventory_statuses!to_status_id(id,name,colour)
+    `;
+  const namesOnly = `
       *,
       from_location:inventory_locations!from_location_id(id,name),
       to_location:inventory_locations!to_location_id(id,name),
       from_status:inventory_statuses!from_status_id(id,name,colour),
       to_status:inventory_statuses!to_status_id(id,name,colour)
-    `)
-    .order("moved_at", { ascending: false })
-    .limit(limit);
+    `;
 
-  if (pieceId) query = query.eq("piece_id", pieceId);
+  function movementQuery(columns: string) {
+    let query = tenantScoped(supabase, tenantId)
+      .from("inventory_movements")
+      .select(columns)
+      .order("moved_at", { ascending: false })
+      .limit(limit);
+    if (pieceId) query = query.eq("piece_id", pieceId);
+    return query;
+  }
 
-  const { data, error } = await query;
+  let { data, error } = await movementQuery(withCode);
+  if (missingLocationColumn(error)) {
+    const fallback = await movementQuery(namesOnly);
+    data = fallback.data;
+    error = fallback.error;
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ movements: data ?? [] });
 }

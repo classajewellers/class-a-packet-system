@@ -29,8 +29,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const body = await req.json().catch(() => null);
   const locationId = typeof body?.location_id === "string" ? body.location_id : "";
   if (!locationId) return NextResponse.json({ error: "location_id is required" }, { status: 400 });
+  const fresh = body?.fresh === true;
   const supabase = await createTenantSupabaseClient(auth.ctx.tenantId);
-  const result = await createStocktake(supabase, auth.ctx.tenantId, auth.ctx.userId, locationId);
+  const result = await createStocktake(supabase, auth.ctx.tenantId, auth.ctx.userId, locationId, { fresh });
   if (!result.ok) return fail(result);
-  return NextResponse.json({ id: result.id });
+  return NextResponse.json({ id: result.id, continued: result.continued, started_at: result.started_at });
 }

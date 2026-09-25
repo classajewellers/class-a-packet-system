@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
 import { InventoryLocation, InventoryLocationType } from "@/lib/types";
-import { Plus, Pencil, Trash2, X, ChevronRight } from "lucide-react";
+import { compareLocations, formatLocationLabel } from "@/lib/location-label";
+import { Plus, Pencil, X, ChevronRight } from "lucide-react";
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -54,7 +55,7 @@ function buildPath(
   let cur: InventoryLocation | undefined = loc;
   let safety = 0;
   while (cur && safety++ < maxDepth) {
-    parts.unshift(cur.name);
+    parts.unshift(formatLocationLabel(cur) || cur.name);
     cur = cur.parent_id ? byId.get(cur.parent_id) : undefined;
   }
   return parts.join(" › ");
@@ -116,7 +117,7 @@ function LocationForm({ initial, prefillParentId, allLocations, onClose, onSaved
   const byId = new Map(allLocations.map(l => [l.id, l]));
 
   // Valid parent options: any location not in the forbidden set
-  const parentOptions = allLocations.filter(l => !forbiddenIds.has(l.id));
+  const parentOptions = allLocations.filter(l => !forbiddenIds.has(l.id)).sort(compareLocations);
 
   useEffect(() => {
     if (initial) {
@@ -314,10 +315,11 @@ interface TreeNodeProps {
   isAdmin: boolean;
   onAdd: (parentId: string) => void;
   onEdit: (loc: InventoryLocation) => void;
-  onDelete: (loc: InventoryLocation) => void;
+  onToggle: (loc: InventoryLocation) => void;
+  canToggle: boolean;
 }
 
-function LocationTreeNode({ loc, depth, childrenByParent, isAdmin, onAdd, onEdit, onDelete }: TreeNodeProps) {
+function LocationTreeNode({ loc, depth, childrenByParent, onAdd, onEdit, onToggle, canToggle }: TreeNodeProps) {
   const children = childrenByParent.get(loc.id) ?? [];
   const badge = LOCATION_TYPE_BADGE[loc.type as InventoryLocationType] ?? LOCATION_TYPE_BADGE.storage;
   const typeLabel = LOCATION_TYPE_LABELS[loc.type as InventoryLocationType];
@@ -331,6 +333,7 @@ function LocationTreeNode({ loc, depth, childrenByParent, isAdmin, onAdd, onEdit
     paddingLeft: 16 + depth * 20,
     borderBottom: "1px solid #F3F4F6",
     background: depth % 2 === 0 ? "#fff" : "#FAFAFA",
+    opacity: loc.active === false ? 0.55 : 1,
   };
 
   return (
@@ -342,8 +345,13 @@ function LocationTreeNode({ loc, depth, childrenByParent, isAdmin, onAdd, onEdit
 
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
           <span style={{ fontSize: isRoot ? 14 : 13, fontWeight: isRoot ? 600 : 500, color: "#1A1A2E" }}>
-            {loc.name}
+            {formatLocationLabel(loc) || loc.name}
           </span>
+          {loc.active === false && (
+            <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: "#F3F4F6", color: "#6B7280" }}>
+              Inactive
+            </span>
+          )}
           {isRoot && typeLabel && (
             <span style={{ ...badge, padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 500 }}>
               {typeLabel}
@@ -375,12 +383,12 @@ function LocationTreeNode({ loc, depth, childrenByParent, isAdmin, onAdd, onEdit
           >
             <Pencil size={11} /> Edit
           </button>
-          {isAdmin && (
+          {canToggle && (
             <button
-              onClick={() => onDelete(loc)}
-              style={{ display: "flex", alignItems: "center", gap: 3, padding: "4px 8px", background: "#FEE2E2", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 11, color: "#991B1B" }}
+              onClick={() => onToggle(loc)}
+              style={{ display: "flex", alignItems: "center", gap: 3, padding: "4px 8px", background: "#F3F4F6", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 11, color: "#374151" }}
             >
-              <Trash2 size={11} /> Delete
+              {loc.active === false ? "Activate" : "Deactivate"}
             </button>
           )}
         </div>
@@ -395,7 +403,8 @@ function LocationTreeNode({ loc, depth, childrenByParent, isAdmin, onAdd, onEdit
           isAdmin={isAdmin}
           onAdd={onAdd}
           onEdit={onEdit}
-          onDelete={onDelete}
+          onToggle={onToggle}
+          canToggle={canToggle}
         />
       ))}
     </>
@@ -415,6 +424,7 @@ export default function InventoryLocationsPage() {
   }, [user, isManager, router]);
 
   const [locations, setLocations] = useState<InventoryLocation[]>([]);
+  const [columnsReady, setColumnsReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [drawer, setDrawer] = useState<DrawerState>(CLOSED);
 
@@ -426,29 +436,23 @@ export default function InventoryLocationsPage() {
     });
     const json = await res.json();
     setLocations(json.locations ?? []);
+    setColumnsReady(json.columnsReady === true);
     setLoading(false);
   }, [user?.tenantId]);
 
   useEffect(() => { fetchLocations(); }, [fetchLocations]);
 
-  async function handleDelete(loc: InventoryLocation) {
-    const childrenByParent = new Map<string, InventoryLocation[]>();
-    for (const l of locations) {
-      if (l.parent_id) {
-        const arr = childrenByParent.get(l.parent_id) ?? [];
-        arr.push(l);
-        childrenByParent.set(l.parent_id, arr);
-      }
-    }
-    const descendantCount = getDescendantIds(loc.id, childrenByParent).size;
-    const msg = descendantCount > 0
-      ? `Delete "${loc.name}" and its ${descendantCount} sub-location${descendantCount > 1 ? "s" : ""}? This cannot be undone.`
-      : `Delete "${loc.name}"? This cannot be undone.`;
-    if (!confirm(msg)) return;
-    await fetch(`/api/inventory/locations/${loc.id}`, {
-      method: "DELETE",
-      headers: { "x-tenant-id": user?.tenantId ?? "" },
+  async function handleToggle(loc: InventoryLocation) {
+    const res = await fetch(`/api/inventory/locations/${loc.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "x-tenant-id": user?.tenantId ?? "" },
+      body: JSON.stringify({ active: loc.active === false }),
     });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      window.alert(json.error || "Could not update this location");
+      return;
+    }
     fetchLocations();
   }
 
@@ -463,7 +467,11 @@ export default function InventoryLocationsPage() {
       childrenByParent.set(loc.parent_id, arr);
     }
   }
-  const roots = locations.filter((l) => !l.parent_id);
+  childrenByParent.forEach((list, key) => {
+    childrenByParent.set(key, [...list].sort(compareLocations));
+  });
+  const roots = locations.filter((l) => !l.parent_id && l.active !== false).sort(compareLocations);
+  const inactiveRoots = locations.filter((l) => !l.parent_id && l.active === false).sort(compareLocations);
 
   return (
     <div style={{ padding: "32px 36px", maxWidth: 900, margin: "0 auto" }}>
@@ -504,10 +512,34 @@ export default function InventoryLocationsPage() {
                 isAdmin={isAdmin}
                 onAdd={(parentId) => setDrawer({ open: true, editing: null, prefillParentId: parentId })}
                 onEdit={(loc) => setDrawer({ open: true, editing: loc, prefillParentId: null })}
-                onDelete={handleDelete}
+                onToggle={handleToggle}
+                canToggle={columnsReady && isManager}
               />
             </div>
           ))}
+
+          {inactiveRoots.length > 0 && (
+            <div>
+              <h2 style={{ margin: "8px 0", fontSize: 14, fontWeight: 700, color: "#6B7280" }}>Inactive</h2>
+              {inactiveRoots.map((root) => (
+                <div
+                  key={root.id}
+                  style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, overflow: "hidden", marginBottom: 12 }}
+                >
+                  <LocationTreeNode
+                    loc={root}
+                    depth={0}
+                    childrenByParent={childrenByParent}
+                    isAdmin={isAdmin}
+                    onAdd={(parentId) => setDrawer({ open: true, editing: null, prefillParentId: parentId })}
+                    onEdit={(loc) => setDrawer({ open: true, editing: loc, prefillParentId: null })}
+                    onToggle={handleToggle}
+                    canToggle={columnsReady && isManager}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Orphaned locations (parent deleted without cascade) */}
           {locations.filter(l => l.parent_id && !locations.find(p => p.id === l.parent_id)).length > 0 && (

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createTenantSupabaseClient } from '@/lib/supabase-server'
 import { tenantScoped } from '@/lib/tenantScoped'
+import { loadLocations } from '@/lib/load-locations'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,14 +9,12 @@ export async function GET(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id') ?? ''
   if (!tenantId) return NextResponse.json({ error: 'Missing tenant' }, { status: 400 })
   const supabase = await createTenantSupabaseClient(tenantId)
-  const { data, error } = await tenantScoped(supabase, tenantId)
-    .from('inventory_locations')
-    .select('*')
-    // parents first, then children; alphabetical within each group
-    .order('parent_id', { ascending: true, nullsFirst: true })
-    .order('name', { ascending: true })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ locations: data ?? [] })
+  try {
+    const { locations, columnsReady } = await loadLocations(supabase, tenantId)
+    return NextResponse.json({ locations, columnsReady })
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Could not load locations' }, { status: 500 })
+  }
 }
 
 export async function POST(req: NextRequest) {

@@ -213,6 +213,70 @@ export function buildStocktakeGroups(
   };
 }
 
+function storedFromGroup(rows: StocktakeRow[], result: StoredResult): StoredLine[] {
+  return rows.map((row) => ({
+    id: row.key,
+    epc: row.epc,
+    sku: row.sku,
+    pieceId: row.pieceId,
+    result,
+    metal: row.metal,
+    status: row.status,
+    locationName: row.locationName,
+    locationId: row.locationId,
+  }));
+}
+
+/**
+ * Merge a scan response into the count already on screen.
+ * Scanning must not wait for another full count load.
+ */
+export function absorbStocktakeScans(
+  payload: StocktakePayload,
+  added: StoredLine[],
+  warnings: string[] = [],
+): StocktakePayload {
+  const lines = [
+    ...storedFromGroup(payload.groups.found, "found"),
+    ...storedFromGroup(payload.groups.elsewhere, "wrong_location"),
+    ...storedFromGroup(payload.groups.notInStock, "not_in_stock"),
+    ...storedFromGroup(payload.groups.unknown, "unknown"),
+    ...storedFromGroup(payload.groups.blank, "unknown"),
+  ];
+  const seen = new Set<string>();
+  for (const line of lines) {
+    if (line.epc) seen.add(line.epc.toLowerCase());
+  }
+  for (const line of added) {
+    const epc = line.epc ? line.epc.toLowerCase() : "";
+    if (epc && seen.has(epc)) continue;
+    if (epc) seen.add(epc);
+    lines.push({ ...line, epc: epc || line.epc });
+  }
+  const scanned = new Set<string>();
+  for (const line of lines) {
+    if (line.pieceId) scanned.add(line.pieceId);
+  }
+  const missing: ExpectedPiece[] = [];
+  for (const row of payload.groups.missing) {
+    if (!row.pieceId || scanned.has(row.pieceId)) continue;
+    missing.push({
+      pieceId: row.pieceId,
+      sku: row.sku,
+      metal: row.metal,
+      status: row.status,
+      locationName: row.locationName,
+    });
+  }
+  const view = buildStocktakeGroups(lines, missing, payload.stocktake.location_id);
+  return {
+    stocktake: payload.stocktake,
+    groups: view.groups,
+    counts: view.counts,
+    warnings,
+  };
+}
+
 export function isStocktakeSchemaError(error: { code?: string; message?: string } | null | undefined): boolean {
   if (!error) return false;
   if (error.code === "42P01" || error.code === "PGRST205") return true;

@@ -1,13 +1,12 @@
-// Resolves an inventory_locations row's full ancestor path (e.g. "Adelaide
-// Showroom > Horseshoe 1") via the parent_id self-reference added in
-// migration 082. Real data as of 2026-09-23 has no hierarchy in use yet
-// (every location's parent_id is null), so every path today is just the
-// location's own name — this is still built correctly for when hierarchy
-// data exists.
+import { formatLocationLabel } from "@/lib/location-label";
+
+// Resolves an inventory_locations row's full ancestor path. Each step is
+// "CODE · Name" when the location has a code.
 
 export interface LocationNode {
   id: string;
   name: string;
+  code?: string | null;
   parent_id?: string | null;
 }
 
@@ -26,7 +25,7 @@ export function buildLocationPath(
   while (currentId && depth < MAX_DEPTH) {
     const node = locationsById.get(currentId);
     if (!node) break;
-    parts.unshift(node.name);
+    parts.unshift(formatLocationLabel(node) || node.name);
     currentId = node.parent_id;
     depth++;
   }

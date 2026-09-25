@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/require-auth";
 import { applyHandheldTagReads } from "@/lib/rfid-tag-read";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { loadLocationLabels } from "@/lib/load-locations";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -167,15 +168,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (hit.piece && typeof hit.piece.location_id === "string") locationIds.add(hit.piece.location_id);
   }
 
-  const locationNames = new Map<string, string>();
+  let locationNames = new Map<string, string>();
   if (locationIds.size) {
-    const { data, error } = await supabase
-      .from("inventory_locations")
-      .select("id, name")
-      .eq("tenant_id", tenantId)
-      .in("id", Array.from(locationIds));
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    for (const row of data ?? []) locationNames.set(String(row.id), String(row.name ?? ""));
+    try {
+      locationNames = await loadLocationLabels(supabase, tenantId, Array.from(locationIds));
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Could not load locations" }, { status: 500 });
+    }
   }
 
   function locationName(row: PieceRow | null): string | null {

@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
 import { RFID_LOOKUP_DEBOUNCE_MS, parseScanLines, splitScanBuffer } from "@/lib/rfid-scan";
-import type { StocktakePayload, StocktakeRow } from "@/lib/rfid-stocktake";
+import { absorbStocktakeScans, type StocktakePayload, type StoredLine, type StocktakeRow } from "@/lib/rfid-stocktake";
 import { StocktakeGroupsView } from "@/components/StocktakeGroups";
 
 function when(iso: string | null): string {
@@ -17,6 +17,7 @@ function when(iso: string | null): string {
 
 export default function StocktakeCountPage() {
   const params = useParams();
+  const router = useRouter();
   const id = String(params.id ?? "");
   const { user, hydrated } = useUser();
   const manager = hydrated && canManage(user?.role);
@@ -25,6 +26,7 @@ export default function StocktakeCountPage() {
   const [confirming, setConfirming] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [movingId, setMovingId] = useState<string | null>(null);
+  const [startingFresh, setStartingFresh] = useState(false);
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const seenEpcs = useRef(new Set<string>());
@@ -75,8 +77,18 @@ export default function StocktakeCountPage() {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || "Could not save the scan");
-      remember(json);
-      setPayload(json);
+      const added = (json.added ?? []) as StoredLine[];
+      for (const line of added) {
+        if (line.epc) seenEpcs.current.add(line.epc);
+        if (line.sku) seenSkus.current.add(line.sku.toLowerCase());
+      }
+      let merged = false;
+      setPayload((prev) => {
+        if (!prev) return prev;
+        merged = true;
+        return absorbStocktakeScans(prev, added, json.warnings ?? []);
+      });
+      if (!merged) await load();
       setError("");
     } catch (err) {
       for (const epc of epcs) seenEpcs.current.delete(epc);
@@ -161,6 +173,24 @@ export default function StocktakeCountPage() {
   const open = session?.status === "in_progress";
   const statusLabel = session?.status === "completed" ? "Finished" : session?.status === "cancelled" ? "Cancelled" : "In progress";
 
+  async function startNewHere() {
+    if (!session) return;
+    setStartingFresh(true);
+    setError("");
+    const res = await fetch("/api/rfid/stocktake", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ location_id: session.location_id, fresh: true }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json.id) {
+      setError(json.error || "Could not start a new count");
+      setStartingFresh(false);
+      return;
+    }
+    router.push(`/rfid/stocktake/${json.id}`);
+  }
+
   return (
     <div
       className="stocktake-page"
@@ -170,9 +200,20 @@ export default function StocktakeCountPage() {
         inputRef.current?.focus();
       }}
     >
+      {!session && !error && (
+        <div aria-busy="true" aria-label="Loading count" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div className="stocktake-skel" style={{ height: 28, width: "70%" }} />
+          <div className="stocktake-skel" style={{ height: 16, width: "46%" }} />
+          <div className="stocktake-skel" style={{ height: 64, width: "100%" }} />
+          <div className="stocktake-skel" style={{ height: 72, width: "100%" }} />
+          <div className="stocktake-skel" style={{ height: 72, width: "100%" }} />
+        </div>
+      )}
+      {session && (
       <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: "0 0 4px" }}>
-        {session?.location_name || "Stocktake"}
+        {session.location_name || "Stocktake"}
       </h1>
+      )}
       {session && (
         <p style={{ margin: "0 0 12px", color: "#4B5563", fontSize: 14 }}>
           {statusLabel} · Started {when(session.started_at)}
@@ -180,6 +221,16 @@ export default function StocktakeCountPage() {
           {session.status === "completed" && ` · Finished ${when(session.finished_at)}`}
           {session.status === "completed" && session.finished_by_name ? ` by ${session.finished_by_name}` : ""}
         </p>
+      )}
+      {session && session.status !== "in_progress" && (
+        <button
+          type="button"
+          onClick={() => { void startNewHere(); }}
+          disabled={startingFresh}
+          style={{ ...primaryButton, width: "100%", marginBottom: 12 }}
+        >
+          {startingFresh ? "Starting…" : "Start new count here"}
+        </button>
       )}
       {error && <p style={{ background: "#FEF2F2", color: "#991B1B", borderRadius: 10, padding: "12px 14px" }}>{error}</p>}
       {payload?.warnings?.map((warning) => (
@@ -259,7 +310,7 @@ export default function StocktakeCountPage() {
           <p style={{ marginTop: 20, color: "#4B5563", fontSize: 15 }}>A manager finishes the count.</p>
         )
       )}
-      <style>{`.stocktake-page { max-width: 720px; margin: 0 auto; overflow-x: hidden; }`}</style>
+      <style>{`.stocktake-page { max-width: 720px; margin: 0 auto; overflow-x: hidden; } .stocktake-skel { background: #E5E7EB; border-radius: 10px; animation: stocktake-pulse 1.2s ease-in-out infinite; } @keyframes stocktake-pulse { 50% { opacity: 0.45; } }`}</style>
     </div>
   );
 }

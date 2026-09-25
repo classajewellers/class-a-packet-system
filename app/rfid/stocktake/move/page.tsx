@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { RFID_LOOKUP_DEBOUNCE_MS, parseScanLines, splitScanBuffer } from "@/lib/rfid-scan";
+import { formatLocationLabel, locationsForPicker, type LocationFields } from "@/lib/location-label";
 
-type LocationRow = { id: string; name: string };
+type LocationRow = LocationFields & { id: string; name: string };
 type MoveAction = "moved" | "already" | "unknown" | "blank";
 type MoveRow = {
   key: string;
@@ -35,9 +36,7 @@ export default function ScanToMovePage() {
     void fetch("/api/inventory/locations")
       .then((res) => res.json())
       .then((json) => {
-        const rows = (json.locations ?? []).map((row: LocationRow) => ({ id: row.id, name: row.name }));
-        rows.sort((a: LocationRow, b: LocationRow) => a.name.localeCompare(b.name, "en"));
-        setLocations(rows);
+        setLocations(locationsForPicker((json.locations ?? []) as LocationRow[]));
       })
       .catch(() => setError("Could not load locations"));
   }, []);
@@ -132,7 +131,7 @@ export default function ScanToMovePage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {locations.map((location) => (
               <button key={location.id} type="button" onClick={() => setDestination(location)} style={locationButton}>
-                {location.name}
+                {formatLocationLabel(location)}
               </button>
             ))}
           </div>
@@ -141,7 +140,7 @@ export default function ScanToMovePage() {
       {destination && (
         <>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, margin: "12px 0" }}>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>Moving to {destination.name}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, minWidth: 0 }}>Moving to {formatLocationLabel(destination)}</div>
             <button type="button" onClick={() => setDestination(null)} style={changeButton}>Change</button>
           </div>
           <textarea
@@ -184,14 +183,14 @@ export default function ScanToMovePage() {
               <div key={row.key} style={card}>
                 <div style={{ fontFamily: "monospace", fontSize: 20, fontWeight: 700 }}>{row.sku || "Piece"}</div>
                 <div style={{ fontSize: 14, color: "#374151", marginTop: 4 }}>
-                  {row.from_location_name ? `From ${row.from_location_name}` : "From no location"} → {destination.name}
+                  {row.from_location_name ? `From ${row.from_location_name}` : "From no location"} → {formatLocationLabel(destination)}
                 </div>
               </div>
             ))}
             {already.map((row) => (
               <div key={row.key} style={card}>
                 <div style={{ fontFamily: "monospace", fontSize: 20, fontWeight: 700 }}>{row.sku || "Piece"}</div>
-                <div style={{ fontSize: 14, color: "#4B5563", marginTop: 4 }}>Already at {destination.name}</div>
+                <div style={{ fontSize: 14, color: "#4B5563", marginTop: 4 }}>Already at {formatLocationLabel(destination)}</div>
               </div>
             ))}
             {unknown.map((row) => (

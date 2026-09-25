@@ -4,12 +4,14 @@
  */
 import assert from "node:assert/strict";
 import {
+  absorbStocktakeScans,
   buildStocktakeGroups,
   classifyStocktakeHit,
   formatStocktakeCounts,
   missingPieceIds,
   planStocktakeInserts,
   preferredTagEpc,
+  type StocktakePayload,
 } from "../lib/rfid-stocktake.ts";
 
 const floor = "floor";
@@ -143,5 +145,47 @@ const finished = buildStocktakeGroups([], [
 ], floor);
 assert.equal(finished.counts.missing, 1);
 assert.equal(finished.groups.missing[0].sku, "RING-03");
+
+const live: StocktakePayload = {
+  stocktake: {
+    id: "session",
+    status: "in_progress",
+    location_id: floor,
+    location_name: "Display Floor",
+    started_at: "2026-09-25T23:08:34.489Z",
+    finished_at: null,
+    started_by_name: null,
+    finished_by_name: null,
+  },
+  groups: {
+    found: [],
+    missing: [
+      { key: "missing:ring-1", epc: null, sku: "RING-01", pieceId: "ring-1", metal: null, status: "in_stock", locationName: "Display Floor", locationId: null, movedHere: false },
+      { key: "missing:ring-3", epc: null, sku: "RING-03", pieceId: "ring-3", metal: null, status: "in_stock", locationName: "Display Floor", locationId: null, movedHere: false },
+    ],
+    elsewhere: [],
+    notInStock: [],
+    unknown: [],
+    blank: [],
+  },
+  counts: { found: 0, missing: 2, elsewhere: 0, notInStock: 0, unknown: 0, blank: 0 },
+  warnings: [],
+};
+const merged = absorbStocktakeScans(live, [{
+  id: "scan-1",
+  epc: "aa3a06d60e1f4eb67b5c0f69",
+  sku: "RING-01",
+  pieceId: "ring-1",
+  result: "found",
+  metal: null,
+  status: "in_stock",
+  locationName: "HA1 · Horseshoe A1",
+  locationId: floor,
+}], ["kept"]);
+assert.equal(merged.counts.found, 1);
+assert.equal(merged.counts.missing, 1);
+assert.equal(merged.groups.missing[0].sku, "RING-03");
+assert.equal(merged.groups.found[0].locationName, "HA1 · Horseshoe A1");
+assert.deepEqual(merged.warnings, ["kept"]);
 
 console.log("rfid-stocktake-classify-test: ok");

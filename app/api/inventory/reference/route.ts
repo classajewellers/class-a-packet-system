@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { tenantScoped } from "@/lib/tenantScoped";
+import { loadLocations } from "@/lib/load-locations";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -25,15 +26,25 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     ? tenantScoped(supabase, tenantId).from("inventory_suppliers").select("*").order("name")
     : Promise.resolve({ data: [], error: null });
 
+  const locationsPromise = tenantId
+    ? loadLocations(supabase, tenantId).then(
+        (loaded) => ({ data: loaded.locations, error: null as { message: string } | null }),
+        (err: unknown) => ({ data: null, error: { message: err instanceof Error ? err.message : "locations failed" } }),
+      )
+    : Promise.resolve({ data: [] as unknown[], error: null as { message: string } | null });
+
   const [statuses, locations, categories, suppliers] = await Promise.all([
     supabase.from("inventory_statuses").select("*").eq("is_active", true).order("sort_order"),
-    supabase.from("inventory_locations").select("*").eq("is_active", true).order("sort_order"),
+    locationsPromise,
     supabase.from("inventory_categories").select("*").eq("tenant_id", tenantId).eq("is_active", true).order("sort_order"),
     suppliersQuery,
   ]);
 
   if (suppliers.error) {
     console.error("[inventory/reference] supplier list failed:", suppliers.error.message);
+  }
+  if (locations.error) {
+    console.error("[inventory/reference] location list failed:", locations.error.message);
   }
 
   return NextResponse.json({

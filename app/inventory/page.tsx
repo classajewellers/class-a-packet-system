@@ -13,6 +13,7 @@ import {
 } from "@/lib/types";
 import { Search, Plus, X, Filter, Sparkles, Loader, ChevronDown, ChevronRight, Package, Upload } from "lucide-react";
 import { FALLBACK_STATUS_OPTIONS } from "@/lib/pieceResolution";
+import { formatLocationLabel, locationsForPicker } from "@/lib/location-label";
 
 const PAGE_SIZE = 50;
 
@@ -341,7 +342,7 @@ export default function InventoryPage() {
                 </select>
                 <select value={locationId} onChange={e => { setLocationId(e.target.value); setPage(1); }} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13, background: "var(--vault-canvas)", color: "var(--vault-text)" }}>
                   <option value="">All Locations</option>
-                  {ref?.locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  {locationsForPicker(ref?.locations ?? []).map(l => <option key={l.id} value={l.id}>{formatLocationLabel(l)}</option>)}
                 </select>
                 {hasFilters && (
                   <button onClick={clearFilters} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13, background: "var(--vault-canvas)", color: "#EF4444", cursor: "pointer" }}>Clear all</button>
@@ -660,7 +661,7 @@ export default function InventoryPage() {
                 <label style={LF}>Location</label>
                 <select value={addForm.location_id} onChange={e => setAddForm(f => ({ ...f, location_id: e.target.value }))} style={{ ...IF, background: "var(--vault-canvas)" }}>
                   <option value="">— Select location —</option>
-                  {ref?.locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  {locationsForPicker(ref?.locations ?? []).map(l => <option key={l.id} value={l.id}>{formatLocationLabel(l)}</option>)}
                 </select>
               </div>
               <div>

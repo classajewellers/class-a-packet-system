@@ -10,6 +10,7 @@ import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
 import PiecePassportCard from "@/components/PiecePassportCard";
 import type { PiecePassport } from "@/lib/piecePassport";
 import { FALLBACK_STATUS_OPTIONS } from "@/lib/pieceResolution";
+import { formatLocationLabel, locationsForPicker } from "@/lib/location-label";
 import {
   ArrowLeft, Edit2, Save, X, ArrowRight,
   Lock, AlertTriangle, TrendingDown, Package, MapPin, Clock, DollarSign, Bookmark, BookmarkX,
@@ -21,7 +22,7 @@ const PAYMENT_METHODS = ["Cash", "EFTPOS", "Credit Card", "Bank Transfer", "Layb
 /** Build "Grandparent › Parent › Leaf" path by climbing parent_id links. */
 function buildLocationPath(
   locationId: string | null | undefined,
-  locations: Array<{ id: string; name: string; parent_id?: string | null }>,
+  locations: Array<{ id: string; name: string; code?: string | null; parent_id?: string | null }>,
   fallback?: string
 ): string {
   if (!locationId) return fallback ?? "";
@@ -30,7 +31,7 @@ function buildLocationPath(
   let cur = byId.get(locationId);
   let safety = 0;
   while (cur && safety++ < 10) {
-    parts.unshift(cur.name);
+    parts.unshift(formatLocationLabel(cur) || cur.name);
     cur = cur.parent_id ? byId.get(cur.parent_id) : undefined;
   }
   return parts.length ? parts.join(" › ") : (fallback ?? "");
@@ -187,10 +188,12 @@ function buildTimeline(piece: any, movements: any[]): TLEvent[] {
   for (const m of movements) {
     const parts: string[] = [];
     if (m.to_location?.name) {
-      if (m.from_location?.name && m.from_location.name !== m.to_location.name) {
-        parts.push(`${m.from_location.name} → ${m.to_location.name}`);
-      } else if (!m.from_location?.name) {
-        parts.push(`Moved to ${m.to_location.name}`);
+      const fromLabel = formatLocationLabel(m.from_location);
+      const toLabel = formatLocationLabel(m.to_location);
+      if (fromLabel && fromLabel !== toLabel) {
+        parts.push(`${fromLabel} → ${toLabel}`);
+      } else if (!fromLabel && toLabel) {
+        parts.push(`Moved to ${toLabel}`);
       }
     }
     if (m.to_status?.name) {
@@ -1679,7 +1682,7 @@ export default function InventoryItemPage({ params }: Params) {
           {/* Inventory state */}
           <SectionCard title="Inventory">
             <EF label="Status" field="status_id" opts={ref?.statuses.map(s => ({ value: s.id, label: s.name })) ?? []} />
-            <EF label="Location" field="location_id" opts={ref?.locations.map(l => ({ value: l.id, label: buildLocationPath(l.id, ref.locations, l.name) })) ?? []} />
+            <EF label="Location" field="location_id" opts={locationsForPicker(ref?.locations ?? [], String(form.location_id ?? piece.location_id ?? "")).map(l => ({ value: l.id, label: buildLocationPath(l.id, ref?.locations ?? [], formatLocationLabel(l)) }))} />
             <EF label="Supplier" field="supplier_id" opts={ref?.suppliers.map(s => ({ value: s.id, label: s.name })) ?? []} />
             <EF label="Assigned To" field="assigned_to" />
           </SectionCard>
@@ -1780,7 +1783,7 @@ export default function InventoryItemPage({ params }: Params) {
                 <select value={moveForm.to_location_id} onChange={e => setMoveForm(f => ({ ...f, to_location_id: e.target.value }))}
                   style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, background: "#fff" }}>
                   <option value="">— Keep current —</option>
-                  {ref?.locations.map(l => <option key={l.id} value={l.id}>{buildLocationPath(l.id, ref.locations, l.name)}</option>)}
+                  {locationsForPicker(ref?.locations ?? []).map(l => <option key={l.id} value={l.id}>{buildLocationPath(l.id, ref?.locations ?? [], formatLocationLabel(l))}</option>)}
                 </select>
               </div>
               <div>

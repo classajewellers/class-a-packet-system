@@ -448,6 +448,9 @@ export interface InventoryLocation {
   id: string;
   tenant_id?: string;
   name: string;
+  code?: string | null;
+  /** migration 171. Missing means the column is not deployed yet. */
+  active?: boolean | null;
   type: "Storage" | "Display" | "Service" | "External" | "Transit" | InventoryLocationType;
   sort_order?: number;
   is_active?: boolean;

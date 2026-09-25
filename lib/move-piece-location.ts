@@ -11,6 +11,7 @@
  */
 import { SupabaseClient } from "@supabase/supabase-js";
 import { tenantScoped } from "@/lib/tenantScoped";
+import { loadLocationLabels } from "@/lib/load-locations";
 
 export type MovePieceResult =
   | {
@@ -23,45 +24,29 @@ export type MovePieceResult =
     }
   | { ok: false; status: number; error: string };
 
-async function locationName(
-  supabase: SupabaseClient,
-  tenantId: string,
-  locationId: string | null,
-): Promise<string | null> {
-  if (!locationId) return null;
-  const { data } = await tenantScoped(supabase, tenantId)
-    .from("inventory_locations")
-    .select("id, name")
-    .eq("id", locationId)
-    .maybeSingle();
-  const name = typeof data?.name === "string" ? data.name.trim() : "";
-  return name || null;
-}
-
 export async function movePieceToLocation(
   supabase: SupabaseClient,
   tenantId: string,
   input: { pieceId: string; toLocationId: string; movedBy: string; notes: string },
 ): Promise<MovePieceResult> {
-  const { data: destination, error: destErr } = await tenantScoped(supabase, tenantId)
-    .from("inventory_locations")
-    .select("id, name")
-    .eq("id", input.toLocationId)
-    .maybeSingle();
-  if (destErr) return { ok: false, status: 500, error: destErr.message };
-  if (!destination) return { ok: false, status: 404, error: "Location not found" };
-
-  const { data: piece, error: pieceErr } = await tenantScoped(supabase, tenantId)
-    .from("inventory_pieces")
-    .select("id, sku, location_id")
-    .eq("id", input.pieceId)
-    .maybeSingle();
-  if (pieceErr) return { ok: false, status: 500, error: pieceErr.message };
+  const [destinationResult, pieceResult] = await Promise.all([
+    tenantScoped(supabase, tenantId).from("inventory_locations").select("id").eq("id", input.toLocationId).maybeSingle(),
+    tenantScoped(supabase, tenantId).from("inventory_pieces").select("id, sku, location_id").eq("id", input.pieceId).maybeSingle(),
+  ]);
+  if (destinationResult.error) return { ok: false, status: 500, error: destinationResult.error.message };
+  if (!destinationResult.data) return { ok: false, status: 404, error: "Location not found" };
+  if (pieceResult.error) return { ok: false, status: 500, error: pieceResult.error.message };
+  const piece = pieceResult.data;
   if (!piece) return { ok: false, status: 404, error: "Piece not found" };
 
   const fromLocationId = typeof piece.location_id === "string" ? piece.location_id : null;
   const sku = typeof piece.sku === "string" ? piece.sku : null;
-  const fromLocationName = await locationName(supabase, tenantId, fromLocationId);
+  const labels = await loadLocationLabels(
+    supabase,
+    tenantId,
+    [fromLocationId, input.toLocationId].filter((id): id is string => !!id),
+  );
+  const fromLocationName = fromLocationId ? labels.get(fromLocationId) ?? null : null;
 
   if (fromLocationId === input.toLocationId) {
     return { ok: true, action: "already", pieceId: input.pieceId, sku, fromLocationId, fromLocationName };

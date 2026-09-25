@@ -19,5 +19,5 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       { status: result.status },
     );
   }
-  return NextResponse.json(result.payload);
+  return NextResponse.json({ added: result.added, warnings: result.warnings });
 }
