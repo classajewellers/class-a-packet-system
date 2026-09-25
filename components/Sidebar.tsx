@@ -409,6 +409,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
                     </div>
                   )}
                   {can("settings") && <SubLink href="/settings/users"     label="Users" />}
+                  {can("settings") && isManager && <SubLink href="/settings/team" label="Team" />}
                   {can("settings") && <SubLink href="/settings/staff"     label="Staff" />}
                   {can("settings") && <SubLink href="/settings/vip-tiers" label="VIP Tiers" />}
                   {can("settings") && isManager && <SubLink href="/settings/tenants" label="Stores" />}
