@@ -39,6 +39,9 @@ function StatusChip({ status }: { status: "queued" | "claimed" | "printing" | "c
   );
 }
 
+// Queued staging job is bound to this printer. The bridge must use it.
+const QUEUED_JOB_PRINTER_ID = "2dd3870a-973f-4128-855d-9958866fd50c";
+
 function fmtDate(d: string | null | undefined) {
   if (!d) return "—";
   return new Date(d).toLocaleString("en-AU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -88,7 +91,9 @@ export default function RfidSettingsPage() {
 
   const openAttach = () => {
     const printers = data?.printers ?? [];
-    const preferred = printers.find((p) => p.is_active) ?? printers[0];
+    const preferred = printers.find((p) => p.id === QUEUED_JOB_PRINTER_ID)
+      ?? printers.find((p) => p.is_active)
+      ?? printers[0];
     setAttachForm({ printer_id: preferred?.id ?? "", bridge_display_name: "Store Bridge" });
     setSetupError("");
     setSetupMode("attach");
@@ -97,7 +102,12 @@ export default function RfidSettingsPage() {
   const handleSetup = async () => {
     setSetupSaving(true);
     setSetupError("");
-    const creating = setupMode === "create";
+    const creating = setupMode === "create" && (data?.printers ?? []).length === 0;
+    if (setupMode === "create" && !creating) {
+      setSetupSaving(false);
+      setSetupError("A printer already exists. Mint a bridge key for it instead.");
+      return;
+    }
     const res = await fetch("/api/rfid/admin/setup", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-tenant-id": tenantId },
@@ -159,7 +169,7 @@ export default function RfidSettingsPage() {
             {keyWasRotated ? "New bridge key — the old key has stopped working" : "Bridge configured — save this API key"}
           </h3>
           <p style={{ margin: "0 0 12px", fontSize: 13, color: "#065F46" }}>
-            This key will not be shown again. Copy it into your bridge <code>config.json</code>.
+            This key will not be shown again. Paste it into <code>bridgeApiKey</code> in <code>config.json</code>. The printer address is <code>printer.host</code> and <code>printer.port</code>.
           </p>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <code style={{ flex: 1, fontFamily: "monospace", fontSize: 12, background: "#D1FAE5", padding: "8px 12px", borderRadius: 8, wordBreak: "break-all" as const, color: "#047857" }}>
@@ -341,15 +351,14 @@ export default function RfidSettingsPage() {
       </div>
 
       {/* Bridge configuration reference */}
-      {hasBridge && (
+      {(hasBridge || newApiKey) && (
         <div style={{ background: "#F8FAFC", border: "1px solid var(--vault-border)", borderRadius: 12, padding: 20, marginBottom: 20 }}>
           <h3 style={{ ...LABEL_STYLE, margin: "0 0 12px" }}>Bridge config reference</h3>
           <pre style={{ margin: 0, fontSize: 12, color: "var(--vault-text)", overflowX: "auto" }}>{JSON.stringify({
             vaultApiUrl: "https://yourdomain.com",
             bridgeApiKey: "<your-api-key>",
             pollIntervalMs: 3000,
-            printerHost: "192.168.40.242",
-            printerPort: 9100,
+            printer: { host: "192.168.40.242", port: 9100 },
           }, null, 2)}</pre>
         </div>
       )}
@@ -363,7 +372,7 @@ export default function RfidSettingsPage() {
             </h2>
             <p style={{ margin: "0 0 20px", fontSize: 13, color: "var(--vault-text-secondary)" }}>
               {setupMode === "attach"
-                ? "Uses the printer already saved. Does not create another printer. The API key is shown once."
+                ? "Links the bridge to the printer already saved. Queued jobs stay on that printer. A new printer is not created. The API key is shown once."
                 : "Creates a printer record and generates a secure API key for your bridge to authenticate with Vault."}
             </p>
 
@@ -380,6 +389,11 @@ export default function RfidSettingsPage() {
                       <option key={p.id} value={p.id}>{p.display_name}{p.model ? ` (${p.model})` : ""}</option>
                     ))}
                   </select>
+                  {attachForm.printer_id && (
+                    <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--vault-text-muted)" }}>
+                      Bridge jobs are returned only for this printer ({attachForm.printer_id}).
+                    </p>
+                  )}
                 </div>
                 <div style={{ marginBottom: 14 }}>
                   <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--vault-text)", marginBottom: 4 }}>Bridge name</label>
