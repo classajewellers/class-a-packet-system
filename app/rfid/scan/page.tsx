@@ -137,7 +137,11 @@ export default function RfidScanPage() {
         focusInput();
       }}
     >
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: "0 0 12px" }}>RFID Scan</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: "0 0 8px" }}>RFID Scan</h1>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+        <Link href="/rfid/stocktake" style={{ display: "inline-flex", alignItems: "center", minHeight: 44, padding: "0 14px", borderRadius: 10, border: "1px solid #E5E7EB", background: "#fff", color: "#111827", textDecoration: "none", fontWeight: 700, fontSize: 15 }}>Stocktake</Link>
+        <Link href="/rfid/stocktake/move" style={{ display: "inline-flex", alignItems: "center", minHeight: 44, padding: "0 14px", borderRadius: 10, border: "1px solid #E5E7EB", background: "#fff", color: "#111827", textDecoration: "none", fontWeight: 700, fontSize: 15 }}>Scan to move</Link>
+      </div>
       <textarea
         ref={inputRef}
         value={draft}

@@ -349,6 +349,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
                 <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 1 }}>
                   <SubLink href="/inventory"                         label="Stock" />
                   <SubLink href="/rfid/scan"                         label="RFID Scan" />
+                  <SubLink href="/rfid/stocktake"                    label="Stocktake" />
                   <SubLink href="/inventory/products"                label="Products" />
                   {isManager && <SubLink href="/inventory/purchase-orders" label="Purchasing" />}
                   {isManager && <SubLink href="/inventory/locations"       label="Locations" />}
