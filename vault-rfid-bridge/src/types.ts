@@ -11,6 +11,10 @@ export interface BridgeConfig {
     port: number;
     connectTimeoutMs: number;
     writeTimeoutMs: number;
+    // Optional. When set, label layout uses this DPI and startup does not
+    // override it with the printer's reported head resolution. When omitted,
+    // the bridge queries the printer and falls back to 203.
+    dpi?: number;
     // Optional printer web UI (HTTP Basic auth) for auto-verification via the
     // /rfidlog page. If webUser/webPassword are absent, auto-verify is skipped
     // and tags are left for manual UHF verification.

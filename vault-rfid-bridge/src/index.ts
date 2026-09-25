@@ -3,6 +3,8 @@ import path from "path";
 import net from "net";
 import { BridgeConfig } from "./types";
 import { runBridge } from "./bridge";
+import { readHeadDpi } from "./zebra";
+import { DEFAULT_DPI } from "./label";
 
 function loadConfig(): BridgeConfig {
   const configPath = path.resolve(process.cwd(), "config.json");
@@ -51,9 +53,20 @@ function loadConfig(): BridgeConfig {
       webPassword:          printer.webPassword          ? String(printer.webPassword) : undefined,
       webScheme:            printer.webScheme === "http" ? "http" : "https",
       webRejectUnauthorized: printer.webRejectUnauthorized === true,  // default false (self-signed)
+      ...readPrinterDpi(printer.dpi),
     },
     logLevel: (c.logLevel as BridgeConfig["logLevel"]) || "info",
   };
+}
+
+function readPrinterDpi(value: unknown): { dpi: number } | Record<string, never> {
+  if (value === undefined || value === null || value === "") return {};
+  const n = typeof value === "number" ? value : Number(String(value).trim());
+  if (!Number.isInteger(n) || n < 150 || n > 600) {
+    console.error(`ERROR: printer.dpi must be a whole number from 150 to 600, or omit it to auto-detect`);
+    process.exit(1);
+  }
+  return { dpi: n };
 }
 
 /** TCP connectivity check — connects and immediately closes. Sends nothing. */
@@ -100,6 +113,22 @@ async function main() {
   } else {
     console.log(`[${ts}] [WARN] Printer ${config.printer.host}:${config.printer.port} is NOT reachable — check IP and network`);
     console.log(`[${ts}] [WARN] Bridge will keep running and retry on each poll`);
+  }
+
+  if (config.printer.dpi) {
+    console.log(`[${ts}] [INFO] Printer head resolution: ${config.printer.dpi} dpi (from printer.dpi in config.json)`);
+  } else if (!reachable) {
+    config.printer.dpi = DEFAULT_DPI;
+    console.log(`[${ts}] [INFO] Printer head resolution: no reply, using ${DEFAULT_DPI} dpi`);
+  } else {
+    const detected = await readHeadDpi(config.printer.host, config.printer.port, config.printer.connectTimeoutMs);
+    if (detected) {
+      config.printer.dpi = detected;
+      console.log(`[${ts}] [INFO] Printer head resolution: ${detected} dpi`);
+    } else {
+      config.printer.dpi = DEFAULT_DPI;
+      console.log(`[${ts}] [INFO] Printer head resolution: no reply, using ${DEFAULT_DPI} dpi`);
+    }
   }
 
   await runBridge(config, reachable);

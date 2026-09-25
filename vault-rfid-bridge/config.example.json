@@ -9,6 +9,7 @@
     "port": 9100,
     "connectTimeoutMs": 5000,
     "writeTimeoutMs": 10000,
+    "dpi": null,
     "webUser": "admin",
     "webPassword": "PRINTER_WEB_PASSWORD_HERE",
     "webScheme": "https",

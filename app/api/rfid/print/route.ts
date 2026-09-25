@@ -155,8 +155,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const now = new Date().toISOString();
 
   // ── Build ZPL ──────────────────────────────────────────────────────────────
-  // Label dimensions use defaults until Sean confirms actual label spec.
-  // widthDots / lengthDots should come from printer config once confirmed.
+  // 68 mm × 26 mm. rfid_printers has no DPI column, so this copy is laid out at
+  // 203 dpi. The bridge rebuilds jewellery_v1 at print time from label_data
+  // using the printer's reported head resolution, or printer.dpi in config.json.
   const p = piece as any;
   const metalName  = [p.metal_karat, p.metal_colour].filter(Boolean).join(" ") || null;
   const stoneName  = p.diamond_type && p.diamond_type !== "None"
@@ -171,7 +172,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     metal:     metalName,
     stone:     stoneName,
     barcode:   p.barcode ?? piece.sku,
-    // widthDots / lengthDots: not configured yet — using defaults pending label spec
   });
 
   // ── Create RFID tag record ─────────────────────────────────────────────────

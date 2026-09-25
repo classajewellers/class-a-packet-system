@@ -1,7 +1,8 @@
 import net from "net";
 import { BridgeConfig, PrintJob } from "./types";
 import { sendZpl } from "./zebra";
-import { fetchRfidLog, findEpcWriteInLog } from "./rfidlog";
+import { countLogLines, fetchRfidLog, findEpcWriteInLog, printerWebUrl } from "./rfidlog";
+import { DEFAULT_DPI, generateJewelleryZpl, type LabelData } from "./label";
 
 const BRIDGE_VERSION = "1.0.0";
 
@@ -150,10 +151,11 @@ async function processJob(config: BridgeConfig, job: PrintJob): Promise<void> {
   await updateJobStatus(config, job.id, "printing");
 
   try {
+    const zpl = zplForJob(config, job);
     await sendZpl(
       config.printer.host,
       config.printer.port,
-      job.zpl_payload,
+      zpl,
       config.printer.connectTimeoutMs,
       config.printer.writeTimeoutMs
     );
@@ -179,44 +181,111 @@ async function processJob(config: BridgeConfig, job: PrintJob): Promise<void> {
  * The EPC we told the printer to encode (job.label_data.epc) is the correlation
  * key. Best-effort: skipped if printer web creds aren't configured; never throws.
  */
+function labelDataForJob(job: PrintJob, dpi: number): LabelData | null {
+  const data = job.label_data;
+  if (!data || typeof data.epc !== "string" || typeof data.sku !== "string") return null;
+  if (!data.epc.trim() || !data.sku.trim()) return null;
+  return {
+    epc: data.epc.trim(),
+    sku: data.sku.trim(),
+    title: typeof data.title === "string" ? data.title : null,
+    metal: typeof data.metal === "string" ? data.metal : null,
+    stone: typeof data.stone === "string" ? data.stone : null,
+    barcode: typeof data.barcode === "string" ? data.barcode : null,
+    programPosition: typeof data.programPosition === "string" ? data.programPosition : undefined,
+    dpi,
+  };
+}
+
+// jewellery_v1 stored on the job was generated before the bridge knew the head
+// DPI. Rebuild it at print time so the detected or configured DPI is what prints.
+function zplForJob(config: BridgeConfig, job: PrintJob): string {
+  if (job.label_template !== "jewellery_v1") return job.zpl_payload;
+  const dpi = config.printer.dpi ?? DEFAULT_DPI;
+  const label = labelDataForJob(job, dpi);
+  if (!label) {
+    log("warn", `Job ${job.id}: jewellery_v1 is missing label data, sending the stored ZPL`);
+    return job.zpl_payload;
+  }
+  try {
+    const zpl = generateJewelleryZpl(label);
+    log("info", `Job ${job.id}: jewellery_v1 laid out at ${dpi} dpi for a 68x26 mm label`);
+    return zpl;
+  } catch (err: unknown) {
+    log("warn", `Job ${job.id}: could not rebuild jewellery_v1 (${err instanceof Error ? err.message : "invalid label"}), sending the stored ZPL`);
+    return job.zpl_payload;
+  }
+}
+
 async function attemptAutoVerify(config: BridgeConfig, job: PrintJob): Promise<void> {
   const expectedEpc =
-    job.label_data && typeof job.label_data.epc === "string" ? job.label_data.epc : "";
-  if (!expectedEpc) return;
-
-  if (!config.printer.webUser || !config.printer.webPassword) {
-    log("info", `Job ${job.id}: printer web creds not set — skipping auto-verify (manual verification still available)`);
+    job.label_data && typeof job.label_data.epc === "string" ? job.label_data.epc.trim() : "";
+  if (!expectedEpc) {
+    log("warn", `RFID verify: no EPC on job ${job.id}, so the printed tag was not checked`);
     return;
   }
 
-  for (let attempt = 1; attempt <= 5; attempt++) {
-    const body = await fetchRfidLog(config);
-    const match = body ? findEpcWriteInLog(body, expectedEpc) : null;
+  if (!config.printer.webUser || !config.printer.webPassword) {
+    log("warn", "RFID verify: printer web username or password is not set in config.json");
+    return;
+  }
+
+  const tries = 5;
+  let lastFail: { retryable: boolean; logLine: string } | null = null;
+  let lastBody = "";
+  for (let attempt = 1; attempt <= tries; attempt++) {
+    const fetched = await fetchRfidLog(config);
+    if (!fetched.ok) {
+      lastFail = fetched;
+      if (!fetched.retryable || attempt === tries) break;
+      await sleep(2000);
+      continue;
+    }
+    lastFail = null;
+    lastBody = fetched.body;
+    const match = findEpcWriteInLog(fetched.body, expectedEpc);
     if (match) {
-      try {
-        const res = await vaultFetch(config, "/api/rfid/bridge/verify", {
-          method: "POST",
-          body: JSON.stringify({
-            job_id: job.id,
-            epc: match.epc,
-            device_id: config.printer.host,
-            printer_timestamp: match.timestamp,
-          }),
-        });
-        if (res.ok) {
-          const j = (await res.json().catch(() => ({}))) as { result?: { ok?: boolean } };
-          log("info", `Job ${job.id}: auto-verified via printer log (EPC ${match.epc}) — ${j?.result?.ok ? "tag active" : "verify result: " + JSON.stringify(j?.result)}`);
-        } else {
-          log("warn", `Job ${job.id}: auto-verify POST returned HTTP ${res.status}`);
-        }
-      } catch (err: unknown) {
-        log("warn", `Job ${job.id}: auto-verify request failed`, err instanceof Error ? err.message : err);
-      }
+      await postVerify(config, job, match.epc, match.timestamp);
       return;
     }
-    if (attempt < 5) await sleep(2000);
+    if (attempt < tries) await sleep(2000);
   }
-  log("info", `Job ${job.id}: EPC not found in printer log after retries — left for manual verification`);
+
+  if (lastFail) {
+    log("warn", lastFail.logLine);
+    return;
+  }
+  const lines = countLogLines(lastBody);
+  log("warn", `RFID verify: no matching EPC in printer log for tag ${expectedEpc.toLowerCase()} (read ${lines} log lines from ${printerWebUrl(config)})`);
+}
+
+async function postVerify(config: BridgeConfig, job: PrintJob, epc: string, printerTimestamp: string): Promise<void> {
+  try {
+    const res = await vaultFetch(config, "/api/rfid/bridge/verify", {
+      method: "POST",
+      body: JSON.stringify({
+        job_id: job.id,
+        epc,
+        device_id: config.printer.host,
+        printer_timestamp: printerTimestamp,
+      }),
+    });
+    if (!res.ok) {
+      log("warn", `RFID verify: Vault verify call failed (HTTP ${res.status}) for tag ${epc}`);
+      return;
+    }
+    const j = (await res.json().catch(() => ({}))) as { result?: { ok?: boolean; code?: string; error?: string } };
+    if (j?.result?.ok) {
+      log("info", `RFID verify: tag ${epc} is active`);
+      return;
+    }
+    const code = j?.result?.code ?? "unknown";
+    const error = j?.result?.error ?? "no details";
+    log("warn", `RFID verify: Vault did not activate tag ${epc} (${code}: ${error})`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "network error";
+    log("warn", `RFID verify: Vault verify call failed (${message}) for tag ${epc}`);
+  }
 }
 
 async function poll(config: BridgeConfig): Promise<void> {
