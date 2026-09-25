@@ -51,7 +51,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
   const showSettings = can("pricing") || can("settings") || isManager;
 
   const [salesOpen, setSalesOpen]         = useState(pathname.startsWith("/quotes") || pathname.startsWith("/leads"));
-  const [inventoryOpen, setInventoryOpen] = useState(pathname.startsWith("/inventory"));
+  const [inventoryOpen, setInventoryOpen] = useState(pathname.startsWith("/inventory") || pathname.startsWith("/rfid"));
   const [pricingGroupOpen, setPricingGroupOpen] = useState(
     pathname.startsWith("/pricing") || pathname.startsWith("/settings/pricing") || pathname.startsWith("/settings/melee")
   );
@@ -62,7 +62,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
   // Auto-expand the relevant section when navigating directly to a sub-route
   useEffect(() => {
     if (pathname.startsWith("/quotes") || pathname.startsWith("/leads")) setSalesOpen(true);
-    if (pathname.startsWith("/inventory")) setInventoryOpen(true);
+    if (pathname.startsWith("/inventory") || pathname.startsWith("/rfid")) setInventoryOpen(true);
     if (pathname.startsWith("/settings") || pathname.startsWith("/pricing") || pathname.startsWith("/admin/users") || pathname.startsWith("/workshop/settings") || pathname.startsWith("/quotes/settings") || pathname.startsWith("/inventory/settings")) setSettingsOpen(true);
   }, [pathname]);
 
@@ -146,7 +146,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
         onClick={onClose}
         style={{
           display: "flex", alignItems: "center",
-          padding: "7px 16px 7px 45px", borderRadius: 6, textDecoration: "none",
+          minHeight: 44, padding: "10px 16px 10px 45px", borderRadius: 6, textDecoration: "none",
           background: active ? HOVER_BG : "transparent",
           color: active ? ACTIVE_COLOR : DEFAULT_COLOR,
           fontWeight: active ? 500 : 400, fontSize: 13,
@@ -181,18 +181,18 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
     );
   }
 
-  function SubSubLink({ href, label }: { href: string; label: string }) {
-    const active = pathname === href || pathname.startsWith(href + "/");
+  function SubSubLink({ href, label, match }: { href: string; label: string; match?: (path: string) => boolean }) {
+    const active = match ? match(pathname) : pathname === href || pathname.startsWith(href + "/");
     return (
       <Link
         href={href}
         onClick={onClose}
         style={{
           display: "flex", alignItems: "center",
-          padding: "6px 16px 6px 62px", borderRadius: 6, textDecoration: "none",
+          minHeight: 44, padding: "10px 16px 10px 58px", borderRadius: 6, textDecoration: "none",
           background: active ? HOVER_BG : "transparent",
           color: active ? ACTIVE_COLOR : DEFAULT_COLOR,
-          fontWeight: active ? 500 : 400, fontSize: 12.5,
+          fontWeight: active ? 500 : 400, fontSize: 15,
           transition: "background var(--vault-motion-fast), color var(--vault-motion-fast)",
         }}
         onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = HOVER_BG; (e.currentTarget as HTMLAnchorElement).style.color = ACTIVE_COLOR; } }}
@@ -341,14 +341,22 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
               <ExpandLink
                 icon={Package} label="Inventory" expanded={inventoryOpen}
                 onClick={() => {
-                  if (inventoryOpen) { setInventoryOpen(false); }
-                  else { setInventoryOpen(true); router.push("/inventory"); onClose(); }
+                  if (inventoryOpen) setInventoryOpen(false);
+                  else { setInventoryOpen(true); router.push("/inventory"); }
                 }}
               />
               {inventoryOpen && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 1 }}>
                   <SubLink href="/inventory"                         label="Stock" />
                   <SubLink href="/inventory/products"                label="Products" />
+                  <div style={{ padding: "12px 16px 2px 45px", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(255,255,255,0.45)" }}>RFID</div>
+                  <SubSubLink href="/rfid/scan" label="Scan" />
+                  <SubSubLink
+                    href="/rfid/stocktake"
+                    label="Stocktake"
+                    match={(path) => path === "/rfid/stocktake" || (path.startsWith("/rfid/stocktake/") && !path.startsWith("/rfid/stocktake/move"))}
+                  />
+                  <SubSubLink href="/rfid/stocktake/move" label="Stock Movement" />
                   {isManager && <SubLink href="/inventory/purchase-orders" label="Purchasing" />}
                   {isManager && <SubLink href="/inventory/locations"       label="Locations" />}
                   {isManager && <SubLink href="/inventory/suppliers"       label="Suppliers" />}
@@ -409,6 +417,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
                     </div>
                   )}
                   {can("settings") && <SubLink href="/settings/users"     label="Users" />}
+                  {can("settings") && isManager && <SubLink href="/settings/team" label="Team" />}
                   {can("settings") && <SubLink href="/settings/staff"     label="Staff" />}
                   {can("settings") && <SubLink href="/settings/vip-tiers" label="VIP Tiers" />}
                   {can("settings") && isManager && <SubLink href="/settings/tenants" label="Stores" />}

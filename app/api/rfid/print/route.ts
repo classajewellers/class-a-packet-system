@@ -105,7 +105,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const { data: piece, error: pErr } = await tenantScoped(supabase, tenantId)
     .from("inventory_pieces")
     .select(`
-      id, sku, notes, barcode,
+      id, sku, notes, barcode, retail_price,
       metal_karat, metal_colour,
       diamond_carat, diamond_colour, diamond_type
     `)
@@ -155,8 +155,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const now = new Date().toISOString();
 
   // ── Build ZPL ──────────────────────────────────────────────────────────────
-  // Label dimensions use defaults until Sean confirms actual label spec.
-  // widthDots / lengthDots should come from printer config once confirmed.
+  // 26 × 26 mm head on a 36 mm face. rfid_printers has no DPI column, so this
+  // stored copy is laid out at the generator default (203 dpi). The bridge does not send this
+  // string for jewellery_v1. It rebuilds the same label_data at the printer's
+  // reported head resolution, or printer.dpi in config.json.
   const p = piece as any;
   const metalName  = [p.metal_karat, p.metal_colour].filter(Boolean).join(" ") || null;
   const stoneName  = p.diamond_type && p.diamond_type !== "None"
@@ -166,12 +168,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const zplPayload = generateJewelleryZpl({
     epc,
-    sku:       piece.sku,
-    title:     designName ?? piece.sku,
-    metal:     metalName,
-    stone:     stoneName,
-    barcode:   p.barcode ?? piece.sku,
-    // widthDots / lengthDots: not configured yet — using defaults pending label spec
+    sku:         piece.sku,
+    title:       designName ?? piece.sku,
+    metal:       metalName,
+    stone:       stoneName,
+    barcode:     p.barcode ?? piece.sku,
+    retailPrice: p.retail_price ?? null,
   });
 
   // ── Create RFID tag record ─────────────────────────────────────────────────
@@ -218,6 +220,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         metal:   metalName,
         stone:   stoneName,
         barcode: p.barcode ?? piece.sku,
+        retail_price: p.retail_price ?? null,
       },
       label_template:  "jewellery_v1",
       idempotency_key: idempotencyKey,

@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { hasPermission, canManage } from "@/lib/userTypes";
 import { formatDateAU } from "@/lib/formatters";
+import { resolveAssigneeName } from "@/lib/workshopAssignee";
+import AssigneeMark from "@/components/AssigneeMark";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,6 +32,7 @@ interface WorkshopPacket {
   workshop_intake_substatus: string | null;
   blocked_reason: string | null;
   blocked_note: string | null;
+  quality_issue?: boolean | null;
   delivery_method: string | null;
   pending_customer_approval?: boolean | null;
 }
@@ -52,7 +55,9 @@ const JOB_TYPE_LABELS: Record<string, string> = {
   online_order: "Online Order", collection_order: "Collection",
 };
 const STAGE_LABELS: Record<string, string> = {
-  intake: "Intake", on_bench: "Production", quality_check: "Quality Control",
+  intake: "Intake", cad_design: "CAD Design", cad_approval: "CAD Approval", casting: "Casting",
+  polish_finish: "Polish/Finish", polish_set: "Polish/Set",
+  on_bench: "Production", quality_check: "Quality Control",
   to_be_valued: "Valuation", ready: "Ready", collected: "Collected",
 };
 const BLOCKED_LABELS: Record<string, string> = {
@@ -87,10 +92,11 @@ function displayName(p: WorkshopPacket) {
   if (p.job_type === "stock_work") return "Internal";
   return p.customer_display_name || [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
 }
-function resolveAssignee(p: WorkshopPacket) {
-  if (p.assigned_to_name) return p.assigned_to_name;
-  if (p.workshop_subcontractor_name) return p.workshop_subcontractor_name;
-  return null;
+function resolveAssignee(p: WorkshopPacket, config?: WorkshopConfig) {
+  return resolveAssigneeName(p, { teamMembers: config?.teamMembers });
+}
+function isMyJob(p: WorkshopPacket, userId: string | null | undefined) {
+  return !!userId && p.assigned_to === userId;
 }
 function resolvePathwaySteps(p: WorkshopPacket, config: WorkshopConfig): { name: string }[] | null {
   if (!p.workshop_pathway_id) return null;
@@ -111,9 +117,6 @@ function relativeTime(iso: string | null): string {
   if (diff < 86400)    return `${Math.floor(diff / 3600)}h ago`;
   if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}d ago`;
   return formatDateAU(iso.split("T")[0]);
-}
-function initials(name: string) {
-  return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
 }
 // Deterministic colour per person, derived from their real name - not a new
 // backend concept, just a display convenience so team members are visually
@@ -154,14 +157,9 @@ function CountBadge({ n }: { n: number }) {
 function OwnerChip({ name }: { name: string | null }) {
   if (!name) return <span style={{ fontSize: 12, color: "var(--vault-text-muted)" }}>Unassigned</span>;
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-      <span style={{
-        width: 20, height: 20, borderRadius: "50%", background: avatarColor(name), color: "#fff",
-        fontSize: 10, fontWeight: 600, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-      }}>
-        {initials(name)}
-      </span>
-      <span style={{ fontSize: 12.5, color: "var(--vault-text)" }}>{name}</span>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+      <AssigneeMark name={name} color={avatarColor(name)} size={20} />
+      <span title={name} style={{ fontSize: 12.5, color: "var(--vault-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
     </span>
   );
 }
@@ -283,6 +281,11 @@ function JobRow({
           <span style={{ fontSize: 13.5, fontWeight: 500, color: "var(--vault-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {p.articles || JOB_TYPE_LABELS[p.job_type ?? ""] || "Job"}
           </span>
+          {p.quality_issue && (
+            <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: "#FEF2F2", color: "#B91C1C", border: "1px solid #FECACA", flexShrink: 0 }}>
+              Quality issue
+            </span>
+          )}
         </div>
         <div style={{ fontSize: 13, color: "var(--vault-text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {displayName(p)}
@@ -292,7 +295,7 @@ function JobRow({
         ) : (
           <StageChip label={stepLabel} />
         )}
-        <div><OwnerChip name={resolveAssignee(p)} /></div>
+        <div><OwnerChip name={resolveAssignee(p, config)} /></div>
         <div style={{ fontSize: 12.5, color: isOverdue(p) ? "var(--vault-status-error)" : isDueToday(p) ? "var(--vault-status-warning)" : "var(--vault-text-secondary)", fontWeight: (isOverdue(p) || isDueToday(p)) ? 600 : 400 }}>
           {p.due_date ? formatDateAU(p.due_date) : "—"}
         </div>
@@ -389,7 +392,7 @@ export default function WorkshopPage() {
     if (stageFilter     !== "all" && p.status         !== stageFilter)     return false;
     if (deliveryFilter  !== "all" && p.delivery_method !== deliveryFilter)  return false;
     if (assigneeFilter !== "all") {
-      const a = resolveAssignee(p);
+      const a = resolveAssignee(p, config);
       if (a !== assigneeFilter) return false;
     }
     if (q) {
@@ -401,10 +404,10 @@ export default function WorkshopPage() {
     return true;
   });
 
-  // My work — a real filter against the already-fetched assignee data, not
-  // a new endpoint.
+  // My jobs — packets whose assigned_to is this login, not a name match
+  // on staff_member or the assignee label.
   const tabFiltered = tab === "mine"
-    ? filtered.filter(p => resolveAssignee(p) === user?.name)
+    ? filtered.filter(p => isMyJob(p, user?.id))
     : filtered;
 
   // ── Sort (identical logic to the prior version) ───────────────────────────
@@ -418,7 +421,7 @@ export default function WorkshopPage() {
       case "job_type":        va = a.job_type ?? ""; vb = b.job_type ?? ""; break;
       case "status":          va = a.status ?? ""; vb = b.status ?? ""; break;
       case "status_updated_at": va = a.status_updated_at ?? ""; vb = b.status_updated_at ?? ""; break;
-      case "assigned":        va = (resolveAssignee(a) ?? "").toLowerCase(); vb = (resolveAssignee(b) ?? "").toLowerCase(); break;
+      case "assigned":        va = (resolveAssignee(a, config) ?? "").toLowerCase(); vb = (resolveAssignee(b, config) ?? "").toLowerCase(); break;
     }
     if (va < vb) return sortDir === "asc" ? -1 : 1;
     if (va > vb) return sortDir === "asc" ? 1 : -1;
@@ -429,8 +432,8 @@ export default function WorkshopPage() {
   // from real fields already on the record (blocked_reason,
   // pending_customer_approval, isOverdue, resolveAssignee). No new data.
   const needsAttention = sorted.filter(p => !!needsAttentionReason(p, config.settings.stale_threshold_days));
-  const inProduction    = sorted.filter(p => !needsAttentionReason(p, config.settings.stale_threshold_days) && !!resolveAssignee(p));
-  const remaining       = sorted.filter(p => !needsAttentionReason(p, config.settings.stale_threshold_days) && !resolveAssignee(p));
+  const inProduction    = sorted.filter(p => !needsAttentionReason(p, config.settings.stale_threshold_days) && !!resolveAssignee(p, config));
+  const remaining       = sorted.filter(p => !needsAttentionReason(p, config.settings.stale_threshold_days) && !resolveAssignee(p, config));
 
   const activeFilterCount = [jobTypeFilter !== "all", stageFilter !== "all", assigneeFilter !== "all", deliveryFilter !== "all"].filter(Boolean).length;
 
@@ -467,7 +470,7 @@ export default function WorkshopPage() {
             Active <span style={{ marginLeft: 5 }}><CountBadge n={filtered.length} /></span>
           </button>
           <button className={"vault-tab" + (tab === "mine" ? " vault-tab-active" : "")} onClick={() => setTab("mine")}>
-            My work <span style={{ marginLeft: 5 }}><CountBadge n={filtered.filter(p => resolveAssignee(p) === user?.name).length} /></span>
+            My jobs <span style={{ marginLeft: 5 }}><CountBadge n={filtered.filter(p => isMyJob(p, user?.id)).length} /></span>
           </button>
           <a href="/workshop/history" className="vault-tab" style={{ textDecoration: "none", display: "inline-block" }}>
             Completed
@@ -503,6 +506,11 @@ export default function WorkshopPage() {
                   <select className="vault-input" value={stageFilter} onChange={e => setStageFilter(e.target.value)}>
                     <option value="all">All stages</option>
                     <option value="intake">Intake</option>
+                    <option value="cad_design">CAD Design</option>
+                    <option value="cad_approval">CAD Approval</option>
+                    <option value="casting">Casting</option>
+                    <option value="polish_finish">Polish/Finish</option>
+                    <option value="polish_set">Polish/Set</option>
                     <option value="on_bench">Production</option>
                     <option value="quality_check">Quality control</option>
                     <option value="to_be_valued">Valuation</option>

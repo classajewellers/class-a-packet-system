@@ -10,17 +10,18 @@ export const fetchCache = "force-no-store";
 // Bridge reports status transitions.
 //
 // Tag lifecycle note:
-//   Job "completed" means ZPL was transmitted over TCP — NOT that the RFID chip
-//   encoded successfully. The ZD621R does not return encode confirmation over
-//   port 9100. Therefore: job completed → tag status "printed" (unverified).
-//   Tags only become "active" after physical verification via
-//   POST /api/rfid/pieces/[id]/verify.
+//   The bridge sends "completed" only after the printer RFID counters show a
+//   valid encode, and "failed" with error_message when the void counter rises
+//   or those counters do not confirm a write. completed → tag "printed"
+//   (unverified). failed → tag "damaged" (not verified). A tag becomes
+//   "active" only after POST /api/rfid/pieces/[id]/verify or the bridge verify
+//   call.
 //
 // Valid bridge transitions:
 //   queued  → claimed   (bridge took the job)
-//   claimed → printing  (ZPL sent to printer socket)
-//   printing → completed (no TCP error)
-//   *       → failed    (any error; include error_message)
+//   claimed → printing  (about to send ZPL)
+//   printing → completed (RFID counters show a valid encode)
+//   *       → failed    (TCP error or RFID encode failure; include error_message)
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -100,7 +101,7 @@ export async function PATCH(
   }
 
   if (status === "failed" && job.rfid_tag_id) {
-    // TCP-level failure — tag is void/unencoded, mark damaged.
+    // TCP or RFID encode failure — the chip was not verified. Mark the tag damaged.
     await supabase
       .from("inventory_rfid_tags")
       .update({

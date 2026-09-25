@@ -31,6 +31,12 @@ function headerMessage(parts: string[]): string {
   return encodeURIComponent(parts.filter(Boolean).join(" "));
 }
 
+function poEmailConfigured(): boolean {
+  return Boolean(process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL);
+}
+
+type EmailState = "sent" | "not_configured" | "no_address" | "suppressed" | "failed" | "skipped";
+
 async function emailPdf(opts: {
   tenantId: string;
   to: string | null;
@@ -38,19 +44,25 @@ async function emailPdf(opts: {
   supplierName: string;
   filename: string;
   bytes: ArrayBuffer;
-}): Promise<string> {
+}): Promise<{ state: EmailState; message: string }> {
   if (!opts.to) {
-    return "This supplier has no email address, so it was not emailed.";
+    return {
+      state: "no_address",
+      message: "This supplier has no email address. The PDF was downloaded for you to send.",
+    };
   }
   const block = outboundBlock("email", opts.tenantId);
   if (block) {
     logSuppressedOutbound("email", opts.tenantId, { to: opts.to, po: opts.poNumber }, block);
-    return "Email was held back on this test tenant, so it was not emailed.";
+    return {
+      state: "suppressed",
+      message: "Email is held on this test tenant. The PDF was downloaded for you to send.",
+    };
   }
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM_EMAIL;
   if (!apiKey || !from) {
-    return "Email is not set up on this Preview, so it was not emailed.";
+    return { state: "not_configured", message: "" };
   }
 
   const res = await fetch("https://api.resend.com/emails", {
@@ -73,9 +85,15 @@ async function emailPdf(opts: {
   if (!res.ok) {
     const body = await res.text();
     console.error("[po-send] email failed:", res.status, body.slice(0, 300));
-    return "The email could not be sent.";
+    return { state: "failed", message: "The email could not be sent. The PDF was downloaded." };
   }
-  return `Emailed to ${opts.to}.`;
+  return { state: "sent", message: `Emailed to ${opts.to}.` };
+}
+
+export async function GET(req: NextRequest): Promise<NextResponse> {
+  const tenantId = req.headers.get("x-tenant-id") ?? "";
+  if (!tenantId) return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
+  return NextResponse.json({ email_configured: poEmailConfigured() });
 }
 
 export async function POST(
@@ -84,6 +102,14 @@ export async function POST(
 ): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
   if (!tenantId) return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
+
+  let intent: "send" | "download" = "send";
+  const requestType = req.headers.get("content-type") ?? "";
+  if (requestType.includes("application/json")) {
+    const body = await req.json().catch(() => ({} as { intent?: string }));
+    if (body?.intent === "download") intent = "download";
+  }
+
   const supabase = await createTenantSupabaseClient(tenantId);
 
   const { data: po, error: poErr } = await tenantScoped(supabase, tenantId)
@@ -226,21 +252,23 @@ export async function POST(
   const document = await renderHtmlDocument(html, po.po_number || "purchase-order");
 
   const notes: string[] = [];
-  if (document.kind === "pdf") {
-    notes.push(await emailPdf({
+  let emailState: EmailState = "skipped";
+  if (intent === "send" && document.kind === "pdf") {
+    const email = await emailPdf({
       tenantId,
       to: supplierEmail,
       poNumber: po.po_number || "PO",
       supplierName: supplier?.name || tenant?.name || "us",
       filename: document.filename,
       bytes: document.bytes,
-    }));
-  } else {
+    });
+    emailState = email.state;
+    if (email.message) notes.push(email.message);
+  } else if (document.kind !== "pdf") {
     notes.push(document.message);
-    notes.push("It was not emailed.");
   }
 
-  if (po.status === "draft") {
+  if (intent === "send" && po.status === "draft") {
     const today = new Date().toISOString().slice(0, 10);
     const { error: statusErr } = await tenantScoped(supabase, tenantId)
       .from("inventory_purchase_orders")
@@ -266,6 +294,7 @@ export async function POST(
       "Content-Length": String(bytes.byteLength),
       "Cache-Control": "no-store",
       "X-Content-Type-Options": "nosniff",
+      "X-Po-Email-State": emailState,
       "X-Po-Message": headerMessage(notes),
     },
   });

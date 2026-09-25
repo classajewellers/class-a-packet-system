@@ -5,6 +5,9 @@ import { useUser } from "@/context/UserContext";
 import { formatDateAU, formatCurrency } from "@/lib/formatters";
 import AttachmentsSection from "@/components/AttachmentsSection";
 import WorkshopPurchasing, { useJobPurchases } from "@/components/WorkshopPurchasing";
+import CadApprovalPanel, { type CadVersionRow } from "@/components/CadApprovalPanel";
+import { castingDueDate, isCastingOverdue, pathwayStepIndex } from "@/lib/cadStage";
+import { resolveAssigneeName } from "@/lib/workshopAssignee";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -46,17 +49,21 @@ export interface WorkshopPacket {
   workshop_needs_valuation: boolean;
   workshop_valuer: string | null;
   workshop_supplier: string | null;
+  workshop_due_date?: string | null;
+  workshop_due_date_overridden?: boolean | null;
+  cad_required?: boolean | null;
   workshop_po_number: string | null;
   blocked_reason: string | null;
   blocked_note: string | null;
   blocked_at: string | null;
+  quality_issue?: boolean | null;
   delivery_method: string | null;
   shopify_order_id: string | null;
   shopify_fulfillment_id: string | null;
   pending_customer_approval?: boolean | null;
 }
 
-export interface TeamMember     { id: string; tenant_id: string; name: string; profile_id: string | null; sort_order: number; active: boolean; }
+export interface TeamMember     { id: string; tenant_id: string; name: string; profile_id: string | null; sort_order: number; active: boolean; workshop_role_keys?: string[]; }
 export interface Subcontractor  { id: string; tenant_id: string; name: string; sort_order: number; active: boolean; }
 export interface Valuer         { id: string; name: string; active: boolean; }
 export interface PathwayStep    { name: string; location: "inhouse" | "external"; }
@@ -81,7 +88,7 @@ export interface WorkshopConfig {
 
 // ── Internal types ────────────────────────────────────────────────────────────
 
-type TabId = "overview" | "customer" | "items" | "notes" | "production" | "materials" | "purchasing" | "pricing" | "qc" | "valuation" | "files" | "messages" | "history";
+type TabId = "overview" | "customer" | "items" | "notes" | "production" | "cad" | "materials" | "pricing" | "qc" | "valuation" | "files" | "messages" | "history";
 
 interface ActivityEvent {
   id: string;
@@ -106,13 +113,13 @@ const FRONT_SECTIONS: { id: TabId; label: string }[] = [
   { id: "overview",   label: "Job" },
   { id: "items",      label: "Items" },
   { id: "production", label: "Production" },
-  { id: "materials",  label: "Materials" },
+  { id: "cad",        label: "CAD" },
+  { id: "materials",  label: "Materials & Purchasing" },
 ];
 
 const MORE_SECTIONS: { id: TabId; label: string }[] = [
   { id: "customer",   label: "Customer" },
   { id: "notes",      label: "Notes" },
-  { id: "purchasing", label: "Purchasing" },
   { id: "pricing",    label: "Pricing" },
   { id: "qc",         label: "QC" },
   { id: "valuation",  label: "Valuation" },
@@ -143,8 +150,20 @@ const BLOCKED_LABELS: Record<string, string> = {
   other:                 "Blocked",
 };
 
+const CAD_APPROVAL_SHORT: Record<string, string> = {
+  pending: "Waiting",
+  approved: "Approved",
+  changes_requested: "Changes",
+  rejected: "Rejected",
+};
+
 const STAGE_LABELS: Record<string, string> = {
   intake:        "Intake",
+  cad_design:    "CAD Design",
+  cad_approval:  "CAD Approval",
+  casting:       "Casting",
+  polish_finish: "Polish/Finish",
+  polish_set:    "Polish/Set",
   on_bench:      "Production",
   quality_check: "Quality Control",
   to_be_valued:  "Valuation",
@@ -166,7 +185,9 @@ const JOB_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
 };
 
 const STAGE_ACCENT: Record<string, string> = {
-  intake: "#378ADD", on_bench: "#7F77DD", quality_check: "#D85A30",
+  intake: "#378ADD", cad_design: "#7F77DD", cad_approval: "#BA7517", casting: "#D85A30",
+  polish_finish: "#0F6E56", polish_set: "#0F6E56",
+  on_bench: "#7F77DD", quality_check: "#D85A30",
   to_be_valued: "#BA7517", ready: "#1D9E75", collected: "#6B7280",
 };
 
@@ -219,11 +240,22 @@ function activityLabel(event: ActivityEvent): string {
       return `QC ${label}${inspector}${notes}`;
     }
     case "step_advanced":
-      return `Step advanced: Step ${Number(ov.step_index ?? 0) + 1} → Step ${Number(nv.step_index ?? 0) + 1}`;
+    case "step_change":
+      return `Step: Step ${Number(ov.step_index ?? 0) + 1} → Step ${Number(nv.step_index ?? 0) + 1}`;
+    case "quality_issue":
+      return nv.quality_issue ? "Quality issue flagged" : "Quality issue cleared";
     case "assignment_changed":
       return `Assigned to: ${(nv.subcontractor as string | null) ?? (nv.assigned_to ? "team member" : "Unassigned")}`;
     case "valuation_assigned":
       return `Valuer set: ${String(nv.valuer ?? "—")}`;
+    case "cad_decision": {
+      const action = String(nv.action ?? "");
+      const ver = nv.version_number != null ? `v${nv.version_number}` : "CAD";
+      if (action === "approve") return `CAD ${ver} approved — moved to Casting`;
+      if (action === "request_changes") return `CAD ${ver} changes requested${nv.note ? `: ${nv.note}` : ""}`;
+      if (action === "reject") return `CAD ${ver} rejected${nv.note ? `: ${nv.note}` : ""}`;
+      return `CAD decision ${ver}`;
+    }
     case "shopify_pickup": {
       const actor = nv.actor_name ? ` by ${nv.actor_name}` : "";
       const fid = nv.shopify_fulfillment_id ? ` (Shopify #${nv.shopify_fulfillment_id})` : "";
@@ -267,6 +299,8 @@ export default function WorkshopJobDrawer({
   const [moreOpen, setMoreOpen] = useState(false);
   const [narrow, setNarrow] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [assignOpen, setAssignOpen] = useState<null | "header" | "cad">(null);
+  const [cadVersions, setCadVersions] = useState<CadVersionRow[]>([]);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 720px)");
@@ -311,6 +345,17 @@ export default function WorkshopJobDrawer({
   }, [packet]);
 
   useEffect(() => { if (user?.name) setQcInspector(user.name); }, [user]);
+
+  useEffect(() => {
+    let ignore = false;
+    fetch(`/api/workshop/packets/${packet.id}/cad`)
+      .then(async (res) => {
+        const json = await res.json().catch(() => ({}));
+        if (!ignore && res.ok && Array.isArray(json.versions)) setCadVersions(json.versions);
+      })
+      .catch(() => {});
+    return () => { ignore = true; };
+  }, [packet.id]);
 
   const h = useCallback(
     () => ({ "Content-Type": "application/json", "x-tenant-id": tenantId }),
@@ -445,7 +490,7 @@ export default function WorkshopJobDrawer({
 
   const CATEGORY_COLORS: Record<string, string> = { blue: "#378ADD", amber: "#BA7517", purple: "#7F77DD", coral: "#D85A30", teal: "#1D9E75", gray: "#6B7280" };
   type StageEntry = { label: string; status: string; substatus: string | null; accent: string };
-  const FLAT_STAGES: StageEntry[] = config.stages.length > 0
+  const configuredStages: StageEntry[] = config.stages.length > 0
     ? config.stages.slice().sort((a, b) => {
         const catA = config.categories.find(c => c.id === a.category_id);
         const catB = config.categories.find(c => c.id === b.category_id);
@@ -457,6 +502,11 @@ export default function WorkshopJobDrawer({
     : [
         { label: "Intake",               status: "intake",        substatus: "jobs_in",   accent: "#378ADD" },
         { label: "Pre-Check",            status: "intake",        substatus: "pre_check", accent: "#378ADD" },
+        { label: "CAD Design",           status: "cad_design",    substatus: null,        accent: "#7F77DD" },
+        { label: "CAD Approval",         status: "cad_approval",  substatus: null,        accent: "#BA7517" },
+        { label: "Casting",              status: "casting",       substatus: null,        accent: "#D85A30" },
+        { label: "Polish/Finish",        status: "polish_finish", substatus: null,        accent: "#0F6E56" },
+        { label: "Polish/Set",           status: "polish_set",    substatus: null,        accent: "#0F6E56" },
         { label: "On Order",             status: "intake",        substatus: "on_order",  accent: "#378ADD" },
         { label: "On Bench",             status: "on_bench",      substatus: null,        accent: "#7F77DD" },
         { label: "Quality Control",      status: "quality_check", substatus: null,        accent: "#D85A30" },
@@ -464,12 +514,94 @@ export default function WorkshopJobDrawer({
         { label: "Ready for Collection", status: "ready",         substatus: null,        accent: "#1D9E75" },
         { label: "Collected",            status: "collected",     substatus: null,        accent: "#6B7280" },
       ];
+  const CAD_STAGE_FALLBACK: StageEntry[] = [
+    { label: "CAD Design",    status: "cad_design",    substatus: null, accent: "#7F77DD" },
+    { label: "CAD Approval",  status: "cad_approval",  substatus: null, accent: "#BA7517" },
+    { label: "Casting",       status: "casting",       substatus: null, accent: "#D85A30" },
+    { label: "Polish/Finish", status: "polish_finish", substatus: null, accent: "#0F6E56" },
+    { label: "Polish/Set",    status: "polish_set",    substatus: null, accent: "#0F6E56" },
+  ];
+  const missingCadStages = CAD_STAGE_FALLBACK.filter((entry) =>
+    !configuredStages.some((stage) => stage.status === entry.status && stage.substatus == null)
+  );
+  const preCheckAt = configuredStages.findIndex((stage) => stage.status === "intake" && stage.substatus === "pre_check");
+  const FLAT_STAGES: StageEntry[] = missingCadStages.length === 0
+    ? configuredStages
+    : preCheckAt === -1
+      ? [...configuredStages, ...missingCadStages]
+      : [...configuredStages.slice(0, preCheckAt + 1), ...missingCadStages, ...configuredStages.slice(preCheckAt + 1)];
 
   function isStageActive(entry: StageEntry): boolean {
     if (local.status !== entry.status) return false;
     if (entry.substatus !== null) return (local.workshop_intake_substatus ?? "jobs_in") === entry.substatus;
     if (entry.status === "intake") return (local.workshop_intake_substatus ?? "jobs_in") === "jobs_in";
     return true;
+  }
+
+  function assignTeam(cadOnly: boolean) {
+    return config.teamMembers.filter((member) => member.active).filter((member) =>
+      !cadOnly || (member.workshop_role_keys ?? []).includes("cad_designer")
+    );
+  }
+
+  function assignValue(cadOnly: boolean): string {
+    const team = assignTeam(cadOnly);
+    if (local.assigned_to && team.some((member) => member.profile_id === local.assigned_to)) return `tp:${local.assigned_to}`;
+    if (local.workshop_subcontractor_name) {
+      if (team.some((member) => !member.profile_id && member.name === local.workshop_subcontractor_name)) return `tn:${local.workshop_subcontractor_name}`;
+      if (!cadOnly && config.subcontractors.some((sub) => sub.active && sub.name === local.workshop_subcontractor_name)) return `sub:${local.workshop_subcontractor_name}`;
+    }
+    return "";
+  }
+
+  function applyAssign(value: string) {
+    if (!value) { patch({ assigned_to: null, workshop_subcontractor_name: null }); return; }
+    if (value.startsWith("tp:")) { patch({ assigned_to: value.slice(3), workshop_subcontractor_name: null }); return; }
+    if (value.startsWith("tn:")) { patch({ assigned_to: null, workshop_subcontractor_name: value.slice(3) }); return; }
+    patch({ workshop_subcontractor_name: value.slice(4), assigned_to: null });
+  }
+
+  function assigneeName(): string | null {
+    return resolveAssigneeName(local, { profiles, teamMembers: config.teamMembers });
+  }
+
+  function cadDesignerName(): string | null {
+    const team = assignTeam(true);
+    if (local.assigned_to) return team.find((member) => member.profile_id === local.assigned_to)?.name ?? null;
+    if (local.workshop_subcontractor_name) {
+      return team.find((member) => !member.profile_id && member.name === local.workshop_subcontractor_name)?.name ?? null;
+    }
+    return null;
+  }
+
+  function renderAssignSelect(cadOnly: boolean) {
+    const team = assignTeam(cadOnly);
+    return (
+      <div style={{ marginTop: 8, maxWidth: 360 }}>
+        <select value={assignValue(cadOnly)} onChange={(e) => { applyAssign(e.target.value); setAssignOpen(null); }} style={INPUT} aria-label={cadOnly ? "CAD Designer" : "Assigned to"}>
+          <option value="">— Unassigned —</option>
+          {team.length > 0 && (
+            <optgroup label={cadOnly ? "CAD Designers" : "Team"}>
+              {team.map((member) => (
+                <option key={member.id} value={member.profile_id ? `tp:${member.profile_id}` : `tn:${member.name}`}>{member.name}</option>
+              ))}
+            </optgroup>
+          )}
+          {!cadOnly && config.subcontractors.filter((sub) => sub.active).length > 0 && (
+            <optgroup label="Subcontractors">
+              {config.subcontractors.filter((sub) => sub.active).map((sub) => (
+                <option key={sub.id} value={`sub:${sub.name}`}>{sub.name}</option>
+              ))}
+            </optgroup>
+          )}
+        </select>
+        {cadOnly && team.length === 0 && (
+          <div style={{ fontSize: 12, color: "#B45309", marginTop: 6 }}>
+            No CAD Designers yet. In Settings → Team, tag a staff member with CAD Designer.
+          </div>
+        )}
+      </div>
+    );
   }
 
   // ── Tab renderers ─────────────────────────────────────────────────────────
@@ -494,6 +626,11 @@ export default function WorkshopJobDrawer({
             )}
           </div>
         )}
+        {isCastingOverdue(local) && (
+          <div style={{ background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: 8, padding: "8px 12px", marginBottom: 14, fontSize: 13, fontWeight: 600, color: "#DC2626" }}>
+            Casting overdue — expected back {castingDueDate(local) ? formatDateAU(castingDueDate(local) as string) : ""} and still in Casting.
+          </div>
+        )}
         {(overdue || dueToday) && (
           <div style={{ background: overdue ? "#FEE2E2" : "#FEF3C7", border: `1px solid ${overdue ? "#FCA5A5" : "#FDE68A"}`, borderRadius: 8, padding: "8px 12px", marginBottom: 14, fontSize: 13, fontWeight: 600, color: overdue ? "#DC2626" : "#B45309" }}>
             {overdue ? "⚠ Overdue" : "⏰ Due today"}
@@ -503,7 +640,12 @@ export default function WorkshopJobDrawer({
           <div style={{ background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: 8, padding: "8px 12px", marginBottom: 14, fontSize: 13, color: "#DC2626" }}>{saveError}</div>
         )}
 
-        <WorkshopPurchasing rows={purchases.rows} error={purchases.error} />
+        <WorkshopPurchasing
+          rows={purchases.rows}
+          error={purchases.error}
+          variant="summary"
+          onOpen={() => setActiveTab("materials")}
+        />
 
         {LABEL("Stage")}
         <div style={{ display: "flex", alignItems: "flex-start", width: "100%", overflowX: "auto", marginBottom: 16, padding: "2px 0 8px" }}>
@@ -514,8 +656,19 @@ export default function WorkshopJobDrawer({
             const isNext = currentIndex >= 0 && index === currentIndex + 1;
             const payload: Record<string, unknown> = { status: entry.status };
             if (entry.substatus !== null) payload.workshop_intake_substatus = entry.substatus;
+            const pathway = config.pathways.find((item) => item.id === local.workshop_pathway_id);
+            const step = pathwayStepIndex(pathway?.steps, entry.status);
+            if (step !== null) payload.workshop_step_index = step;
             const blockedByApproval = !!local.pending_customer_approval && isNext;
             const canAdvance = isNext && !blockedByApproval;
+            const latestCad = cadVersions.reduce<CadVersionRow | null>((best, row) => (
+              !best || row.version_number > best.version_number ? row : best
+            ), null);
+            const stageCaption = entry.status === "cad_design"
+              ? (cadDesignerName() ?? "")
+              : entry.status === "cad_approval"
+                ? (latestCad ? CAD_APPROVAL_SHORT[latestCad.status] : "")
+                : "";
             const label = (narrow && !active && !isNext) ? stageShort(entry.label) : entry.label;
             return (
               <div key={`${entry.status}_${entry.substatus ?? ""}`} style={{ display: "flex", alignItems: "flex-start", flex: index === 0 ? "0 0 auto" : "1 1 0", minWidth: active || isNext ? 72 : 44 }}>
@@ -534,6 +687,9 @@ export default function WorkshopJobDrawer({
                   </span>
                   <span style={{ width: active ? 14 : 8, height: active ? 14 : 8, borderRadius: "50%", background: active || done ? "#635BFF" : isNext ? "#fff" : "#E5E7EB", border: isNext ? "2px solid #635BFF" : "none", boxShadow: active ? "0 0 0 4px rgba(99,91,255,0.22)" : undefined, boxSizing: "content-box" }} />
                   <span style={{ fontSize: active || isNext ? 12 : 10, lineHeight: 1.2, fontWeight: active || isNext ? 700 : 500, color: active || isNext ? "#1A1A2E" : "#6B7280", textAlign: "center" }}>{label}</span>
+                  {stageCaption ? (
+                    <span style={{ fontSize: 9, lineHeight: 1.2, color: "#6B7280", textAlign: "center", maxWidth: 88, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{stageCaption}</span>
+                  ) : null}
                 </button>
               </div>
             );
@@ -597,6 +753,26 @@ export default function WorkshopJobDrawer({
             </div>
           </div>
         )}
+
+        {LABEL("Quality issue")}
+        <div style={{ marginBottom: 14 }}>
+          {local.quality_issue ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "#FEF2F2", color: "#B91C1C", border: "1px solid #FECACA" }}>
+                Quality issue
+              </span>
+              <button onClick={() => patch({ quality_issue: false })}
+                style={{ fontSize: 12, fontWeight: 600, color: "#374151", background: "#F9FAFB", border: "1px solid #E8E8F0", borderRadius: 6, padding: "3px 10px", cursor: "pointer" }}>
+                Clear flag
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => patch({ quality_issue: true })}
+              style={{ fontSize: 12, fontWeight: 600, color: "#B91C1C", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 6, padding: "4px 12px", cursor: "pointer" }}>
+              + Flag quality issue
+            </button>
+          )}
+        </div>
 
         <div style={{ borderTop: "1px solid #E8E8F0", paddingTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 13, color: "#374151" }}>
           <div><span style={{ color: "#9CA3AF" }}>In Date: </span>{local.in_date ? formatDateAU(local.in_date) : "—"}</div>
@@ -730,32 +906,76 @@ export default function WorkshopJobDrawer({
     );
   }
 
-  function renderPurchasing() {
-    return <WorkshopPurchasing rows={purchases.rows} error={purchases.error} />;
-  }
-
   function renderMaterials() {
     return (
       <div>
-        {FIELD("Supplier",
-          <input type="text" defaultValue={local.workshop_supplier ?? ""} onBlur={e => { if (e.target.value !== (local.workshop_supplier ?? "")) patch({ workshop_supplier: e.target.value || null }); }} style={INPUT} placeholder="Supplier name…" />
-        )}
-        {FIELD("PO Number",
-          <input type="text" defaultValue={local.workshop_po_number ?? ""} onBlur={e => { if (e.target.value !== (local.workshop_po_number ?? "")) patch({ workshop_po_number: e.target.value || null }); }} style={INPUT} placeholder="PO-…" />
-        )}
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
+            Casting / external work
+          </div>
+          {FIELD("Supplier",
+            <input type="text" defaultValue={local.workshop_supplier ?? ""} onBlur={e => { if (e.target.value !== (local.workshop_supplier ?? "")) patch({ workshop_supplier: e.target.value || null }); }} style={INPUT} placeholder="Supplier name…" />
+          )}
+          {FIELD("PO Number",
+            <input type="text" defaultValue={local.workshop_po_number ?? ""} onBlur={e => { if (e.target.value !== (local.workshop_po_number ?? "")) patch({ workshop_po_number: e.target.value || null }); }} style={INPUT} placeholder="PO-…" />
+          )}
+          {FIELD("Expected return",
+            <input type="date" value={local.workshop_due_date ?? ""} onChange={e => patch({ workshop_due_date: e.target.value || null, workshop_due_date_overridden: !!e.target.value })} style={INPUT} />
+          )}
+          {local.due_date && local.due_date !== local.workshop_due_date && (
+            <div style={{ fontSize: 12, color: "#6B7280", marginTop: -8, marginBottom: 10 }}>Customer due date: {formatDateAU(local.due_date)}</div>
+          )}
+          {local.status === "casting" && (
+            <div style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.45 }}>
+              {isCastingOverdue(local)
+                ? "This casting is overdue. It is still in Casting, so it is not back. When it returns, move the stage to Polish/Finish or Polish/Set."
+                : "Expected return is the workshop due date. While the job stays in Casting past that date, it is overdue. When it returns, move the stage to Polish/Finish or Polish/Set."}
+            </div>
+          )}
+        </div>
+        <WorkshopPurchasing rows={purchases.rows} error={purchases.error} />
       </div>
     );
   }
 
-  function renderPricing() {
-    // Assignee dropdown value
-    let assignVal = "";
-    if (local.assigned_to) assignVal = `tp:${local.assigned_to}`;
-    else if (local.workshop_subcontractor_name) {
-      assignVal = config.teamMembers.some(m => !m.profile_id && m.name === local.workshop_subcontractor_name)
-        ? `tn:${local.workshop_subcontractor_name}` : `sub:${local.workshop_subcontractor_name}`;
-    }
+  function renderCad() {
+    const designer = cadDesignerName();
+    return (
+      <CadApprovalPanel
+        packetId={local.id}
+        isManager={isManager}
+        designerName={designer}
+        assignControl={(
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: designer ? "#1A1A2E" : "#9CA3AF" }}>{designer ?? "No CAD designer"}</span>
+              <button
+                type="button"
+                onClick={() => setAssignOpen((open) => open === "cad" ? null : "cad")}
+                style={{ background: "#fff", border: "1px solid #D1D5DB", borderRadius: 8, padding: "4px 10px", fontSize: 12, fontWeight: 700, color: "#1A1A2E", cursor: "pointer" }}
+              >
+                {designer ? "Change" : "Assign"}
+              </button>
+            </div>
+            {assignOpen === "cad" && renderAssignSelect(true)}
+          </div>
+        )}
+        onVersions={setCadVersions}
+        onPacket={(next) => {
+          const updated: WorkshopPacket = {
+            ...local,
+            ...(next as Partial<WorkshopPacket>),
+            customer_display_name: local.customer_display_name,
+            assigned_to_name: local.assigned_to_name,
+          };
+          setLocal(updated);
+          onUpdate(updated);
+        }}
+      />
+    );
+  }
 
+  function renderPricing() {
     return (
       <div>
         {FIELD("Job Type",
@@ -765,31 +985,6 @@ export default function WorkshopJobDrawer({
             <option value="collection_order">Collection Order</option>
             <option value="online_order">Online Order</option>
             <option value="stock_work">Stock Work</option>
-          </select>
-        )}
-        {FIELD("Assign To",
-          <select value={assignVal} onChange={e => {
-            const v = e.target.value;
-            if (!v) { patch({ assigned_to: null, workshop_subcontractor_name: null }); return; }
-            if (v.startsWith("tp:")) { patch({ assigned_to: v.slice(3), workshop_subcontractor_name: null }); return; }
-            if (v.startsWith("tn:")) { patch({ assigned_to: null, workshop_subcontractor_name: v.slice(3) }); return; }
-            patch({ workshop_subcontractor_name: v.slice(4), assigned_to: null });
-          }} style={INPUT}>
-            <option value="">— Unassigned —</option>
-            {config.teamMembers.filter(m => m.active).length > 0 && (
-              <optgroup label="Team">
-                {config.teamMembers.filter(m => m.active).map(m => (
-                  <option key={m.id} value={m.profile_id ? `tp:${m.profile_id}` : `tn:${m.name}`}>{m.name}</option>
-                ))}
-              </optgroup>
-            )}
-            {config.subcontractors.filter(s => s.active).length > 0 && (
-              <optgroup label="Subcontractors">
-                {config.subcontractors.filter(s => s.active).map(s => (
-                  <option key={s.id} value={`sub:${s.name}`}>{s.name}</option>
-                ))}
-              </optgroup>
-            )}
           </select>
         )}
         {FIELD("Due Date", <input type="date" value={local.due_date ?? ""} onChange={e => patch({ due_date: e.target.value || null })} style={INPUT} />)}
@@ -1022,6 +1217,18 @@ export default function WorkshopJobDrawer({
             <div style={{ minWidth: 0 }}>
               <div style={{ fontFamily: "monospace", fontSize: 11, color: "#9CA3AF", marginBottom: 1 }}>{local.reference_number}</div>
               <div style={{ fontWeight: 700, color: "#1A1A2E", fontSize: 17, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName(local)}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13, color: "#6B7280" }}>Assigned to</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: assigneeName() ? "#1A1A2E" : "#9CA3AF" }}>{assigneeName() ?? "Unassigned"}</span>
+                <button
+                  type="button"
+                  onClick={() => setAssignOpen((open) => open === "header" ? null : "header")}
+                  style={{ background: "#fff", border: "1px solid #D1D5DB", borderRadius: 8, padding: "4px 10px", fontSize: 12, fontWeight: 700, color: "#1A1A2E", cursor: "pointer" }}
+                >
+                  {assigneeName() ? "Change" : "Assign"}
+                </button>
+              </div>
+              {assignOpen === "header" && renderAssignSelect(local.status === "cad_design")}
             </div>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 2, flexShrink: 0, position: "relative" }}>
               <button
@@ -1069,6 +1276,17 @@ export default function WorkshopJobDrawer({
             {local.blocked_reason && (
               <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#FFF5F3", color: "#EA580C", border: "1px solid #FDBA74" }}>
                 🚫 {BLOCKED_LABELS[local.blocked_reason] ?? "Blocked"}
+              </span>
+            )}
+            {local.cad_required && (
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#F5F3FF", color: "#5B21B6", border: "1px solid #DDD6FE" }}>CAD required</span>
+            )}
+            {isCastingOverdue(local) && (
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#FEE2E2", color: "#DC2626", border: "1px solid #FECACA" }}>Casting overdue</span>
+            )}
+            {local.quality_issue && (
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#FEF2F2", color: "#B91C1C", border: "1px solid #FECACA" }}>
+                Quality issue
               </span>
             )}
             {local.workshop_needs_valuation && (
@@ -1134,8 +1352,8 @@ export default function WorkshopJobDrawer({
           {activeTab === "items"      && renderItems()}
           {activeTab === "notes"      && renderNotes()}
           {activeTab === "production" && renderProduction()}
+          {activeTab === "cad"        && renderCad()}
           {activeTab === "materials"  && renderMaterials()}
-          {activeTab === "purchasing" && renderPurchasing()}
           {activeTab === "pricing"    && renderPricing()}
           {activeTab === "qc"         && renderQC()}
           {activeTab === "valuation"  && renderValuation()}

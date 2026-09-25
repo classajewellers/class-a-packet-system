@@ -61,7 +61,7 @@ export default function PiecePassportCard({
       <h3 style={{ margin: "0 0 14px", fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.06em" }}>
         Passport
       </h3>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 20px" }}>
+      <div className="piece-stack" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 20px" }}>
         <Field label="What">{passport.what || "—"}{passport.category ? ` · ${passport.category}` : ""}</Field>
         <Field label="Job">
           {jobLabel ? jobLabel : <span style={{ color: "#9CA3AF" }}>No job</span>}

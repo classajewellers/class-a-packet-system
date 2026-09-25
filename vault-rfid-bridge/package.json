@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts"
+    "dev": "ts-node src/index.ts",
+    "test-outline": "ts-node --transpile-only src/test-outline.ts"
   },
   "dependencies": {
     "node-fetch": "^3.3.2"

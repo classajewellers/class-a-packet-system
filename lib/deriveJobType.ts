@@ -1,4 +1,4 @@
-const WORKSHOP_JOB_TYPES = [
+export const WORKSHOP_JOB_TYPES = [
   "repair",
   "custom_order",
   "stock_work",

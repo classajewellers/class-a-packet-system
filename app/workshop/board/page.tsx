@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { hasPermission, canManage } from "@/lib/userTypes";
 import { formatDateAU } from "@/lib/formatters";
+import { isCastingOverdue } from "@/lib/cadStage";
+import { assigneeBoardLabel, resolveAssigneeName } from "@/lib/workshopAssignee";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -50,9 +52,13 @@ interface WorkshopPacket {
   workshop_needs_valuation: boolean;
   workshop_valuer: string | null;
   workshop_supplier: string | null;
+  workshop_due_date?: string | null;
+  workshop_due_date_overridden?: boolean | null;
+  cad_required?: boolean | null;
   workshop_po_number: string | null;
   blocked_reason: string | null;
   blocked_note: string | null;
+  quality_issue?: boolean | null;
   blocked_at: string | null;
   delivery_method: string | null;
   shopify_order_id: string | null;
@@ -60,7 +66,7 @@ interface WorkshopPacket {
   pending_customer_approval?: boolean | null;
 }
 
-interface TeamMember     { id: string; tenant_id: string; name: string; profile_id: string | null; sort_order: number; active: boolean; }
+interface TeamMember     { id: string; tenant_id: string; name: string; profile_id: string | null; sort_order: number; active: boolean; workshop_role_keys?: string[]; }
 interface Subcontractor  { id: string; tenant_id: string; name: string; sort_order: number; active: boolean; }
 interface Valuer         { id: string; name: string; active: boolean; }
 interface PathwayStep    { name: string; location: "inhouse" | "external"; }
@@ -132,13 +138,18 @@ const BLOCKED_LABELS: Record<string, string> = {
   other:                 "Blocked",
 };
 
-const STAGE_DEFS = [
+const STAGE_DEFS: { key: string; label: string; status: string; accent: string; colBg: string }[] = [
   { key: "intake",        label: "Intake",               status: "intake",        accent: "#378ADD", colBg: "#F0F7FF" },
+  { key: "cad_design",    label: "CAD Design",           status: "cad_design",    accent: "#7F77DD", colBg: "#F5F3FF" },
+  { key: "cad_approval",  label: "CAD Approval",         status: "cad_approval",  accent: "#BA7517", colBg: "#FFFBEB" },
+  { key: "casting",       label: "Casting",              status: "casting",       accent: "#D85A30", colBg: "#FFF5F3" },
+  { key: "polish_finish", label: "Polish/Finish",        status: "polish_finish", accent: "#0F6E56", colBg: "#ECFDF5" },
+  { key: "polish_set",    label: "Polish/Set",           status: "polish_set",    accent: "#0F6E56", colBg: "#ECFDF5" },
   { key: "on_bench",      label: "Production",           status: "on_bench",      accent: "#7F77DD", colBg: "#F5F3FF" },
   { key: "quality_check", label: "Quality Control",      status: "quality_check", accent: "#D85A30", colBg: "#FFF5F3" },
   { key: "to_be_valued",  label: "Valuation",            status: "to_be_valued",  accent: "#BA7517", colBg: "#FFFBEB" },
   { key: "ready",         label: "Ready for Collection", status: "ready",         accent: "#1D9E75", colBg: "#ECFDF5" },
-] as const;
+];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -153,12 +164,8 @@ function displayName(p: WorkshopPacket) {
   if (p.job_type === "stock_work") return "Internal";
   return p.customer_display_name || [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "No name";
 }
-function initials(name: string | null) {
-  if (!name) return "?";
-  return name.split(" ").filter(Boolean).map(w => w[0]).join("").toUpperCase().slice(0, 2);
-}
-function resolveAssignee(p: WorkshopPacket): string | null {
-  return p.assigned_to_name || p.workshop_subcontractor_name || null;
+function resolveAssignee(p: WorkshopPacket, config?: WorkshopConfig): string | null {
+  return resolveAssigneeName(p, { teamMembers: config?.teamMembers });
 }
 function resolveStepLabel(p: WorkshopPacket, config: WorkshopConfig): string | null {
   if (!p.workshop_pathway_id) return null;
@@ -172,8 +179,16 @@ function resolveStepLabel(p: WorkshopPacket, config: WorkshopConfig): string | n
 
 // ── Column builders ───────────────────────────────────────────────────────────
 
-function buildStageColumns(): Column[] {
-  return STAGE_DEFS.map(c => ({
+function stageColumnDefs(config: WorkshopConfig) {
+  return STAGE_DEFS.map(c => {
+    if (c.status === "intake") return c;
+    const configured = config.stages.find(s => s.key === c.status && !s.intake_substatus);
+    return configured ? { ...c, label: configured.label } : c;
+  });
+}
+
+function buildStageColumns(config: WorkshopConfig): Column[] {
+  return stageColumnDefs(config).map(c => ({
     key: c.key, label: c.label, accent: c.accent, colBg: c.colBg, alwaysShow: true,
     match: (p) => p.status === c.status,
     dropPayload: () => ({ status: c.status }),
@@ -275,7 +290,7 @@ function buildCurrentStepColumns(packets: WorkshopPacket[], config: WorkshopConf
 
 function getMoveOptions(p: WorkshopPacket, grouping: GroupingKey, config: WorkshopConfig): MoveOption[] {
   if (grouping === "stage") {
-    return STAGE_DEFS.filter(c => c.status !== p.status).map(c => ({
+    return stageColumnDefs(config).filter(c => c.status !== p.status).map(c => ({
       value: c.key, label: c.label, payload: { status: c.status },
     }));
   }
@@ -283,7 +298,7 @@ function getMoveOptions(p: WorkshopPacket, grouping: GroupingKey, config: Worksh
     const opts: MoveOption[] = [];
     const isUnassigned = !p.assigned_to && !p.workshop_subcontractor_name;
     if (!isUnassigned) opts.push({ value: "unassigned", label: "— Unassigned —", payload: { assigned_to: null, workshop_subcontractor_name: null } });
-    for (const m of config.teamMembers.filter(m => m.active)) {
+    for (const m of config.teamMembers.filter(m => m.active && (p.status !== "cad_design" || (m.workshop_role_keys ?? []).includes("cad_designer")))) {
       const cur = m.profile_id ? p.assigned_to === m.profile_id : p.workshop_subcontractor_name === m.name && !p.assigned_to;
       if (!cur) opts.push({
         value: `tm_${m.id}`, label: m.name,
@@ -291,7 +306,7 @@ function getMoveOptions(p: WorkshopPacket, grouping: GroupingKey, config: Worksh
       });
     }
     const teamNameSet = new Set(config.teamMembers.filter(m => !m.profile_id).map(m => m.name));
-    for (const s of config.subcontractors.filter(s => s.active)) {
+    if (p.status !== "cad_design") for (const s of config.subcontractors.filter(s => s.active)) {
       if (teamNameSet.has(s.name)) continue;
       if (p.workshop_subcontractor_name !== s.name) opts.push({ value: `sub_${s.id}`, label: s.name, payload: { workshop_subcontractor_name: s.name, assigned_to: null } });
     }
@@ -394,7 +409,7 @@ function ManagerNoticeboard({ messages, leadTimes, tenantId, onRefresh }: { mess
 
 // ── Job Card ──────────────────────────────────────────────────────────────────
 
-function JobCard({ packet, config, accent, grouping, draggingDisabled, focused, onDragStart, onClick, onMove }: {
+function JobCard({ packet, config, grouping, draggingDisabled, focused, onDragStart, onClick, onMove }: {
   packet: WorkshopPacket;
   config: WorkshopConfig;
   accent: string;
@@ -415,7 +430,7 @@ function JobCard({ packet, config, accent, grouping, draggingDisabled, focused, 
   const jt       = packet.job_type ?? "repair";
   const jtColor  = JOB_TYPE_COLORS[jt] ?? JOB_TYPE_COLORS.repair;
   const stepLabel = resolveStepLabel(packet, config);
-  const assignee  = resolveAssignee(packet);
+  const assignee  = resolveAssignee(packet, config);
   const leftBorder = packet.pending_customer_approval ? "3px solid #EA580C" : overdue ? "3px solid #EF4444" : stale && !dueToday ? "3px solid #F59E0B" : packet.blocked_reason ? "3px solid #EA580C" : "3px solid transparent";
   const moveOptions = getMoveOptions(packet, grouping, config);
 
@@ -460,10 +475,16 @@ function JobCard({ packet, config, accent, grouping, draggingDisabled, focused, 
           </span>
         )}
         {subStageLabel && <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 999, background: "#EFF6FF", color: "#3B82F6" }}>{subStageLabel}</span>}
+        {isCastingOverdue(packet) && <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: "#FEE2E2", color: "#DC2626" }}>Casting overdue</span>}
         {stepLabel && <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 999, background: "#F5F3FF", color: "#635BFF" }}>{stepLabel}</span>}
         {packet.blocked_reason && (
           <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: "#FFF5F3", color: "#EA580C", border: "1px solid #FDBA74" }}>
             🚫 {BLOCKED_LABELS[packet.blocked_reason] ?? packet.blocked_reason}
+          </span>
+        )}
+        {packet.quality_issue && (
+          <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: "#FEF2F2", color: "#B91C1C", border: "1px solid #FECACA" }}>
+            Quality issue
           </span>
         )}
         {packet.workshop_needs_valuation && <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: "#FDF4FF", color: "#9333EA", border: "1px solid #E9D5FF" }}>Needs Valuation</span>}
@@ -478,11 +499,12 @@ function JobCard({ packet, config, accent, grouping, draggingDisabled, focused, 
             {overdue ? "⚠ " : dueToday ? "⏰ " : ""}{formatDateAU(packet.due_date)}
           </span>
         ) : <span style={{ fontSize: 11, color: "#D1D5DB" }}>No due date</span>}
-        {assignee && (
-          <span style={{ width: 22, height: 22, borderRadius: "50%", background: accent, color: "#fff", fontSize: 9, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            {initials(assignee)}
-          </span>
-        )}
+        <span
+          title={assignee ?? undefined}
+          style={{ fontSize: 11, fontWeight: assignee ? 600 : 500, color: assignee ? "#374151" : "#9CA3AF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 108, minWidth: 0 }}
+        >
+          {assignee ? assigneeBoardLabel(assignee, packet, { teamMembers: config.teamMembers }) : "Unassigned"}
+        </span>
       </div>
 
       {/* Block / Unblock control */}
@@ -563,6 +585,7 @@ export default function WorkshopBoardPage() {
   const [config,   setConfig]   = useState<WorkshopConfig>({ teamMembers: [], subcontractors: [], valuers: [], pathways: [], messages: [], leadTimes: [], categories: [], stages: [], locations: [] });
   const [loading,  setLoading]  = useState(true);
   const [configError, setConfigError] = useState<string | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
 
   const [grouping, setGrouping] = useState<GroupingKey>("stage");
 
@@ -646,7 +669,7 @@ export default function WorkshopBoardPage() {
 
   const activeColumns = useMemo(() => {
     switch (grouping) {
-      case "stage":        return buildStageColumns();
+      case "stage":        return buildStageColumns(config);
       case "assignee":     return buildAssigneeColumns(config);
       case "work_centre":  return buildWorkCentreColumns(config);
       case "current_step": return buildCurrentStepColumns(filteredPackets, config);
@@ -668,6 +691,76 @@ export default function WorkshopBoardPage() {
 
   const handleDragStart = (e: React.DragEvent, id: string) => { dragId.current = id; e.dataTransfer.effectAllowed = "move"; };
 
+  function cadAssignmentAllowed(packet: WorkshopPacket, payload: Record<string, unknown>): boolean {
+    if (packet.status !== "cad_design") return true;
+    if (!("workshop_subcontractor_name" in payload) && !("assigned_to" in payload)) return true;
+    if (!payload.workshop_subcontractor_name && !payload.assigned_to) return true;
+    if (payload.assigned_to) {
+      return config.teamMembers.some((m) => m.profile_id === payload.assigned_to && (m.workshop_role_keys ?? []).includes("cad_designer"));
+    }
+    const name = String(payload.workshop_subcontractor_name);
+    return config.teamMembers.some((m) => m.name === name && (m.workshop_role_keys ?? []).includes("cad_designer"));
+  }
+
+  const applyPacketMove = async (id: string, payload: Record<string, unknown>) => {
+    const previous = packets.find((p) => p.id === id);
+    if (previous && !cadAssignmentAllowed(previous, payload)) {
+      setMoveError("CAD Design can only be assigned to a CAD Designer.");
+      return;
+    }
+    setMoveError(null);
+    setPackets(prev => prev.map(p => {
+      if (p.id !== id) return p;
+      const next: WorkshopPacket = {
+        ...p,
+        ...(payload as Partial<WorkshopPacket>),
+        ...(payload.status !== undefined ? { status_updated_at: new Date().toISOString() } : {}),
+      };
+      if ("assigned_to" in payload || "workshop_subcontractor_name" in payload) {
+        next.assigned_to_name = resolveAssigneeName({
+          assigned_to: next.assigned_to,
+          assigned_to_name: null,
+          workshop_subcontractor_name: next.workshop_subcontractor_name,
+        }, { teamMembers: config.teamMembers });
+      }
+      return next;
+    }));
+    try {
+      const res = await fetch(`/api/workshop/packets/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json", "x-tenant-id": tenantId }, body: JSON.stringify(payload) });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (previous) {
+          setPackets(prev => prev.map(p => p.id === id ? previous : p));
+        } else {
+          fetchPackets();
+        }
+        setMoveError(json.error ?? "Could not move this job");
+        return;
+      }
+      if (json.packet && previous) {
+        const updated: WorkshopPacket = {
+          ...previous,
+          ...json.packet,
+          customer_display_name: previous.customer_display_name,
+          assigned_to_name: previous.assigned_to_name,
+        };
+        if ("assigned_to" in payload || "workshop_subcontractor_name" in payload) {
+          updated.assigned_to_name = resolveAssigneeName({
+            assigned_to: updated.assigned_to,
+            assigned_to_name: null,
+            workshop_subcontractor_name: updated.workshop_subcontractor_name,
+          }, { teamMembers: config.teamMembers });
+        }
+        setPackets(prev => prev.map(p => p.id === id ? updated : p));
+      }
+    } catch {
+      if (previous) {
+        setPackets(prev => prev.map(p => p.id === id ? previous : p));
+      }
+      setMoveError("Network error");
+    }
+  };
+
   const handleDrop = async (e: React.DragEvent, col: Column) => {
     e.preventDefault();
     (e.currentTarget as HTMLDivElement).style.outline = "none";
@@ -677,23 +770,11 @@ export default function WorkshopBoardPage() {
     dragId.current = null;
     const payload = col.dropPayload();
     if (!Object.keys(payload).length) return;
-    setPackets(prev => prev.map(p => p.id === id ? {
-      ...p, ...(payload as Partial<WorkshopPacket>),
-      ...(payload.status !== undefined ? { status_updated_at: new Date().toISOString() } : {}),
-    } : p));
-    try {
-      await fetch(`/api/workshop/packets/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json", "x-tenant-id": tenantId }, body: JSON.stringify(payload) });
-    } catch { fetchPackets(); }
+    await applyPacketMove(id, payload);
   };
 
   const handleMove = async (id: string, fields: Record<string, unknown>) => {
-    setPackets(prev => prev.map(p => p.id === id ? {
-      ...p, ...(fields as Partial<WorkshopPacket>),
-      ...(fields.status !== undefined ? { status_updated_at: new Date().toISOString() } : {}),
-    } : p));
-    try {
-      await fetch(`/api/workshop/packets/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json", "x-tenant-id": tenantId }, body: JSON.stringify(fields) });
-    } catch { fetchPackets(); }
+    await applyPacketMove(id, fields);
   };
 
   const hasActiveFilters = jobTypeFilter !== "all" || statusFilter !== "all" || blockedFilter !== "all" || deliveryFilter !== "all" || !!dueDateFrom || !!dueDateTo || !!search;
@@ -736,6 +817,11 @@ export default function WorkshopBoardPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {config.messages.map(m => <div key={m.id} style={{ background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 8, padding: "8px 12px", fontSize: 13, color: "#374151" }}>{m.text}</div>)}
           </div>
+        </div>
+      )}
+      {moveError && (
+        <div style={{ background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: 10, padding: "8px 14px", fontSize: 13, color: "#DC2626", fontWeight: 600, marginBottom: 10, flexShrink: 0 }}>
+          {moveError}
         </div>
       )}
       {configError && (

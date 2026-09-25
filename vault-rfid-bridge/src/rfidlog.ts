@@ -3,19 +3,41 @@ import https from "https";
 import { BridgeConfig } from "./types";
 
 /**
- * Reads the Zebra printer's built-in RFID write log (/rfidlog) over its web UI
- * (HTTP Basic auth) and confirms a specific EPC was written. Used for
- * auto-verification — no external deps, no real HTML parsing needed: the log
- * body is plain text inside a single <PRE> block, one entry per line:
+ * Reads the Zebra printer's RFID write log over its web UI (HTTP Basic auth).
+ * The log is plain text, usually inside one <PRE> block, one entry per line:
  *
  *   Aug-05-2026 00:23:40,W,F4,A1,23,00000000,19785d46c8fe9243e1b56cbe
  *   └ timestamp        └op └───codes────────┘ └ status  └ EPC (last field)
  */
 
-/** GET /rfidlog with Basic auth. Returns the raw body, or null on any failure. */
-export function fetchRfidLog(config: BridgeConfig): Promise<string | null> {
+export interface RfidLogMatch {
+  epc: string;
+  timestamp: string;
+}
+
+export type RfidLogFetch =
+  | { ok: true; body: string; url: string }
+  | { ok: false; url: string; retryable: boolean; logLine: string };
+
+const LOG_PATH = "/rfidlog";
+
+export function printerWebUrl(config: BridgeConfig, path = LOG_PATH): string {
+  const scheme = config.printer.webScheme === "http" ? "http" : "https";
+  return `${scheme}://${config.printer.host}${path}`;
+}
+
+/** GET /rfidlog. Never includes the password in the result. */
+export function fetchRfidLog(config: BridgeConfig): Promise<RfidLogFetch> {
   const { host, webUser, webPassword, webScheme, webRejectUnauthorized } = config.printer;
-  if (!webUser || !webPassword) return Promise.resolve(null);
+  const url = printerWebUrl(config);
+  if (!webUser || !webPassword) {
+    return Promise.resolve({
+      ok: false,
+      url,
+      retryable: false,
+      logLine: "RFID verify: printer web username or password is not set in config.json",
+    });
+  }
 
   const isHttps = webScheme !== "http";
   const mod = isHttps ? https : http;
@@ -25,63 +47,130 @@ export function fetchRfidLog(config: BridgeConfig): Promise<string | null> {
     const req = mod.request(
       {
         host,
-        path: "/rfidlog",
+        path: LOG_PATH,
         method: "GET",
         headers: { Authorization: auth },
         timeout: 5000,
-        // Printer web UIs are typically self-signed; default to not verifying.
         ...(isHttps ? { rejectUnauthorized: webRejectUnauthorized === true } : {}),
       },
       (res) => {
-        if (res.statusCode !== 200) {
+        const status = res.statusCode ?? 0;
+        if (status === 401 || status === 403) {
           res.resume();
-          resolve(null);
+          resolve({
+            ok: false,
+            url,
+            retryable: false,
+            logLine: `RFID verify: could not log in to printer web UI (HTTP ${status}) at ${url}`,
+          });
+          return;
+        }
+        if (status !== 200) {
+          res.resume();
+          resolve({
+            ok: false,
+            url,
+            retryable: false,
+            logLine: `RFID verify: printer web UI returned HTTP ${status} at ${url}`,
+          });
           return;
         }
         let body = "";
         res.setEncoding("utf8");
         res.on("data", (c) => (body += c));
-        res.on("end", () => resolve(body));
+        res.on("end", () => {
+          if (looksLikeLoginPage(body)) {
+            resolve({
+              ok: false,
+              url,
+              retryable: false,
+              logLine: `RFID verify: printer web UI at ${url} returned a login page, not the RFID log. Check printer.webPassword.`,
+            });
+            return;
+          }
+          resolve({ ok: true, body, url });
+        });
       }
     );
-    req.on("error", () => resolve(null));
-    req.on("timeout", () => { req.destroy(); resolve(null); });
+    req.on("error", (err: NodeJS.ErrnoException) => {
+      resolve({
+        ok: false,
+        url,
+        retryable: true,
+        logLine: `RFID verify: could not reach printer web UI at ${url} (${err.code ?? err.message}).${schemeHint(err, isHttps)}`,
+      });
+    });
+    req.on("timeout", () => {
+      req.destroy();
+      resolve({
+        ok: false,
+        url,
+        retryable: true,
+        logLine: `RFID verify: printer web UI timed out at ${url}`,
+      });
+    });
     req.end();
   });
 }
 
-export interface RfidLogMatch {
-  epc: string;
-  timestamp: string;
+function schemeHint(err: NodeJS.ErrnoException, isHttps: boolean): string {
+  const code = `${err.code ?? ""} ${err.message}`.toLowerCase();
+  if (isHttps && (code.includes("wrong version") || code.includes("eproto") || code.includes("econnrefused"))) {
+    return ` If the printer web page is HTTP, set printer.webScheme to "http".`;
+  }
+  if (code.includes("cert") || code.includes("self signed") || code.includes("unable to verify")) {
+    return ` The printer certificate was rejected. Set printer.webRejectUnauthorized to false for a self-signed certificate.`;
+  }
+  return "";
+}
+
+function looksLikeLoginPage(body: string): boolean {
+  if (extractLogText(body).split(/\r?\n/).some((line) => line.includes(","))) return false;
+  return /type\s*=\s*["']password["']/i.test(body) || /<form\b/i.test(body);
+}
+
+export function extractLogText(logBody: string): string {
+  const pre = logBody.match(/<PRE>([\s\S]*?)<\/PRE>/i);
+  return pre ? pre[1] : logBody;
+}
+
+export function countLogLines(logBody: string): number {
+  return extractLogText(logBody).split(/\r?\n/).map((line) => line.trim()).filter(Boolean).length;
 }
 
 /**
- * Find a successful WRITE of `expectedEpc` in the log body. Matches on the EPC
- * (unique per tag, so this is the reliable correlation key — not timestamp) plus
- * operation 'W'. The 6th field appears to be a status code ('00000000' on the
- * confirmed-good write); treated as a soft success guard — if a real device ever
- * shows a non-zero code on a good write, relax this. Returns the match or null.
+ * Find a successful WRITE of `expectedEpc`. The EPC match is case-insensitive
+ * and also accepts a longer hex field that ends with that EPC. Operation is
+ * W or WRITE. An 8-digit status immediately before the EPC must be all zeros
+ * when it is present; other columns (position, antenna, power) are not a failure.
  */
 export function findEpcWriteInLog(logBody: string, expectedEpc: string): RfidLogMatch | null {
   const want = expectedEpc.trim().toLowerCase();
-  const pre = logBody.match(/<PRE>([\s\S]*?)<\/PRE>/i);
-  const text = pre ? pre[1] : logBody; // fall back to whole body if no <PRE>
+  if (!want) return null;
+  const text = extractLogText(logBody);
 
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
-    if (!line) continue;
+    if (!line || /\b(VOID|FAIL|FAILED)\b/i.test(line)) continue;
     const fields = line.split(",").map((f) => f.trim());
-    if (fields.length < 3) continue;
+    if (fields.length < 2) continue;
 
-    const op = fields[1];
-    const epc = fields[fields.length - 1].toLowerCase();
-    const status = fields.length >= 7 ? fields[5] : null; // status code, if present
+    const op = fields[1] ?? "";
+    if (!/^(W|WRITE)$/i.test(op)) continue;
 
-    if (op === "W" && epc === want) {
-      // soft success guard: if a status field is present, require all-zeros
-      if (status !== null && !/^0+$/.test(status)) continue;
-      return { epc, timestamp: fields[0] };
-    }
+    const epcIndex = fields.findIndex((field) => fieldIsEpc(field, want));
+    if (epcIndex < 0) continue;
+
+    const before = epcIndex > 0 ? fields[epcIndex - 1].replace(/\s+/g, "") : "";
+    if (/^[0-9a-f]{8}$/i.test(before) && !/^0+$/.test(before)) continue;
+
+    return { epc: want, timestamp: fields[0] };
   }
   return null;
+}
+
+function fieldIsEpc(field: string, want: string): boolean {
+  const hex = field.replace(/\s+/g, "").toLowerCase();
+  if (!/^[0-9a-f]+$/i.test(hex)) return false;
+  return hex === want || (hex.length > want.length && hex.endsWith(want));
 }

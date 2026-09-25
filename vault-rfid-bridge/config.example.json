@@ -1,6 +1,7 @@
 {
   "vaultApiUrl": "https://www.yourdomain.com",
   "bridgeApiKey": "PASTE_API_KEY_FROM_VAULT_SETTINGS_HERE",
+  "vercelBypassSecret": "",
   "pollIntervalMs": 3000,
   "heartbeatIntervalMs": 30000,
   "printer": {
@@ -8,6 +9,12 @@
     "port": 9100,
     "connectTimeoutMs": 5000,
     "writeTimeoutMs": 10000,
+    "dpi": null,
+    "labelLengthDots": 425,
+    "tagHeadTopMm": 8.7,
+    "tagHeadLeftMm": 0.5,
+    "tagOffsetXMm": 0,
+    "tagOffsetYMm": 0,
     "webUser": "admin",
     "webPassword": "PRINTER_WEB_PASSWORD_HERE",
     "webScheme": "https",

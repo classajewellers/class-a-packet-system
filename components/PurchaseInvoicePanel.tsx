@@ -12,6 +12,18 @@ interface SavedInvoice {
   xero_status: string | null;
 }
 
+function xeroBillEditUrl(invoiceId: string): string {
+  return `https://go.xero.com/AccountsPayable/Edit.aspx?InvoiceID=${encodeURIComponent(invoiceId)}`;
+}
+
+function withoutRawIds(text: string): string {
+  return text
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([.,])/g, "$1")
+    .trim();
+}
+
 export default function PurchaseInvoicePanel({
   poId,
   tenantId,
@@ -107,7 +119,7 @@ export default function PurchaseInvoicePanel({
         if (json.xero_invoice_id) await load();
         return;
       }
-      setNote(json.message ?? "Xero draft created.");
+      setNote(json.message ? withoutRawIds(json.message) || null : null);
       await load();
     } finally {
       setSending(false);
@@ -135,8 +147,22 @@ export default function PurchaseInvoicePanel({
       )}
       {alreadySent ? (
         <div style={{ fontSize: 13, color: "#065F46", background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: 8, padding: "10px 12px" }}>
-          Xero draft {saved?.xero_status || "DRAFT"} · {saved?.xero_invoice_id}
-          {saved?.invoice_number ? ` · Invoice ${saved.invoice_number}` : ""}
+          {saved?.invoice_number
+            ? <>Draft bill created in Xero — Invoice {saved.invoice_number}</>
+            : "Draft bill created in Xero"}
+          {saved?.xero_invoice_id ? (
+            <>
+              {" "}
+              <a
+                href={xeroBillEditUrl(saved.xero_invoice_id)}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: "#047857", fontWeight: 600 }}
+              >
+                Open in Xero
+              </a>
+            </>
+          ) : null}
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -160,7 +186,7 @@ export default function PurchaseInvoicePanel({
       )}
       {(note || error) && (
         <div style={{ marginTop: 12, fontSize: 13, color: error ? "#B91C1C" : "#374151", background: error ? "#FEF2F2" : "#F9FAFB", borderRadius: 8, padding: "8px 10px" }}>
-          {error || note}
+          {error ? withoutRawIds(error) : note}
         </div>
       )}
       {canSend && !alreadySent && (

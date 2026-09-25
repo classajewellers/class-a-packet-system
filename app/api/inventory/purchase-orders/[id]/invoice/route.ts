@@ -185,7 +185,7 @@ export async function POST(
   const existing = existingRows?.[0] ?? null;
   if (existing?.xero_invoice_id) {
     return NextResponse.json({
-      error: `A Xero draft already exists for this purchase order (${existing.xero_invoice_id}). Review it in Xero. Vault did not create another bill.`,
+      error: "A Xero draft already exists for this purchase order. Review it in Xero. Vault did not create another bill.",
       xero_invoice_id: existing.xero_invoice_id,
       xero_status: existing.xero_status ?? XERO_BILL_STATUS,
     }, { status: 409 });
@@ -253,7 +253,7 @@ export async function POST(
     .eq("id", invoiceId);
   if (stampErr) {
     return NextResponse.json({
-      error: `Xero created draft ${xeroInvoiceId}, but Vault could not save that id. ${stampErr.message}`,
+      error: `Xero created the draft bill, but Vault could not save it. ${stampErr.message}`,
       xero_invoice_id: xeroInvoiceId,
       xero_status: XERO_BILL_STATUS,
     }, { status: 500 });
@@ -312,7 +312,7 @@ export async function POST(
     xero_invoice_id: xeroInvoiceId,
     xero_status: XERO_BILL_STATUS,
     pieces_stamped: piecesStamped,
-    message: `Xero draft bill ${xeroInvoiceId} was created. A person still needs to review it in Xero.${pieceNote}${attachmentNote}`,
+    message: `${pieceNote}${attachmentNote}`.trim() || null,
   });
 }
 

@@ -1,41 +1,153 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes, createHash } from "crypto";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { canManage, type UserRole } from "@/lib/userTypes";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 // POST /api/rfid/admin/setup
-// Provision a printer + bridge installation for the tenant.
-// Body: {
-//   printer_display_name: string,
-//   printer_model?: string,
-//   bridge_display_name: string,
-// }
-// Returns: { printer, bridge, api_key } — api_key is shown ONCE, never stored.
+// Manager only. Raw api_key is returned once. Only the sha256 hex is stored.
+//
+// Create a printer and its first bridge:
+//   { printer_display_name, printer_model?, bridge_display_name }
+//
+// Attach a bridge to a printer that already exists (inserts only a bridge row):
+//   { printer_id, bridge_display_name }
+// A new printer is refused while any printer row exists. Queued jobs are
+// filtered by the bridge printer_id, so a second printer would orphan them.
+//
+// Rotate the key on a bridge. The previous key stops matching immediately:
+//   { bridge_id, regenerate: true }
+// Staging print job is queued on this printer. Do not deactivate it.
+const HELD_PRINTER_ID = "2dd3870a-973f-4128-855d-9958866fd50c";
+
+function mintApiKey(): { rawApiKey: string; apiKeyHash: string } {
+  const rawApiKey = randomBytes(32).toString("hex");
+  const apiKeyHash = createHash("sha256").update(rawApiKey).digest("hex");
+  return { rawApiKey, apiKeyHash };
+}
+
+function requireManager(req: NextRequest): NextResponse | null {
+  const role = req.headers.get("x-user-role");
+  const known: UserRole = role === "admin" || role === "manager" ? role : null;
+  if (!canManage(known)) {
+    return NextResponse.json({ error: "Manager access required" }, { status: 403 });
+  }
+  return null;
+}
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const denied = requireManager(req);
+  if (denied) return denied;
+
   const tenantId = req.headers.get("x-tenant-id") ?? "";
+  if (!tenantId) {
+    return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
+  }
   const supabase = await createTenantSupabaseClient(tenantId);
-
   const body = await req.json();
-  const { printer_display_name, printer_model, bridge_display_name } = body;
 
-  if (!printer_display_name || !bridge_display_name) {
+  if (body.regenerate === true) {
+    const bridgeId = typeof body.bridge_id === "string" ? body.bridge_id.trim() : "";
+    if (!bridgeId) {
+      return NextResponse.json({ error: "bridge_id is required to regenerate a key" }, { status: 400 });
+    }
+    const { rawApiKey, apiKeyHash } = mintApiKey();
+    const { data: bridge, error } = await supabase
+      .from("rfid_bridge_installations")
+      .update({ api_key_hash: apiKeyHash, updated_at: new Date().toISOString() })
+      .eq("id", bridgeId)
+      .eq("tenant_id", tenantId)
+      .select("id, display_name, printer_id, is_active")
+      .maybeSingle();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!bridge) return NextResponse.json({ error: "Bridge not found" }, { status: 404 });
+    return NextResponse.json({ bridge, api_key: rawApiKey });
+  }
+
+  const printerId = typeof body.printer_id === "string" ? body.printer_id.trim() : "";
+  if (printerId) {
+    const bridgeName = typeof body.bridge_display_name === "string" ? body.bridge_display_name.trim() : "";
+    if (!bridgeName) {
+      return NextResponse.json({ error: "bridge_display_name is required" }, { status: 400 });
+    }
+
+    const { data: printer, error: printerErr } = await supabase
+      .from("rfid_printers")
+      .select("id, display_name, model")
+      .eq("id", printerId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    if (printerErr) return NextResponse.json({ error: printerErr.message }, { status: 500 });
+    if (!printer) return NextResponse.json({ error: "Printer not found" }, { status: 404 });
+
+    const { data: existing, error: existingErr } = await supabase
+      .from("rfid_bridge_installations")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("printer_id", printerId)
+      .limit(1);
+    if (existingErr) return NextResponse.json({ error: existingErr.message }, { status: 500 });
+    if ((existing ?? []).length > 0) {
+      return NextResponse.json(
+        { error: "This printer already has a bridge. Regenerate its API key instead." },
+        { status: 409 }
+      );
+    }
+
+    const { rawApiKey, apiKeyHash } = mintApiKey();
+    const { data: bridge, error: bridgeErr } = await supabase
+      .from("rfid_bridge_installations")
+      .insert({
+        tenant_id: tenantId,
+        display_name: bridgeName,
+        api_key_hash: apiKeyHash,
+        printer_id: printer.id,
+        is_active: true,
+      })
+      .select("id, display_name, printer_id, is_active")
+      .single();
+    if (bridgeErr || !bridge) {
+      return NextResponse.json({ error: bridgeErr?.message ?? "Failed to create bridge" }, { status: 500 });
+    }
+    return NextResponse.json({ printer, bridge, api_key: rawApiKey }, { status: 201 });
+  }
+
+  const { data: already, error: alreadyErr } = await supabase
+    .from("rfid_printers")
+    .select("id, display_name")
+    .eq("tenant_id", tenantId);
+  if (alreadyErr) return NextResponse.json({ error: alreadyErr.message }, { status: 500 });
+  const existingPrinter = (already ?? []).find((row) => row.id === HELD_PRINTER_ID) ?? already?.[0];
+  if (existingPrinter) {
+    return NextResponse.json({
+      error: "A printer already exists. Send printer_id and bridge_display_name to mint a bridge key. A new printer was not created.",
+      printer_id: existingPrinter.id,
+    }, { status: 409 });
+  }
+
+  const printerName = typeof body.printer_display_name === "string" ? body.printer_display_name.trim() : "";
+  const bridgeName = typeof body.bridge_display_name === "string" ? body.bridge_display_name.trim() : "";
+  const printerModel = typeof body.printer_model === "string" && body.printer_model.trim()
+    ? body.printer_model.trim()
+    : "Zebra ZD621R";
+
+  if (!printerName || !bridgeName) {
     return NextResponse.json(
       { error: "printer_display_name and bridge_display_name are required" },
       { status: 400 }
     );
   }
 
-  // Create the printer
   const { data: printer, error: printerErr } = await supabase
     .from("rfid_printers")
     .insert({
-      tenant_id:    tenantId,
-      display_name: printer_display_name,
-      model:        printer_model ?? "Zebra ZD621R",
-      capability:   "rfid",
-      is_active:    true,
+      tenant_id: tenantId,
+      display_name: printerName,
+      model: printerModel,
+      capability: "rfid",
+      is_active: true,
     })
     .select("id, display_name, model")
     .single();
@@ -44,19 +156,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: printerErr?.message ?? "Failed to create printer" }, { status: 500 });
   }
 
-  // Generate a raw API key (shown once to the user, never stored)
-  const rawApiKey = randomBytes(32).toString("hex"); // 64 hex chars
-  const apiKeyHash = createHash("sha256").update(rawApiKey).digest("hex");
-
-  // Create the bridge installation
+  const { rawApiKey, apiKeyHash } = mintApiKey();
   const { data: bridge, error: bridgeErr } = await supabase
     .from("rfid_bridge_installations")
     .insert({
-      tenant_id:    tenantId,
-      display_name: bridge_display_name,
+      tenant_id: tenantId,
+      display_name: bridgeName,
       api_key_hash: apiKeyHash,
-      printer_id:   printer.id,
-      is_active:    true,
+      printer_id: printer.id,
+      is_active: true,
     })
     .select("id, display_name, printer_id, is_active")
     .single();
@@ -81,6 +189,9 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
   const bridgeId  = searchParams.get("bridge_id");
 
   if (printerId) {
+    if (printerId === HELD_PRINTER_ID) {
+      return NextResponse.json({ error: "This printer has a queued job and stays active." }, { status: 409 });
+    }
     await supabase.from("rfid_printers").update({ is_active: false }).eq("id", printerId).eq("tenant_id", tenantId);
   }
   if (bridgeId) {
