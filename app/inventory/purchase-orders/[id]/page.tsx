@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage, canSeeCosts } from "@/lib/userTypes";
 import { loadXeroAccounts, XeroAccountsLoad } from "@/lib/xeroAccounts";
-import { ArrowLeft, Package, CheckCircle2, SkipForward, Sparkles, Loader, X, ChevronDown, DollarSign, Pencil, Ban, AlertTriangle, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Package, CheckCircle2, SkipForward, Sparkles, Loader, X, ChevronDown, DollarSign, Pencil, Ban, AlertTriangle, Plus, Trash2, Download, Send } from "lucide-react";
 import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
 import PurchaseInvoicePanel from "@/components/PurchaseInvoicePanel";
 import { XeroAccountSelect } from "@/components/XeroAccountSelect";
@@ -124,6 +124,17 @@ function DetailItem({ label, value }: { label: string; value?: string | null }) 
       <div style={{ fontSize: 14, color: value ? "#111827" : "#D1D5DB" }}>{value ?? "—"}</div>
     </div>
   );
+}
+
+function poSendNote(state: string | null, detail: string): string {
+  const cleaned = detail
+    .replace(/Email is not set up on this Preview, so it was not emailed\.?/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  if (state === "not_configured" || /not set up on this Preview/i.test(detail)) {
+    return cleaned ? `PDF downloaded. ${cleaned}` : "PDF downloaded.";
+  }
+  return cleaned || "PDF downloaded.";
 }
 
 // Receive card for a single line
@@ -559,8 +570,9 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   const [confirmLine, setConfirmLine]     = useState<PoLine | null>(null);
   const [confirmCost, setConfirmCost]     = useState("");
   const [confirmSaving, setConfirmSaving] = useState(false);
-  const [sendingPo, setSendingPo] = useState(false);
+  const [poAction, setPoAction] = useState<"send" | "download" | null>(null);
   const [sendNote, setSendNote] = useState<string | null>(null);
+  const [emailConfigured, setEmailConfigured] = useState<boolean | null>(null);
   const [confirmError, setConfirmError]   = useState("");
 
   // Edit mode
@@ -615,6 +627,22 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
 
   useEffect(() => { fetchPo(); }, [fetchPo]);
 
+  useEffect(() => {
+    if (!tenantId) return;
+    let cancelled = false;
+    fetch(`/api/inventory/purchase-orders/${params.id}/send`, {
+      cache: "no-store",
+      headers: { "x-tenant-id": tenantId },
+    })
+      .then(async (res) => (res.ok ? res.json() as Promise<{ email_configured?: boolean }> : null))
+      .then((json) => {
+        if (cancelled || !json || typeof json.email_configured !== "boolean") return;
+        setEmailConfigured(json.email_configured);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [tenantId, params.id]);
+
   // Show lines that still have remaining qty to receive
   const unreceived = po?.lines.filter(l => Number(l.received_quantity ?? 0) < Number(l.quantity ?? 1)) ?? [];
 
@@ -664,13 +692,14 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
     fetchPo();
   }
 
-  async function handleSendToSupplier() {
-    setSendingPo(true);
+  async function handlePoDocument(intent: "send" | "download") {
+    setPoAction(intent);
     setSendNote(null);
     try {
       const res = await fetch(`/api/inventory/purchase-orders/${params.id}/send`, {
         method: "POST",
-        headers,
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ intent }),
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({} as { error?: string }));
@@ -696,16 +725,17 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 2000);
       const encoded = res.headers.get("X-Po-Message");
-      let detail = "File downloaded.";
+      let detail = "";
       if (encoded) {
-        try { detail = `File downloaded. ${decodeURIComponent(encoded)}`; } catch { detail = "File downloaded."; }
+        try { detail = decodeURIComponent(encoded); } catch { detail = ""; }
       }
-      setSendNote(detail);
-      fetchPo({ silent: true });
+      const state = res.headers.get("X-Po-Email-State");
+      setSendNote(poSendNote(state, detail));
+      if (intent === "send") fetchPo({ silent: true });
     } catch {
       setSendNote("Could not send this purchase order. No file was saved.");
     } finally {
-      setSendingPo(false);
+      setPoAction(null);
     }
   }
 
@@ -854,6 +884,11 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   const canReceive   = isManager && po.status !== "cancelled" && po.status !== "draft" && unreceived.length > 0;
   const canEdit      = isManager && po.status !== "cancelled";
   const canCancel    = isManager && po.status !== "cancelled";
+  const canSendPo    = isManager && po.status !== "cancelled";
+  const docBusy      = poAction !== null;
+  const noLines      = po.lines.length === 0;
+  const receivedLineCount = po.lines.filter(l => Number(l.received_quantity ?? 0) >= Number(l.quantity ?? 1)).length;
+  const linesReceivedValue = `${po.lines.length} item${po.lines.length !== 1 ? "s" : ""} · ${receivedLineCount} of ${po.lines.length} received`;
 
   // ── Edit mode ──────────────────────────────────────────────────────────────
   if (editMode) {
@@ -1221,7 +1256,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
 
   // ── Detail view ────────────────────────────────────────────────────────────
   return (
-    <div style={{ padding: "32px 32px 64px", maxWidth: 900, margin: "0 auto" }}>
+    <div style={{ padding: "0 0 64px", maxWidth: 1180, margin: "0 auto", width: "100%" }}>
       {/* Back */}
       <button
         onClick={() => router.push("/inventory/purchase-orders")}
@@ -1239,11 +1274,11 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
           </div>
           <div style={{ fontSize: 14, color: "#6B7280" }}>{supplierName}</div>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
           {canEdit && (
             <button
               onClick={enterEditMode}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", color: "#374151", fontSize: 14, cursor: "pointer" }}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px", borderRadius: 8, border: "none", background: "transparent", color: "#6B7280", fontSize: 13, fontWeight: 500, cursor: "pointer" }}
             >
               <Pencil size={14} /> Edit PO
             </button>
@@ -1251,18 +1286,18 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
           {canCancel && (
             <button
               onClick={() => { setCancelError(""); setShowCancelModal(true); }}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", fontSize: 14, cursor: "pointer" }}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px", borderRadius: 8, border: "none", background: "transparent", color: "#B91C1C", fontSize: 13, fontWeight: 500, cursor: "pointer" }}
             >
               <Ban size={14} /> Cancel PO
             </button>
           )}
-          {isManager && po.status !== "cancelled" && (
+          {canSendPo && (
             <button
-              onClick={handleSendToSupplier}
-              disabled={sendingPo || po.lines.length === 0}
-              style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "#1D4ED8", color: "#fff", fontSize: 14, fontWeight: 600, cursor: sendingPo ? "wait" : "pointer", opacity: sendingPo || po.lines.length === 0 ? 0.6 : 1 }}
+              onClick={() => handlePoDocument("download")}
+              disabled={docBusy || noLines}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", color: "#374151", fontSize: 14, fontWeight: 500, cursor: docBusy ? "wait" : "pointer", opacity: docBusy || noLines ? 0.6 : 1 }}
             >
-              {po.status === "draft" ? (sendingPo ? "Sending…" : "Send to supplier") : "Download attachment"}
+              <Download size={14} /> {poAction === "download" ? "Downloading…" : "Download PDF"}
             </button>
           )}
           {canReceive && (
@@ -1273,9 +1308,23 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
               <Package size={15} /> Receive Stock
             </button>
           )}
+          {canSendPo && (
+            <button
+              onClick={() => handlePoDocument("send")}
+              disabled={docBusy || noLines}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, border: "none", background: "#1D4ED8", color: "#fff", fontSize: 14, fontWeight: 600, cursor: docBusy ? "wait" : "pointer", opacity: docBusy || noLines ? 0.6 : 1 }}
+            >
+              <Send size={14} /> {poAction === "send" ? "Sending…" : "Send PO"}
+            </button>
+          )}
         </div>
       </div>
-      {sendNote && (
+      {canSendPo && emailConfigured === false && (
+        <div style={{ marginBottom: 16, fontSize: 13, color: "#6B7280" }}>
+          Email isn&apos;t set up yet — Send PO will download the PDF for you to send
+        </div>
+      )}
+      {sendNote && !/not set up on this Preview/i.test(sendNote) && (
         <div style={{ marginBottom: 16, padding: "10px 12px", borderRadius: 8, background: "#F9FAFB", border: "1px solid #E5E7EB", fontSize: 13, color: "#374151" }}>
           {sendNote}
         </div>
@@ -1283,17 +1332,22 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
 
       {/* Summary card */}
       <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 24, marginBottom: 16 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Order info</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px 24px" }}>
           <DetailItem label="Supplier" value={supplierName} />
           <DetailItem label="Order Date" value={po.order_date ? new Date(po.order_date).toLocaleDateString("en-AU") : null} />
-          <DetailItem label="Expected Delivery" value={po.expected_date ? new Date(po.expected_date).toLocaleDateString("en-AU") : "Uses the supplier lead time on the PDF"} />
-          <DetailItem label="Payment terms" value={po.payment_terms || DEFAULT_PAYMENT_TERMS} />
-          <DetailItem label="Ship to" value={po.ship_to_address || "Business address"} />
-          <DetailItem label="Lines" value={`${po.lines.length} item${po.lines.length !== 1 ? "s" : ""}`} />
-          <DetailItem label="Received" value={`${po.lines.filter(l => Number(l.received_quantity ?? 0) >= Number(l.quantity ?? 1)).length} of ${po.lines.length} lines`} />
-          <DetailItem label="Created" value={new Date(po.created_at).toLocaleDateString("en-AU")} />
-          {po.notes && <div style={{ gridColumn: "1 / -1" }}><DetailItem label="Notes" value={po.notes} /></div>}
+          <DetailItem label="Payment Terms" value={po.payment_terms || DEFAULT_PAYMENT_TERMS} />
         </div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.06em", margin: "20px 0 12px" }}>Delivery</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px 24px" }}>
+          <DetailItem label="Expected Delivery" value={po.expected_date ? new Date(po.expected_date).toLocaleDateString("en-AU") : "Uses the supplier lead time on the PDF"} />
+          <DetailItem label="Ship To" value={po.ship_to_address || "Business address"} />
+          <DetailItem label="Lines / Received" value={linesReceivedValue} />
+        </div>
+        <div style={{ marginTop: 16, fontSize: 12, color: "#9CA3AF" }}>
+          Created {new Date(po.created_at).toLocaleDateString("en-AU")}
+        </div>
+        {po.notes && <div style={{ marginTop: 16 }}><DetailItem label="Notes" value={po.notes} /></div>}
       </div>
 
       {/* Lines table */}
@@ -1306,16 +1360,63 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
             </span>
           )}
         </div>
+        <style>{`
+          .po-lines-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; }
+          .po-lines-table th, .po-lines-table td {
+            height: 40px;
+            padding: 0 6px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            vertical-align: middle;
+            box-sizing: border-box;
+          }
+          .po-lines-table th {
+            font-size: 10px;
+            font-weight: 600;
+            color: #6B7280;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+          }
+          .po-lines-clip {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 100%;
+          }
+        `}</style>
         {po.lines.length === 0 ? (
           <div style={{ padding: 32, textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>No line items</div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <div data-po-lines style={{ overflow: "hidden" }}>
+            <table className="po-lines-table">
+              <colgroup>
+                <col style={{ width: showCosts ? "14%" : "28%" }} />
+                <col style={{ width: showCosts ? "11%" : "16%" }} />
+                <col style={{ width: showCosts ? "13%" : "16%" }} />
+                <col style={{ width: showCosts ? "8%" : "14%" }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "6%" }} />
+                {showCosts && <col style={{ width: "7%" }} />}
+                {showCosts && <col style={{ width: "7%" }} />}
+                {showCosts && <col style={{ width: "16%" }} />}
+                <col style={{ width: showCosts ? "6%" : "8%" }} />
+              </colgroup>
               <thead>
                 <tr style={{ background: "#F9FAFB" }}>
-                  {(["Title", "Metal", "Ordered", "Received", "Remaining", ...(showCosts ? ["Est. Cost", "Actual Cost", "Invoice"] : []), "Stock Pieces"] as string[]).map(h => (
-                    <th key={h} style={{ padding: "8px 16px", textAlign: "left", fontWeight: 600, color: "#6B7280", fontSize: 11, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em" }}>{h}</th>
-                  ))}
+                  <th style={{ textAlign: "left" }}>Title</th>
+                  <th style={{ textAlign: "left" }} title="Xero account">Account</th>
+                  <th style={{ textAlign: "left" }} title="Linked job">Job</th>
+                  <th style={{ textAlign: "left" }}>Metal</th>
+                  <th style={{ textAlign: "center" }} title="Ordered">Ord</th>
+                  <th style={{ textAlign: "center" }} title="Received">Rcv</th>
+                  <th style={{ textAlign: "center" }} title="Remaining">Rem</th>
+                  {showCosts && <th style={{ textAlign: "right" }} title="Estimated cost">Est.</th>}
+                  {showCosts && <th style={{ textAlign: "right" }} title="Actual cost">Actual</th>}
+                  {showCosts && <th style={{ textAlign: "left" }}>Invoice</th>}
+                  <th style={{ textAlign: "left" }} title="Stock pieces">Stock</th>
                 </tr>
               </thead>
               <tbody>
@@ -1327,122 +1428,154 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                   const remaining   = orderedQty - receivedQty;
                   const fullyRcvd   = receivedQty >= orderedQty;
                   const linePieces  = line.pieces ?? [];
+                  const catName = line.category?.name ?? categories.find(c => c.id === line.category_id)?.name ?? null;
+                  const titleText = line.title?.trim() || "";
+                  const titleTip = [titleText || null, catName, line.supplier_design_no ? `SKU ${line.supplier_design_no}` : null].filter(Boolean).join(" · ");
+                  const account = [line.xero_account_code, line.xero_account_name].filter(Boolean).join(" — ");
+                  const metal = [line.metal_karat, line.metal_colour, line.metal_type].filter(Boolean).join(" ");
+                  const stone = [
+                    (line.diamond_carat ?? line.stone_carat) != null ? `${line.diamond_carat ?? line.stone_carat}ct` : null,
+                    line.diamond_colour ?? line.stone_colour,
+                    line.diamond_type ?? line.stone_type,
+                  ].filter(Boolean).join(" ");
+                  const metalText = [metal, stone].filter(Boolean).join(" · ");
+                  const jobTip = line.packet
+                    ? [[line.packet.customer_first_name, line.packet.customer_last_name].filter(Boolean).join(" "), line.packet.reference_number].filter(Boolean).join(" · ")
+                    : undefined;
+                  const stockTip = linePieces.map(piece => `${piece.sku}${piece.quantity > 1 ? ` ×${piece.quantity}` : ""}`).join(", ");
+                  const money = (amount: number) => `$${Number(amount).toLocaleString("en-AU", { minimumFractionDigits: 2 })}`;
                   return (
                     <tr key={line.id} style={{ borderTop: i > 0 ? "1px solid #F3F4F6" : "none" }}>
-                      <td style={{ padding: "10px 16px", color: "#374151", maxWidth: 240 }}>
-                        <div>{line.title ?? <span style={{ color: "#D1D5DB" }}>—</span>}</div>
-                        {(() => { const catName = categories.find(c => c.id === line.category_id)?.name; return catName ? <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>{catName}</div> : null; })()}
-                        {(line.xero_account_code || line.xero_account_name) && (
-                          <div style={{ fontSize: 11, color: "#1D4ED8", marginTop: 2 }}>
-                            Xero: {[line.xero_account_code, line.xero_account_name].filter(Boolean).join(" — ")}
-                          </div>
-                        )}
-                        {line.supplier_design_no && (
-                          <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2, fontFamily: "monospace" }}>
-                            SKU: {line.supplier_design_no}
-                          </div>
-                        )}
+                      <td title={titleTip || undefined} style={{ color: titleText ? "#374151" : "#D1D5DB" }}>
+                        <span className="po-lines-clip">{titleText || "—"}</span>
+                      </td>
+                      <td title={account || undefined} style={{ color: account ? "#6B7280" : "#D1D5DB", fontSize: 12 }}>
+                        <span className="po-lines-clip">{account || "—"}</span>
+                      </td>
+                      <td>
                         {line.packet ? (
-                          <div style={{ marginTop: 4 }}>
-                            <a
-                              href={`/workshop/jobs/${line.packet.id}`}
-                              style={{
-                                display: "inline-flex", alignItems: "center", gap: 3,
-                                padding: "2px 7px", borderRadius: 6, fontSize: 11, fontWeight: 600,
-                                background: "#EEF2FF", color: "#4338CA", border: "1px solid #C7D2FE",
-                                textDecoration: "none",
-                              }}
-                              title={[line.packet.customer_first_name, line.packet.customer_last_name].filter(Boolean).join(" ") || undefined}
-                            >
-                              {line.packet.reference_number}
-                            </a>
-                          </div>
+                          <a
+                            href={`/workshop/jobs/${line.packet.id}`}
+                            title={jobTip}
+                            className="po-lines-clip"
+                            style={{
+                              display: "inline-block",
+                              maxWidth: "100%",
+                              padding: "1px 6px",
+                              borderRadius: 6,
+                              fontSize: 11,
+                              fontWeight: 600,
+                              lineHeight: "16px",
+                              background: "#EEF2FF",
+                              color: "#4338CA",
+                              border: "1px solid #C7D2FE",
+                              textDecoration: "none",
+                              verticalAlign: "middle",
+                              boxSizing: "border-box",
+                            }}
+                          >
+                            {line.packet.reference_number}
+                          </a>
                         ) : (
-                          <div style={{ marginTop: 4 }}>
+                          <span style={{
+                            display: "inline-block",
+                            padding: "1px 6px",
+                            borderRadius: 6,
+                            fontSize: 11,
+                            fontWeight: 500,
+                            lineHeight: "16px",
+                            background: "#F3F4F6",
+                            color: "#9CA3AF",
+                            verticalAlign: "middle",
+                          }}>Stock</span>
+                        )}
+                      </td>
+                      <td title={metalText || undefined} style={{ color: "#6B7280" }}>
+                        <span className="po-lines-clip">{metalText || "—"}</span>
+                      </td>
+                      <td style={{ color: "#374151", textAlign: "center", fontWeight: 500 }}>{orderedQty}</td>
+                      <td style={{ textAlign: "center", color: receivedQty > 0 ? "#059669" : "#D1D5DB", fontWeight: receivedQty > 0 ? 600 : 400 }}>{receivedQty}</td>
+                      <td style={{ textAlign: "center", color: remaining > 0 ? "#92400E" : "#9CA3AF", fontWeight: remaining > 0 ? 500 : 400 }}>{remaining}</td>
+                      {showCosts && (
+                        <td title={estCost != null ? money(estCost) : undefined} style={{ color: "#6B7280", fontFamily: "monospace", textAlign: "right", fontSize: 12 }}>
+                          <span className="po-lines-clip">{estCost != null ? money(estCost) : "—"}</span>
+                        </td>
+                      )}
+                      {showCosts && (
+                        <td title={invoiced ? money(Number(line.actual_cost)) : undefined} style={{ fontFamily: "monospace", textAlign: "right", fontSize: 12, color: invoiced ? "#111827" : "#D1D5DB", fontWeight: invoiced ? 500 : 400 }}>
+                          <span className="po-lines-clip">{invoiced ? money(Number(line.actual_cost)) : "—"}</span>
+                        </td>
+                      )}
+                      {showCosts && (
+                        <td>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, maxWidth: "100%", verticalAlign: "middle" }}>
                             <span style={{
-                              display: "inline-block", padding: "2px 7px", borderRadius: 6, fontSize: 11,
-                              fontWeight: 500, background: "#F3F4F6", color: "#9CA3AF",
-                            }}>Stock</span>
-                          </div>
-                        )}
-                      </td>
-                      <td style={{ padding: "10px 16px", color: "#6B7280", whiteSpace: "nowrap" }}>
-                        {[line.metal_karat, line.metal_colour, line.metal_type].filter(Boolean).join(" ") || "—"}
-                        {line.diamond_carat && (
-                          <div style={{ fontSize: 11, marginTop: 2 }}>
-                            {[line.diamond_carat && `${line.diamond_carat}ct`, line.diamond_colour, line.diamond_type].filter(Boolean).join(" ")}
-                          </div>
-                        )}
-                      </td>
-                      <td style={{ padding: "10px 16px", color: "#374151", textAlign: "center", fontWeight: 500 }}>{orderedQty}</td>
-                      <td style={{ padding: "10px 16px", textAlign: "center", color: receivedQty > 0 ? "#059669" : "#D1D5DB", fontWeight: receivedQty > 0 ? 600 : 400 }}>{receivedQty}</td>
-                      <td style={{ padding: "10px 16px", textAlign: "center", color: remaining > 0 ? "#92400E" : "#9CA3AF", fontWeight: remaining > 0 ? 500 : 400 }}>{remaining}</td>
-                      {showCosts && (
-                        <td style={{ padding: "10px 16px", color: "#6B7280", fontFamily: "monospace", whiteSpace: "nowrap" }}>
-                          {estCost != null ? `$${Number(estCost).toLocaleString("en-AU", { minimumFractionDigits: 2 })}` : "—"}
-                        </td>
-                      )}
-                      {showCosts && (
-                        <td style={{ padding: "10px 16px", fontFamily: "monospace", whiteSpace: "nowrap" }}>
-                          {invoiced ? (
-                            <span style={{ color: "#111827", fontWeight: 500 }}>
-                              ${Number(line.actual_cost).toLocaleString("en-AU", { minimumFractionDigits: 2 })}
-                            </span>
-                          ) : (
-                            <span style={{ color: "#D1D5DB" }}>—</span>
-                          )}
-                        </td>
-                      )}
-                      {showCosts && (
-                        <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
-                          {invoiced ? (
-                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: "#ECFDF5", color: "#065F46", border: "1px solid #A7F3D0" }}>Invoiced</span>
-                              {isManager && (
-                                <button
-                                  onClick={() => openConfirmModal(line)}
-                                  style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}
-                                >
-                                  Edit
-                                </button>
-                              )}
-                            </div>
-                          ) : (
-                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#FFFBEB", color: "#92400E", border: "1px solid #FDE68A" }}>Pending Invoice</span>
-                              {isManager && (
-                                <button
-                                  onClick={() => openConfirmModal(line)}
-                                  style={{ display: "flex", alignItems: "center", gap: 3, padding: "3px 8px", borderRadius: 6, border: "1px solid #E5E7EB", background: "#fff", fontSize: 11, cursor: "pointer", color: "#374151", fontWeight: 500, whiteSpace: "nowrap" }}
-                                >
-                                  <DollarSign size={11} /> Confirm
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                      )}
-                      <td style={{ padding: "10px 16px" }}>
-                        {linePieces.length > 0 ? (
-                          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                            {fullyRcvd && (
-                              <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: "#ECFDF5", color: "#065F46", border: "1px solid #A7F3D0", marginBottom: 2, display: "inline-block" }}>Received</span>
-                            )}
-                            {linePieces.map(piece => (
-                              <a
-                                key={piece.id}
-                                href={`/inventory/pieces/${piece.id}`}
-                                style={{ fontSize: 11, color: "#4338CA", fontFamily: "monospace", textDecoration: "none" }}
-                                title={piece.quantity > 1 ? `Batch qty: ${piece.quantity}` : undefined}
+                              padding: "1px 6px",
+                              borderRadius: 999,
+                              fontSize: 11,
+                              fontWeight: invoiced ? 600 : 500,
+                              lineHeight: "16px",
+                              background: invoiced ? "#ECFDF5" : "#FFFBEB",
+                              color: invoiced ? "#065F46" : "#92400E",
+                              border: `1px solid ${invoiced ? "#A7F3D0" : "#FDE68A"}`,
+                              flex: "0 0 auto",
+                            }}>{invoiced ? "Invoiced" : "Pending Invoice"}</span>
+                            {isManager && (
+                              <button
+                                onClick={() => openConfirmModal(line)}
+                                title={invoiced ? "Edit invoice amount" : "Confirm invoice"}
+                                aria-label={invoiced ? "Edit invoice amount" : "Confirm invoice"}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 2,
+                                  padding: invoiced ? 0 : "1px 6px",
+                                  borderRadius: 6,
+                                  border: invoiced ? "none" : "1px solid #E5E7EB",
+                                  background: invoiced ? "none" : "#fff",
+                                  fontSize: 11,
+                                  cursor: "pointer",
+                                  color: invoiced ? "#9CA3AF" : "#374151",
+                                  fontWeight: 500,
+                                  textDecoration: invoiced ? "underline" : "none",
+                                  flex: "0 0 auto",
+                                }}
                               >
-                                {piece.sku}{piece.quantity > 1 ? ` ×${piece.quantity}` : ""}
-                              </a>
+                                {invoiced ? "Edit" : <DollarSign size={11} />}
+                              </button>
+                            )}
+                          </span>
+                        </td>
+                      )}
+                      <td title={stockTip || undefined}>
+                        {linePieces.length > 0 ? (
+                          <span className="po-lines-clip" style={{ fontSize: 11, color: "#4338CA", fontFamily: "monospace" }}>
+                            {fullyRcvd ? "Received · " : ""}
+                            {linePieces.map((piece, index) => (
+                              <span key={piece.id}>
+                                {index > 0 ? ", " : ""}
+                                <a
+                                  href={`/inventory/pieces/${piece.id}`}
+                                  style={{ color: "#4338CA", textDecoration: "none" }}
+                                  title={piece.quantity > 1 ? `Batch qty: ${piece.quantity}` : piece.sku}
+                                >
+                                  {piece.sku}{piece.quantity > 1 ? ` ×${piece.quantity}` : ""}
+                                </a>
+                              </span>
                             ))}
-                          </div>
-                        ) : remaining > 0 ? (
-                          <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#F3F4F6", color: "#6B7280" }}>Pending</span>
+                          </span>
                         ) : (
-                          <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#FFFBEB", color: "#92400E" }}>Skipped</span>
+                          <span style={{
+                            display: "inline-block",
+                            padding: "1px 6px",
+                            borderRadius: 999,
+                            fontSize: 11,
+                            fontWeight: 500,
+                            lineHeight: "16px",
+                            background: remaining > 0 ? "#F3F4F6" : "#FFFBEB",
+                            color: remaining > 0 ? "#6B7280" : "#92400E",
+                            verticalAlign: "middle",
+                          }}>{remaining > 0 ? "Pending" : "Skipped"}</span>
                         )}
                       </td>
                     </tr>
@@ -1464,9 +1597,14 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
           entityId={po.id}
           readOnly={false}
           defaultAttachmentType="invoice"
+          attachmentTypes={["invoice", "other"]}
         />
       </div>
-      <PurchaseInvoicePanel poId={po.id} tenantId={tenantId} canSend={isManager && po.status !== "cancelled"} />
+      <PurchaseInvoicePanel
+        poId={po.id}
+        tenantId={tenantId}
+        canSend={isManager && po.status !== "cancelled"}
+      />
 
       {/* Confirm Actual Cost Modal */}
       {confirmLine && (

@@ -86,13 +86,19 @@ interface UploadModalProps {
   entityId: string;
   tenantId: string;
   defaultAttachmentType?: AttachmentType;
+  allowedTypes?: AttachmentType[];
   onClose: () => void;
   onUploaded: () => void;
 }
 
-function UploadModal({ entityType, entityId, tenantId, defaultAttachmentType = "photo", onClose, onUploaded }: UploadModalProps) {
+function UploadModal({ entityType, entityId, tenantId, defaultAttachmentType = "photo", allowedTypes, onClose, onUploaded }: UploadModalProps) {
+  const typeOptions = allowedTypes?.length
+    ? allowedTypes
+    : (Object.keys(ATTACHMENT_TYPE_LABELS) as AttachmentType[]);
   const [files, setFiles]               = useState<File[]>([]);
-  const [attachmentType, setType]       = useState<AttachmentType>(defaultAttachmentType);
+  const [attachmentType, setType]       = useState<AttachmentType>(
+    typeOptions.includes(defaultAttachmentType) ? defaultAttachmentType : typeOptions[0]
+  );
   const [displayName, setDisplayName]   = useState("");
   const [notes, setNotes]               = useState("");
   const [uploading, setUploading]       = useState(false);
@@ -232,7 +238,7 @@ function UploadModal({ entityType, entityId, tenantId, defaultAttachmentType = "
           <div>
             <label style={labelStyle}>Type</label>
             <select style={inputStyle} value={attachmentType} onChange={e => setType(e.target.value as AttachmentType)}>
-              {(Object.keys(ATTACHMENT_TYPE_LABELS) as AttachmentType[]).map(t => (
+              {typeOptions.map(t => (
                 <option key={t} value={t}>{ATTACHMENT_TYPE_LABELS[t]}</option>
               ))}
             </select>
@@ -273,9 +279,14 @@ interface Props {
   /** If true, hides upload/delete buttons (e.g. for staff-only view) */
   readOnly?: boolean;
   defaultAttachmentType?: AttachmentType;
+  /**
+   * When set, filter pills (and the upload type list) show only these types.
+   * Omit on inventory screens so Photo, Certificate, Valuation, and the rest stay available.
+   */
+  attachmentTypes?: AttachmentType[];
 }
 
-export default function InventoryAttachmentsPanel({ entityType, entityId, readOnly = false, defaultAttachmentType = "photo" }: Props) {
+export default function InventoryAttachmentsPanel({ entityType, entityId, readOnly = false, defaultAttachmentType = "photo", attachmentTypes }: Props) {
   const { user } = useUser();
   const tenantId = user?.tenantId ?? "";
 
@@ -372,7 +383,10 @@ export default function InventoryAttachmentsPanel({ entityType, entityId, readOn
   // Count by type for filter chips
   const allForRecord = attachments; // filtered list — we use it for count display
 
-  const typeChips = Object.entries(ATTACHMENT_TYPE_LABELS) as [AttachmentType, string][];
+  const typeChips = (attachmentTypes?.length
+    ? attachmentTypes
+    : (Object.keys(ATTACHMENT_TYPE_LABELS) as AttachmentType[])
+  ).map((t) => [t, ATTACHMENT_TYPE_LABELS[t]] as [AttachmentType, string]);
 
   return (
     <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20, marginBottom: 16 }}>
@@ -489,6 +503,7 @@ export default function InventoryAttachmentsPanel({ entityType, entityId, readOn
           entityId={entityId}
           tenantId={tenantId}
           defaultAttachmentType={defaultAttachmentType}
+          allowedTypes={attachmentTypes}
           onClose={() => setShowUpload(false)}
           onUploaded={() => fetchAttachments()}
         />
