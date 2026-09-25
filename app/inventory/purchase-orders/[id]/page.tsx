@@ -4,12 +4,16 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage, canSeeCosts } from "@/lib/userTypes";
+import { loadXeroAccounts, XeroAccountsLoad } from "@/lib/xeroAccounts";
 import { ArrowLeft, Package, CheckCircle2, SkipForward, Sparkles, Loader, X, ChevronDown, DollarSign, Pencil, Ban, AlertTriangle, Plus, Trash2 } from "lucide-react";
 import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
+import PurchaseInvoicePanel from "@/components/PurchaseInvoicePanel";
+import { XeroAccountSelect } from "@/components/XeroAccountSelect";
+import { PoLineSections } from "@/components/PoLineSections";
+import { fallbackReceiveTitle, inheritedReceiveTitle } from "@/lib/receiveStock";
+import { addCalendarDays, DEFAULT_PAYMENT_TERMS } from "@/lib/purchaseOrderDocument";
 
 type POStatus = "draft" | "ordered" | "partially_received" | "received" | "cancelled";
-
-interface XeroAccountOption { id: string; code: string; name: string; type: string; }
 
 interface PoLine {
   id: string;
@@ -26,6 +30,10 @@ interface PoLine {
   diamond_carat: number | null;
   diamond_colour: string | null;
   diamond_clarity: string | null;
+  stone_type?: string | null;
+  stone_carat?: number | null;
+  stone_colour?: string | null;
+  stone_clarity?: string | null;
   finger_size: string | null;
   quantity: number;
   unit_cost: number | null;
@@ -81,6 +89,8 @@ interface PurchaseOrder {
   status: POStatus;
   order_date: string | null;
   expected_date: string | null;
+  payment_terms: string | null;
+  ship_to_address: string | null;
   notes: string | null;
   lines: PoLine[];
   created_at: string;
@@ -134,29 +144,46 @@ function ReceiveCard({
   const orderedQty      = Number(line.quantity ?? 1);
   const remaining       = orderedQty - alreadyReceived;
 
+  const categoryName =
+    line.category?.name
+    ?? categories.find((c: { id: string; name: string }) => c.id === line.category_id)?.name
+    ?? null;
+  const prefilledTitle = fallbackReceiveTitle({ ...line, categoryName });
+
+  const [titleTouched, setTitleTouched] = useState(false);
   const [specs, setSpecs] = useState({
-    title:           line.title          ?? "",
+    title:           prefilledTitle,
     category_id:     line.category_id    ?? "",
     metal_type:      line.metal_type     ?? "",
     metal_karat:     line.metal_karat    ?? "",
     metal_colour:    line.metal_colour   ?? "",
-    diamond_type:    line.diamond_type    ?? "",
-    diamond_carat:   line.diamond_carat != null ? String(line.diamond_carat) : "",
-    diamond_colour:  line.diamond_colour  ?? "",
-    diamond_clarity: line.diamond_clarity ?? "",
+    diamond_type:    line.diamond_type ?? line.stone_type ?? "",
+    diamond_carat:   line.diamond_carat != null
+      ? String(line.diamond_carat)
+      : line.stone_carat != null ? String(line.stone_carat) : "",
+    diamond_colour:  line.diamond_colour ?? line.stone_colour ?? "",
+    diamond_clarity: line.diamond_clarity ?? line.stone_clarity ?? "",
     finger_size:     line.finger_size    ?? "",
     notes:           line.notes          ?? "",
     location_id: "",
     product_id:  "",
   });
+  useEffect(() => {
+    if (titleTouched) return;
+    setSpecs(s => s.title === prefilledTitle ? s : { ...s, title: prefilledTitle });
+  }, [prefilledTitle, titleTouched]);
+
   const [actualUnitCost, setActualUnitCost] = useState(
-    line.estimated_cost != null ? String(line.estimated_cost) : ""
+    line.estimated_cost != null
+      ? String(line.estimated_cost)
+      : line.unit_cost != null ? String(line.unit_cost) : ""
   );
   const [receiveQty, setReceiveQty] = useState(remaining);
   // individual = one piece per unit; batch = one piece record with quantity > 1
   const [receiveMode, setReceiveMode] = useState<"individual" | "batch">("individual");
 
   const [saving, setSaving]     = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [skipping, setSkipping] = useState(false);
   const [done, setDone]         = useState(false);
   const [aiDesc, setAiDesc]     = useState("");
@@ -201,8 +228,11 @@ function ReceiveCard({
     }));
   }
 
+  const lineLabel = prefilledTitle || "Untitled item";
+
   async function handleConfirm() {
     setSaving(true);
+    setSaveError("");
     const builtSpecs: Record<string, any> = {
       ...specs,
       diamond_carat: specs.diamond_carat ? parseFloat(specs.diamond_carat) : null,
@@ -229,6 +259,8 @@ function ReceiveCard({
       setCreatedPieces(json.pieces ?? []);
       setDone(true);
       onDone();
+    } else {
+      setSaveError(json.error ?? "Could not create stock");
     }
   }
 
@@ -257,7 +289,7 @@ function ReceiveCard({
                   : `Created ${createdPieces.length} pieces (${createdPieces.map(p => p.sku).join(", ")})`
                 : "Skipped"}
             </div>
-            <div style={{ fontSize: 13, color: "#6B7280", marginTop: 2 }}>{line.title ?? "Untitled item"}</div>
+            <div style={{ fontSize: 13, color: "#6B7280", marginTop: 2 }}>{lineLabel}</div>
           </div>
         </div>
         {createdPieces.length > 0 && (
@@ -291,7 +323,7 @@ function ReceiveCard({
     <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20 }}>
       {/* Header — title + qty summary */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4, gap: 12 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>{line.title ?? "Untitled item"}</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>{lineLabel}</div>
         <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#6B7280", flexShrink: 0 }}>
           <span>Ordered: <strong style={{ color: "#374151" }}>{orderedQty}</strong></span>
           {alreadyReceived > 0 && <span>Received: <strong style={{ color: "#059669" }}>{alreadyReceived}</strong></span>}
@@ -362,7 +394,7 @@ function ReceiveCard({
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px 16px", marginBottom: 14 }}>
         <div style={{ gridColumn: "1 / -1" }}>
           <label style={LF}>Title</label>
-          <input value={specs.title} onChange={e => setSpecs(s => ({ ...s, title: e.target.value }))} style={IF} />
+          <input value={specs.title} onChange={e => { setTitleTouched(true); setSpecs(s => ({ ...s, title: e.target.value })); }} style={IF} />
         </div>
         <div>
           <label style={LF}>Category</label>
@@ -376,7 +408,7 @@ function ReceiveCard({
           <input value={specs.metal_type} onChange={e => setSpecs(s => ({ ...s, metal_type: e.target.value }))} style={IF} />
         </div>
         <div>
-          <label style={LF}>Carat</label>
+          <label style={LF}>Metal carat</label>
           <input value={specs.metal_karat} onChange={e => setSpecs(s => ({ ...s, metal_karat: e.target.value }))} style={IF} />
         </div>
         <div>
@@ -477,6 +509,12 @@ function ReceiveCard({
         </div>
       </div>
 
+      {saveError && (
+        <div style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 8, background: "#FEF2F2", color: "#B91C1C", fontSize: 13 }}>
+          {saveError}
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <button
           onClick={handleSkip}
@@ -510,8 +548,8 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   const [categories, setCategories] = useState<any[]>([]);
   const [locations, setLocations]   = useState<any[]>([]);
   const [products, setProducts]     = useState<any[]>([]);
-  const [suppliers, setSuppliers]   = useState<{ id: string; name: string }[]>([]);
-  const [xeroAccounts, setXeroAccounts] = useState<XeroAccountOption[] | null>(null);
+  const [suppliers, setSuppliers]   = useState<{ id: string; name: string; payment_terms?: string | null; lead_time_days?: number | null }[]>([]);
+  const [xeroAccounts, setXeroAccounts] = useState<XeroAccountsLoad>({ status: "loading" });
   const [showReceive, setShowReceive] = useState(false);
   const [receivedCount, setReceivedCount] = useState(0);
   const [allDone, setAllDone] = useState(false);
@@ -521,11 +559,13 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   const [confirmLine, setConfirmLine]     = useState<PoLine | null>(null);
   const [confirmCost, setConfirmCost]     = useState("");
   const [confirmSaving, setConfirmSaving] = useState(false);
+  const [sendingPo, setSendingPo] = useState(false);
+  const [sendNote, setSendNote] = useState<string | null>(null);
   const [confirmError, setConfirmError]   = useState("");
 
   // Edit mode
   const [editMode, setEditMode]     = useState(false);
-  const [editHeader, setEditHeader] = useState({ supplier_id: "", order_date: "", expected_date: "", notes: "" });
+  const [editHeader, setEditHeader] = useState({ supplier_id: "", order_date: "", expected_date: "", payment_terms: "", ship_to_address: "", notes: "" });
   const [editLines, setEditLines]   = useState<EditPoLine[]>([]);
   const [editSaving, setEditSaving]           = useState(false);
   const [editError, setEditError]             = useState("");
@@ -539,14 +579,14 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
 
   const headers = { "x-tenant-id": tenantId };
 
-  const fetchPo = useCallback(async () => {
+  const fetchPo = useCallback(async (opts?: { silent?: boolean }) => {
     if (!tenantId) return;
-    setLoading(true);
-    const [poRes, refRes, prodRes, xeroRes] = await Promise.all([
+    if (!opts?.silent) setLoading(true);
+    const [poRes, refRes, prodRes, xeroLoad] = await Promise.all([
       fetch(`/api/inventory/purchase-orders/${params.id}`, { headers }),
       fetch("/api/inventory/reference", { headers }),
       fetch("/api/inventory/products?limit=500", { headers }),
-      fetch("/api/xero/accounts", { headers }),
+      loadXeroAccounts(headers),
     ]);
     if (poRes.ok) {
       const json = await poRes.json();
@@ -562,7 +602,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
       const json = await prodRes.json();
       setProducts(json.products ?? []);
     }
-    setXeroAccounts(xeroRes.ok ? (await xeroRes.json()).accounts ?? [] : []);
+    setXeroAccounts(xeroLoad);
     setLoading(false);
   }, [tenantId, params.id]);
 
@@ -617,13 +657,49 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
     fetchPo();
   }
 
-  async function handleMarkOrdered() {
-    await fetch(`/api/inventory/purchase-orders/${params.id}`, {
-      method: "PATCH",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "ordered" }),
-    });
-    fetchPo();
+  async function handleSendToSupplier() {
+    setSendingPo(true);
+    setSendNote(null);
+    try {
+      const res = await fetch(`/api/inventory/purchase-orders/${params.id}/send`, {
+        method: "POST",
+        headers,
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({} as { error?: string }));
+        setSendNote(json.error ?? "Could not send this purchase order. No file was saved.");
+        return;
+      }
+      const blob = await res.blob();
+      const contentType = res.headers.get("Content-Type") ?? blob.type;
+      const match = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "");
+      const fallbackName = `${po?.po_number ?? "purchase-order"}${contentType.includes("pdf") ? ".pdf" : ".html"}`;
+      const filename = match?.[1] || fallbackName;
+      if (blob.size === 0) {
+        setSendNote("The purchase order file came back empty. Nothing was saved.");
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.rel = "noopener";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+      const encoded = res.headers.get("X-Po-Message");
+      let detail = "File downloaded.";
+      if (encoded) {
+        try { detail = `File downloaded. ${decodeURIComponent(encoded)}`; } catch { detail = "File downloaded."; }
+      }
+      setSendNote(detail);
+      fetchPo({ silent: true });
+    } catch {
+      setSendNote("Could not send this purchase order. No file was saved.");
+    } finally {
+      setSendingPo(false);
+    }
   }
 
   async function enterEditMode() {
@@ -632,6 +708,8 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
       supplier_id:   po.supplier_id   ?? "",
       order_date:    po.order_date    ?? "",
       expected_date: po.expected_date ?? "",
+      payment_terms: po.payment_terms ?? "",
+      ship_to_address: po.ship_to_address ?? "",
       notes:         po.notes         ?? "",
     });
     setEditLines(po.lines.map(l => ({
@@ -696,6 +774,8 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
         supplier_id:      editHeader.supplier_id   || null,
         order_date:       editHeader.order_date    || null,
         expected_date:    editHeader.expected_date || null,
+        payment_terms:    editHeader.payment_terms || null,
+        ship_to_address:  editHeader.ship_to_address || null,
         notes:            editHeader.notes         || null,
         deleted_line_ids: deletedLineIds.length > 0 ? deletedLineIds : undefined,
         lines: editLines.map(l => ({
@@ -809,7 +889,19 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
               <label style={LF}>Supplier</label>
               <select
                 value={editHeader.supplier_id}
-                onChange={e => setEditHeader(h => ({ ...h, supplier_id: e.target.value }))}
+                onChange={e => {
+                  const supplierId = e.target.value;
+                  const supplier = suppliers.find(s => s.id === supplierId);
+                  setEditHeader(h => {
+                    const next = { ...h, supplier_id: supplierId };
+                    if (!h.payment_terms.trim()) next.payment_terms = supplier?.payment_terms?.trim() || DEFAULT_PAYMENT_TERMS;
+                    if (!h.expected_date && supplier?.lead_time_days != null) {
+                      const base = h.order_date || new Date().toISOString().slice(0, 10);
+                      next.expected_date = addCalendarDays(base, Number(supplier.lead_time_days)) ?? h.expected_date;
+                    }
+                    return next;
+                  });
+                }}
                 style={{ ...IF, background: "#fff" }}
               >
                 <option value="">— No supplier —</option>
@@ -832,6 +924,25 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                 value={editHeader.expected_date}
                 onChange={e => setEditHeader(h => ({ ...h, expected_date: e.target.value }))}
                 style={IF}
+              />
+            </div>
+            <div>
+              <label style={LF}>Payment terms</label>
+              <input
+                value={editHeader.payment_terms}
+                onChange={e => setEditHeader(h => ({ ...h, payment_terms: e.target.value }))}
+                placeholder={DEFAULT_PAYMENT_TERMS}
+                style={IF}
+              />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={LF}>Ship to, if different from the business address</label>
+              <textarea
+                value={editHeader.ship_to_address}
+                onChange={e => setEditHeader(h => ({ ...h, ship_to_address: e.target.value }))}
+                rows={2}
+                placeholder="Leave blank to ship to the business address in Settings"
+                style={{ ...IF, resize: "vertical" as const }}
               />
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
@@ -889,90 +1000,102 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                       This line has been invoiced (actual cost: ${Number(line.actual_cost).toLocaleString("en-AU", { minimumFractionDigits: 2 })}). Changes here are cosmetic only.
                     </div>
                   )}
-                  <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: "10px 16px", marginBottom: 12 }}>
-                    <div style={{ gridColumn: "1 / -1" }}>
-                      <label style={LF}>Title</label>
-                      <input value={line.title} onChange={e => setLine({ title: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Category</label>
-                      <select value={line.category_id} onChange={e => setLine({ category_id: e.target.value })} style={{ ...IF, background: "#fff" }}>
-                        <option value="">—</option>
-                        {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={LF}>Xero Account</label>
-                      <select
-                        value={line.xero_account_id}
-                        onChange={e => {
-                          const acc = xeroAccounts?.find(a => a.id === e.target.value);
-                          setLine({
-                            xero_account_id:   acc?.id ?? "",
-                            xero_account_code: acc?.code ?? "",
-                            xero_account_name: acc?.name ?? "",
-                          });
-                        }}
-                        style={{ ...IF, background: "#fff" }}
-                      >
-                        <option value="">
-                          {xeroAccounts === null ? "Loading…" : xeroAccounts.length === 0 ? "Xero not connected" : "—"}
-                        </option>
-                        {xeroAccounts?.map(a => (
-                          <option key={a.id} value={a.id}>{a.code ? `${a.code} — ${a.name}` : a.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={LF}>Metal Type</label>
-                      <input value={line.metal_type} onChange={e => setLine({ metal_type: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Karat</label>
-                      <input value={line.metal_karat} onChange={e => setLine({ metal_karat: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Metal Colour</label>
-                      <input value={line.metal_colour} onChange={e => setLine({ metal_colour: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Stone Type</label>
-                      <input value={line.diamond_type} onChange={e => setLine({ diamond_type: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Stone Carat</label>
-                      <input type="number" step="0.01" value={line.diamond_carat} onChange={e => setLine({ diamond_carat: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Stone Colour</label>
-                      <input value={line.diamond_colour} onChange={e => setLine({ diamond_colour: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Stone Clarity</label>
-                      <input value={line.diamond_clarity} onChange={e => setLine({ diamond_clarity: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Finger Size</label>
-                      <input value={line.finger_size} onChange={e => setLine({ finger_size: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Qty</label>
-                      <input type="number" min="1" value={line.quantity} onChange={e => setLine({ quantity: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>
-                        Est. Cost ($){isInvoiced && <span style={{ color: "#D97706", marginLeft: 4 }}>⚠</span>}
-                      </label>
-                      <input type="number" step="0.01" min="0" value={line.estimated_cost} onChange={e => setLine({ estimated_cost: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Supplier Design No</label>
-                      <input value={line.supplier_design_no} onChange={e => setLine({ supplier_design_no: e.target.value })} style={IF} />
-                    </div>
-                    <div>
-                      <label style={LF}>Notes</label>
+                  <div style={{ marginBottom: 12 }}>
+                  <PoLineSections
+                    categoryName={categories.find((c: { id: string; name: string }) => c.id === line.category_id)?.name ?? null}
+                    stonesHaveValues={[line.diamond_type, line.diamond_carat, line.diamond_colour, line.diamond_clarity].some(v => String(v ?? "").trim() !== "")}
+                    what={
+                      <>
+                        <div style={{ gridColumn: "1 / -1" }}>
+                          <label style={LF}>Title</label>
+                          <input value={line.title} onChange={e => setLine({ title: e.target.value })} style={IF} />
+                        </div>
+                        <div>
+                          <label style={LF}>Category</label>
+                          <select value={line.category_id} onChange={e => setLine({ category_id: e.target.value })} style={{ ...IF, background: "#fff" }}>
+                            <option value="">—</option>
+                            {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={LF}>Qty</label>
+                          <input type="number" min="1" value={line.quantity} onChange={e => setLine({ quantity: e.target.value })} style={IF} />
+                        </div>
+                        <div>
+                          <label style={LF}>Finger Size</label>
+                          <input value={line.finger_size} onChange={e => setLine({ finger_size: e.target.value })} style={IF} />
+                        </div>
+                        <div>
+                          <label style={LF}>SKU</label>
+                          <input value={line.supplier_design_no} onChange={e => setLine({ supplier_design_no: e.target.value })} placeholder="Product code" style={IF} />
+                        </div>
+                      </>
+                    }
+                    metal={
+                      <>
+                        <div>
+                          <label style={LF}>Metal Type</label>
+                          <input value={line.metal_type} onChange={e => setLine({ metal_type: e.target.value })} style={IF} />
+                        </div>
+                        <div>
+                          <label style={LF}>Metal carat</label>
+                          <input value={line.metal_karat} onChange={e => setLine({ metal_karat: e.target.value })} style={IF} />
+                        </div>
+                        <div>
+                          <label style={LF}>Metal Colour</label>
+                          <input value={line.metal_colour} onChange={e => setLine({ metal_colour: e.target.value })} style={IF} />
+                        </div>
+                      </>
+                    }
+                    stones={
+                      <>
+                        <div>
+                          <label style={LF}>Stone Type</label>
+                          <input value={line.diamond_type} onChange={e => setLine({ diamond_type: e.target.value })} style={IF} />
+                        </div>
+                        <div>
+                          <label style={LF}>Stone Carat</label>
+                          <input type="number" step="0.01" value={line.diamond_carat} onChange={e => setLine({ diamond_carat: e.target.value })} style={IF} />
+                        </div>
+                        <div>
+                          <label style={LF}>Stone Colour</label>
+                          <input value={line.diamond_colour} onChange={e => setLine({ diamond_colour: e.target.value })} style={IF} />
+                        </div>
+                        <div>
+                          <label style={LF}>Stone Clarity</label>
+                          <input value={line.diamond_clarity} onChange={e => setLine({ diamond_clarity: e.target.value })} style={IF} />
+                        </div>
+                      </>
+                    }
+                    cost={
+                      <>
+                        <div>
+                          <label style={LF}>
+                            Est. Cost ($){isInvoiced && <span style={{ color: "#D97706", marginLeft: 4 }}>⚠</span>}
+                          </label>
+                          <input type="number" step="0.01" min="0" value={line.estimated_cost} onChange={e => setLine({ estimated_cost: e.target.value })} style={IF} />
+                        </div>
+                        <div style={{ gridColumn: "span 2" }}>
+                          <label style={LF}>Xero Account</label>
+                          <XeroAccountSelect
+                            load={xeroAccounts}
+                            accountId={line.xero_account_id}
+                            accountCode={line.xero_account_code}
+                            accountName={line.xero_account_name}
+                            onChange={acc => setLine({
+                              xero_account_id:   acc?.id ?? "",
+                              xero_account_code: acc?.code ?? "",
+                              xero_account_name: acc?.name ?? "",
+                            })}
+                            style={{ ...IF, background: "#fff" }}
+                          />
+                        </div>
+                      </>
+                    }
+                    notes={
                       <input value={line.notes} onChange={e => setLine({ notes: e.target.value })} style={IF} />
-                    </div>
+                    }
+                  />
                   </div>
                   {/* Stock / Order toggle */}
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1043,7 +1166,16 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
             <X size={20} />
           </button>
           <div>
-            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "#111827" }}>Receive Stock — {po.po_number}</h1>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "#111827" }}>
+              Receive Stock —{" "}
+              <a
+                href={`/inventory/purchase-orders/${po.id}`}
+                onClick={(e) => { e.preventDefault(); fetchPo(); setShowReceive(false); setAllDone(false); setReceivedCount(0); }}
+                style={{ color: "#111827", textDecoration: "underline" }}
+              >
+                {po.po_number}
+              </a>
+            </h1>
             <p style={{ margin: "2px 0 0", fontSize: 13, color: "#6B7280" }}>{unreceived.length} item{unreceived.length !== 1 ? "s" : ""} to receive</p>
           </div>
         </div>
@@ -1117,12 +1249,13 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
               <Ban size={14} /> Cancel PO
             </button>
           )}
-          {isManager && po.status === "draft" && (
+          {isManager && po.status !== "cancelled" && (
             <button
-              onClick={handleMarkOrdered}
-              style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #BFDBFE", background: "#EFF6FF", color: "#1D4ED8", fontSize: 14, cursor: "pointer" }}
+              onClick={handleSendToSupplier}
+              disabled={sendingPo || po.lines.length === 0}
+              style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "#1D4ED8", color: "#fff", fontSize: 14, fontWeight: 600, cursor: sendingPo ? "wait" : "pointer", opacity: sendingPo || po.lines.length === 0 ? 0.6 : 1 }}
             >
-              Mark as Ordered
+              {po.status === "draft" ? (sendingPo ? "Sending…" : "Send to supplier") : "Download attachment"}
             </button>
           )}
           {canReceive && (
@@ -1135,13 +1268,20 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
           )}
         </div>
       </div>
+      {sendNote && (
+        <div style={{ marginBottom: 16, padding: "10px 12px", borderRadius: 8, background: "#F9FAFB", border: "1px solid #E5E7EB", fontSize: 13, color: "#374151" }}>
+          {sendNote}
+        </div>
+      )}
 
       {/* Summary card */}
       <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 24, marginBottom: 16 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px 24px" }}>
           <DetailItem label="Supplier" value={supplierName} />
           <DetailItem label="Order Date" value={po.order_date ? new Date(po.order_date).toLocaleDateString("en-AU") : null} />
-          <DetailItem label="Expected Delivery" value={po.expected_date ? new Date(po.expected_date).toLocaleDateString("en-AU") : null} />
+          <DetailItem label="Expected Delivery" value={po.expected_date ? new Date(po.expected_date).toLocaleDateString("en-AU") : "Uses the supplier lead time on the PDF"} />
+          <DetailItem label="Payment terms" value={po.payment_terms || DEFAULT_PAYMENT_TERMS} />
+          <DetailItem label="Ship to" value={po.ship_to_address || "Business address"} />
           <DetailItem label="Lines" value={`${po.lines.length} item${po.lines.length !== 1 ? "s" : ""}`} />
           <DetailItem label="Received" value={`${po.lines.filter(l => Number(l.received_quantity ?? 0) >= Number(l.quantity ?? 1)).length} of ${po.lines.length} lines`} />
           <DetailItem label="Created" value={new Date(po.created_at).toLocaleDateString("en-AU")} />
@@ -1185,15 +1325,20 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                       <td style={{ padding: "10px 16px", color: "#374151", maxWidth: 240 }}>
                         <div>{line.title ?? <span style={{ color: "#D1D5DB" }}>—</span>}</div>
                         {(() => { const catName = categories.find(c => c.id === line.category_id)?.name; return catName ? <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>{catName}</div> : null; })()}
+                        {(line.xero_account_code || line.xero_account_name) && (
+                          <div style={{ fontSize: 11, color: "#1D4ED8", marginTop: 2 }}>
+                            Xero: {[line.xero_account_code, line.xero_account_name].filter(Boolean).join(" — ")}
+                          </div>
+                        )}
                         {line.supplier_design_no && (
                           <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2, fontFamily: "monospace" }}>
-                            Ref: {line.supplier_design_no}
+                            SKU: {line.supplier_design_no}
                           </div>
                         )}
                         {line.packet ? (
                           <div style={{ marginTop: 4 }}>
                             <a
-                              href={`/workshop/board`}
+                              href={`/workshop/jobs/${line.packet.id}`}
                               style={{
                                 display: "inline-flex", alignItems: "center", gap: 3,
                                 padding: "2px 7px", borderRadius: 6, fontSize: 11, fontWeight: 600,
@@ -1311,8 +1456,10 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
           entityType="purchase_order"
           entityId={po.id}
           readOnly={false}
+          defaultAttachmentType="invoice"
         />
       </div>
+      <PurchaseInvoicePanel poId={po.id} tenantId={tenantId} canSend={isManager && po.status !== "cancelled"} />
 
       {/* Confirm Actual Cost Modal */}
       {confirmLine && (
@@ -1324,7 +1471,12 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
                   {confirmLine.actual_cost != null ? "Update Actual Cost" : "Confirm Invoice Amount"}
                 </h2>
                 <p style={{ margin: "4px 0 0", fontSize: 13, color: "#6B7280" }}>
-                  {confirmLine.title ?? "Untitled item"}
+                  {fallbackReceiveTitle({
+                    ...confirmLine,
+                    categoryName: confirmLine.category?.name
+                      ?? categories.find((c: { id: string }) => c.id === confirmLine.category_id)?.name
+                      ?? null,
+                  }) || "Untitled item"}
                 </p>
               </div>
               <button onClick={() => setConfirmLine(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280", padding: 0 }}>

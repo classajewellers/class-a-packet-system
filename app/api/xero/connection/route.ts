@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { requireManager } from "@/lib/require-auth";
+import { missingXeroScopes, XERO_REQUIRED_CONNECTION_SCOPES } from "@/lib/xero";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
   if (!tenantId) {
-    return NextResponse.json({ connected: false }, { status: 400 });
+    return NextResponse.json({ connected: false, error: "Missing tenant" }, { status: 400 });
   }
 
   try {
@@ -25,11 +27,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ connected: false });
     }
 
+    const missing = missingXeroScopes(data.scopes, XERO_REQUIRED_CONNECTION_SCOPES);
+
     return NextResponse.json({
-      connected:        true,
-      xero_tenant_name: data.xero_tenant_name,
-      scopes:           data.scopes,
-      connected_at:     data.connected_at,
+      connected:          true,
+      xero_tenant_name:   data.xero_tenant_name,
+      scopes:             data.scopes,
+      connected_at:       data.connected_at,
+      missing_scopes:     missing,
+      reconnect_required: missing.length > 0,
     });
   } catch (err) {
     return NextResponse.json({ connected: false, error: String(err) }, { status: 500 });
@@ -37,10 +43,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 }
 
 export async function DELETE(req: NextRequest): Promise<NextResponse> {
-  const tenantId = req.headers.get("x-tenant-id") ?? "";
-  if (!tenantId) {
-    return NextResponse.json({ error: "x-tenant-id required" }, { status: 400 });
-  }
+  const auth = await requireManager(req);
+  if (!auth.ok) return auth.response;
+  const tenantId = auth.ctx.tenantId;
 
   try {
     const supabase = await createTenantSupabaseClient(tenantId);

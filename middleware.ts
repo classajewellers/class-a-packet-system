@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
+import { safeInternalPath } from "@/lib/safeNext";
 
 // Exact public PAGE paths that bypass the session redirect. API publics are a
 // separate, tighter list (API_PUBLIC_ROUTES) applied in the /api/* branch —
@@ -35,8 +36,9 @@ const PUBLIC_PAGE_PATTERNS = [/^\/quote\/[^/]+\/order$/];
 //   (verify-pin is NOT here — it requires a session so the tenant can be derived)
 //   Inbound webhooks (server-to-server; verify their own signature/HMAC):
 //     /api/shopify/webhook, /api/twilio/webhook, /api/stripe/webhook, /api/billing/webhook
-//   OAuth redirect (browser redirect from Shopify; verifies HMAC + state itself):
+//   OAuth redirect (browser redirect from the provider; verifies HMAC + state itself):
 //     /api/shopify/oauth/callback
+//     /api/xero/oauth/callback
 //   Public store list (pre-auth login store selector; GET-only, non-sensitive):
 //     /api/tenants
 const API_PUBLIC_ROUTES = new Set([
@@ -49,6 +51,7 @@ const API_PUBLIC_ROUTES = new Set([
   // authenticated.
   "/api/shopify/webhook",
   "/api/shopify/oauth/callback",
+  "/api/xero/oauth/callback",
   "/api/twilio/webhook",
   "/api/stripe/webhook",
   "/api/billing/webhook",
@@ -318,6 +321,17 @@ export async function middleware(request: NextRequest) {
 
   // ── Auth checks (pages) ─────────────────────────────────────────────────────
 
+  // Old workshop links (?job= / ?packet=) open the full-page traveler, not the board.
+  if (pathname === "/workshop/board") {
+    const jobId = request.nextUrl.searchParams.get("job") || request.nextUrl.searchParams.get("packet");
+    if (jobId && !jobId.includes("/") && !jobId.includes("\\") && !jobId.includes("..")) {
+      const url = request.nextUrl.clone();
+      url.pathname = `/workshop/jobs/${encodeURIComponent(jobId)}`;
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+  }
+
   // 3. Completely public — return immediately, no Supabase client created
   if (
     PUBLIC_ROUTES.has(pathname) ||
@@ -365,7 +379,10 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    const loginUrl = new URL("/login", request.url);
+    const next = safeInternalPath(`${pathname}${request.nextUrl.search}`);
+    if (next) loginUrl.searchParams.set("next", next);
+    return NextResponse.redirect(loginUrl);
   }
 
   return response;

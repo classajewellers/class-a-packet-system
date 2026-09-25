@@ -5,6 +5,12 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
+  // An empty tenant must not look like an empty roster. Browser selects on
+  // workshop_team_members also return [] while RLS has no policy; this route
+  // uses the service role so the saved names are returned either way.
+  if (!tenantId) {
+    return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
+  }
   try {
     const supabase = await createTenantSupabaseClient(tenantId);
     const { data: members, error } = await supabase

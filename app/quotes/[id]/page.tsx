@@ -9,6 +9,7 @@ import { Quote } from "@/lib/types";
 import { useUser } from "@/context/UserContext";
 import { formatDateAU } from "@/lib/formatters";
 import { hasPermission, canManage } from "@/lib/userTypes";
+import { QUOTE_PAYMENT_REQUIRED } from "@/lib/quoteConversion";
 
 // ─── Screen styles ────────────────────────────────────────────────────────────
 
@@ -335,6 +336,7 @@ export default function QuoteViewPage() {
   const [vipTier, setVipTier] = useState<{ tier_name: string; colour: string } | null>(null);
   const [acceptingIdx, setAcceptingIdx] = useState<number | null>(null);
   const [converting, setConverting] = useState(false);
+  const [convertError, setConvertError] = useState<string | null>(null);
   const [downloading] = useState(false); // kept for ref safety, replaced by downloadingSize
   const [showPaymentPanel, setShowPaymentPanel] = useState(false);
   const [generatingLink, setGeneratingLink] = useState(false);
@@ -523,40 +525,61 @@ export default function QuoteViewPage() {
     return `/orders/new?from_quote=${q.id}`;
   }
 
+  async function saveAcceptedOption(optionIdx: number): Promise<boolean> {
+    if (!quote || !id) return false;
+    if (quote.deposit_paid !== true) {
+      setConvertError(QUOTE_PAYMENT_REQUIRED);
+      return false;
+    }
+    const res = await fetch(`/api/quotes/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "x-tenant-id": user?.tenantId ?? "" },
+      body: JSON.stringify({ accepted_option: optionIdx }),
+    });
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({} as { error?: string }));
+      setConvertError(json.error ?? "Could not save the accepted option. The quote was not marked Job Won and no order was opened.");
+      return false;
+    }
+    const json = await res.json().catch(() => ({} as { quote?: Quote }));
+    if (json.quote) setQuote(json.quote);
+    return true;
+  }
+
   async function handleAcceptOption(itemIdx: number, optionIdx: number) {
     if (!quote || !id) return;
+    setConvertError(null);
     setAcceptingIdx(optionIdx);
     try {
-      await fetch(`/api/quotes/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-tenant-id": user?.tenantId ?? "" },
-        body: JSON.stringify({ status: "job_won", accepted_option: optionIdx }),
-      });
-      setQuote(q => q ? { ...q, status: "job_won" } : q);
-    } catch { /* navigate anyway */ }
-
-    const qbd = quote.quote_builder_data != null && typeof quote.quote_builder_data === "object"
-      ? (quote.quote_builder_data as Record<string, unknown>) : null;
-    const builderItems = qbd && Array.isArray(qbd.builder_items) ? (qbd.builder_items as Array<Record<string, unknown>>) : null;
-    router.push(buildOrderUrl(quote, builderItems, itemIdx, optionIdx));
+      const saved = await saveAcceptedOption(optionIdx);
+      if (!saved) return;
+      const qbd = quote.quote_builder_data != null && typeof quote.quote_builder_data === "object"
+        ? (quote.quote_builder_data as Record<string, unknown>) : null;
+      const builderItems = qbd && Array.isArray(qbd.builder_items) ? (qbd.builder_items as Array<Record<string, unknown>>) : null;
+      router.push(buildOrderUrl(quote, builderItems, itemIdx, optionIdx));
+    } catch {
+      setConvertError("Could not reach the server. The quote was not marked Job Won and no order was opened.");
+    } finally {
+      setAcceptingIdx(null);
+    }
   }
 
   async function handleConvertToOrder() {
     if (!quote || !id) return;
+    setConvertError(null);
     setConverting(true);
     try {
-      await fetch(`/api/quotes/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-tenant-id": user?.tenantId ?? "" },
-        body: JSON.stringify({ status: "job_won", accepted_option: 0 }),
-      });
-      setQuote(q => q ? { ...q, status: "job_won" } : q);
-    } catch { /* navigate anyway */ }
-
-    const qbd = quote.quote_builder_data != null && typeof quote.quote_builder_data === "object"
-      ? (quote.quote_builder_data as Record<string, unknown>) : null;
-    const builderItems = qbd && Array.isArray(qbd.builder_items) ? (qbd.builder_items as Array<Record<string, unknown>>) : null;
-    router.push(buildOrderUrl(quote, builderItems, 0, 0));
+      const saved = await saveAcceptedOption(0);
+      if (!saved) return;
+      const qbd = quote.quote_builder_data != null && typeof quote.quote_builder_data === "object"
+        ? (quote.quote_builder_data as Record<string, unknown>) : null;
+      const builderItems = qbd && Array.isArray(qbd.builder_items) ? (qbd.builder_items as Array<Record<string, unknown>>) : null;
+      router.push(buildOrderUrl(quote, builderItems, 0, 0));
+    } catch {
+      setConvertError("Could not reach the server. The quote was not marked Job Won and no order was opened.");
+    } finally {
+      setConverting(false);
+    }
   }
 
   if (!hydrated || loading) {
@@ -671,6 +694,12 @@ export default function QuoteViewPage() {
             </button>
           </div>
         </div>
+
+        {convertError && (
+          <div style={{ borderRadius: 12, background: "#FEE2E2", border: "1px solid #FECACA", padding: "12px 16px", fontSize: 14, color: "#991B1B", fontWeight: 500, marginBottom: 16 }}>
+            {convertError}
+          </div>
+        )}
 
         {/* ── Status bar (screen only) ─────────────────────────────────────── */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>

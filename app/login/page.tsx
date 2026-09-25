@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
+import { safeInternalPath } from '@/lib/safeNext'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -23,7 +24,8 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
-    window.location.href = '/orders'
+    const next = safeInternalPath(new URLSearchParams(window.location.search).get('next'))
+    window.location.href = next ?? '/orders'
   }
 
   return (

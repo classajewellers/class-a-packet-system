@@ -92,7 +92,7 @@ async function computeATP(supabase: SupabaseClientAny, tenantId: string, product
     packet_id: j.packet_id,
     stage: j.stage,
     due_date: j.due_date,
-    workshop_link: `/workshop/board?job=${j.id}`,
+    workshop_link: `/workshop/jobs/${j.packet_id || j.id}`,
   }));
 
   return {

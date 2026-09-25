@@ -57,6 +57,21 @@ function AttachmentIcon({ fileType, signedUrl, fileName }: { fileType: string; s
   );
 }
 
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === "AbortError";
+}
+
+function dedupeAttachments(rows: Attachment[]): Attachment[] {
+  const seen = new Set<string>();
+  const next: Attachment[] = [];
+  for (const row of rows) {
+    if (!row?.id || seen.has(row.id)) continue;
+    seen.add(row.id);
+    next.push(row);
+  }
+  return next;
+}
+
 function formatSize(bytes: number | null) {
   if (!bytes) return "";
   if (bytes < 1024) return `${bytes} B`;
@@ -70,13 +85,14 @@ interface UploadModalProps {
   entityType: InventoryEntityType;
   entityId: string;
   tenantId: string;
+  defaultAttachmentType?: AttachmentType;
   onClose: () => void;
   onUploaded: () => void;
 }
 
-function UploadModal({ entityType, entityId, tenantId, onClose, onUploaded }: UploadModalProps) {
+function UploadModal({ entityType, entityId, tenantId, defaultAttachmentType = "photo", onClose, onUploaded }: UploadModalProps) {
   const [files, setFiles]               = useState<File[]>([]);
-  const [attachmentType, setType]       = useState<AttachmentType>("photo");
+  const [attachmentType, setType]       = useState<AttachmentType>(defaultAttachmentType);
   const [displayName, setDisplayName]   = useState("");
   const [notes, setNotes]               = useState("");
   const [uploading, setUploading]       = useState(false);
@@ -84,6 +100,20 @@ function UploadModal({ entityType, entityId, tenantId, onClose, onUploaded }: Up
   const [error, setError]               = useState("");
   const [dragOver, setDragOver]         = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const xhrRef = useRef<XMLHttpRequest | null>(null);
+  const mountedRef = useRef(true);
+  const onUploadedRef = useRef(onUploaded);
+  onUploadedRef.current = onUploaded;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      // Leave the request running. Closing the dialog or leaving the tab
+      // must not cancel a save that the server may already have accepted.
+      xhrRef.current = null;
+    };
+  }, []);
 
   function pickFiles(fl: FileList | File[]) {
     const arr = Array.from(fl);
@@ -96,8 +126,11 @@ function UploadModal({ entityType, entityId, tenantId, onClose, onUploaded }: Up
 
   async function handleUpload() {
     if (!files.length) { setError("Select at least one file."); return; }
+    if (!entityId) { setError("Save the record first, then attach the file."); return; }
     setUploading(true); setError(""); setProgress(0);
 
+    let failed = false;
+    let saved = 0;
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const fd = new FormData();
@@ -108,29 +141,42 @@ function UploadModal({ entityType, entityId, tenantId, onClose, onUploaded }: Up
       if (displayName && files.length === 1) fd.append("display_name", displayName);
       if (notes) fd.append("notes", notes);
 
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.upload.addEventListener("progress", (e) => {
-          if (e.lengthComputable) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhrRef.current = xhr;
+          xhr.timeout = 60000;
+          xhr.upload.addEventListener("progress", (e) => {
+            if (!mountedRef.current || !e.lengthComputable) return;
             const fileBase = (i / files.length) * 100;
             const fileShare = (e.loaded / e.total) * (100 / files.length);
             setProgress(Math.round(fileBase + fileShare));
-          }
+          });
+          xhr.addEventListener("load", () => {
+            xhrRef.current = null;
+            if (xhr.status >= 200 && xhr.status < 300) { resolve(); return; }
+            try { reject(new Error(JSON.parse(xhr.responseText).error ?? `Upload failed (${xhr.status})`)); }
+            catch { reject(new Error(`Upload failed (${xhr.status})`)); }
+          });
+          xhr.addEventListener("error", () => { xhrRef.current = null; reject(new Error("Network error")); });
+          xhr.addEventListener("timeout", () => { xhrRef.current = null; reject(new Error("Upload timed out. Try again.")); });
+          xhr.open("POST", "/api/attachments");
+          xhr.setRequestHeader("x-tenant-id", tenantId);
+          xhr.send(fd);
         });
-        xhr.addEventListener("load", () => {
-          if (xhr.status >= 200 && xhr.status < 300) { resolve(); return; }
-          try { reject(new Error(JSON.parse(xhr.responseText).error ?? `Upload failed (${xhr.status})`)); }
-          catch { reject(new Error(`Upload failed (${xhr.status})`)); }
-        });
-        xhr.addEventListener("error", () => reject(new Error("Network error")));
-        xhr.open("POST", "/api/attachments");
-        xhr.setRequestHeader("x-tenant-id", tenantId);
-        xhr.send(fd);
-      }).catch(err => { setError(err instanceof Error ? err.message : "Upload failed"); });
+        saved += 1;
+      } catch (err) {
+        failed = true;
+        if (mountedRef.current) setError(err instanceof Error ? err.message : "Upload failed");
+        break;
+      }
     }
 
+    // Refresh from the server even if this dialog has already unmounted.
+    if (saved > 0) onUploadedRef.current();
+    if (!mountedRef.current) return;
     setUploading(false);
-    onUploaded();
+    if (failed) return;
     onClose();
   }
 
@@ -226,39 +272,101 @@ interface Props {
   entityId: string;
   /** If true, hides upload/delete buttons (e.g. for staff-only view) */
   readOnly?: boolean;
+  defaultAttachmentType?: AttachmentType;
 }
 
-export default function InventoryAttachmentsPanel({ entityType, entityId, readOnly = false }: Props) {
+export default function InventoryAttachmentsPanel({ entityType, entityId, readOnly = false, defaultAttachmentType = "photo" }: Props) {
   const { user } = useUser();
   const tenantId = user?.tenantId ?? "";
 
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loading, setLoading]         = useState(true);
+  const [listError, setListError]     = useState("");
   const [showUpload, setShowUpload]   = useState(false);
   const [typeFilter, setTypeFilter]   = useState<AttachmentType | "">("");
+  const attachmentsRef = useRef<Attachment[]>([]);
+  const requestGen = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+  const aliveRef = useRef(true);
+  const recordKeyRef = useRef("");
+  const loadedKeyRef = useRef("");
+  attachmentsRef.current = attachments;
 
   const fetchAttachments = useCallback(async () => {
-    if (!entityId || !tenantId) return;
-    setLoading(true);
+    if (!entityId || !tenantId || !aliveRef.current) return;
+    const gen = ++requestGen.current;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const recordKey = `${entityType}:${entityId}:${typeFilter}`;
+    if (recordKeyRef.current !== recordKey) {
+      recordKeyRef.current = recordKey;
+      attachmentsRef.current = [];
+      setAttachments([]);
+      setLoading(true);
+    } else if (loadedKeyRef.current !== recordKey) {
+      setLoading(true);
+    }
     try {
       const params = new URLSearchParams({ record_type: entityType, record_id: entityId });
       if (typeFilter) params.set("attachment_type", typeFilter);
-      const res = await fetch(`/api/attachments?${params}`, { headers: { "x-tenant-id": tenantId } });
-      const json = await res.json();
-      setAttachments(json.attachments ?? []);
-    } catch {
-      setAttachments([]);
+      const res = await fetch(`/api/attachments?${params}`, {
+        cache: "no-store",
+        signal: controller.signal,
+        headers: { "x-tenant-id": tenantId },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!aliveRef.current || gen !== requestGen.current) return;
+      if (!res.ok) {
+        setListError(json.error ?? "Could not load files");
+        return;
+      }
+      const next = dedupeAttachments(json.attachments ?? []);
+      loadedKeyRef.current = recordKey;
+      setListError("");
+      setAttachments(next);
+      attachmentsRef.current = next;
+    } catch (err) {
+      if (!aliveRef.current || gen !== requestGen.current || isAbortError(err)) return;
+      setListError("Could not load files");
     } finally {
-      setLoading(false);
+      if (aliveRef.current && gen === requestGen.current) setLoading(false);
     }
   }, [entityType, entityId, tenantId, typeFilter]);
 
-  useEffect(() => { fetchAttachments(); }, [fetchAttachments]);
+  useEffect(() => {
+    aliveRef.current = true;
+    fetchAttachments();
+    return () => {
+      aliveRef.current = false;
+      abortRef.current?.abort();
+    };
+  }, [fetchAttachments]);
+
+  useEffect(() => {
+    function refreshIfVisible() {
+      if (document.visibilityState === "hidden") return;
+      fetchAttachments();
+    }
+    document.addEventListener("visibilitychange", refreshIfVisible);
+    window.addEventListener("focus", refreshIfVisible);
+    window.addEventListener("pageshow", refreshIfVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+      window.removeEventListener("focus", refreshIfVisible);
+      window.removeEventListener("pageshow", refreshIfVisible);
+    };
+  }, [fetchAttachments]);
 
   async function handleDelete(id: string) {
     if (!confirm("Remove this attachment? It won't be permanently deleted yet.")) return;
-    await fetch(`/api/attachments/${id}`, { method: "DELETE", headers: { "x-tenant-id": tenantId } });
-    setAttachments(prev => prev.filter(a => a.id !== id));
+    const res = await fetch(`/api/attachments/${id}`, { method: "DELETE", headers: { "x-tenant-id": tenantId } });
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      setListError(json.error ?? "Could not remove that file");
+      return;
+    }
+    await fetchAttachments();
   }
 
   // Count by type for filter chips
@@ -307,8 +415,14 @@ export default function InventoryAttachmentsPanel({ entityType, entityId, readOn
         </div>
       )}
 
+      {listError && (
+        <div style={{ padding: "8px 10px", background: "#FEF2F2", color: "#B91C1C", borderRadius: 8, fontSize: 13, marginBottom: 12 }}>
+          {listError}
+        </div>
+      )}
+
       {/* List */}
-      {loading ? (
+      {loading && attachments.length === 0 ? (
         <p style={{ fontSize: 13, color: "#9CA3AF", margin: 0 }}>Loading…</p>
       ) : attachments.length === 0 ? (
         <div style={{ textAlign: "center", padding: "20px 0" }}>
@@ -374,6 +488,7 @@ export default function InventoryAttachmentsPanel({ entityType, entityId, readOn
           entityType={entityType}
           entityId={entityId}
           tenantId={tenantId}
+          defaultAttachmentType={defaultAttachmentType}
           onClose={() => setShowUpload(false)}
           onUploaded={() => fetchAttachments()}
         />

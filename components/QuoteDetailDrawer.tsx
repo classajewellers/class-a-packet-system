@@ -15,6 +15,7 @@ import {
   quoteStage,
 } from "@/lib/pipeline";
 import AttachmentsSection from "./AttachmentsSection";
+import { QUOTE_PAYMENT_REQUIRED } from "@/lib/quoteConversion";
 
 const STAFF_MEMBERS = [
   "Aisha Scott", "Arissa Michos", "Ben Mucklow", "Brad Mucklow",
@@ -123,6 +124,10 @@ export default function QuoteDetailDrawer({ quote, onClose, onUpdate, onDelete }
 
   function handleConvert() {
     setConvertError(null);
+    if (local.deposit_paid !== true) {
+      setConvertError(QUOTE_PAYMENT_REQUIRED);
+      return;
+    }
     setConverting(true);
     router.push(`/orders/new?from_quote=${local.id}`);
   }

@@ -7,6 +7,7 @@ import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import AIAssistant from "@/components/AIAssistant";
 import VaultReportButton from "@/components/VaultReportButton";
+import { safeInternalPath } from "@/lib/safeNext";
 
 interface BillingState { subscriptionStatus: string | null }
 const BillingContext = createContext<BillingState>({ subscriptionStatus: null });
@@ -50,11 +51,13 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!hydrated && !forceShow) return;
     if (isPublicPage) return;
     if (!user && !isLoginPage && !isOnboarding && !isBillingPage && !isSetPassword) {
-      router.replace("/login");
+      const next = safeInternalPath(`${pathname}${window.location.search}`);
+      router.replace(next ? `/login?next=${encodeURIComponent(next)}` : "/login");
     } else if (user && isLoginPage) {
-      router.replace("/");
+      const next = safeInternalPath(new URLSearchParams(window.location.search).get("next"));
+      router.replace(next ?? "/");
     }
-  }, [user, hydrated, forceShow, isLoginPage, isOnboarding, isBillingPage, isSetPassword, isPublicPage, router]);
+  }, [user, hydrated, forceShow, isLoginPage, isOnboarding, isBillingPage, isSetPassword, isPublicPage, pathname, router]);
 
   const checkedRef = useRef(false);
   useEffect(() => {

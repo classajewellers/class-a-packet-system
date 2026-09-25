@@ -139,8 +139,8 @@ export default function QuotesPage() {
   const followUpDueToday = quotes.filter((q) => q.follow_up_date === today && q.status !== "converted");
   const wonThisMonth = quotes.filter((q) => q.status === "converted" && (q.converted_at ?? "") >= monthStart);
   const lostThisMonth = quotes.filter((q) => q.status === "job_lost" && (q.job_lost_at ?? "") >= monthStart);
-  const closedCount = quotes.filter((q) => q.status === "converted" || q.status === "job_won" || q.status === "paid" || q.status === "job_lost").length;
-  const wonCount = quotes.filter((q) => q.status === "converted" || q.status === "job_won" || q.status === "paid").length;
+  const closedCount = quotes.filter((q) => q.status === "converted" || q.status === "job_won" || q.status === "job_lost").length;
+  const wonCount = quotes.filter((q) => q.status === "converted" || q.status === "job_won").length;
   const conversionRate = closedCount > 0 ? Math.round((wonCount / closedCount) * 100) : 0;
   const overdueFollowUps = quotes.filter(
     (q) => isOverdue(q.follow_up_date) && quoteStage(q.status) !== "job_won" && quoteStage(q.status) !== "job_lost" && q.status !== "converted"

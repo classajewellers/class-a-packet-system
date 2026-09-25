@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
 import { formatDateAU, formatCurrency } from "@/lib/formatters";
 import AttachmentsSection from "@/components/AttachmentsSection";
+import WorkshopPurchasing, { useJobPurchases } from "@/components/WorkshopPurchasing";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -80,7 +81,7 @@ export interface WorkshopConfig {
 
 // ── Internal types ────────────────────────────────────────────────────────────
 
-type TabId = "overview" | "customer" | "items" | "notes" | "production" | "materials" | "pricing" | "qc" | "valuation" | "files" | "messages" | "history";
+type TabId = "overview" | "customer" | "items" | "notes" | "production" | "materials" | "purchasing" | "pricing" | "qc" | "valuation" | "files" | "messages" | "history";
 
 interface ActivityEvent {
   id: string;
@@ -101,19 +102,23 @@ interface SmsMessage {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const TABS: { id: TabId; label: string }[] = [
-  { id: "overview",    label: "Overview" },
-  { id: "customer",    label: "Customer" },
-  { id: "items",       label: "Items" },
-  { id: "notes",       label: "Notes" },
-  { id: "production",  label: "Production" },
-  { id: "materials",   label: "Materials" },
-  { id: "pricing",     label: "Pricing" },
-  { id: "qc",          label: "QC" },
-  { id: "valuation",   label: "Valuation" },
-  { id: "files",       label: "Files" },
-  { id: "messages",    label: "Messages" },
-  { id: "history",     label: "History" },
+const FRONT_SECTIONS: { id: TabId; label: string }[] = [
+  { id: "overview",   label: "Job" },
+  { id: "items",      label: "Items" },
+  { id: "production", label: "Production" },
+  { id: "materials",  label: "Materials" },
+];
+
+const MORE_SECTIONS: { id: TabId; label: string }[] = [
+  { id: "customer",   label: "Customer" },
+  { id: "notes",      label: "Notes" },
+  { id: "purchasing", label: "Purchasing" },
+  { id: "pricing",    label: "Pricing" },
+  { id: "qc",         label: "QC" },
+  { id: "valuation",  label: "Valuation" },
+  { id: "files",      label: "Files" },
+  { id: "messages",   label: "Messages" },
+  { id: "history",    label: "History" },
 ];
 
 const BLOCKED_REASON_OPTIONS = [
@@ -182,6 +187,22 @@ function isDueToday(p: WorkshopPacket) {
   return !!p.due_date && p.due_date === today && p.status !== "collected";
 }
 
+const STAGE_SHORT: Record<string, string> = {
+  "Pre-Check": "Pre",
+  "On Order": "Order",
+  "On Bench": "Bench",
+  "Quality Control": "QC",
+  "To-Be-Valued": "Value",
+  "Valuation": "Value",
+  "Ready for Collection": "Ready",
+};
+
+function stageShort(label: string): string {
+  if (STAGE_SHORT[label]) return STAGE_SHORT[label];
+  if (label.length <= 10) return label;
+  return label.split(/[\s-]+/)[0]?.slice(0, 8) || label.slice(0, 8);
+}
+
 function activityLabel(event: ActivityEvent): string {
   const nv = event.new_value ?? {};
   const ov = event.old_value ?? {};
@@ -236,10 +257,24 @@ export default function WorkshopJobDrawer({
 }) {
   const { user } = useUser();
   const [local,     setLocal]     = useState<WorkshopPacket>(packet);
+  const purchases = useJobPurchases(packet.id, tenantId);
   const [saving,    setSaving]    = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleting,  setDeleting]  = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [narrow, setNarrow] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("overview");
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 720px)");
+    const apply = () => setNarrow(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
 
   // Blocked control
   const [blockingOpen, setBlockingOpen] = useState(false);
@@ -370,13 +405,28 @@ export default function WorkshopJobDrawer({
   useEffect(() => { if (activeTab === "messages") fetchSms(); }, [activeTab, fetchSms]);
   useEffect(() => { if (activeTab === "history")  fetchActivity(); }, [activeTab, fetchActivity]);
 
-  const handleDelete = async () => {
-    if (!confirm("Delete this job permanently?")) return;
+  const handleDelete = () => {
+    setDeleteError(null);
+    setConfirmDelete(true);
+  };
+
+  const confirmDeleteJob = async () => {
     setDeleting(true);
+    setDeleteError(null);
     try {
-      await fetch(`/api/workshop/packets/${local.id}`, { method: "DELETE", headers: { "x-tenant-id": tenantId } });
-      onDelete(local.id); onClose();
-    } catch { /* noop */ } finally { setDeleting(false); }
+      const res = await fetch(`/api/workshop/packets/${local.id}`, { method: "DELETE", headers: { "x-tenant-id": tenantId } });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({} as { error?: string }));
+        setDeleteError(json.error ?? "Could not delete this job");
+        return;
+      }
+      onDelete(local.id);
+      onClose();
+    } catch {
+      setDeleteError("Could not delete this job");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const overdue  = isOverdue(local);
@@ -453,25 +503,39 @@ export default function WorkshopJobDrawer({
           <div style={{ background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: 8, padding: "8px 12px", marginBottom: 14, fontSize: 13, color: "#DC2626" }}>{saveError}</div>
         )}
 
+        <WorkshopPurchasing rows={purchases.rows} error={purchases.error} />
+
         {LABEL("Stage")}
-        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 14 }}>
-          {FLAT_STAGES.map(entry => {
-            const active  = isStageActive(entry);
+        <div style={{ display: "flex", alignItems: "flex-start", width: "100%", overflowX: "auto", marginBottom: 16, padding: "2px 0 8px" }}>
+          {FLAT_STAGES.map((entry, index) => {
+            const active = isStageActive(entry);
+            const currentIndex = FLAT_STAGES.findIndex(isStageActive);
+            const done = currentIndex >= 0 && index < currentIndex;
+            const isNext = currentIndex >= 0 && index === currentIndex + 1;
             const payload: Record<string, unknown> = { status: entry.status };
             if (entry.substatus !== null) payload.workshop_intake_substatus = entry.substatus;
-            // Server-side gate (app/api/workshop/packets/[id]/route.ts) rejects
-            // this anyway while pending approval — disabling here just makes
-            // that visible instead of a silent-looking failed click.
-            const blockedByApproval = !!local.pending_customer_approval && !active;
+            const blockedByApproval = !!local.pending_customer_approval && isNext;
+            const canAdvance = isNext && !blockedByApproval;
+            const label = (narrow && !active && !isNext) ? stageShort(entry.label) : entry.label;
             return (
-              <button
-                key={`${entry.status}_${entry.substatus ?? ""}`}
-                onClick={() => !blockedByApproval && patch(payload)}
-                disabled={blockedByApproval}
-                title={blockedByApproval ? "Approve this order before changing its stage" : undefined}
-                style={{ padding: "6px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: blockedByApproval ? "not-allowed" : "pointer", border: `1px solid ${active ? entry.accent : "#E8E8F0"}`, background: active ? entry.accent : "#fff", color: active ? "#fff" : blockedByApproval ? "#D1D5DB" : "#6B7280", opacity: blockedByApproval ? 0.6 : 1, transition: "all .12s" }}>
-                {entry.label}
-              </button>
+              <div key={`${entry.status}_${entry.substatus ?? ""}`} style={{ display: "flex", alignItems: "flex-start", flex: index === 0 ? "0 0 auto" : "1 1 0", minWidth: active || isNext ? 72 : 44 }}>
+                {index > 0 && (
+                  <div style={{ flex: 1, height: 2, marginTop: 15, background: done || active ? "#635BFF" : "#E5E7EB", minWidth: 8 }} />
+                )}
+                <button
+                  type="button"
+                  onClick={() => { if (canAdvance) patch(payload); }}
+                  disabled={!canAdvance}
+                  title={blockedByApproval ? "Approve this order before changing its stage" : canAdvance ? `Move to ${entry.label}` : entry.label}
+                  style={{ border: isNext ? "1px solid #C7C4FF" : "none", background: isNext ? "#F5F3FF" : "transparent", borderRadius: 10, padding: isNext ? "4px 8px 6px" : "0 2px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, cursor: canAdvance ? "pointer" : "default", maxWidth: active || isNext ? 120 : 88 }}
+                >
+                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.04em", color: "#635BFF", lineHeight: 1, minHeight: 9 }}>
+                    {active ? "NOW" : isNext ? "NEXT" : ""}
+                  </span>
+                  <span style={{ width: active ? 14 : 8, height: active ? 14 : 8, borderRadius: "50%", background: active || done ? "#635BFF" : isNext ? "#fff" : "#E5E7EB", border: isNext ? "2px solid #635BFF" : "none", boxShadow: active ? "0 0 0 4px rgba(99,91,255,0.22)" : undefined, boxSizing: "content-box" }} />
+                  <span style={{ fontSize: active || isNext ? 12 : 10, lineHeight: 1.2, fontWeight: active || isNext ? 700 : 500, color: active || isNext ? "#1A1A2E" : "#6B7280", textAlign: "center" }}>{label}</span>
+                </button>
+              </div>
             );
           })}
         </div>
@@ -505,48 +569,34 @@ export default function WorkshopJobDrawer({
           </div>
         )}
 
-        {LABEL("Blocked Status")}
-        <div style={{ marginBottom: 14 }}>
-          {local.blocked_reason ? (
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 12, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "#FFF5F3", color: "#EA580C", border: "1px solid #FDBA74" }}>
-                🚫 {BLOCKED_LABELS[local.blocked_reason] ?? local.blocked_reason}
-              </span>
-              {local.blocked_note && <span style={{ fontSize: 12, color: "#6B7280", alignSelf: "center" }}>{local.blocked_note}</span>}
-              <button onClick={() => patch({ blocked_reason: null, blocked_note: null, blocked_at: null })}
-                style={{ fontSize: 12, fontWeight: 600, color: "#16A34A", background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 6, padding: "3px 10px", cursor: "pointer" }}>
-                Unblock
+        {local.blocked_reason && local.blocked_note && (
+          <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 14 }}>{local.blocked_note}</div>
+        )}
+
+        {blockingOpen && !local.blocked_reason && (
+          <div style={{ marginBottom: 14, border: "1px solid #E8E8F0", borderRadius: 8, padding: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 8 }}>Flag as blocked</div>
+            <select value={blockReason} onChange={e => setBlockReason(e.target.value)} style={INPUT}>
+              <option value="">Select reason…</option>
+              {BLOCKED_REASON_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            {blockReason === "other" && (
+              <textarea rows={2} value={blockNote} onChange={e => setBlockNote(e.target.value)} placeholder="Add a note…" style={{ ...TEXTAREA, marginTop: 8 }} />
+            )}
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button
+                onClick={() => { patch({ blocked_reason: blockReason, blocked_note: blockNote || null, blocked_at: new Date().toISOString() }); setBlockingOpen(false); setBlockReason(""); setBlockNote(""); }}
+                disabled={!blockReason}
+                style={{ background: "#fff", color: "#374151", border: "1px solid #E8E8F0", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: blockReason ? "pointer" : "default", opacity: blockReason ? 1 : 0.5 }}>
+                Save
+              </button>
+              <button onClick={() => { setBlockingOpen(false); setBlockReason(""); setBlockNote(""); }}
+                style={{ background: "transparent", color: "#6B7280", border: "none", padding: "6px 8px", fontSize: 12, cursor: "pointer" }}>
+                Cancel
               </button>
             </div>
-          ) : blockingOpen ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <select value={blockReason} onChange={e => setBlockReason(e.target.value)} style={INPUT}>
-                <option value="">Select reason…</option>
-                {BLOCKED_REASON_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-              {blockReason === "other" && (
-                <textarea rows={2} value={blockNote} onChange={e => setBlockNote(e.target.value)} placeholder="Add a note…" style={TEXTAREA} />
-              )}
-              <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  onClick={() => { patch({ blocked_reason: blockReason, blocked_note: blockNote || null, blocked_at: new Date().toISOString() }); setBlockingOpen(false); setBlockReason(""); setBlockNote(""); }}
-                  disabled={!blockReason}
-                  style={{ flex: 1, background: "#EA580C", color: "#fff", border: "none", borderRadius: 8, padding: "7px 0", fontSize: 13, fontWeight: 600, cursor: blockReason ? "pointer" : "default", opacity: blockReason ? 1 : 0.5 }}>
-                  Mark as Blocked
-                </button>
-                <button onClick={() => { setBlockingOpen(false); setBlockReason(""); setBlockNote(""); }}
-                  style={{ background: "#F9FAFB", color: "#6B7280", border: "1px solid #E8E8F0", borderRadius: 8, padding: "7px 12px", fontSize: 13, cursor: "pointer" }}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button onClick={() => setBlockingOpen(true)}
-              style={{ fontSize: 12, fontWeight: 600, color: "#EA580C", background: "#FFF5F3", border: "1px solid #FDBA74", borderRadius: 6, padding: "4px 12px", cursor: "pointer" }}>
-              + Flag as Blocked
-            </button>
-          )}
-        </div>
+          </div>
+        )}
 
         <div style={{ borderTop: "1px solid #E8E8F0", paddingTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 13, color: "#374151" }}>
           <div><span style={{ color: "#9CA3AF" }}>In Date: </span>{local.in_date ? formatDateAU(local.in_date) : "—"}</div>
@@ -678,6 +728,10 @@ export default function WorkshopJobDrawer({
         )}
       </div>
     );
+  }
+
+  function renderPurchasing() {
+    return <WorkshopPurchasing rows={purchases.rows} error={purchases.error} />;
   }
 
   function renderMaterials() {
@@ -949,24 +1003,60 @@ export default function WorkshopJobDrawer({
   const stageLabel  = STAGE_LABELS[local.status ?? ""] ?? local.status ?? "Unknown";
   const jt          = local.job_type ?? "repair";
   const jtColor     = JOB_TYPE_COLORS[jt] ?? JOB_TYPE_COLORS.repair;
+  const moreActive  = MORE_SECTIONS.find(section => section.id === activeTab);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <>
-      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 100 }} onClick={onClose} />
-      <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, zIndex: 101, width: "min(580px, 100vw)", background: "#fff", display: "flex", flexDirection: "column", boxShadow: "-4px 0 24px rgba(0,0,0,0.15)" }}>
+    <div style={{ maxWidth: 920, margin: "0 auto", paddingBottom: 32 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <button type="button" onClick={onClose} style={{ background: "none", border: "none", padding: 0, fontSize: 13, fontWeight: 600, color: "#635BFF", cursor: "pointer" }}>
+          ← Board
+        </button>
+        <a href="/workshop" style={{ fontSize: 13, fontWeight: 600, color: "#6B7280", textDecoration: "none" }}>All jobs</a>
+      </div>
 
         {/* Header */}
-        <div style={{ padding: "14px 20px", borderBottom: "1px solid #E8E8F0", flexShrink: 0 }}>
+        <div style={{ padding: "14px 20px", border: "1px solid #E8E8F0", borderRadius: 12, background: "#fff" }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontFamily: "monospace", fontSize: 11, color: "#9CA3AF", marginBottom: 1 }}>{local.reference_number}</div>
               <div style={{ fontWeight: 700, color: "#1A1A2E", fontSize: 17, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName(local)}</div>
             </div>
-            <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "#9CA3AF", flexShrink: 0, marginTop: 2 }}>
-              <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 2, flexShrink: 0, position: "relative" }}>
+              <button
+                type="button"
+                onClick={() => setMenuOpen(open => !open)}
+                aria-label="Job actions"
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "#6B7280", fontSize: 18, lineHeight: 1 }}
+              >
+                ···
+              </button>
+              {menuOpen && (
+                <button type="button" aria-label="Close job actions" onClick={() => setMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 4, background: "transparent", border: "none", cursor: "default" }} />
+              )}
+              {menuOpen && (
+                <div style={{ position: "absolute", top: 28, right: 0, zIndex: 5, background: "#fff", border: "1px solid #E8E8F0", borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.08)", minWidth: 160, padding: 4 }}>
+                  {local.blocked_reason ? (
+                    <button
+                      type="button"
+                      onClick={() => { setMenuOpen(false); patch({ blocked_reason: null, blocked_note: null, blocked_at: null }); }}
+                      style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "8px 10px", fontSize: 13, color: "#374151", cursor: "pointer" }}
+                    >
+                      Unblock
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => { setMenuOpen(false); setActiveTab("overview"); setBlockingOpen(true); }}
+                      style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "8px 10px", fontSize: 13, color: "#374151", cursor: "pointer" }}
+                    >
+                      Flag as blocked
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: jtColor.bg, color: jtColor.color }}>{JOB_TYPE_LABELS[jt] ?? jt}</span>
@@ -993,24 +1083,59 @@ export default function WorkshopJobDrawer({
           </div>
         </div>
 
-        {/* Tab bar */}
-        <div style={{ display: "flex", borderBottom: "1px solid #E8E8F0", overflowX: "auto", flexShrink: 0, scrollbarWidth: "none" as React.CSSProperties["scrollbarWidth"] }}>
-          {TABS.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              style={{ padding: "10px 14px", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", border: "none", background: "transparent", cursor: "pointer", flexShrink: 0, color: activeTab === tab.id ? "#635BFF" : "#6B7280", borderBottom: activeTab === tab.id ? "2px solid #635BFF" : "2px solid transparent", transition: "color .12s" }}>
-              {tab.label}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 14, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 2, background: "#F3F4F6", borderRadius: 10, padding: 3 }}>
+            {FRONT_SECTIONS.map(section => {
+              const on = activeTab === section.id;
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => { setActiveTab(section.id); setMoreOpen(false); }}
+                  style={{ padding: "6px 12px", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: on ? "#fff" : "transparent", color: on ? "#1A1A2E" : "#6B7280", boxShadow: on ? "0 1px 3px rgba(0,0,0,0.08)" : "none" }}
+                >
+                  {section.label}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ position: "relative" }}>
+            <button
+              type="button"
+              onClick={() => setMoreOpen(open => !open)}
+              style={{ padding: "6px 12px", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "1px solid #E8E8F0", cursor: "pointer", background: moreActive ? "#fff" : "#F9FAFB", color: moreActive ? "#1A1A2E" : "#6B7280" }}
+            >
+              {moreActive ? moreActive.label : "More"}
             </button>
-          ))}
+            {moreOpen && (
+              <>
+                <button type="button" aria-label="Close sections" onClick={() => setMoreOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 4, background: "transparent", border: "none", cursor: "default" }} />
+                <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 5, background: "#fff", border: "1px solid #E8E8F0", borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.08)", minWidth: 160, padding: 4 }}>
+                  {MORE_SECTIONS.map(section => (
+                    <button
+                      key={section.id}
+                      type="button"
+                      onClick={() => { setActiveTab(section.id); setMoreOpen(false); }}
+                      style={{ display: "block", width: "100%", textAlign: "left", background: activeTab === section.id ? "#F5F3FF" : "transparent", border: "none", borderRadius: 6, padding: "8px 10px", fontSize: 13, fontWeight: activeTab === section.id ? 700 : 500, color: "#374151", cursor: "pointer" }}
+                    >
+                      {section.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
-        {/* Tab content */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
+        {/* Section */}
+        <div style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, padding: "16px 20px", marginTop: 12 }}>
           {activeTab === "overview"   && renderOverview()}
           {activeTab === "customer"   && renderCustomer()}
           {activeTab === "items"      && renderItems()}
           {activeTab === "notes"      && renderNotes()}
           {activeTab === "production" && renderProduction()}
           {activeTab === "materials"  && renderMaterials()}
+          {activeTab === "purchasing" && renderPurchasing()}
           {activeTab === "pricing"    && renderPricing()}
           {activeTab === "qc"         && renderQC()}
           {activeTab === "valuation"  && renderValuation()}
@@ -1023,12 +1148,41 @@ export default function WorkshopJobDrawer({
         {isManager && (
           <div style={{ padding: "12px 20px", borderTop: "1px solid #E8E8F0", flexShrink: 0 }}>
             <button onClick={handleDelete} disabled={deleting}
-              style={{ background: "#FEE2E2", color: "#DC2626", border: "1px solid #FECACA", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: deleting ? 0.5 : 1 }}>
-              {deleting ? "Deleting…" : "Delete Job"}
+              style={{ background: "transparent", color: "#6B7280", border: "none", padding: "4px 0", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+              Delete job
             </button>
           </div>
         )}
-      </div>
-    </>
+        {confirmDelete && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 120, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <div style={{ background: "#fff", borderRadius: 12, padding: 20, width: "min(400px, 100%)", boxShadow: "0 16px 40px rgba(0,0,0,0.18)" }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "#1A1A2E", marginBottom: 8 }}>Delete this job?</div>
+              <p style={{ fontSize: 13, color: "#6B7280", margin: "0 0 16px" }}>
+                {local.reference_number} will be deleted. This cannot be undone.
+              </p>
+              {deleteError && (
+                <div style={{ background: "#FEE2E2", border: "1px solid #FECACA", borderRadius: 8, padding: "8px 12px", fontSize: 13, color: "#B91C1C", marginBottom: 12 }}>{deleteError}</div>
+              )}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => { if (!deleting) { setConfirmDelete(false); setDeleteError(null); } }}
+                  style={{ background: "#fff", color: "#374151", border: "1px solid #E8E8F0", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeleteJob}
+                  disabled={deleting}
+                  style={{ background: "#DC2626", color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: deleting ? "default" : "pointer", opacity: deleting ? 0.6 : 1 }}
+                >
+                  {deleting ? "Deleting…" : "Delete job"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+    </div>
   );
 }

@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { PacketFormData } from "@/lib/types";
-import { useStaff } from "@/lib/useStaff";
+import { useUser } from "@/context/UserContext";
+import { jobStaffNames, type StaffProfileRow, type WorkshopTeamMember } from "@/lib/jobStaff";
 
 const REFERRAL_SOURCES = [
   { value: "instagram", label: "Instagram" },
@@ -19,8 +21,54 @@ interface Props {
   errors: Partial<Record<keyof PacketFormData, string>>;
 }
 
+const LOAD_FAILED = "Staff list failed to load. This is not an empty roster.";
+
+type StaffLoad =
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "ready"; names: string[] };
+
+function useWorkshopStaff(): StaffLoad {
+  const { user } = useUser();
+  const tenantId = user?.tenantId;
+  const [state, setState] = useState<StaffLoad>({ status: "loading" });
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!tenantId) {
+      setState({ status: "error", message: LOAD_FAILED });
+      return;
+    }
+    setState({ status: "loading" });
+    const headers = { "x-tenant-id": tenantId };
+    Promise.all([
+      fetch("/api/workshop/team-members", { headers, cache: "no-store" }),
+      fetch("/api/profiles", { headers, cache: "no-store" }),
+    ])
+      .then(async ([membersResponse, profilesResponse]) => {
+        const membersBody = await membersResponse.json().catch(() => null) as { members?: WorkshopTeamMember[] } | null;
+        const profilesBody = await profilesResponse.json().catch(() => null) as { profiles?: StaffProfileRow[]; error?: string } | null;
+        if (cancelled) return;
+        const members = membersBody && Array.isArray(membersBody.members) ? membersBody.members : null;
+        const profiles = profilesBody && Array.isArray(profilesBody.profiles) && !profilesBody.error ? profilesBody.profiles : null;
+        if (!membersResponse.ok || !profilesResponse.ok || !members || !profiles) {
+          setState({ status: "error", message: LOAD_FAILED });
+          return;
+        }
+        setState({ status: "ready", names: jobStaffNames(members, profiles) });
+      })
+      .catch(() => {
+        if (!cancelled) setState({ status: "error", message: LOAD_FAILED });
+      });
+    return () => { cancelled = true; };
+  }, [tenantId]);
+
+  return state;
+}
+
 export default function ReferralStaffSection({ data, onChange, errors }: Props) {
-  const { names: STAFF_NAMES } = useStaff();
+  const staff = useWorkshopStaff();
+  const names = staff.status === "ready" ? staff.names : [];
   const selectClass =
     "w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-black";
 
@@ -66,19 +114,28 @@ export default function ReferralStaffSection({ data, onChange, errors }: Props) 
         <select
           value={data.staff_member}
           onChange={(e) => onChange("staff_member", e.target.value)}
+          disabled={staff.status !== "ready"}
           className={`
             w-full rounded-lg border px-3 py-2.5 text-sm text-black
             focus:outline-none focus:ring-2 focus:ring-black focus:border-black
-            ${errors.staff_member ? "border-red-500 bg-red-50" : "border-gray-300 bg-white"}
+            ${errors.staff_member || staff.status === "error" ? "border-red-500 bg-red-50" : "border-gray-300 bg-white"}
           `}
         >
-          <option value="">— Select —</option>
-          {STAFF_NAMES.map((s) => (
+          <option value="">
+            {staff.status === "loading" ? "Loading staff…" : "— Select —"}
+          </option>
+          {names.map((s) => (
             <option key={s} value={s}>
               {s}
             </option>
           ))}
         </select>
+        {staff.status === "error" && (
+          <p className="mt-1 text-xs text-red-600">{staff.message}</p>
+        )}
+        {staff.status === "ready" && names.length === 0 && (
+          <p className="mt-1 text-xs text-amber-700">No active workshop staff are saved for this store.</p>
+        )}
         {errors.staff_member && (
           <p className="mt-1 text-xs text-red-600">{errors.staff_member}</p>
         )}

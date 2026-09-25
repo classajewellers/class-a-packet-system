@@ -14,6 +14,7 @@ import { roundUpTo49or99 } from "@/lib/pricingRounding";
 import NivodaModal, { type NivodaStone } from "@/components/NivodaModal";
 import CharmNecklaceBuilder, { type CharmLineItem } from "@/components/CharmNecklaceBuilder";
 import { caratToMmRoundBrilliant } from "@/lib/melee-pricing";
+import { formatLabourMarkup, labourMultiplierFromRules } from "@/lib/labourMarkup";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -25,9 +26,9 @@ interface MarginBracket { id: string; cost_min: number; cost_max: number | null;
 // calculateBlendedRetailFromBrackets()/pricing_margin_brackets path — each
 // cost component (metal, main stone(s), melee) is priced through its own
 // cost-tier multiplier in pricing_component_rules, instead of one blended
-// multiplier applied to the combined total. Labour/addons pass through as
-// flat retail figures with no multiplier (calculate_price's own established
-// behaviour for every mode, not a rule invented here).
+// multiplier applied to the combined total. Labour and addons are wholesale
+// costs marked up by the live labour rule (Settings → Pricing Engine,
+// "Labour & setting markup") inside POST /api/quotes/calculate-price.
 interface CalcPriceResult {
   total_retail: number;
   metal_retail: number;
@@ -46,6 +47,9 @@ interface CalcPriceResult {
     // in the first place (display falls back to "Mixed" — see below).
     stone_rows_count: number | null;
     melee_multiplier: number | null;
+    labour_multiplier: number | null;
+    labour_cost: number;
+    addons_cost: number;
   };
   error?: string;
 }
@@ -297,7 +301,8 @@ function computeItemPricing(
   // melee quantity across all rows (e.g. 20 melee stones = 20 settings) —
   // no manual toggle/entry.
   const totalMeleeQty = item.meleeRows.reduce((s, r) => s + (parseInt(r.qty) || 0), 0);
-  const smallSettingsCost = totalMeleeQty * 30;
+  const smallSettingRate = Number(fixedCosts.find(fc => fc.key === "small_setting")?.amount ?? 30);
+  const smallSettingsCost = totalMeleeQty * smallSettingRate;
 
   let addonsCost = mainStoneSettingCost;
   const costMap: Record<string, number> = {};
@@ -308,8 +313,8 @@ function computeItemPricing(
   }
 
   // totalMeleeQty/smallSettingsCost already computed above (auto-derived
-  // from melee row quantities, not a manual toggle - one setting per melee
-  // stone, same $30 rate as before).
+  // from melee row quantities, not a manual toggle — one setting per melee
+  // stone, using the Settings small_setting fixed cost).
   if (smallSettingsCost > 0) {
     addonsCost += smallSettingsCost; costMap.smallSettings = smallSettingsCost;
   }
@@ -330,12 +335,12 @@ function computeItemPricing(
   // as calcResult — each cost component (metal, main stone(s), melee) is
   // priced through its own cost-tier multiplier in pricing_component_rules,
   // replacing the old single blended-bracket multiplier on the combined
-  // total. Labour/addons pass straight through as flat retail figures with
-  // no multiplier applied (calculate_price's own established behaviour).
-  // While the async call is in flight (or hasn't fired yet), suggestedRetail
-  // is 0 and quotedPrice falls back to a plain cost-based rounding below —
-  // same "no price yet" fallback shape the old code already had for a
-  // zero-cost item.
+  // total. Labour and addons are marked up by the same live labour
+  // multiplier (Settings "Labour & setting markup") before that RPC, which
+  // does not multiply ad-hoc labour/addons itself. While the async call is
+  // in flight (or hasn't fired yet), suggestedRetail is 0 and quotedPrice
+  // falls back to a plain cost-based rounding below — same "no price yet"
+  // fallback shape the old code already had for a zero-cost item.
   const suggestedRetail = calcResult && !calcResult.error ? calcResult.total_retail : 0;
   const rawPrice = suggestedRetail;
   const breakdown: BlendedBreakdownLine[] = calcResult && !calcResult.error
@@ -352,8 +357,20 @@ function computeItemPricing(
           multiplierLabel: (calcResult.inputs.stone_rows_count ?? 0) > 1 ? "Mixed" : undefined,
         },
         calcResult.melee_retail > 0 && { label: "Melee", portion: meleeCost, multiplier: calcResult.inputs.melee_multiplier ?? 0, subtotal: calcResult.melee_retail },
-        calcResult.labour_retail > 0 && { label: "Labour (flat, no multiplier)", portion: calcResult.labour_retail, multiplier: 1, subtotal: calcResult.labour_retail },
-        calcResult.addons_retail > 0 && { label: "Addons (flat, no multiplier)", portion: calcResult.addons_retail, multiplier: 1, subtotal: calcResult.addons_retail },
+        calcResult.labour_retail > 0 && {
+          label: "Labour",
+          portion: calcResult.inputs.labour_cost ?? 0,
+          multiplier: calcResult.inputs.labour_multiplier ?? 0,
+          multiplierLabel: calcResult.inputs.labour_multiplier == null ? "markup not set" : undefined,
+          subtotal: calcResult.labour_retail,
+        },
+        calcResult.addons_retail > 0 && {
+          label: "Addons",
+          portion: calcResult.inputs.addons_cost ?? 0,
+          multiplier: calcResult.inputs.labour_multiplier ?? 0,
+          multiplierLabel: calcResult.inputs.labour_multiplier == null ? "markup not set" : undefined,
+          subtotal: calcResult.addons_retail,
+        },
       ].filter((line): line is BlendedBreakdownLine => line !== false)
     : [];
 
@@ -520,10 +537,13 @@ interface ItemCardProps {
   ndData: NdData | null;
   meleeStones: MeleeStoneRef[];
   tenantId: string;
+  labourMultiplier: number | null | undefined;
 }
 
-function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManager, setItems, onShowNivoda, errors, stonePricing, ndData, meleeStones, tenantId }: ItemCardProps) {
+function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManager, setItems, onShowNivoda, errors, stonePricing, ndData, meleeStones, tenantId, labourMultiplier }: ItemCardProps) {
   const [activeOptIdx, setActiveOptIdx] = useState(0);
+  const shownMarkup = (cost: number) =>
+    labourMultiplier === undefined ? `$${Number(cost).toFixed(2)}` : formatLabourMarkup(cost, labourMultiplier);
 
   function set<K extends keyof BuilderItem>(key: K, value: BuilderItem[K]) {
     setItems(prev => prev.map(it => it.id === item.id ? { ...it, [key]: value } : it));
@@ -954,18 +974,22 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "#F9FAFB", borderRadius: 8, border: "1px solid #E8E8F0" }}>
                 <span style={{ fontSize: 14, color: "#374151", fontWeight: 500 }}>Labour</span>
-                {isManager && <span style={{ fontSize: 13, color: "#6B7280" }}>${Number(fixedCosts.find(fc => fc.key === "labour")?.amount ?? 300).toFixed(2)}</span>}
+                {isManager && (
+                  <span style={{ fontSize: 13, color: "#6B7280" }}>
+                    {shownMarkup(Number(fixedCosts.find(fc => fc.key === "labour")?.amount ?? 300))}
+                  </span>
+                )}
               </div>
               {isManager && item.includeMainStone && pricing.mainStoneSettingCost > 0 && (
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "#F9FAFB", borderRadius: 8, border: "1px solid #E8E8F0" }}>
                   <span style={{ fontSize: 14, color: "#374151" }}>Stone Settings (auto)</span>
-                  <span style={{ fontSize: 13, color: "#6B7280" }}>{item.stoneOptions[0]?.stones.length ?? 0} × ${Number(pricing.mainStoneSettingRate).toFixed(2)} = ${Number(pricing.mainStoneSettingCost).toFixed(2)}</span>
+                  <span style={{ fontSize: 13, color: "#6B7280" }}>{item.stoneOptions[0]?.stones.length ?? 0} × ${Number(pricing.mainStoneSettingRate).toFixed(2)} · {shownMarkup(pricing.mainStoneSettingCost)}</span>
                 </div>
               )}
               {pricing.totalMeleeQty > 0 && (
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "#F9FAFB", borderRadius: 8, border: "1px solid #E8E8F0" }}>
                   <span style={{ fontSize: 14, color: "#374151" }}>Small Stone Settings (auto)</span>
-                  {isManager && <span style={{ fontSize: 13, color: "#6B7280" }}>{pricing.totalMeleeQty} × $30.00 = ${Number(pricing.smallSettingsCost).toFixed(2)}</span>}
+                  {isManager && <span style={{ fontSize: 13, color: "#6B7280" }}>{pricing.totalMeleeQty} × ${Number(fixedCosts.find(fc => fc.key === "small_setting")?.amount ?? 30).toFixed(2)} · {shownMarkup(pricing.smallSettingsCost)}</span>}
                 </div>
               )}
 
@@ -1070,7 +1094,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                   return <div key={r.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Melee {idx + 1}: {r.qty || 1}× {desc || "—"}</span><span style={{ fontWeight: 500 }}>${Number(t).toFixed(2)}</span></div>;
                 })}
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Labour</span><span style={{ fontWeight: 500 }}>${Number(pricing.costMap.labour ?? 0).toFixed(2)}</span></div>
-                {pricing.totalMeleeQty > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Melee Settings: {pricing.totalMeleeQty} × $30.00</span><span style={{ fontWeight: 500 }}>${Number(pricing.costMap.smallSettings ?? 0).toFixed(2)}</span></div>}
+                {pricing.totalMeleeQty > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>Melee Settings: {pricing.totalMeleeQty} × ${Number(fixedCosts.find(fc => fc.key === "small_setting")?.amount ?? 30).toFixed(2)}</span><span style={{ fontWeight: 500 }}>${Number(pricing.costMap.smallSettings ?? 0).toFixed(2)}</span></div>}
                 {item.components.filter(c => c.name).map(c => (
                   <div key={c.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ color: "#6B7280" }}>{c.name}</span><span style={{ fontWeight: 500 }}>${Number(parseFloat(c.cost) || 0).toFixed(2)}</span></div>
                 ))}
@@ -1198,6 +1222,9 @@ function QuoteBuilderPageInner() {
   // asynchronously (see the effect below), since pricing now goes through a
   // server RPC rather than the old synchronous bracket calculation.
   const [calcPriceResults, setCalcPriceResults] = useState<Record<string, CalcPriceResult | null>>({});
+  // undefined until Settings labour markup has loaded. null means the rule
+  // is missing — the table must not pretend that is ×1.
+  const [labourMultiplier, setLabourMultiplier] = useState<number | null | undefined>(undefined);
 
   // Customer
   const [firstName, setFirstName] = useState("");
@@ -1250,6 +1277,16 @@ function QuoteBuilderPageInner() {
         setMeleeStones(json.meleeStones ?? []);
       })
       .catch(() => {});
+    fetch("/api/pricing-hub/component-rules", { headers })
+      .then(async r => {
+        const json = await r.json().catch(() => null);
+        if (!r.ok || !Array.isArray(json)) {
+          setLabourMultiplier(null);
+          return;
+        }
+        setLabourMultiplier(labourMultiplierFromRules(json));
+      })
+      .catch(() => setLabourMultiplier(null));
     fetch("/api/settings/stone-pricing", { headers })
       .then(r => r.json())
       .then((json: StonePricingData) => setStonePricing(json))
@@ -1316,9 +1353,8 @@ function QuoteBuilderPageInner() {
   // same wholesale figure the old bracket calc used as its stone-cost
   // input), melee rows (raw origin/shape/quality/carat/mm — the RPC does its
   // own pricing_melee_stones lookup, same table lib/melee-pricing.ts already
-  // queries client-side for the per-row preview), and the flat labour/addons
-  // total (setting + small-stone settings + components + engraving — never
-  // multiplied, in this system or the old one's addons).
+  // queries client-side for the per-row preview), and labour/addons as
+  // wholesale costs. The API multiplies both by the live labour markup.
   function buildCalcPricePayload(item: BuilderItem) {
     const metals = item.metals
       .filter(m => m.type && (parseFloat(m.weight) || 0) > 0)
@@ -1344,7 +1380,8 @@ function QuoteBuilderPageInner() {
     const stoneCount = item.includeMainStone && item.stoneOptions[0] ? (item.stoneOptions[0].stones?.length ?? 0) : 0;
     const mainStoneSettingCost = item.includeMainStone ? stoneCount * mainStoneSettingRate : 0;
     const totalMeleeQty = item.meleeRows.reduce((s, r) => s + (parseInt(r.qty) || 0), 0);
-    const smallSettingsCost = totalMeleeQty * 30;
+    const smallSettingRate = Number(fixedCosts.find(fc => fc.key === "small_setting")?.amount ?? 30);
+    const smallSettingsCost = totalMeleeQty * smallSettingRate;
     const componentsCost = item.components.reduce((s, c) => s + (parseFloat(c.cost) || 0), 0);
     const handEngravingCost = item.handEngraving ? (parseFloat(item.handEngravingAmount) || 150) : 0;
     const laserEngravingCost = item.laserEngraving ? (parseFloat(item.laserEngravingAmount) || 80) : 0;
@@ -1800,6 +1837,7 @@ function QuoteBuilderPageInner() {
               ndData={ndData}
               meleeStones={meleeStones}
               tenantId={user?.tenantId ?? ""}
+              labourMultiplier={labourMultiplier}
             />
           ))}
 

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { tenantScoped } from "@/lib/tenantScoped";
+import { exposePoLineToClient, preparePoLineForWrite } from "@/lib/poLineColumns";
+import { poPdfSchemaError } from "@/lib/poPdfSchema";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -30,7 +32,7 @@ export async function GET(
   if (po.supplier_id) {
     const { data: sup } = await tenantScoped(supabase, tenantId)
       .from("inventory_suppliers")
-      .select("id, name")
+      .select("id, name, email")
       .eq("id", po.supplier_id)
       .single();
     supplier = sup ?? null;
@@ -48,7 +50,7 @@ export async function GET(
     return NextResponse.json({ error: linesErr.message }, { status: 500 });
   }
 
-  const lineRows = lines ?? [];
+  const lineRows = (lines ?? []).map((line: Record<string, unknown>) => exposePoLineToClient(line));
   const lineIds   = lineRows.map((l: any) => l.id);
   const packetIds = lineRows.map((l: any) => l.packet_id).filter(Boolean);
 
@@ -100,14 +102,21 @@ export async function PATCH(
   const body = await req.json();
   const { lines, deleted_line_ids, supplier: _sup, ...updateData } = body;
 
+  const header = { ...updateData, updated_at: new Date().toISOString() } as Record<string, unknown>;
+  if (header.payment_terms == null || header.payment_terms === "") delete header.payment_terms;
+  if (header.ship_to_address == null || header.ship_to_address === "") delete header.ship_to_address;
+
   const { data, error } = await tenantScoped(supabase, tenantId)
     .from("inventory_purchase_orders")
-    .update({ ...updateData, updated_at: new Date().toISOString() })
+    .update(header)
     .eq("id", params.id)
     .select("*")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    const hint = poPdfSchemaError(error);
+    return NextResponse.json({ error: hint ?? error.message }, { status: hint ? 503 : 500 });
+  }
 
   // Delete removed lines — only non-received lines belonging to this PO
   if (Array.isArray(deleted_line_ids) && deleted_line_ids.length > 0) {
@@ -120,23 +129,57 @@ export async function PATCH(
     if (delErr) return NextResponse.json({ error: `Line delete failed: ${delErr.message}` }, { status: 500 });
   }
 
-  // Upsert lines if provided — lines with id are updated, lines without id are inserted
+  // Upsert lines if provided — lines with id are updated, lines without id are inserted.
+  // Prepare every line first so a bad Xero account fails the request before
+  // any line is written.
   if (Array.isArray(lines)) {
+    const preparedLines: Record<string, unknown>[] = [];
     for (const line of lines) {
+      if (!line || typeof line !== "object") {
+        return NextResponse.json({ error: "Each purchase order line must be an object" }, { status: 400 });
+      }
+      const prepared = preparePoLineForWrite(line as Record<string, unknown>);
+      if (!prepared.ok) return NextResponse.json({ error: prepared.error }, { status: 400 });
+      preparedLines.push(prepared.line);
+    }
+
+    for (const line of preparedLines) {
       if (line.id) {
-        const { id: lineId, category: _cat, piece: _pc, packet: _pkt, ...lineUpdate } = line;
+        const {
+          id: lineId,
+          category: _cat,
+          piece: _pc,
+          pieces: _pcs,
+          packet: _pkt,
+          forOrder: _forOrder,
+          ...lineUpdate
+        } = line;
         const { error: luErr } = await tenantScoped(supabase, tenantId)
           .from("inventory_po_lines").update(lineUpdate).eq("id", lineId);
-        if (luErr) return NextResponse.json({ error: `Line update failed: ${luErr.message}` }, { status: 500 });
+        if (luErr) {
+          const hint = poPdfSchemaError(luErr);
+          return NextResponse.json({ error: hint ?? `Line update failed: ${luErr.message}` }, { status: hint ? 503 : 500 });
+        }
       } else {
         // Destructure id out so an empty-string id from the UI is never sent —
         // Postgres rejects "" for a UUID column; omitting it triggers the DB default.
-        const { id: _newLineId, ...insertData } = line;
+        const {
+          id: _newLineId,
+          category: _cat,
+          piece: _pc,
+          pieces: _pcs,
+          packet: _pkt,
+          forOrder: _forOrder,
+          ...insertData
+        } = line;
         const { error: liErr } = await tenantScoped(supabase, tenantId)
           .from("inventory_po_lines").insert({
             ...insertData, po_id: params.id, received: false,
           });
-        if (liErr) return NextResponse.json({ error: `Line insert failed: ${liErr.message}` }, { status: 500 });
+        if (liErr) {
+          const hint = poPdfSchemaError(liErr);
+          return NextResponse.json({ error: hint ?? `Line insert failed: ${liErr.message}` }, { status: hint ? 503 : 500 });
+        }
       }
     }
   }

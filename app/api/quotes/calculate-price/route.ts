@@ -10,10 +10,11 @@
 // the same engine already used for inventory pieces
 // (app/api/inventory/pieces/[id]/price/route.ts). Labour and addons (main
 // stone setting, small-stone settings, components, hand/laser engraving)
-// pass straight through as already-retail dollar figures with no multiplier
-// applied — this is calculate_price's existing, established behaviour for
-// every mode (labour_retail/addons_retail are never multiplied anywhere in
-// the function), not a new rule invented here.
+// arrive as wholesale costs. Ad-hoc calculate_price() does not multiply
+// them; other modes do ((labour + setting) × the labour rule). This route
+// applies the live pricing_component_rules labour multiplier — Settings →
+// Pricing Engine, "Labour & setting markup" — before the RPC. A missing
+// rule stays unmarked and is reported as null, not silently as ×1.
 //
 // Body:
 //   metals: [{ type: string, weight: number }]   — type is the exact
@@ -23,11 +24,12 @@
 //     — an item can have more than one main stone (e.g. a 3-stone ring), so
 //     this is always an array, mapped straight to p_stone_rows.
 //   melee: [{ origin: "Lab Grown"|"Natural", shape, quality, carat: number, mm, qty: number }]
-//   labourRetail: number   — flat labour dollar figure (no multiplier)
-//   addonsRetail: number   — flat sum of setting/components/engraving (no multiplier)
+//   labourRetail: number   — labour wholesale cost (multiplied here by the labour rule)
+//   addonsRetail: number   — setting/components/engraving wholesale cost (same multiplier)
 
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { applyLabourMarkup, labourMultiplierFromRules, roundMoney } from "@/lib/labourMarkup";
 
 export const dynamic = "force-dynamic";
 
@@ -110,17 +112,43 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }));
 
   const supabase = await createTenantSupabaseClient(tenantId);
+  const { data: labourRules, error: labourRuleError } = await supabase
+    .from("pricing_component_rules")
+    .select("component_type, multiplier")
+    .eq("tenant_id", tenantId)
+    .eq("component_type", "labour")
+    .limit(1);
+
+  if (labourRuleError) {
+    return NextResponse.json({ error: labourRuleError.message }, { status: 500 });
+  }
+
+  const labourMultiplier = labourMultiplierFromRules(labourRules ?? []);
+  const labourCost = roundMoney(Number(body.labourRetail ?? 0) || 0);
+  const addonsCost = roundMoney(Number(body.addonsRetail ?? 0) || 0);
+
   const { data, error } = await supabase.rpc("calculate_price", {
     p_tenant_id: tenantId,
     p_metal_rows: metalRows,
     p_stone_rows: stoneRows && stoneRows.length > 0 ? stoneRows : undefined,
     p_melee_rows: meleeRows.length > 0 ? meleeRows : undefined,
-    p_labour_retail: body.labourRetail ?? 0,
-    p_addons_retail: body.addonsRetail ?? 0,
+    p_labour_retail: applyLabourMarkup(labourCost, labourMultiplier),
+    p_addons_retail: applyLabourMarkup(addonsCost, labourMultiplier),
   });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (data?.error) return NextResponse.json({ error: data.error, detail: data }, { status: 422 });
 
-  return NextResponse.json(data);
+  return NextResponse.json({
+    ...data,
+    inputs: {
+      ...(data?.inputs ?? {}),
+      // The RPC still reports its own COALESCE default (1.80) when no row
+      // exists, even in ad-hoc mode where it does not apply that default.
+      // Overwrite with the multiplier this route actually applied.
+      labour_multiplier: labourMultiplier,
+      labour_cost: labourCost,
+      addons_cost: addonsCost,
+    },
+  });
 }

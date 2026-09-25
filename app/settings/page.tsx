@@ -11,7 +11,7 @@ interface MetalRate { id: string; metal_type: string; price_per_gram: number; up
 interface FixedCost { id: string; key: string; label: string; amount: number; updated_at: string; }
 interface MarginBracket { id: string; cost_min: number; cost_max: number | null; multiplier: number; stone_type: string | null; }
 interface MeleeStone { id: string; size_label: string; stone_type: string; price_per_stone: number; updated_at: string; }
-interface StoreDetails { bank_name: string; account_name: string; bsb: string; account_number: string; deposit_percentage: string; terms_and_conditions: string; brand_logo_url: string; brand_primary_colour: string; }
+interface StoreDetails { name: string; abn: string; address: string; phone: string; email: string; gst_registered: boolean; bank_name: string; account_name: string; bsb: string; account_number: string; deposit_percentage: string; terms_and_conditions: string; brand_logo_url: string; brand_primary_colour: string; }
 type SaveState = Record<string, 'saving' | 'saved' | 'error'>;
 interface ShopifyConnection {
   connected: boolean;
@@ -25,7 +25,23 @@ interface XeroConnection {
   xero_tenant_name?: string | null;
   scopes?: string | null;
   connected_at?: string | null;
+  missing_scopes?: string[];
+  reconnect_required?: boolean;
+  error?: string;
 }
+
+const XERO_OAUTH_ERRORS: Record<string, string> = {
+  missing_params: "Xero did not return a login code. Start the connection again from this page.",
+  invalid_state: "The Xero login link expired or did not match this site. Start the connection again from this page.",
+  oauth_not_configured: "Xero login is not configured on this site.",
+  token_exchange_failed: "Xero rejected the login. On a Preview link, that link’s callback address must be saved in the Xero app. Connect again from this same address.",
+  no_access_token: "Xero did not return an access token. Connect again.",
+  token_exchange_error: "Xero login failed before a token was saved. Connect again.",
+  connections_lookup_failed: "Xero signed in, but Vault could not read which organisation you picked. Connect again.",
+  no_xero_organisation: "No Xero organisation was authorised. Connect again and choose an organisation.",
+  connections_lookup_error: "Vault could not reach Xero to confirm the organisation. Connect again.",
+  db_error: "Xero authorised the connection, but Vault could not save it. Connect again.",
+};
 type Section = 'integrations' | 'pricing' | 'store';
 type PricingTab = 'metal' | 'fixed' | 'margin' | 'melee';
 
@@ -66,6 +82,7 @@ export default function SettingsPage() {
   const [xeroConn, setXeroConn] = useState<XeroConnection | null>(null);
   const [xeroConnLoading, setXeroConnLoading] = useState(false);
   const [xeroDisconnecting, setXeroDisconnecting] = useState(false);
+  const [xeroNotice, setXeroNotice] = useState<{ kind: "ok" | "error"; message: string } | null>(null);
 
 
   /* Pricing state */
@@ -81,11 +98,14 @@ export default function SettingsPage() {
   const [saveStates, setSaveStates] = useState<SaveState>({});
 
   /* Store state */
-  const [store, setStore] = useState<StoreDetails>({ bank_name: '', account_name: '', bsb: '', account_number: '', deposit_percentage: '30', terms_and_conditions: '', brand_logo_url: '', brand_primary_colour: '' });
+  const [store, setStore] = useState<StoreDetails>({ name: '', abn: '', address: '', phone: '', email: '', gst_registered: true, bank_name: '', account_name: '', bsb: '', account_number: '', deposit_percentage: '30', terms_and_conditions: '', brand_logo_url: '', brand_primary_colour: '' });
+  const [logoPreview, setLogoPreview] = useState('');
+  const [logoUploading, setLogoUploading] = useState(false);
   const [storeLoading, setStoreLoading] = useState(false);
   const [storeLoaded, setStoreLoaded] = useState(false);
   const [storeSaving, setStoreSaving] = useState(false);
   const [storeSaved, setStoreSaved] = useState(false);
+  const [storeError, setStoreError] = useState('');
 
   /* Auth guard */
   useEffect(() => {
@@ -101,9 +121,17 @@ export default function SettingsPage() {
   /* Shopify/Xero: read query params on load (success/error redirected back from OAuth) */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const xeroError = params.get("xero_error");
+    const xeroConnected = params.get("xero_connected");
+    if (xeroError) {
+      setXeroNotice({ kind: "error", message: XERO_OAUTH_ERRORS[xeroError] ?? `Xero connection failed (${xeroError}).` });
+    } else if (xeroConnected) {
+      setXeroNotice({ kind: "ok", message: "Xero connected. Purchase order lines can now pick a Chart of Accounts account." });
+      setXeroConn(null);
+    }
     if (
       params.get("shopify_connected") || params.get("shopify_error") || params.get("webhook_warning") ||
-      params.get("xero_connected") || params.get("xero_error")
+      xeroConnected || xeroError
     ) {
       setSection('integrations');
       // Remove query params without full reload
@@ -143,22 +171,40 @@ export default function SettingsPage() {
     if (section !== 'integrations' || !user?.tenantId || xeroConn !== null || xeroConnLoading) return;
     setXeroConnLoading(true);
     fetch('/api/xero/connection', { headers: { 'x-tenant-id': user.tenantId } })
-      .then(r => r.json())
-      .then((json: XeroConnection) => setXeroConn(json))
-      .catch(() => setXeroConn({ connected: false }))
+      .then(async r => {
+        const json = await r.json() as XeroConnection;
+        if (!r.ok) {
+          setXeroNotice({ kind: "error", message: json.error || "Could not load the Xero connection." });
+          setXeroConn({ connected: false });
+          return;
+        }
+        setXeroConn(json);
+      })
+      .catch(() => {
+        setXeroNotice({ kind: "error", message: "Could not load the Xero connection." });
+        setXeroConn({ connected: false });
+      })
       .finally(() => setXeroConnLoading(false));
   }, [section, user, xeroConn, xeroConnLoading]);
 
   /* Xero: disconnect */
   async function disconnectXero() {
-    if (!confirm('Disconnect Xero? Purchase order sync will stop.')) return;
+    if (!confirm('Disconnect Xero? Saved account choices on existing purchase orders stay as they are. New lines cannot pick an account until you connect again.')) return;
     setXeroDisconnecting(true);
     try {
-      await fetch('/api/xero/connection', {
+      const res = await fetch('/api/xero/connection', {
         method: 'DELETE',
         headers: { 'x-tenant-id': user?.tenantId ?? '' },
       });
+      const json = await res.json().catch(() => ({} as { error?: string }));
+      if (!res.ok) {
+        setXeroNotice({ kind: "error", message: json.error || "Could not disconnect Xero." });
+        return;
+      }
       setXeroConn({ connected: false });
+      setXeroNotice({ kind: "ok", message: "Xero disconnected." });
+    } catch {
+      setXeroNotice({ kind: "error", message: "Could not disconnect Xero." });
     } finally {
       setXeroDisconnecting(false);
     }
@@ -196,6 +242,12 @@ export default function SettingsPage() {
           // deposit_percentage since it would have inherited the same bug.
           const s = json.settings ?? {};
           setStore({
+            name: s.name ?? '',
+            abn: s.abn ?? '',
+            address: s.address ?? '',
+            phone: s.phone ?? '',
+            email: s.email ?? '',
+            gst_registered: s.gst_registered !== false,
             bank_name: s.bank_name ?? '',
             account_name: s.account_name ?? '',
             bsb: s.bsb ?? '',
@@ -205,6 +257,7 @@ export default function SettingsPage() {
             brand_logo_url: s.brand_logo_url ?? '',
             brand_primary_colour: s.brand_primary_colour ?? '',
           });
+          setLogoPreview(s.logo_preview_url ?? (typeof s.brand_logo_url === 'string' && s.brand_logo_url.startsWith('http') ? s.brand_logo_url : ''));
           setStoreLoaded(true);
         })
         .catch(() => {})
@@ -257,16 +310,45 @@ export default function SettingsPage() {
   async function saveStore() {
     setStoreSaving(true);
     setStoreSaved(false);
+    setStoreError('');
     try {
-      await fetch('/api/settings/store', {
+      const res = await fetch('/api/settings/store', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'x-tenant-id': user?.tenantId ?? '' },
         body: JSON.stringify(store),
       });
+      const json = await res.json().catch(() => ({} as { error?: string }));
+      if (!res.ok) {
+        setStoreError(json.error ?? 'Could not save business details');
+        return;
+      }
       setStoreSaved(true);
       setTimeout(() => setStoreSaved(false), 3000);
     } finally {
       setStoreSaving(false);
+    }
+  }
+
+  async function uploadLogo(file: File) {
+    setLogoUploading(true);
+    setStoreError('');
+    try {
+      const body = new FormData();
+      body.set('file', file);
+      const res = await fetch('/api/settings/store/logo', {
+        method: 'POST',
+        headers: { 'x-tenant-id': user?.tenantId ?? '' },
+        body,
+      });
+      const json = await res.json().catch(() => ({} as { error?: string; brand_logo_url?: string; logo_preview_url?: string }));
+      if (!res.ok) {
+        setStoreError(json.error ?? 'Could not upload the logo');
+        return;
+      }
+      setStore(prev => ({ ...prev, brand_logo_url: json.brand_logo_url ?? prev.brand_logo_url }));
+      setLogoPreview(json.logo_preview_url ?? '');
+    } finally {
+      setLogoUploading(false);
     }
   }
 
@@ -511,6 +593,16 @@ export default function SettingsPage() {
 
             {/* ── Xero Connect ── */}
             <div style={{ ...card, padding: 24, marginTop: 16 }}>
+              {xeroNotice && (
+                <div style={{
+                  marginBottom: 14, padding: '10px 14px', borderRadius: 8, fontSize: 13,
+                  background: xeroNotice.kind === 'error' ? '#FEF2F2' : '#F0FDF4',
+                  border: `1px solid ${xeroNotice.kind === 'error' ? '#FECACA' : '#BBF7D0'}`,
+                  color: xeroNotice.kind === 'error' ? '#B91C1C' : '#166534',
+                }}>
+                  {xeroNotice.message}
+                </div>
+              )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
                 <div style={{ width: 32, height: 32, borderRadius: 8, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth={1.8}>
@@ -538,10 +630,21 @@ export default function SettingsPage() {
                       Connected {formatDateAU(xeroConn.connected_at.split('T')[0])}
                     </p>
                   )}
+                  {xeroConn.reconnect_required ? (
+                    <div style={{ marginBottom: 12, padding: '10px 12px', borderRadius: 8, background: '#FFFBEB', border: '1px solid #FDE68A', fontSize: 13, color: '#92400E', lineHeight: 1.45 }}>
+                      Reconnect Xero to grant permissions this connection is missing: {(xeroConn.missing_scopes ?? []).join(', ')}.
+                      Chart of Accounts needs accounting.settings.read. Contacts and attachments are included so later supplier-bill work does not need another reconnect.
+                      Reconnecting replaces the saved tokens. Purchase orders already saved are unchanged.
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: 12, color: '#6B7280', marginBottom: 12 }}>
+                      Chart of Accounts is available on each purchase order line.
+                    </p>
+                  )}
                   <div style={{ display: 'flex', gap: 8 }}>
                     <a
                       href="/api/xero/oauth/install"
-                      style={{ fontSize: 13, fontWeight: 600, color: 'var(--vault-text)', background: 'var(--vault-surface-selected)', border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', textDecoration: 'none' }}
+                      style={{ fontSize: 13, fontWeight: 600, color: '#fff', background: '#2563EB', border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', textDecoration: 'none' }}
                     >
                       Reconnect
                     </a>
@@ -556,8 +659,10 @@ export default function SettingsPage() {
                 </div>
               ) : (
                 <div>
-                  <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 12 }}>
-                    Connect Xero to sync purchase orders.
+                  <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 12, lineHeight: 1.45 }}>
+                    Connect Xero so each purchase order line can pick an expense account.
+                    Vault asks for invoices, contacts, Chart of Accounts, and attachments.
+                    If you connected before those permissions were added, use Reconnect — refreshing the token does not add them.
                   </p>
                   <a
                     href="/api/xero/oauth/install"
@@ -738,7 +843,73 @@ export default function SettingsPage() {
 
           {/* ── Store Details ── */}
           {section === 'store' && (
-            <div style={{ ...card, padding: 24, maxWidth: 520 }}>
+            <div style={{ ...card, padding: 24, maxWidth: 640 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--vault-text)', marginBottom: 4 }}>Business details</h2>
+              <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 16 }}>Printed on purchase orders. This is the business for this Vault, not a single store hardcoded in the file.</p>
+              {storeLoading ? (
+                <div style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 28 }}>Loading…</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 28 }}>
+                  {([
+                    { key: 'name' as const, label: 'Legal business name', placeholder: 'e.g. Acme Jewellers Pty Ltd' },
+                    { key: 'abn' as const, label: 'ABN', placeholder: 'e.g. 12 345 678 901' },
+                    { key: 'phone' as const, label: 'Phone', placeholder: 'e.g. 02 0000 0000' },
+                    { key: 'email' as const, label: 'Email', placeholder: 'e.g. orders@example.com' },
+                  ]).map(({ key, label, placeholder }) => (
+                    <div key={key}>
+                      <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 6 }}>{label}</label>
+                      <input
+                        type="text"
+                        value={store[key]}
+                        placeholder={placeholder}
+                        onChange={e => setStore(prev => ({ ...prev, [key]: e.target.value }))}
+                        style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--vault-border)', borderRadius: 8, padding: '9px 12px', fontSize: 14, color: '#1A1A2E', outline: 'none' }}
+                      />
+                    </div>
+                  ))}
+                  <div>
+                    <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 6 }}>Address</label>
+                    <textarea
+                      value={store.address}
+                      rows={3}
+                      placeholder="Street, suburb, state, postcode"
+                      onChange={e => setStore(prev => ({ ...prev, address: e.target.value }))}
+                      style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--vault-border)', borderRadius: 8, padding: '9px 12px', fontSize: 14, color: '#1A1A2E', fontFamily: 'inherit', resize: 'vertical' }}
+                    />
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#374151' }}>
+                    <input type="checkbox" checked={store.gst_registered} onChange={e => setStore(prev => ({ ...prev, gst_registered: e.target.checked }))} />
+                    Registered for GST. Purchase orders then add 10% GST.
+                  </label>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 6 }}>Logo</label>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      disabled={logoUploading}
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) uploadLogo(file);
+                        e.target.value = '';
+                      }}
+                    />
+                    {logoUploading && <div style={{ fontSize: 12, color: '#6B7280', marginTop: 6 }}>Uploading…</div>}
+                    {logoPreview && <img src={logoPreview} alt="Logo preview" style={{ maxHeight: 48, marginTop: 8, display: 'block' }} />}
+                    <input
+                      type="text"
+                      value={store.brand_logo_url.startsWith('storage:') ? '' : store.brand_logo_url}
+                      placeholder="Or paste a public logo URL"
+                      onChange={e => {
+                        const value = e.target.value;
+                        setStore(prev => ({ ...prev, brand_logo_url: value }));
+                        setLogoPreview(value);
+                      }}
+                      style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--vault-border)', borderRadius: 8, padding: '9px 12px', fontSize: 14, color: '#1A1A2E', marginTop: 8 }}
+                    />
+                  </div>
+                </div>
+              )}
+
               <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--vault-text)', marginBottom: 4 }}>Deposit Settings</h2>
               <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 24 }}>Default deposit percentage used when auto-generating a customer payment link. Staff can still override the amount per quote.</p>
 
@@ -777,26 +948,7 @@ export default function SettingsPage() {
                   <div style={{ color: '#9CA3AF', fontSize: 14 }}>Loading…</div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 6 }}>Logo URL</label>
-                      <input
-                        type="text"
-                        value={store.brand_logo_url}
-                        placeholder="https://.../logo.png"
-                        onChange={e => setStore(prev => ({ ...prev, brand_logo_url: e.target.value }))}
-                        style={{
-                          width: '100%', boxSizing: 'border-box',
-                          border: '1px solid var(--vault-border)', borderRadius: 8,
-                          padding: '9px 12px', fontSize: 14, color: '#1A1A2E',
-                          outline: 'none', transition: 'border-color .15s',
-                        }}
-                        onFocus={e => (e.target.style.borderColor = 'var(--vault-text)')}
-                        onBlur={e => (e.target.style.borderColor = 'var(--vault-border)')}
-                      />
-                      {store.brand_logo_url && (
-                        <img src={store.brand_logo_url} alt="Logo preview" style={{ maxHeight: 40, marginTop: 8, display: 'block' }} />
-                      )}
-                    </div>
+                    <p style={{ fontSize: 13, color: '#6B7280', margin: 0 }}>The logo used on purchase orders is set under Business details.</p>
                     <div>
                       <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 6 }}>Primary Colour</label>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -833,7 +985,7 @@ export default function SettingsPage() {
                     { key: 'account_name', label: 'Account Name', placeholder: 'e.g. Acme Jewellers Pty Ltd' },
                     { key: 'bsb', label: 'BSB', placeholder: 'e.g. 062-000' },
                     { key: 'account_number', label: 'Account Number', placeholder: 'e.g. 12345678' },
-                  ] as { key: keyof StoreDetails; label: string; placeholder: string }[]).map(({ key, label, placeholder }) => (
+                  ] as { key: 'bank_name' | 'account_name' | 'bsb' | 'account_number'; label: string; placeholder: string }[]).map(({ key, label, placeholder }) => (
                     <div key={key}>
                       <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 6 }}>{label}</label>
                       <input
@@ -886,6 +1038,7 @@ export default function SettingsPage() {
                       }}
                     >{storeSaving ? 'Saving…' : 'Save'}</button>
                     {storeSaved && <span style={{ fontSize: 13, color: '#10B981', fontWeight: 600 }}>Saved ✓</span>}
+                    {storeError && <span style={{ fontSize: 13, color: '#DC2626' }}>{storeError}</span>}
                   </div>
                 </div>
               )}

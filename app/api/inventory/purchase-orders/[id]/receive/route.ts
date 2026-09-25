@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { tenantScoped } from "@/lib/tenantScoped";
+import { buildReceivedPieceRow, PieceColumnFlags } from "@/lib/receiveStock";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -79,12 +80,12 @@ export async function POST(
   const [{ data: po }, { data: line, error: lineErr }] = await Promise.all([
     tenantScoped(supabase, tenantId)
       .from("inventory_purchase_orders")
-      .select("po_number")
+      .select("po_number, supplier_id")
       .eq("id", params.id)
       .single(),
     tenantScoped(supabase, tenantId)
       .from("inventory_po_lines")
-      .select("id, quantity, received_quantity, estimated_cost")
+      .select("*")
       .eq("id", line_id)
       .single(),
   ]);
@@ -140,22 +141,25 @@ export async function POST(
     return NextResponse.json({ error: evtErr?.message ?? "Failed to create receiving event" }, { status: 500 });
   }
 
+  const flags = await pieceColumnFlags(supabase);
+
   // ── Resolve category name for SKU prefix ──────────────────────────────────
+  const categoryIdForSku = (specs.category_id as string | undefined) || line.category_id || null;
   let categoryName: string | null = null;
-  if (specs.category_id) {
+  if (categoryIdForSku) {
     const { data: cat } = await tenantScoped(supabase, tenantId)
       .from("inventory_categories")
       .select("name")
-      .eq("id", specs.category_id)
+      .eq("id", categoryIdForSku)
       .single();
     categoryName = cat?.name ?? null;
   }
 
   const prefix = categoryPrefix(categoryName);
 
-  // ── Resolve default status ─────────────────────────────────────────────────
+  // ── Resolve default status (only when the piece table has status_id) ─────
   let statusId: string | null = null;
-  if (!specs.status_id) {
+  if (flags.status_id && !specs.status_id) {
     const { data: awaitingStatus } = await tenantScoped(supabase, tenantId)
       .from("inventory_statuses")
       .select("id")
@@ -192,21 +196,22 @@ export async function POST(
   const now        = new Date().toISOString();
 
   const effectiveStatusId   = specs.status_id   ?? statusId;
-  const effectiveLocationId = specs.location_id ?? locationId;
+  const effectiveLocationId = specs.location_id || locationId;
 
-  // Sanitise UUID fields — empty string is invalid for uuid columns
-  const {
-    status_id:   _sid,
-    location_id: _lid,
-    category_id: rawCategoryId,
-    product_id:  rawProductId,
-    ...otherSpecs
-  } = specs;
-
-  if (rawCategoryId) otherSpecs.category_id = rawCategoryId;
-  if (rawProductId)  otherSpecs.product_id  = rawProductId;
-
-  const baseActualCost = actual_unit_cost != null ? Number(actual_unit_cost) : null;
+  const pieceBase = {
+    line,
+    specs,
+    flags,
+    actualUnitCost: actual_unit_cost,
+    statusId: effectiveStatusId,
+    locationId: effectiveLocationId,
+    categoryName,
+    now,
+    poLineId: line_id,
+    receivingEventId: event.id,
+    supplierId: po?.supplier_id ?? null,
+    packetId: line.packet_id ?? null,
+  };
 
   // ── Create inventory pieces ────────────────────────────────────────────────
   const createdPieces: { id: string; sku: string }[] = [];
@@ -218,15 +223,7 @@ export async function POST(
       .from("inventory_pieces")
       .insert({
         sku,
-        status_id:          effectiveStatusId,
-        location_id:        effectiveLocationId,
-        po_line_id:         line_id,
-        receiving_event_id: event.id,
-        quantity:           qty,
-        actual_cost:        baseActualCost,
-        created_at:         now,
-        updated_at:         now,
-        ...otherSpecs,
+        ...buildReceivedPieceRow({ ...pieceBase, quantity: qty }),
       })
       .select("id,sku")
       .single();
@@ -255,15 +252,7 @@ export async function POST(
         .from("inventory_pieces")
         .insert({
           sku,
-          status_id:          effectiveStatusId,
-          location_id:        effectiveLocationId,
-          po_line_id:         line_id,
-          receiving_event_id: event.id,
-          quantity:           1,
-          actual_cost:        baseActualCost,
-          created_at:         now,
-          updated_at:         now,
-          ...otherSpecs,
+          ...buildReceivedPieceRow({ ...pieceBase, quantity: 1 }),
         })
         .select("id,sku")
         .single();
@@ -308,6 +297,47 @@ export async function POST(
     received_quantity: newReceivedQty,
     fully_received: fullyReceived,
   });
+}
+
+const PIECE_FLAG_COLUMNS = [
+  "title",
+  "category_id",
+  "metal_type",
+  "status_id",
+  "updated_at",
+  "status",
+  "cost_price",
+  "notes",
+  "actual_cost",
+  "supplier_code",
+  "created_at",
+] as const;
+
+// Any probe error means the column is absent. Same rule as the pieces
+// list route: a non-PGRST204 failure must not be treated as "column exists".
+async function pieceColumnFlags(
+  supabase: Awaited<ReturnType<typeof createTenantSupabaseClient>>
+): Promise<PieceColumnFlags> {
+  const probes = await Promise.all(
+    PIECE_FLAG_COLUMNS.map(async (column) => {
+      const probe = await supabase.from("inventory_pieces").select(column).limit(1);
+      return [column, !probe.error] as const;
+    })
+  );
+  const present = Object.fromEntries(probes) as Record<(typeof PIECE_FLAG_COLUMNS)[number], boolean>;
+  return {
+    title: present.title,
+    category_id: present.category_id,
+    metal_type: present.metal_type,
+    status_id: present.status_id,
+    updated_at: present.updated_at,
+    status: present.status,
+    cost_price: present.cost_price,
+    notes: present.notes,
+    actual_cost: present.actual_cost,
+    supplier_code: present.supplier_code,
+    created_at: present.created_at,
+  };
 }
 
 async function checkAndUpdatePoStatus(

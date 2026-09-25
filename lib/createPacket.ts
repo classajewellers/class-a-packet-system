@@ -4,6 +4,12 @@ import { parseCurrency } from "@/lib/formatters";
 import { fireOrderConfirmationZap } from "@/lib/zapier";
 import { PacketFormData, Packet } from "@/lib/types";
 import { deriveJobType } from "@/lib/deriveJobType";
+import { autoReserveQuoteItems } from "@/lib/graceReservations";
+import {
+  QUOTE_LINK_FAILED,
+  quoteConversionBlockMessage,
+  quoteConversionBlockReason,
+} from "@/lib/quoteConversion";
 
 type TenantSupabaseClient = Awaited<ReturnType<typeof createTenantSupabaseClient>>;
 
@@ -40,6 +46,27 @@ export async function createPacket(
   supabase: TenantSupabaseClient,
   opts?: CreatePacketOptions
 ): Promise<CreatePacketResult> {
+  // Quote conversions are refused before a reference number is burned.
+  // Job Won is written only after the packet insert and the quote link both succeed.
+  if (formData.from_quote_id) {
+    const quoteQuery = supabase
+      .from("quotes")
+      .select("id, deposit_paid, converted_to_packet_id")
+      .eq("id", formData.from_quote_id);
+    const { data: existingQuote, error: loadErr } = await (
+      tenantId ? quoteQuery.eq("tenant_id", tenantId) : quoteQuery
+    ).maybeSingle();
+
+    if (loadErr) {
+      return { packet: null, errors: { quote: QUOTE_LINK_FAILED } };
+    }
+    const block = quoteConversionBlockReason(existingQuote);
+    if (block) {
+      const key = block === "unpaid" ? "payment" : "quote";
+      return { packet: null, errors: { [key]: quoteConversionBlockMessage(block) } };
+    }
+  }
+
   // ── 1. Generate reference number ───────────────────────────────────────────
   let referenceNumber: string;
   try {
@@ -199,46 +226,46 @@ export async function createPacket(
 
   const packet = insertedPacket as Packet;
 
-  // ── 5. Zap 1 — Order Confirmation SMS + claim slip (repair / custom_order only) ──
-  const isOrderConfirmType = packet.packet_type === "repair" || packet.packet_type === "custom_order";
-  if (isOrderConfirmType && !opts?.skipClaimSlip) {
-    // fire-and-forget; returns null from formatAustralianPhone if no valid mobile
-    fireOrderConfirmationZap(packet);
-
-    // Record claim slip URL in DB (fire-and-forget)
-    const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "https://jewelleryvault.com.au").replace(/\/$/, "");
-    const claimSlipUrl = `${appUrl}/claim/${packet.reference_number}`;
-    supabase
-      .from("packets")
-      .update({
-        claim_slip_url: claimSlipUrl,
-        claim_slip_sent: true,
-        claim_slip_sent_at: new Date().toISOString(),
-      })
-      .eq("id", packet.id)
-      .then(({ error }) => {
-        if (error) console.warn("[createPacket] claim_slip_url DB update failed:", error.message);
-      });
-  }
-
-  // ── 6. Mark quote as converted (if this order was created from a quote) ─────
+  // ── 5. Mark the quote Job Won only once the packet row exists ──────────────
+  // If the link fails, delete the packet so a failed attempt leaves no order.
   if (formData.from_quote_id) {
-    const { data: quoteRow, error: quoteErr } = await supabase
+    const wonAt = new Date().toISOString();
+    const quoteUpdate = supabase
       .from("quotes")
       .update({
         status: "converted",
         converted_to_packet_id: packet.id,
-        converted_at: new Date().toISOString(),
+        converted_at: wonAt,
         packet_reference: packet.reference_number,
+        job_won_at: wonAt,
+        status_changed_at: wonAt,
       })
-      .eq("id", formData.from_quote_id)
-      .select("quote_builder_data")
+      .eq("id", formData.from_quote_id);
+    const { data: quoteRow, error: quoteErr } = await (
+      tenantId ? quoteUpdate.eq("tenant_id", tenantId) : quoteUpdate
+    )
+      .select("id, quote_builder_data, customer_id")
       .single();
-    if (quoteErr) {
-      console.warn("[createPacket] Failed to mark quote as converted:", quoteErr.message);
+
+    if (quoteErr || !quoteRow) {
+      console.error("[createPacket] Failed to mark quote as converted:", quoteErr?.message ?? "no row");
+      const { error: deleteErr } = await supabase.from("packets").delete().eq("id", packet.id);
+      if (deleteErr) {
+        console.error("[createPacket] Failed to roll back packet after quote link failure:", deleteErr.message);
+      }
+      return { packet: null, errors: { quote: QUOTE_LINK_FAILED } };
     }
 
-    // ── 6a. Generate charm purchase orders for non-stock charms (fire-and-forget)
+    try {
+      const result = await autoReserveQuoteItems(supabase, tenantId, quoteRow);
+      if (result.skipped.length > 0) {
+        console.warn("[createPacket] Grace auto-reserve skipped some pieces:", result.skipped);
+      }
+    } catch (err) {
+      console.warn("[createPacket] Grace auto-reserve failed (non-fatal):", err instanceof Error ? err.message : String(err));
+    }
+
+    // ── 5a. Generate charm purchase orders for non-stock charms (fire-and-forget)
     void (async () => {
       try {
         const qbd = quoteRow?.quote_builder_data as Record<string, unknown> | null;
@@ -307,6 +334,27 @@ export async function createPacket(
         console.warn("[createPacket] Charm PO generation failed:", err instanceof Error ? err.message : String(err));
       }
     })();
+  }
+
+  // Customer SMS and the claim slip run only after a quote-linked order is
+  // saved. A rolled-back packet must not message the customer.
+  const isOrderConfirmType = packet.packet_type === "repair" || packet.packet_type === "custom_order";
+  if (isOrderConfirmType && !opts?.skipClaimSlip) {
+    fireOrderConfirmationZap(packet);
+
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "https://jewelleryvault.com.au").replace(/\/$/, "");
+    const claimSlipUrl = `${appUrl}/claim/${packet.reference_number}`;
+    supabase
+      .from("packets")
+      .update({
+        claim_slip_url: claimSlipUrl,
+        claim_slip_sent: true,
+        claim_slip_sent_at: new Date().toISOString(),
+      })
+      .eq("id", packet.id)
+      .then(({ error }) => {
+        if (error) console.warn("[createPacket] claim_slip_url DB update failed:", error.message);
+      });
   }
 
   return { packet, errors: {} };

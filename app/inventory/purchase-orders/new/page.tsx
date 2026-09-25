@@ -4,7 +4,11 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { InventoryReferenceData } from "@/lib/types";
+import { loadXeroAccounts, XeroAccountsLoad } from "@/lib/xeroAccounts";
+import { XeroAccountSelect } from "@/components/XeroAccountSelect";
+import { PoLineSections } from "@/components/PoLineSections";
 import { ArrowLeft, Plus, X, Sparkles, Loader } from "lucide-react";
+import { addCalendarDays, DEFAULT_PAYMENT_TERMS } from "@/lib/purchaseOrderDocument";
 
 interface OpenPacket {
   id: string;
@@ -13,8 +17,6 @@ interface OpenPacket {
   customer_last_name: string | null;
   packet_type: string | null;
 }
-
-interface XeroAccountOption { id: string; code: string; name: string; type: string; }
 
 interface PoLine {
   _id: string; // local only
@@ -124,6 +126,8 @@ export default function NewPurchaseOrderPage() {
   const [supplierName, setSupplierName] = useState(""); // free-text fallback
   const [orderDate, setOrderDate]       = useState(new Date().toISOString().slice(0, 10));
   const [expectedDate, setExpectedDate] = useState("");
+  const [paymentTerms, setPaymentTerms] = useState("");
+  const [shipToAddress, setShipToAddress] = useState("");
   const [notes, setNotes]               = useState("");
   const [lines, setLines]               = useState<PoLine[]>([blankLine()]);
 
@@ -131,20 +135,16 @@ export default function NewPurchaseOrderPage() {
   const [saveAs, setSaveAs]     = useState<"draft" | "ordered">("draft");
   const [error, setError]       = useState("");
 
-  // Xero accounts for the per-line "Xero Account" dropdown — fetched once;
-  // null while loading, empty array if Xero isn't connected or the fetch
-  // failed (the dropdown degrades to "not connected", not an error state,
-  // since Xero is optional).
-  const [xeroAccounts, setXeroAccounts] = useState<XeroAccountOption[] | null>(null);
+  const [xeroAccounts, setXeroAccounts] = useState<XeroAccountsLoad>({ status: "loading" });
 
   const headers = { "x-tenant-id": tenantId };
 
   const fetchRef = useCallback(async () => {
     if (!tenantId) return;
-    const [refRes, pktsRes, xeroRes] = await Promise.all([
+    const [refRes, pktsRes, xeroLoad] = await Promise.all([
       fetch("/api/inventory/reference", { headers }),
       fetch("/api/inventory/open-packets", { headers }),
-      fetch("/api/xero/accounts", { headers }),
+      loadXeroAccounts(headers),
     ]);
     if (refRes.ok) {
       const json = await refRes.json();
@@ -155,12 +155,7 @@ export default function NewPurchaseOrderPage() {
       const json = await pktsRes.json();
       setOpenPackets(json.packets ?? []);
     }
-    if (xeroRes.ok) {
-      const json = await xeroRes.json();
-      setXeroAccounts(json.accounts ?? []);
-    } else {
-      setXeroAccounts([]);
-    }
+    setXeroAccounts(xeroLoad);
   }, [tenantId]);
 
   useEffect(() => { fetchRef(); }, [fetchRef]);
@@ -214,6 +209,8 @@ export default function NewPurchaseOrderPage() {
       supplier_name: supplierId ? null : (supplierName || null),
       order_date:    orderDate || null,
       expected_date: expectedDate || null,
+      payment_terms: paymentTerms || null,
+      ship_to_address: shipToAddress || null,
       notes:         notes || null,
       status,
       lines: lines.map(l => ({
@@ -238,15 +235,23 @@ export default function NewPurchaseOrderPage() {
       })),
     };
 
-    const res = await fetch("/api/inventory/purchase-orders", {
-      method: "POST",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const json = await res.json();
-    setSaving(false);
-    if (!res.ok) { setError(json.error ?? "Failed to save"); return; }
-    router.push(`/inventory/purchase-orders/${json.purchase_order.id}`);
+    try {
+      const res = await fetch("/api/inventory/purchase-orders", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json().catch(() => ({}));
+      setSaving(false);
+      if (!res.ok || !json.purchase_order?.id) {
+        setError(json.error ?? "Could not save the purchase order");
+        return;
+      }
+      router.push(`/inventory/purchase-orders/${json.purchase_order.id}`);
+    } catch (err) {
+      setSaving(false);
+      setError(err instanceof Error ? err.message : "Could not save the purchase order");
+    }
   }
 
   if (!hydrated) return null;
@@ -279,15 +284,25 @@ export default function NewPurchaseOrderPage() {
             />
           </div>
           <div>
-            <label style={LF}>Supplier</label>
+            <label style={LF}>Supplier <span style={{ fontWeight: 400, color: "#9CA3AF" }}>(optional)</span></label>
             <select
               value={supplierId}
-              onChange={e => setSupplierId(e.target.value)}
+              onChange={e => {
+                const id = e.target.value;
+                setSupplierId(id);
+                const supplier = suppliers.find((s: { id: string; payment_terms?: string | null; lead_time_days?: number | null }) => s.id === id);
+                if (!paymentTerms.trim()) setPaymentTerms(supplier?.payment_terms?.trim() || DEFAULT_PAYMENT_TERMS);
+                if (!expectedDate && supplier?.lead_time_days != null) {
+                  const next = addCalendarDays(orderDate || new Date().toISOString().slice(0, 10), Number(supplier.lead_time_days));
+                  if (next) setExpectedDate(next);
+                }
+              }}
               style={{ ...IF, background: "#fff" }}
             >
-              <option value="">— Select supplier or enter below —</option>
+              <option value="">— No supplier yet —</option>
               {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
+            <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>A blank supplier still saves. You can name one below, or add it later.</div>
           </div>
           {!supplierId && (
             <div>
@@ -307,6 +322,20 @@ export default function NewPurchaseOrderPage() {
           <div>
             <label style={LF}>Expected Delivery</label>
             <input type="date" value={expectedDate} onChange={e => setExpectedDate(e.target.value)} style={IF} />
+          </div>
+          <div>
+            <label style={LF}>Payment terms</label>
+            <input value={paymentTerms} onChange={e => setPaymentTerms(e.target.value)} placeholder={DEFAULT_PAYMENT_TERMS} style={IF} />
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={LF}>Ship to, if different from the business address</label>
+            <textarea
+              value={shipToAddress}
+              onChange={e => setShipToAddress(e.target.value)}
+              rows={2}
+              placeholder="Leave blank to ship to the business address in Settings"
+              style={{ ...IF, resize: "vertical" }}
+            />
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
             <label style={LF}>Notes</label>
@@ -373,109 +402,119 @@ export default function NewPurchaseOrderPage() {
                 </button>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px 16px" }}>
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <label style={LF}>Title</label>
-                  <input value={line.title} onChange={e => updateLine(line._id, { title: e.target.value })} placeholder="e.g. Round Brilliant Diamond Ring" style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Category</label>
-                  <select value={line.category_id} onChange={e => updateLine(line._id, { category_id: e.target.value })} style={{ ...IF, background: "#fff" }}>
-                    <option value="">—</option>
-                    {ref?.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={LF}>Xero Account</label>
-                  <select
-                    value={line.xero_account_id}
-                    onChange={e => {
-                      const acc = xeroAccounts?.find(a => a.id === e.target.value);
-                      updateLine(line._id, {
-                        xero_account_id:   acc?.id ?? "",
-                        xero_account_code: acc?.code ?? "",
-                        xero_account_name: acc?.name ?? "",
-                      });
-                    }}
-                    style={{ ...IF, background: "#fff" }}
-                  >
-                    <option value="">
-                      {xeroAccounts === null ? "Loading…" : xeroAccounts.length === 0 ? "Xero not connected" : "—"}
-                    </option>
-                    {xeroAccounts?.map(a => (
-                      <option key={a.id} value={a.id}>{a.code ? `${a.code} — ${a.name}` : a.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label style={LF}>Metal Type</label>
-                  <input value={line.metal_type} onChange={e => updateLine(line._id, { metal_type: e.target.value })} placeholder="e.g. Yellow Gold" style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Carat</label>
-                  <input value={line.metal_karat} onChange={e => updateLine(line._id, { metal_karat: e.target.value })} placeholder="e.g. 18ct" style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Metal Colour</label>
-                  <input value={line.metal_colour} onChange={e => updateLine(line._id, { metal_colour: e.target.value })} placeholder="e.g. Yellow" style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Stone Type</label>
-                  <input value={line.stone_type} onChange={e => updateLine(line._id, { stone_type: e.target.value })} placeholder="e.g. Natural" style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Stone Carat</label>
-                  <input type="number" step="0.01" value={line.stone_carat} onChange={e => updateLine(line._id, { stone_carat: e.target.value })} placeholder="e.g. 0.50" style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Stone Colour</label>
-                  <input value={line.stone_colour} onChange={e => updateLine(line._id, { stone_colour: e.target.value })} placeholder="e.g. G" style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Stone Clarity</label>
-                  <input value={line.stone_clarity} onChange={e => updateLine(line._id, { stone_clarity: e.target.value })} placeholder="e.g. VS1" style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Finger Size</label>
-                  <input value={line.finger_size} onChange={e => updateLine(line._id, { finger_size: e.target.value })} placeholder="e.g. N" style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Qty</label>
-                  <input type="number" min="1" value={line.quantity} onChange={e => updateLine(line._id, { quantity: e.target.value })} style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Estimated Cost ($)</label>
-                  <input type="number" step="0.01" value={line.estimated_cost} onChange={e => updateLine(line._id, { estimated_cost: e.target.value })} placeholder="0.00" style={IF} />
-                </div>
-                <div>
-                  <label style={LF}>Supplier Design No.</label>
-                  <input value={line.supplier_design_no} onChange={e => updateLine(line._id, { supplier_design_no: e.target.value })} placeholder="Supplier's ref/job no." style={IF} />
-                </div>
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <label style={LF}>For</label>
-                  <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                    <select
-                      value={line.forOrder ? "order" : "stock"}
-                      onChange={e => updateLine(line._id, { forOrder: e.target.value === "order", packet_id: "" })}
-                      style={{ ...IF, width: "auto", minWidth: 120, background: "#fff" }}
-                    >
-                      <option value="stock">Stock</option>
-                      <option value="order">Customer Order</option>
-                    </select>
-                    {line.forOrder && (
-                      <PacketPicker
-                        packets={openPackets}
-                        value={line.packet_id}
-                        onChange={id => updateLine(line._id, { packet_id: id })}
+              <PoLineSections
+                categoryName={ref?.categories.find(c => c.id === line.category_id)?.name ?? null}
+                stonesHaveValues={[line.stone_type, line.stone_carat, line.stone_colour, line.stone_clarity].some(v => v.trim() !== "")}
+                what={
+                  <>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <label style={LF}>Title</label>
+                      <input value={line.title} onChange={e => updateLine(line._id, { title: e.target.value })} placeholder="e.g. Round Brilliant Diamond Ring" style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Category</label>
+                      <select value={line.category_id} onChange={e => updateLine(line._id, { category_id: e.target.value })} style={{ ...IF, background: "#fff" }}>
+                        <option value="">—</option>
+                        {ref?.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={LF}>Qty</label>
+                      <input type="number" min="1" value={line.quantity} onChange={e => updateLine(line._id, { quantity: e.target.value })} style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Finger Size</label>
+                      <input value={line.finger_size} onChange={e => updateLine(line._id, { finger_size: e.target.value })} placeholder="e.g. N" style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>SKU</label>
+                      <input value={line.supplier_design_no} onChange={e => updateLine(line._id, { supplier_design_no: e.target.value })} placeholder="Product code" style={IF} />
+                    </div>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <label style={LF}>For</label>
+                      <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                        <select
+                          value={line.forOrder ? "order" : "stock"}
+                          onChange={e => updateLine(line._id, { forOrder: e.target.value === "order", packet_id: "" })}
+                          style={{ ...IF, width: "auto", minWidth: 120, background: "#fff" }}
+                        >
+                          <option value="stock">Stock</option>
+                          <option value="order">Customer Order</option>
+                        </select>
+                        {line.forOrder && (
+                          <PacketPicker
+                            packets={openPackets}
+                            value={line.packet_id}
+                            onChange={id => updateLine(line._id, { packet_id: id })}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </>
+                }
+                metal={
+                  <>
+                    <div>
+                      <label style={LF}>Metal Type</label>
+                      <input value={line.metal_type} onChange={e => updateLine(line._id, { metal_type: e.target.value })} placeholder="e.g. Yellow Gold" style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Metal carat</label>
+                      <input value={line.metal_karat} onChange={e => updateLine(line._id, { metal_karat: e.target.value })} placeholder="e.g. 18ct" style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Metal Colour</label>
+                      <input value={line.metal_colour} onChange={e => updateLine(line._id, { metal_colour: e.target.value })} placeholder="e.g. Yellow" style={IF} />
+                    </div>
+                  </>
+                }
+                stones={
+                  <>
+                    <div>
+                      <label style={LF}>Stone Type</label>
+                      <input value={line.stone_type} onChange={e => updateLine(line._id, { stone_type: e.target.value })} placeholder="e.g. Natural" style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Stone Carat</label>
+                      <input type="number" step="0.01" value={line.stone_carat} onChange={e => updateLine(line._id, { stone_carat: e.target.value })} placeholder="e.g. 0.50" style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Stone Colour</label>
+                      <input value={line.stone_colour} onChange={e => updateLine(line._id, { stone_colour: e.target.value })} placeholder="e.g. G" style={IF} />
+                    </div>
+                    <div>
+                      <label style={LF}>Stone Clarity</label>
+                      <input value={line.stone_clarity} onChange={e => updateLine(line._id, { stone_clarity: e.target.value })} placeholder="e.g. VS1" style={IF} />
+                    </div>
+                  </>
+                }
+                cost={
+                  <>
+                    <div>
+                      <label style={LF}>Estimated Cost ($)</label>
+                      <input type="number" step="0.01" value={line.estimated_cost} onChange={e => updateLine(line._id, { estimated_cost: e.target.value })} placeholder="0.00" style={IF} />
+                    </div>
+                    <div style={{ gridColumn: "span 2" }}>
+                      <label style={LF}>Xero Account</label>
+                      <XeroAccountSelect
+                        load={xeroAccounts}
+                        accountId={line.xero_account_id}
+                        accountCode={line.xero_account_code}
+                        accountName={line.xero_account_name}
+                        onChange={acc => updateLine(line._id, {
+                          xero_account_id:   acc?.id ?? "",
+                          xero_account_code: acc?.code ?? "",
+                          xero_account_name: acc?.name ?? "",
+                        })}
+                        style={{ ...IF, background: "#fff" }}
                       />
-                    )}
-                  </div>
-                </div>
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <label style={LF}>Notes</label>
+                    </div>
+                  </>
+                }
+                notes={
                   <input value={line.notes} onChange={e => updateLine(line._id, { notes: e.target.value })} placeholder="Optional…" style={IF} />
-                </div>
-              </div>
+                }
+              />
             </div>
           ))}
         </div>

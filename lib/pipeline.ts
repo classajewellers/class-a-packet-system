@@ -83,16 +83,15 @@ export function defaultFollowUpDate(): string {
   return d.toISOString().split("T")[0];
 }
 
-/** Canonical stage for a quote (treats "converted"/"paid" as job_won for display purposes) */
+/** Canonical stage for a quote. Only a finished conversion is Job Won. */
 export function quoteStage(status: string): PipelineStage {
   if (PIPELINE_STAGES.includes(status as PipelineStage)) {
     return status as PipelineStage;
   }
-  // "converted" and "paid" quotes display in the job_won column — a real
-  // Stripe payment means the job is won even before staff converts it to
-  // an order. "awaiting_payment" deliberately falls through to "pending"
-  // below — a payment link having gone out doesn't mean the deal is won
-  // yet, and follow-ups should keep chasing an unpaid link.
-  if (status === "converted" || status === "paid") return "job_won";
+  // "converted" is written only after the deposit is recorded and the order
+  // packet exists. "paid" and "awaiting_payment" stay out of Job Won —
+  // payment alone, or a payment link, is not a won job. Follow-ups keep
+  // chasing an unpaid link.
+  if (status === "converted") return "job_won";
   return "pending";
 }
