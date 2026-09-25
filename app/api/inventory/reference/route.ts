@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
+import { tenantScoped } from "@/lib/tenantScoped";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -16,18 +17,35 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const tenantId = req.headers.get("x-tenant-id") ?? "";
   const supabase = await createTenantSupabaseClient(tenantId);
 
+  // inventory_suppliers has no is_active column. Filtering on it makes
+  // PostgREST reject the query; this handler used to ignore that error and
+  // return suppliers: [], so purchase-order dropdowns only showed
+  // "No supplier". The Suppliers page lists the same table by tenant_id.
+  // Match that. If a later schema adds is_active, hide rows that are
+  // explicitly false without requiring the column in the query.
+  const suppliersQuery = tenantId
+    ? tenantScoped(supabase, tenantId).from("inventory_suppliers").select("*").order("name")
+    : Promise.resolve({ data: [], error: null });
+
   const [statuses, locations, categories, suppliers] = await Promise.all([
     supabase.from("inventory_statuses").select("*").eq("is_active", true).order("sort_order"),
     supabase.from("inventory_locations").select("*").eq("is_active", true).order("sort_order"),
     supabase.from("inventory_categories").select("*").eq("tenant_id", tenantId).eq("is_active", true).order("sort_order"),
-    supabase.from("inventory_suppliers").select("*").eq("is_active", true).order("name"),
+    suppliersQuery,
   ]);
+
+  if (suppliers.error) {
+    console.error("[inventory/reference] supplier list failed:", suppliers.error.message);
+  }
+
+  const supplierRows = ((suppliers.data ?? []) as { is_active?: boolean | null }[])
+    .filter((row) => row.is_active !== false);
 
   return NextResponse.json({
     statuses:   statuses.data  ?? [],
     locations:  locations.data ?? [],
     categories: categories.data ?? [],
-    suppliers:  suppliers.data ?? [],
+    suppliers:  supplierRows,
   }, { headers: { "Cache-Control": "no-store" } });
 }
 
