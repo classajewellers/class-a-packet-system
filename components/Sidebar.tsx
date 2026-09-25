@@ -146,7 +146,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
         onClick={onClose}
         style={{
           display: "flex", alignItems: "center",
-          padding: "7px 16px 7px 45px", borderRadius: 6, textDecoration: "none",
+          minHeight: 44, padding: "10px 16px 10px 45px", borderRadius: 6, textDecoration: "none",
           background: active ? HOVER_BG : "transparent",
           color: active ? ACTIVE_COLOR : DEFAULT_COLOR,
           fontWeight: active ? 500 : 400, fontSize: 13,
@@ -189,10 +189,10 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
         onClick={onClose}
         style={{
           display: "flex", alignItems: "center",
-          padding: "6px 16px 6px 62px", borderRadius: 6, textDecoration: "none",
+          minHeight: 44, padding: "10px 16px 10px 58px", borderRadius: 6, textDecoration: "none",
           background: active ? HOVER_BG : "transparent",
           color: active ? ACTIVE_COLOR : DEFAULT_COLOR,
-          fontWeight: active ? 500 : 400, fontSize: 12.5,
+          fontWeight: active ? 500 : 400, fontSize: 15,
           transition: "background var(--vault-motion-fast), color var(--vault-motion-fast)",
         }}
         onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLAnchorElement).style.background = HOVER_BG; (e.currentTarget as HTMLAnchorElement).style.color = ACTIVE_COLOR; } }}
@@ -341,16 +341,16 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
               <ExpandLink
                 icon={Package} label="Inventory" expanded={inventoryOpen}
                 onClick={() => {
-                  if (inventoryOpen) { setInventoryOpen(false); }
-                  else { setInventoryOpen(true); router.push("/inventory"); onClose(); }
+                  if (inventoryOpen) setInventoryOpen(false);
+                  else { setInventoryOpen(true); router.push("/inventory"); }
                 }}
               />
               {inventoryOpen && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 1 }}>
                   <SubLink href="/inventory"                         label="Stock" />
-                  <SubLink href="/rfid/scan"                         label="RFID Scan" />
-                  <SubLink href="/rfid/stocktake"                    label="Stocktake" />
                   <SubLink href="/inventory/products"                label="Products" />
+                  <div style={{ padding: "12px 16px 2px 45px", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(255,255,255,0.45)" }}>RFID</div>
+                  <SubSubLink href="/rfid/scan" label="Scan" />
                   {isManager && <SubLink href="/inventory/purchase-orders" label="Purchasing" />}
                   {isManager && <SubLink href="/inventory/locations"       label="Locations" />}
                   {isManager && <SubLink href="/inventory/suppliers"       label="Suppliers" />}

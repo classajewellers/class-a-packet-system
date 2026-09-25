@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/require-auth";
+import { applyHandheldTagReads } from "@/lib/rfid-tag-read";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
@@ -103,6 +104,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         status: String(tag.status),
         pieceId: String(tag.inventory_piece_id),
       });
+    }
+    try {
+      const displayed = await applyHandheldTagReads(
+        supabase,
+        tenantId,
+        auth.ctx.userId,
+        Array.from(tagByEpc.entries()).map(([epc, tag]) => ({ epc, status: tag.status })),
+      );
+      for (const [epc, status] of Array.from(displayed.entries())) {
+        const tag = tagByEpc.get(epc);
+        if (tag) tag.status = status;
+      }
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Could not record the scan" }, { status: 500 });
     }
   }
 
