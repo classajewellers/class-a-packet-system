@@ -69,9 +69,11 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     void (async () => {
       try {
         const headers = { "x-tenant-id": user.tenantId ?? "" };
-        const ob = await fetch("/api/onboarding/status", { headers }).then(r => r.json()) as { onboarding_complete?: boolean };
+        const [ob, bil] = await Promise.all([
+          fetch("/api/onboarding/status", { headers }).then(r => r.json()) as Promise<{ onboarding_complete?: boolean }>,
+          fetch("/api/billing/status", { headers }).then(r => r.json()) as Promise<{ subscription_status?: string }>,
+        ]);
         if (!ob.onboarding_complete) { router.replace("/onboarding"); return; }
-        const bil = await fetch("/api/billing/status", { headers }).then(r => r.json()) as { subscription_status?: string };
         const status = bil.subscription_status ?? null;
         setSubscriptionStatus(status);
         if (status === "canceled") router.replace("/billing");
