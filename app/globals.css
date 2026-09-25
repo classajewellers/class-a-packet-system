@@ -804,3 +804,63 @@ table.ds-t tbody tr:last-child td { border-bottom: 0; }
 .app-content .sticky {
   background-color: #F9FAFB !important;
 }
+
+/* Handheld width. Desktop rules above 640px are the inline layouts. */
+@media (max-width: 640px) {
+  .piece-page {
+    padding: 0 0 32px !important;
+    max-width: none;
+  }
+  .piece-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    padding: 14px 12px !important;
+  }
+  .piece-id {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    width: 100%;
+  }
+  .piece-id > span {
+    flex-shrink: 1 !important;
+    white-space: normal !important;
+  }
+  .piece-sku { font-size: 26px !important; }
+  .piece-metal { display: block !important; }
+  .piece-price { font-size: 22px !important; }
+  .piece-actions {
+    width: 100% !important;
+    flex-shrink: 1 !important;
+    flex-wrap: wrap !important;
+    justify-content: space-between;
+  }
+  .piece-action-buttons {
+    flex-wrap: wrap !important;
+    width: 100%;
+  }
+  .piece-action-buttons button {
+    flex: 1 1 calc(50% - 8px);
+    justify-content: center;
+    min-height: 44px;
+  }
+  .piece-columns { grid-template-columns: minmax(0, 1fr) !important; }
+  .piece-history { position: static !important; }
+  .piece-history-head { flex-wrap: wrap; }
+  .piece-stack { grid-template-columns: minmax(0, 1fr) !important; }
+  .rfid-actions { flex-direction: column; }
+  .rfid-actions button {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
+  .stock-page { padding: 0 0 32px !important; }
+  .stock-actions {
+    flex-wrap: wrap !important;
+    width: 100%;
+  }
+  .stock-table-wrap { display: none !important; }
+  .stock-cards { display: flex !important; }
+  .stock-indent { padding-left: 14px !important; flex-wrap: wrap !important; row-gap: 4px; }
+}
+
+.stock-cards { display: none; flex-direction: column; gap: 8px; }

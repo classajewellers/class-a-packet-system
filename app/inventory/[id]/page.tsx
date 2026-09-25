@@ -9,6 +9,7 @@ import { InventoryPiece, InventoryReferenceData } from "@/lib/types";
 import InventoryAttachmentsPanel from "@/components/InventoryAttachmentsPanel";
 import PiecePassportCard from "@/components/PiecePassportCard";
 import type { PiecePassport } from "@/lib/piecePassport";
+import { FALLBACK_STATUS_OPTIONS } from "@/lib/pieceResolution";
 import {
   ArrowLeft, Edit2, Save, X, ArrowRight,
   Lock, AlertTriangle, TrendingDown, Package, MapPin, Clock, DollarSign, Bookmark, BookmarkX,
@@ -108,11 +109,25 @@ function FieldView({ label, value }: { label: string; value?: string | number | 
   );
 }
 
+function pieceStatusView(status: unknown): { name: string; colour: string } | null {
+  if (!status) return null;
+  if (typeof status === "string") {
+    const known = FALLBACK_STATUS_OPTIONS.find((option) => option.value === status);
+    return { name: known?.label ?? status, colour: known?.colour ?? "#9CA3AF" };
+  }
+  if (typeof status === "object" && status !== null && "name" in status) {
+    const named = status as { name?: string; colour?: string };
+    if (!named.name) return null;
+    return { name: named.name, colour: named.colour ?? "#9CA3AF" };
+  }
+  return null;
+}
+
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20, marginBottom: 16 }}>
       <h3 style={{ margin: "0 0 14px", fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>{title}</h3>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 20px" }}>{children}</div>
+      <div className="piece-stack" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 20px" }}>{children}</div>
     </div>
   );
 }
@@ -393,13 +408,26 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
           {isManager && (
             <div>
               <input
+                className="rfid-epc-input"
                 value={epcInput}
-                onChange={e => { setEpcInput(e.target.value); setEpcError(""); }}
+                onChange={e => {
+                  const value = e.target.value.replace(/[\r\n]/g, "");
+                  setEpcInput(value);
+                  setEpcError("");
+                }}
+                onKeyDown={e => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  if (/^[0-9a-f]{24}$/i.test(epcInput.trim())) void handleConfirm();
+                }}
                 placeholder="Enter 24-char EPC from UHF reader…"
                 maxLength={32}
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
                 style={{
                   width: "100%", boxSizing: "border-box" as const,
-                  padding: "8px 10px", borderRadius: 8, fontSize: 12, fontFamily: "monospace",
+                  padding: "8px 10px", borderRadius: 8, fontSize: 16, fontFamily: "monospace",
                   border: epcError ? "1px solid #FCA5A5" : "1px solid #D1D5DB",
                   outline: "none", marginBottom: epcError ? 4 : 0,
                 }}
@@ -427,7 +455,7 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
       )}
 
       {isManager && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
+        <div className="rfid-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
           {/* Print: available when no active/printed tag and no job in flight */}
           {!activeTag && !printedTag && !activeJob && (
             <button onClick={() => handlePrint(false)} disabled={printing}
@@ -1086,7 +1114,9 @@ export default function InventoryItemPage({ params }: Params) {
     );
   }
 
-  const statusColour = piece.status?.colour ?? "#9CA3AF";
+  const statusView = pieceStatusView(piece.status);
+  const statusColour = statusView?.colour ?? "#9CA3AF";
+  const metalLine = [piece.metal_karat, piece.metal_colour].filter(Boolean).join(" ");
   const lockedGP = piece.retail_price != null && piece.locked_cost != null
     ? Number(piece.retail_price) - Number(piece.locked_cost) : null;
   const lockedGPPct = lockedGP != null && piece.retail_price != null && Number(piece.retail_price) > 0
@@ -1097,7 +1127,7 @@ export default function InventoryItemPage({ params }: Params) {
   const meleeQty = (piece as any).melee_quantity;
 
   // Determine sold / reserved state from current status name (case-insensitive)
-  const isSold     = (piece.status?.name ?? "").toLowerCase().includes("sold");
+  const isSold     = (statusView?.name ?? "").toLowerCase().includes("sold");
   const isReserved = activeRes?.status === "active";
   const resExpired = isReserved && activeRes?.expires_at != null && new Date(activeRes.expires_at) < new Date();
 
@@ -1105,7 +1135,7 @@ export default function InventoryItemPage({ params }: Params) {
 
   return (
     <EditContext.Provider value={{ editing, piece, form, setForm }}>
-    <div style={{ padding: "32px 32px 64px", maxWidth: 1100, margin: "0 auto" }}>
+    <div className="piece-page" style={{ padding: "32px 32px 64px", maxWidth: 1100, margin: "0 auto" }}>
 
       {/* Back */}
       <button onClick={() => router.push("/inventory")}
@@ -1116,31 +1146,34 @@ export default function InventoryItemPage({ params }: Params) {
       <PiecePassportCard passport={passport} error={passportError} />
 
       {/* ── Header strip ── */}
-      <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: "16px 24px", marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", minWidth: 0 }}>
-          <span style={{ fontFamily: "monospace", fontSize: 20, fontWeight: 700, color: "#111827", flexShrink: 0 }}>{piece.sku}</span>
-          {piece.status && (
+      <div className="piece-header" style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: "16px 24px", marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+        <div className="piece-id" style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", minWidth: 0 }}>
+          <span className="piece-sku" style={{ fontFamily: "monospace", fontSize: 20, fontWeight: 700, color: "#111827", flexShrink: 0 }}>{piece.sku}</span>
+          {metalLine && (
+            <span className="piece-metal" style={{ display: "none", fontSize: 16, fontWeight: 600, color: "#374151", width: "100%" }}>{metalLine}</span>
+          )}
+          {statusView && (
             <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 12, fontWeight: 500, flexShrink: 0, background: statusColour + "22", color: statusColour, border: `1px solid ${statusColour}44` }}>
-              {piece.status.name}
+              {statusView.name}
             </span>
           )}
-          {piece.location && (
+          {(piece.location || piece.location_id) && (
             <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 13, color: "#6B7280", flexShrink: 0 }}>
               <MapPin size={13} />
-              {buildLocationPath(piece.location?.id, ref?.locations ?? [], piece.location.name)}
+              {buildLocationPath(piece.location?.id ?? piece.location_id, ref?.locations ?? [], piece.location?.name)}
             </span>
           )}
           {piece.title && <span style={{ fontSize: 15, color: "#374151" }}>{piece.title}</span>}
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 16, flexShrink: 0 }}>
+        <div className="piece-actions" style={{ display: "flex", alignItems: "center", gap: 16, flexShrink: 0 }}>
           {piece.retail_price != null && (
-            <span style={{ fontFamily: "monospace", fontSize: 18, fontWeight: 700, color: "#111827" }}>
+            <span className="piece-price" style={{ fontFamily: "monospace", fontSize: 18, fontWeight: 700, color: "#111827" }}>
               {fmtMoney(piece.retail_price)}
             </span>
           )}
           {isManager && !editing && (
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div className="piece-action-buttons" style={{ display: "flex", gap: 8, alignItems: "center" }}>
               {/* Reserved badge or Reserve/Move buttons */}
               {isReserved ? (
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1183,7 +1216,7 @@ export default function InventoryItemPage({ params }: Params) {
             </div>
           )}
           {editing && (
-            <div style={{ display: "flex", gap: 8 }}>
+            <div className="piece-action-buttons" style={{ display: "flex", gap: 8 }}>
               <button onClick={() => setEditing(false)}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", fontSize: 13, cursor: "pointer", color: "#374151" }}>
                 <X size={14} /> Cancel
@@ -1202,7 +1235,7 @@ export default function InventoryItemPage({ params }: Params) {
       )}
 
       {/* ── Two-column layout ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 3fr) minmax(0, 2fr)", gap: 20, alignItems: "start" }}>
+      <div className="piece-columns" style={{ display: "grid", gridTemplateColumns: "minmax(0, 3fr) minmax(0, 2fr)", gap: 20, alignItems: "start" }}>
 
         {/* ═══ LEFT: Detail sections ═══ */}
         <div>
@@ -1392,7 +1425,7 @@ export default function InventoryItemPage({ params }: Params) {
               <h3 style={{ margin: "0 0 14px", fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>
                 Melee Stones
               </h3>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 20px" }}>
+              <div className="piece-stack" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 20px" }}>
                 <EF label="Quantity" field={"melee_quantity" as keyof InventoryPiece} type="number" />
                 {(() => {
                   // Cascading Shape → Quality → Size, sourced live from
@@ -1509,7 +1542,7 @@ export default function InventoryItemPage({ params }: Params) {
             ) : (
               <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20, marginBottom: 16 }}>
                 <h3 style={{ margin: "0 0 16px", fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>Pricing</h3>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <div className="piece-stack" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
 
                   {/* Actual Cost */}
                   <div style={{ background: "#FAFAFA", border: "1px solid #E5E7EB", borderRadius: 10, padding: 16 }}>
@@ -1626,7 +1659,7 @@ export default function InventoryItemPage({ params }: Params) {
 
                 {/* Stored cost inputs — visible in view mode without editing */}
                 {(piece.labour_cost != null || piece.stone_cost != null || (piece as any).actual_cost != null) && (
-                  <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #E5E7EB", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px 20px" }}>
+                  <div className="piece-stack" style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #E5E7EB", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px 20px" }}>
                     {piece.labour_cost != null && <FieldView label="Stored Labour Cost" value={fmtMoney(piece.labour_cost)} />}
                     {piece.stone_cost != null && <FieldView label="Stone Cost" value={fmtMoney(piece.stone_cost)} />}
                     {(piece as any).actual_cost != null && <FieldView label="Actual Cost Paid" value={fmtMoney((piece as any).actual_cost)} />}
@@ -1634,7 +1667,7 @@ export default function InventoryItemPage({ params }: Params) {
                 )}
 
                 {(piece.valuation_number || piece.valuation_amount) && (
-                  <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #E5E7EB", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 20px" }}>
+                  <div className="piece-stack" style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #E5E7EB", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 20px" }}>
                     <FieldView label="Certificate Number" value={piece.valuation_number} />
                     <FieldView label="Certificate Amount" value={piece.valuation_amount} />
                   </div>
@@ -1660,7 +1693,7 @@ export default function InventoryItemPage({ params }: Params) {
                   {resExpired ? "Reservation Expired" : "Reserved"}
                 </h3>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 20px" }}>
+              <div className="piece-stack" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 20px" }}>
                 <FieldView label="Customer" value={activeRes.customer ? `${activeRes.customer.first_name ?? ""} ${activeRes.customer.last_name ?? ""}`.trim() || activeRes.customer.email : null} />
                 <FieldView label="Reserved By" value={activeRes.created_by_profile?.full_name} />
                 <FieldView label="Reserved On" value={fmtDate(activeRes.created_at)} />
@@ -1715,9 +1748,9 @@ export default function InventoryItemPage({ params }: Params) {
         </div>
 
         {/* ═══ RIGHT: Timeline ═══ */}
-        <div style={{ position: "sticky", top: 24 }}>
+        <div className="piece-history" style={{ position: "sticky", top: 24 }}>
           <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
+            <div className="piece-history-head" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
               <Clock size={13} style={{ color: "#9CA3AF" }} />
               <h3 style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>History</h3>
               <span style={{ marginLeft: "auto", fontSize: 11, color: "#9CA3AF" }}>{movements.length} movement{movements.length !== 1 ? "s" : ""}</span>
@@ -1735,7 +1768,7 @@ export default function InventoryItemPage({ params }: Params) {
               <div>
                 <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>Move Item</h2>
                 <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9CA3AF" }}>
-                  Currently: {buildLocationPath(piece.location?.id, ref?.locations ?? [], piece.location?.name ?? "no location")} · {piece.status?.name ?? "no status"}
+                  Currently: {buildLocationPath(piece.location?.id ?? piece.location_id, ref?.locations ?? [], piece.location?.name ?? "no location")} · {statusView?.name ?? "no status"}
                 </p>
               </div>
               <button onClick={() => setShowMove(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><X size={20} /></button>

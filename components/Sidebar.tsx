@@ -51,7 +51,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
   const showSettings = can("pricing") || can("settings") || isManager;
 
   const [salesOpen, setSalesOpen]         = useState(pathname.startsWith("/quotes") || pathname.startsWith("/leads"));
-  const [inventoryOpen, setInventoryOpen] = useState(pathname.startsWith("/inventory"));
+  const [inventoryOpen, setInventoryOpen] = useState(pathname.startsWith("/inventory") || pathname.startsWith("/rfid"));
   const [pricingGroupOpen, setPricingGroupOpen] = useState(
     pathname.startsWith("/pricing") || pathname.startsWith("/settings/pricing") || pathname.startsWith("/settings/melee")
   );
@@ -62,7 +62,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
   // Auto-expand the relevant section when navigating directly to a sub-route
   useEffect(() => {
     if (pathname.startsWith("/quotes") || pathname.startsWith("/leads")) setSalesOpen(true);
-    if (pathname.startsWith("/inventory")) setInventoryOpen(true);
+    if (pathname.startsWith("/inventory") || pathname.startsWith("/rfid")) setInventoryOpen(true);
     if (pathname.startsWith("/settings") || pathname.startsWith("/pricing") || pathname.startsWith("/admin/users") || pathname.startsWith("/workshop/settings") || pathname.startsWith("/quotes/settings") || pathname.startsWith("/inventory/settings")) setSettingsOpen(true);
   }, [pathname]);
 
@@ -348,6 +348,7 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
               {inventoryOpen && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 1 }}>
                   <SubLink href="/inventory"                         label="Stock" />
+                  <SubLink href="/rfid/scan"                         label="RFID Scan" />
                   <SubLink href="/inventory/products"                label="Products" />
                   {isManager && <SubLink href="/inventory/purchase-orders" label="Purchasing" />}
                   {isManager && <SubLink href="/inventory/locations"       label="Locations" />}

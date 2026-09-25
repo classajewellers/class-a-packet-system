@@ -235,7 +235,7 @@ export default function InventoryPage() {
   const IF = { width: "100%", boxSizing: "border-box" as const, padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14 };
 
   return (
-    <div style={{ padding: "32px 32px 64px", maxWidth: 1200, margin: "0 auto" }}>
+    <div className="stock-page" style={{ padding: "32px 32px 64px", maxWidth: 1200, margin: "0 auto" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
@@ -246,7 +246,7 @@ export default function InventoryPage() {
               : (loadingGrouped ? "Loading…" : `${products.length} product${products.length !== 1 ? "s" : ""}`)}
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div className="stock-actions" style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {/* View toggle */}
           <div style={{ display: "flex", background: "var(--vault-surface)", border: "1px solid var(--vault-border)", borderRadius: "var(--vault-radius-sm)", padding: 3 }}>
             {(["flat", "grouped"] as ViewMode[]).map(v => (
@@ -350,8 +350,43 @@ export default function InventoryPage() {
             )}
           </div>
 
+          <div className="stock-cards">
+            {loading ? (
+              <div style={{ padding: 24, textAlign: "center", color: "var(--vault-text-muted)" }}>Loading…</div>
+            ) : pieces.length === 0 ? (
+              <div style={{ padding: 24, textAlign: "center", color: "var(--vault-text-muted)" }}>No items found</div>
+            ) : pieces.map((piece) => (
+              <button
+                key={piece.id}
+                type="button"
+                onClick={() => router.push(`/inventory/${piece.id}`)}
+                style={{
+                  display: "block", width: "100%", boxSizing: "border-box", textAlign: "left",
+                  background: "var(--vault-canvas)", border: "1px solid #E5E7EB", borderRadius: 12,
+                  padding: "14px 14px", minHeight: 72, cursor: "pointer",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
+                  <span style={{ fontFamily: "monospace", fontSize: 18, fontWeight: 700, color: "var(--vault-text)" }}>{piece.sku}</span>
+                  <span style={{ fontWeight: 700, color: "var(--vault-text)", flexShrink: 0 }}>
+                    {piece.retail_price != null
+                      ? `$${piece.retail_price.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : "—"}
+                  </span>
+                </div>
+                <div style={{ fontSize: 14, color: "var(--vault-text-secondary)", marginTop: 4 }}>
+                  {[piece.metal_karat, piece.metal_colour].filter(Boolean).join(" ") || "—"}
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 8 }}>
+                  <StatusBadge status={piece.resolved_status} />
+                  <span style={{ fontSize: 13, color: "var(--vault-text-secondary)" }}>{piece.location_path ?? piece.location?.name ?? "No location"}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+
           {/* Table */}
-          <div style={{ background: "var(--vault-canvas)", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
+          <div className="stock-table-wrap" style={{ background: "var(--vault-canvas)", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
               <thead>
                 <tr style={{ background: "var(--vault-surface)", borderBottom: "1px solid #E5E7EB" }}>
@@ -467,7 +502,7 @@ export default function InventoryPage() {
                           return (
                             <div key={variant.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
                               {/* Variant row */}
-                              <div style={{ display: "flex", alignItems: "center", padding: "10px 18px 10px 52px", background: "var(--vault-surface)" }}>
+                              <div className="stock-indent" style={{ display: "flex", alignItems: "center", padding: "10px 18px 10px 52px", background: "var(--vault-surface)" }}>
                                 <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
                                   {variant.title && <span style={{ fontSize: 13, fontWeight: 600, color: "var(--vault-text)" }}>{variant.title}</span>}
                                   <div style={{ display: "flex", gap: 4 }}>
@@ -481,6 +516,7 @@ export default function InventoryPage() {
                                 <div
                                   key={piece.id}
                                   onClick={() => router.push(`/inventory/${piece.id}`)}
+                                  className="stock-indent"
                                   style={{ display: "flex", alignItems: "center", padding: "8px 18px 8px 72px", cursor: "pointer", borderTop: "1px solid #F9FAFB" }}
                                   onMouseEnter={e => (e.currentTarget.style.background = "var(--vault-surface)")}
                                   onMouseLeave={e => (e.currentTarget.style.background = "")}
@@ -528,6 +564,7 @@ export default function InventoryPage() {
                         <div
                           key={piece.id}
                           onClick={() => router.push(`/inventory/${piece.id}`)}
+                          className="stock-indent"
                           style={{ display: "flex", alignItems: "center", padding: "10px 18px 10px 52px", cursor: "pointer", borderBottom: "1px solid #F9FAFB" }}
                           onMouseEnter={e => (e.currentTarget.style.background = "var(--vault-surface)")}
                           onMouseLeave={e => (e.currentTarget.style.background = "")}

@@ -66,8 +66,9 @@ const API_PUBLIC_ROUTES = new Set([
 // RFID bridge Bearer token, hashed against rfid_bridge_installations) and are
 // called by a headless device that has no Supabase session. They are exempt
 // from the session guard but are NOT unauthenticated — the route enforces the
-// Bearer token itself.
-const API_SELF_AUTH_PREFIXES = ["/api/rfid/bridge/", "/api/rfid/lookup/"];
+// Bearer token itself. /api/rfid/lookup is a logged-in handheld route and is
+// not in this list.
+const API_SELF_AUTH_PREFIXES = ["/api/rfid/bridge/"];
 
 // Truly-public API prefixes: unauthenticated by design (no session, no device
 // credential). Each route enforces its OWN abuse protection (per-key + per-IP
