@@ -1,8 +1,24 @@
+import fs from "fs";
 import net from "net";
+import path from "path";
 import { BridgeConfig, PrintJob } from "./types";
-import { sendZpl } from "./zebra";
+import {
+  readRfidCounters,
+  rfidEncodeDelta,
+  RFID_VALID_COUNTER,
+  RFID_VOID_COUNTER,
+  sendZpl,
+  type RfidCounters,
+} from "./zebra";
 import { countLogLines, fetchRfidLog, findEpcWriteInLog, printerWebUrl } from "./rfidlog";
 import { DEFAULT_DPI, generateJewelleryZpl, type LabelData } from "./label";
+
+const ENCODE_WAIT_MS = 20000;
+const ENCODE_POLL_MS = 1000;
+// Void-and-retry feeds another label about once a second. Require the void
+// count to sit still across several reads before calling the encode a failure,
+// so a pause between retries is not treated as the final result.
+const ENCODE_STABLE_FAIL_READS = 4;
 
 const BRIDGE_VERSION = "1.0.0";
 
@@ -143,6 +159,74 @@ function checkPrinterReachable(config: BridgeConfig): Promise<boolean> {
   });
 }
 
+function writeLastJobZpl(zpl: string): string | null {
+  try {
+    const dir = path.resolve(process.cwd(), "logs");
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, "last-job.zpl");
+    fs.writeFileSync(file, zpl, { encoding: "utf8" });
+    return file;
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    log("warn", `Could not write logs/last-job.zpl (${message})`);
+    return null;
+  }
+}
+
+function zplDimensions(zpl: string): { pw: string; ll: string } {
+  return {
+    pw: zpl.match(/\^PW(\d+)/)?.[1] ?? "missing",
+    ll: zpl.match(/\^LL(\d+)/)?.[1] ?? "missing",
+  };
+}
+
+async function readCountersRetry(config: BridgeConfig, tries: number): Promise<RfidCounters | null> {
+  for (let attempt = 1; attempt <= tries; attempt++) {
+    const counters = await readRfidCounters(
+      config.printer.host,
+      config.printer.port,
+      config.printer.connectTimeoutMs
+    );
+    if (counters) return counters;
+    if (attempt < tries) await sleep(ENCODE_POLL_MS);
+  }
+  return null;
+}
+
+/**
+ * Poll the RFID odometers until a valid encode lands, the void count rises and
+ * then stays put (the printer has finished its retries), or the wait expires.
+ * The printer can refuse port 9100 while it is voiding, so a missed read is retried.
+ */
+async function watchRfidEncode(config: BridgeConfig, before: RfidCounters): Promise<RfidCounters | null> {
+  const deadline = Date.now() + ENCODE_WAIT_MS;
+  let latest: RfidCounters | null = null;
+  let stableFailures = 0;
+
+  while (Date.now() < deadline) {
+    await sleep(ENCODE_POLL_MS);
+    const current = await readRfidCounters(
+      config.printer.host,
+      config.printer.port,
+      config.printer.connectTimeoutMs
+    );
+    if (!current) {
+      stableFailures = 0;
+      continue;
+    }
+    const delta = rfidEncodeDelta(before, current);
+    if (delta.state === "ok") return current;
+    if (delta.state === "failed" && latest && current.valid === latest.valid && current.voided === latest.voided) {
+      stableFailures += 1;
+      if (stableFailures >= ENCODE_STABLE_FAIL_READS) return current;
+    } else {
+      stableFailures = delta.state === "failed" ? 1 : 0;
+    }
+    latest = current;
+  }
+  return latest;
+}
+
 async function processJob(config: BridgeConfig, job: PrintJob): Promise<void> {
   log("info", `Claiming job ${job.id} (piece=${job.piece_id})`);
   await updateJobStatus(config, job.id, "claimed");
@@ -150,8 +234,20 @@ async function processJob(config: BridgeConfig, job: PrintJob): Promise<void> {
   log("info", `Sending ZPL for job ${job.id}`);
   await updateJobStatus(config, job.id, "printing");
 
+  const zpl = zplForJob(config, job);
+  const bytes = Buffer.byteLength(zpl, "utf8");
+  const { pw, ll } = zplDimensions(zpl);
+  const zplPath = writeLastJobZpl(zpl);
+  log("info", `Job ${job.id}: ${bytes} bytes ^PW${pw} ^LL${ll} written to ${zplPath ?? "logs/last-job.zpl (not written)"}`);
+
+  const before = await readCountersRetry(config, 3);
+  if (before) {
+    log("info", `Job ${job.id}: RFID counters before valid=${before.valid} void=${before.voided}`);
+  } else {
+    log("warn", `Job ${job.id}: could not read ${RFID_VALID_COUNTER} / ${RFID_VOID_COUNTER} before the job`);
+  }
+
   try {
-    const zpl = zplForJob(config, job);
     await sendZpl(
       config.printer.host,
       config.printer.port,
@@ -159,20 +255,52 @@ async function processJob(config: BridgeConfig, job: PrintJob): Promise<void> {
       config.printer.connectTimeoutMs,
       config.printer.writeTimeoutMs
     );
-    // "completed" means ZPL bytes were flushed over TCP.
-    // It does NOT mean the RFID chip encoded successfully.
-    // Physical verification is required before the tag becomes active in Vault.
-    log("info", `Job ${job.id} ZPL transmitted — awaiting physical verification`);
-    await updateJobStatus(config, job.id, "completed");
-    // Auto-verify from the printer's own write log (skips the manual UHF scan
-    // for the base case). Non-fatal: on any failure the tag stays 'printed' and
-    // the manual verification path remains available.
-    await attemptAutoVerify(config, job);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     log("error", `Job ${job.id} TCP send failed: ${msg}`);
     await updateJobStatus(config, job.id, "failed", msg);
+    return;
   }
+
+  const epc = jobEpc(job);
+  if (!before) {
+    const reason = `RFID encode FAILED (could not read ${RFID_VOID_COUNTER} before the job)`;
+    log("error", `Job ${job.id}: ${reason} - marked failed`);
+    await updateJobStatus(config, job.id, "failed", reason);
+    return;
+  }
+
+  const after = await watchRfidEncode(config, before);
+  if (!after) {
+    const reason = `RFID encode FAILED (no reply from ${RFID_VALID_COUNTER} / ${RFID_VOID_COUNTER})`;
+    log("error", `Job ${job.id}: ${reason} - marked failed`);
+    await updateJobStatus(config, job.id, "failed", reason);
+    return;
+  }
+
+  const delta = rfidEncodeDelta(before, after);
+  log("info", `Job ${job.id}: RFID counters after valid=${after.valid} void=${after.voided}`);
+  if (delta.state === "ok") {
+    log("info", `Job ${job.id}: RFID encode OK (EPC ${epc})`);
+    if (delta.voidDelta > 0) {
+      log("info", `Job ${job.id}: printer voided ${delta.voidDelta} labels before the successful encode`);
+    }
+    await updateJobStatus(config, job.id, "completed");
+    await attemptAutoVerify(config, job);
+    return;
+  }
+
+  const voided = delta.state === "failed" ? delta.voidDelta : 0;
+  const reason = voided > 0
+    ? `RFID encode FAILED (printer voided ${voided} labels)`
+    : `RFID encode FAILED (printer RFID counters did not confirm a write)`;
+  log("error", `Job ${job.id}: ${reason} - marked failed`);
+  await updateJobStatus(config, job.id, "failed", reason);
+}
+
+function jobEpc(job: PrintJob): string {
+  const epc = job.label_data && typeof job.label_data.epc === "string" ? job.label_data.epc.trim() : "";
+  return epc.toLowerCase();
 }
 
 /**

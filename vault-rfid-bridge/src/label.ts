@@ -1,11 +1,15 @@
 /**
- * jewellery_v1 ZPL for a 68 mm × 26 mm RFID label.
+ * jewellery_v1 ZPL for a 68 mm × 26 mm RFID label on a Zebra ZD621R.
  *
- * Every position is millimetres converted at the printer DPI. 203 dpi heads
- * are 8 dots/mm (544 × 208). 300 dpi heads are 300/25.4 dots/mm (about 803 × 307).
+ * The encode block is the one that wrote the chip on 25 Sep 2026 (bridge
+ * 70cbb44): SGD rfid.position.program "F4" before ^XA, then ^RFW,H,1,6,1
+ * immediately before the visual fields. No ^RS. A non-zero ^LT shifts the
+ * format relative to that program position and the printer voids the label.
+ * ^LT0 is the proven default and clears the label-top the failed layout stored.
  *
- * EPC write is unchanged: SGD rfid.position.program, then ^RFW,H,1,6,1.
- * The ZD621R does not report encode success on port 9100.
+ * Positions are millimetres converted at the printer DPI. 203 dpi is 8 dots/mm
+ * (544 × 208). 300 dpi is 300/25.4 dots/mm (803 × 307). ^PW sets the canvas.
+ * It does not scale the fields, so the type itself has to be large.
  */
 
 export const LABEL_WIDTH_MM = 68;
@@ -43,8 +47,12 @@ export function normalizeDpi(dpi: number | undefined): number {
   return rounded;
 }
 
+type TextBlock = { text: string; font: number; lines: number; lineGap: number };
+
 /**
  * Generate ZPL II for a jewellery RFID label that fills 68 mm × 26 mm.
+ * Visual fields change. The RFID commands, their order, and their place
+ * before those fields do not.
  */
 export function generateJewelleryZpl(data: LabelData): string {
   const { epc, sku } = data;
@@ -62,69 +70,106 @@ export function generateJewelleryZpl(data: LabelData): string {
 
   const width = data.widthDots ?? px(LABEL_WIDTH_MM);
   const length = data.lengthDots ?? px(LABEL_LENGTH_MM);
-  const marginX = px(2);
-  const marginTop = px(2);
-  const marginBottom = px(1.5);
-  const labelTop = px(1);
+  const marginX = px(1.5);
   const textW = Math.max(px(10), width - marginX * 2);
-  const skuH = px(3.2);
-  const titleH = px(2.15);
-  const detailH = px(2.05);
-  const gap = px(0.4);
-  const readableH = px(2.2);
+  const gap = px(0.7);
+  const marginTop = px(0.8);
+  const skuH = px(4.8);
+  const titleH = px(3.0);
+  const detailH = px(2.8);
+  const readableH = px(3.8);
+  const marginBottom = px(1.0);
 
-  const titleLines = showTitle ? (fits(2) ? 2 : 1) : 0;
-
-  function textBlock(lines: number): number {
-    let y = marginTop + skuH + gap;
-    if (showTitle) y += titleH * lines + (lines > 1 ? px(0.15) : 0) + gap;
-    if (detailText) y += detailH + gap;
-    return y;
-  }
-
-  function fits(lines: number): boolean {
-    return textBlock(lines) + px(4.5) + readableH + marginBottom + labelTop <= length;
-  }
-
-  const barcodeY = textBlock(titleLines);
-  const barH = Math.max(px(4.5), length - labelTop - marginBottom - readableH - barcodeY);
-  let moduleWidth = Math.max(1, Math.round(0.25 * dotsPerMm(dpi)));
-  const modules = 11 * Math.max(barcodeValue.length, 1) + 35;
-  while (moduleWidth > 1 && modules * moduleWidth > textW) moduleWidth -= 1;
-
-  const fields = [
-    field(marginX, marginTop, skuH, textW, 1, 0, sku.trim()),
-  ];
-  let y = marginTop + skuH + gap;
+  const blocks: TextBlock[] = [{ text: sku.trim(), font: skuH, lines: 1, lineGap: 0 }];
   if (showTitle) {
-    const lineGap = titleLines > 1 ? px(0.15) : 0;
-    fields.push(field(marginX, y, titleH, textW, titleLines, lineGap, titleText));
-    y += titleH * titleLines + lineGap + gap;
+    const perLine = charsPerLine(textW, titleH);
+    const lines = titleText.length > perLine ? 2 : 1;
+    blocks.push({
+      text: clip(titleText, perLine * lines),
+      font: titleH,
+      lines,
+      lineGap: lines > 1 ? px(0.15) : 0,
+    });
   }
   if (detailText) {
-    fields.push(field(marginX, y, detailH, textW, 1, 0, detailText));
+    blocks.push({
+      text: clip(detailText, charsPerLine(textW, detailH)),
+      font: detailH,
+      lines: 1,
+      lineGap: 0,
+    });
   }
+
+  let placed = placeBlocks(blocks, marginTop, gap);
+  let barH = length - placed.barcodeY - readableH - marginBottom;
+  if (barH < px(4)) {
+    const title = blocks.find((block, index) => index > 0 && block.lines > 1);
+    if (title) {
+      title.lines = 1;
+      title.lineGap = 0;
+      title.text = clip(title.text, charsPerLine(textW, title.font));
+      placed = placeBlocks(blocks, marginTop, gap);
+      barH = length - placed.barcodeY - readableH - marginBottom;
+    }
+  }
+  if (barH < 1) barH = 1;
+  if (placed.barcodeY + barH + readableH > length) {
+    barH = Math.max(1, length - placed.barcodeY - marginBottom);
+  }
+
+  let moduleWidth = Math.min(6, Math.max(2, Math.round(0.5 * dotsPerMm(dpi))));
+  const modules = 11 * Math.max(barcodeValue.length, 1) + 35;
+  while (moduleWidth > 2 && modules * moduleWidth > textW) moduleWidth -= 1;
+
+  const fields = placed.blocks.map((block) =>
+    `^FO${marginX},${block.y}^A0N,${block.font},${block.font}^FB${textW},${block.lines},${block.lineGap},L,0^FD${escZpl(block.text)}^FS`
+  );
 
   return [
     `! U1 setvar "rfid.position.program" "${programPosition}"`,
     "^XA",
+    "^MUD",
     "^MMT",
     `^PW${width}`,
     `^LL${length}`,
     "^LH0,0",
-    `^LT${labelTop}`,
+    "^LT0",
     "^LS0",
     "^CI28",
     `^RFW,H,1,6,1^FD${epc.toLowerCase()}^FS`,
     ...fields,
-    `^FO${marginX},${barcodeY}^BY${moduleWidth},2,${barH}^BCN,${barH},Y,N,N^FD${escZpl(barcodeValue)}^FS`,
+    `^FO${marginX},${placed.barcodeY}^BY${moduleWidth},2,${barH}^BCN,${barH},Y,N,N^FD${escZpl(barcodeValue)}^FS`,
     "^PQ1",
     "^XZ",
   ].join("\n");
 }
 
-function field(x: number, y: number, font: number, width: number, lines: number, lineGap: number, text: string): string {
-  return `^FO${x},${y}^A0N,${font},${font}^FB${width},${lines},${lineGap},L,0^FD${escZpl(text)}^FS`;
+function charsPerLine(textW: number, font: number): number {
+  return Math.max(4, Math.floor(textW / Math.max(1, font * 0.55)));
+}
+
+function blockHeight(block: TextBlock): number {
+  return block.font * block.lines + block.lineGap * Math.max(0, block.lines - 1);
+}
+
+function placeBlocks(blocks: TextBlock[], marginTop: number, gap: number): {
+  blocks: Array<TextBlock & { y: number }>;
+  barcodeY: number;
+} {
+  let y = marginTop;
+  const placed = blocks.map((block, index) => {
+    const at = y;
+    y += blockHeight(block);
+    if (index < blocks.length - 1) y += gap;
+    return { ...block, y: at };
+  });
+  return { blocks: placed, barcodeY: y + gap };
+}
+
+function clip(text: string, max: number): string {
+  if (text.length <= max) return text;
+  if (max <= 3) return text.slice(0, Math.max(0, max));
+  return text.slice(0, max - 3) + "...";
 }
 
 function cleanText(value: string | null | undefined): string {
