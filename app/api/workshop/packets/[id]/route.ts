@@ -42,6 +42,7 @@ const ALLOWED_FIELDS = [
   "delivery_method",
   "shopify_order_id",
   "pending_customer_approval",
+  "quality_issue",
 ];
 
 // Fields that trigger a revert to intake/pre_check when the packet is not already in intake
@@ -91,7 +92,6 @@ export async function PATCH(
       updates.total_charges !== undefined ||
       updates.deposit !== undefined ||
       intakeTriggerPresent ||
-      updates.workshop_step_index !== undefined ||
       updates.assigned_to !== undefined ||
       updates.workshop_subcontractor_name !== undefined ||
       updates.workshop_valuer !== undefined;
@@ -272,16 +272,8 @@ export async function PATCH(
     if (current) {
       const activityLogs: Record<string, unknown>[] = [];
 
-      if (updates.workshop_step_index !== undefined &&
-          Number(updates.workshop_step_index) !== Number(current.workshop_step_index)) {
-        activityLogs.push({
-          packet_id: params.id,
-          tenant_id: tenantId || null,
-          event_type: "step_advanced",
-          old_value: { step_index: current.workshop_step_index ?? 0 },
-          new_value: { step_index: updates.workshop_step_index },
-        });
-      }
+      // Step moves and quality_issue flips are written by the packets
+      // update trigger (migration 168). Logging them here would double-write.
 
       const assigneeChanged =
         (updates.assigned_to !== undefined && updates.assigned_to !== current.assigned_to) ||

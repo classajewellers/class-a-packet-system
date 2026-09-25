@@ -54,6 +54,7 @@ export interface WorkshopPacket {
   blocked_reason: string | null;
   blocked_note: string | null;
   blocked_at: string | null;
+  quality_issue?: boolean | null;
   delivery_method: string | null;
   shopify_order_id: string | null;
   shopify_fulfillment_id: string | null;
@@ -211,7 +212,10 @@ function activityLabel(event: ActivityEvent): string {
       return `QC ${label}${inspector}${notes}`;
     }
     case "step_advanced":
-      return `Step advanced: Step ${Number(ov.step_index ?? 0) + 1} → Step ${Number(nv.step_index ?? 0) + 1}`;
+    case "step_change":
+      return `Step: Step ${Number(ov.step_index ?? 0) + 1} → Step ${Number(nv.step_index ?? 0) + 1}`;
+    case "quality_issue":
+      return nv.quality_issue ? "Quality issue flagged" : "Quality issue cleared";
     case "assignment_changed":
       return `Assigned to: ${(nv.subcontractor as string | null) ?? (nv.assigned_to ? "team member" : "Unassigned")}`;
     case "valuation_assigned":
@@ -594,6 +598,26 @@ export default function WorkshopJobDrawer({
             <button onClick={() => setBlockingOpen(true)}
               style={{ fontSize: 12, fontWeight: 600, color: "#EA580C", background: "#FFF5F3", border: "1px solid #FDBA74", borderRadius: 6, padding: "4px 12px", cursor: "pointer" }}>
               + Flag as Blocked
+            </button>
+          )}
+        </div>
+
+        {LABEL("Quality issue")}
+        <div style={{ marginBottom: 14 }}>
+          {local.quality_issue ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "#FEF2F2", color: "#B91C1C", border: "1px solid #FECACA" }}>
+                Quality issue
+              </span>
+              <button onClick={() => patch({ quality_issue: false })}
+                style={{ fontSize: 12, fontWeight: 600, color: "#374151", background: "#F9FAFB", border: "1px solid #E8E8F0", borderRadius: 6, padding: "3px 10px", cursor: "pointer" }}>
+                Clear flag
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => patch({ quality_issue: true })}
+              style={{ fontSize: 12, fontWeight: 600, color: "#B91C1C", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 6, padding: "4px 12px", cursor: "pointer" }}>
+              + Flag quality issue
             </button>
           )}
         </div>
@@ -1076,6 +1100,11 @@ export default function WorkshopJobDrawer({
             )}
             {isCastingOverdue(local) && (
               <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#FEE2E2", color: "#DC2626", border: "1px solid #FECACA" }}>Casting overdue</span>
+            )}
+            {local.quality_issue && (
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#FEF2F2", color: "#B91C1C", border: "1px solid #FECACA" }}>
+                Quality issue
+              </span>
             )}
             {local.workshop_needs_valuation && (
               <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: "#FDF4FF", color: "#9333EA", border: "1px solid #E9D5FF" }}>Needs Valuation</span>
