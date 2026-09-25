@@ -1,3 +1,6 @@
+-- STATUS: APPLIED
+-- Applied to staging on 2026-09-26 at about 8:54 AM ACST, as migration 20260925232344.
+
 ALTER TABLE public.inventory_locations ADD COLUMN IF NOT EXISTS code text;
 ALTER TABLE public.inventory_locations ADD COLUMN IF NOT EXISTS active boolean NOT NULL DEFAULT true;
 
