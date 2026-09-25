@@ -15,10 +15,17 @@ export interface BridgeConfig {
     // override it with the printer's reported head resolution. When omitted,
     // the bridge queries the printer and falls back to 203.
     dpi?: number;
-    // Optional millimetre nudge of the rat-tail head on the liner. Omit for 0.
+    // Optional millimetre nudge on top of the measured head origin. Omit for 0.
     // Positive X moves the head right; positive Y moves it down the label.
     tagOffsetXMm?: number;
     tagOffsetYMm?: number;
+    // Optional overrides of the measured defaults (0.5 mm, 8.7 mm, 36 mm /
+    // 425 dots at 300 dpi). Omit them and the code defaults are used.
+    // labelLengthDots wins over labelLengthMm when both are set.
+    labelLengthDots?: number;
+    labelLengthMm?: number;
+    tagHeadTopMm?: number;
+    tagHeadLeftMm?: number;
     // Optional printer web UI (HTTP Basic auth) for auto-verification via the
     // /rfidlog page. If webUser/webPassword are absent, auto-verify is skipped
     // and tags are left for manual UHF verification.

@@ -1,10 +1,15 @@
 /**
- * jewellery_v1 ZPL for a fold-over rat-tail RFID tag die-cut in a 68 × 26 mm liner.
+ * jewellery_v1 ZPL for a fold-over rat-tail RFID tag.
+ *
+ * The stock is an 80 mm liner with a 71 × 36 mm label face. The printer
+ * senses about 462 dots of pitch; ^LL is the 36 mm face so the back flag
+ * is not clipped. The rat-tail head is 26 × 26 mm inside that face. The
+ * tail to the right of the head is not printed. ^PW stays the 68 mm print
+ * width under the left of the 4 inch head.
  *
  * The encode block is fixed: ^MUD ^MMT ^PW ^LL ^LH0,0 ^LT0 ^LS0 ^CI28, then
  * ^RFW,H,2,12,1 before any ^FO. Nothing here changes the printer's program
- * position. The head sits on the left of the liner; the tail to the right is
- * not printed.
+ * position. The only header field that follows the face length is ^LL.
  *
  * ^FO is the upper-left of a field regardless of rotation. ^A0I and ^BCI
  * rotate the artwork 180 degrees inside that box, so on the back flag the
@@ -13,18 +18,23 @@
  */
 
 export const LABEL_WIDTH_MM = 68;
-export const LABEL_LENGTH_MM = 26;
+/** Label face height. At 300 dpi this is ^LL425. */
+export const LABEL_LENGTH_MM = 36;
 export const DEFAULT_DPI = 203;
 
 /**
- * Head of the rat-tail tag, in millimetres, measured on the liner.
- * headLeftMm is from the left edge of the label. The fold is horizontal.
- * Shift a printed job with printer.tagOffsetXMm / tagOffsetYMm; change these
- * only when the die-cut itself is different.
+ * Head of the rat-tail tag, in millimetres, measured on the printed face.
+ * headLeftMm and headTopMm are from the top-left of the label. The fold is
+ * foldMm below the head top. Shift a printed job with printer.tagOffsetXMm /
+ * tagOffsetYMm. Override the origin with printer.tagHeadLeftMm,
+ * printer.tagHeadTopMm, and the face length with printer.labelLengthDots
+ * (or printer.labelLengthMm) when the die-cut itself is different.
  */
 export const TAG_HEAD_MM = {
-  headLeftMm: 3,
+  headLeftMm: 0.5,
+  headTopMm: 8.7,
   headWidthMm: 25,
+  headHeightMm: 26,
   foldMm: 13,
   marginMm: 1.5,
 };
@@ -39,7 +49,10 @@ export type LabelData = {
   retailPrice?: number | string | null;
   dpi?: number;
   widthDots?: number;       // optional ^PW override
-  lengthDots?: number;      // optional ^LL override
+  lengthDots?: number;      // optional ^LL override; wins over labelLengthMm
+  labelLengthMm?: number;   // optional face height; default LABEL_LENGTH_MM
+  headLeftMm?: number;      // optional; default TAG_HEAD_MM.headLeftMm
+  headTopMm?: number;       // optional; default TAG_HEAD_MM.headTopMm
   offsetXMm?: number;
   offsetYMm?: number;
   programPosition?: string; // ignored; the printer's calibrated position is left alone
@@ -50,6 +63,9 @@ export type OutlineOptions = {
   dpi?: number;
   widthDots?: number;
   lengthDots?: number;
+  labelLengthMm?: number;
+  headLeftMm?: number;
+  headTopMm?: number;
   offsetXMm?: number;
   offsetYMm?: number;
 };
@@ -112,15 +128,22 @@ export function tagGeometry(
   offsetYMm = 0,
   widthDots?: number,
   lengthDots?: number,
+  layout: { headLeftMm?: number; headTopMm?: number; labelLengthMm?: number } = {},
 ): TagGeometry {
   const dpi = normalizeDpi(dpiInput);
+  const headLeftMm = layout.headLeftMm ?? TAG_HEAD_MM.headLeftMm;
+  const headTopMm = layout.headTopMm ?? TAG_HEAD_MM.headTopMm;
+  const labelLengthMm = layout.labelLengthMm ?? LABEL_LENGTH_MM;
   const labelWidth = widthDots ?? dots(LABEL_WIDTH_MM, dpi);
-  const labelLength = lengthDots ?? dots(LABEL_LENGTH_MM, dpi);
-  const headLeft = dots(TAG_HEAD_MM.headLeftMm + offsetXMm, dpi);
-  const headRight = dots(TAG_HEAD_MM.headLeftMm + TAG_HEAD_MM.headWidthMm + offsetXMm, dpi);
-  const headTop = dots(offsetYMm, dpi);
-  const fold = dots(TAG_HEAD_MM.foldMm + offsetYMm, dpi);
-  const headBottom = dots(LABEL_LENGTH_MM + offsetYMm, dpi);
+  // Round from the label origin (head top + fold, head top + height) so the
+  // fold stays on the measured notch. Rounding the head top and the fold
+  // gap separately walks the notch a dot off.
+  const labelLength = lengthDots ?? dots(labelLengthMm, dpi);
+  const headLeft = dots(headLeftMm + offsetXMm, dpi);
+  const headRight = dots(headLeftMm + TAG_HEAD_MM.headWidthMm + offsetXMm, dpi);
+  const headTop = dots(headTopMm + offsetYMm, dpi);
+  const fold = dots(headTopMm + TAG_HEAD_MM.foldMm + offsetYMm, dpi);
+  const headBottom = dots(headTopMm + TAG_HEAD_MM.headHeightMm + offsetYMm, dpi);
   const margin = dots(TAG_HEAD_MM.marginMm, dpi);
   const innerW = Math.max(1, headRight - headLeft - margin * 2);
   return {
@@ -160,7 +183,11 @@ export function generateJewelleryZpl(data: LabelData): string {
     throw new Error(`Invalid EPC: must be exactly 24 hex characters, got "${epc}"`);
   }
 
-  const geo = tagGeometry(data.dpi, data.offsetXMm ?? 0, data.offsetYMm ?? 0, data.widthDots, data.lengthDots);
+  const geo = tagGeometry(data.dpi, data.offsetXMm ?? 0, data.offsetYMm ?? 0, data.widthDots, data.lengthDots, {
+    headLeftMm: data.headLeftMm,
+    headTopMm: data.headTopMm,
+    labelLengthMm: data.labelLengthMm,
+  });
   const skuText = cleanText(sku);
   const metalText = cleanText(data.metal);
   const priceText = formatRetailPrice(data.retailPrice);
@@ -189,7 +216,11 @@ export function generateJewelleryZpl(data: LabelData): string {
 
 /** Alignment label. No RFID write. Boxes are the printable area of each flag. */
 export function generateOutlineZpl(options: OutlineOptions = {}): string {
-  const geo = tagGeometry(options.dpi, options.offsetXMm ?? 0, options.offsetYMm ?? 0, options.widthDots, options.lengthDots);
+  const geo = tagGeometry(options.dpi, options.offsetXMm ?? 0, options.offsetYMm ?? 0, options.widthDots, options.lengthDots, {
+    headLeftMm: options.headLeftMm,
+    headTopMm: options.headTopMm,
+    labelLengthMm: options.labelLengthMm,
+  });
   const thickness = 2;
   const topFont = fitFont("TOP", geo.top.w - 8, Math.min(dots(3.2, geo.dpi), geo.top.h - 8), dots(1.6, geo.dpi));
   const backFont = fitFont("BACK", geo.bottom.w - 8, Math.min(dots(3.2, geo.dpi), geo.bottom.h - 8), dots(1.6, geo.dpi));

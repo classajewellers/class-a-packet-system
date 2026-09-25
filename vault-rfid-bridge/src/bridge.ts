@@ -332,6 +332,10 @@ function labelDataForJob(config: BridgeConfig, job: PrintJob, dpi: number): Labe
     retailPrice: typeof rawPrice === "number" || typeof rawPrice === "string" ? rawPrice : null,
     offsetXMm: config.printer.tagOffsetXMm ?? 0,
     offsetYMm: config.printer.tagOffsetYMm ?? 0,
+    ...(config.printer.labelLengthDots != null ? { lengthDots: config.printer.labelLengthDots } : {}),
+    ...(config.printer.labelLengthMm != null ? { labelLengthMm: config.printer.labelLengthMm } : {}),
+    ...(config.printer.tagHeadTopMm != null ? { headTopMm: config.printer.tagHeadTopMm } : {}),
+    ...(config.printer.tagHeadLeftMm != null ? { headLeftMm: config.printer.tagHeadLeftMm } : {}),
     onWarn: (message) => log("warn", `Job ${job.id}: ${message}`),
     dpi,
   };
@@ -349,7 +353,7 @@ function zplForJob(config: BridgeConfig, job: PrintJob): string {
   }
   try {
     const zpl = generateJewelleryZpl(label);
-    log("info", `Job ${job.id}: jewellery_v1 laid out at ${dpi} dpi for a 68x26 mm label`);
+    log("info", `Job ${job.id}: jewellery_v1 laid out at ${dpi} dpi for a 26x26 mm head on a 36 mm face`);
     return zpl;
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "invalid label";

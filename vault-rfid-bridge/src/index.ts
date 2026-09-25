@@ -56,6 +56,10 @@ export function loadConfig(): BridgeConfig {
       ...readPrinterDpi(printer.dpi),
       ...readTagOffset(printer.tagOffsetXMm, "tagOffsetXMm"),
       ...readTagOffset(printer.tagOffsetYMm, "tagOffsetYMm"),
+      ...readLabelLengthDots(printer.labelLengthDots),
+      ...readMillimetres(printer.labelLengthMm, "labelLengthMm"),
+      ...readMillimetres(printer.tagHeadTopMm, "tagHeadTopMm"),
+      ...readMillimetres(printer.tagHeadLeftMm, "tagHeadLeftMm"),
     },
     logLevel: (c.logLevel as BridgeConfig["logLevel"]) || "info",
   };
@@ -69,6 +73,31 @@ function readTagOffset(value: unknown, name: string): { tagOffsetXMm: number } |
     process.exit(1);
   }
   return name === "tagOffsetXMm" ? { tagOffsetXMm: n } : { tagOffsetYMm: n };
+}
+
+function readLabelLengthDots(value: unknown): { labelLengthDots: number } | Record<string, never> {
+  if (value === undefined || value === null || value === "") return {};
+  const n = typeof value === "number" ? value : Number(String(value).trim());
+  if (!Number.isInteger(n) || n < 1) {
+    console.error("ERROR: printer.labelLengthDots must be a positive whole number, or omit it");
+    process.exit(1);
+  }
+  return { labelLengthDots: n };
+}
+
+function readMillimetres(
+  value: unknown,
+  name: "labelLengthMm" | "tagHeadTopMm" | "tagHeadLeftMm",
+): { labelLengthMm: number } | { tagHeadTopMm: number } | { tagHeadLeftMm: number } | Record<string, never> {
+  if (value === undefined || value === null || value === "") return {};
+  const n = typeof value === "number" ? value : Number(String(value).trim());
+  if (!Number.isFinite(n)) {
+    console.error(`ERROR: printer.${name} must be a number of millimetres, or omit it`);
+    process.exit(1);
+  }
+  if (name === "labelLengthMm") return { labelLengthMm: n };
+  if (name === "tagHeadTopMm") return { tagHeadTopMm: n };
+  return { tagHeadLeftMm: n };
 }
 
 function readPrinterDpi(value: unknown): { dpi: number } | Record<string, never> {

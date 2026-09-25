@@ -155,8 +155,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const now = new Date().toISOString();
 
   // ── Build ZPL ──────────────────────────────────────────────────────────────
-  // 68 mm × 26 mm. rfid_printers has no DPI column, so this stored copy is laid
-  // out at the generator default (203 dpi). The bridge does not send this
+  // 26 × 26 mm head on a 36 mm face. rfid_printers has no DPI column, so this
+  // stored copy is laid out at the generator default (203 dpi). The bridge does not send this
   // string for jewellery_v1. It rebuilds the same label_data at the printer's
   // reported head resolution, or printer.dpi in config.json.
   const p = piece as any;

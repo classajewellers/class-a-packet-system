@@ -38,6 +38,10 @@ async function main(): Promise<void> {
     dpi,
     offsetXMm: config.printer.tagOffsetXMm ?? 0,
     offsetYMm: config.printer.tagOffsetYMm ?? 0,
+    lengthDots: config.printer.labelLengthDots,
+    labelLengthMm: config.printer.labelLengthMm,
+    headTopMm: config.printer.tagHeadTopMm,
+    headLeftMm: config.printer.tagHeadLeftMm,
   });
   const file = writeLastJobZpl(zpl);
   const pw = zpl.match(/\^PW(\d+)/)?.[1] ?? "?";
