@@ -105,7 +105,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const { data: piece, error: pErr } = await tenantScoped(supabase, tenantId)
     .from("inventory_pieces")
     .select(`
-      id, sku, notes, barcode,
+      id, sku, notes, barcode, retail_price,
       metal_karat, metal_colour,
       diamond_carat, diamond_colour, diamond_type
     `)
@@ -168,11 +168,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const zplPayload = generateJewelleryZpl({
     epc,
-    sku:       piece.sku,
-    title:     designName ?? piece.sku,
-    metal:     metalName,
-    stone:     stoneName,
-    barcode:   p.barcode ?? piece.sku,
+    sku:         piece.sku,
+    title:       designName ?? piece.sku,
+    metal:       metalName,
+    stone:       stoneName,
+    barcode:     p.barcode ?? piece.sku,
+    retailPrice: p.retail_price ?? null,
   });
 
   // ── Create RFID tag record ─────────────────────────────────────────────────
@@ -219,6 +220,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         metal:   metalName,
         stone:   stoneName,
         barcode: p.barcode ?? piece.sku,
+        retail_price: p.retail_price ?? null,
       },
       label_template:  "jewellery_v1",
       idempotency_key: idempotencyKey,

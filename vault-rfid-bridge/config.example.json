@@ -10,6 +10,8 @@
     "connectTimeoutMs": 5000,
     "writeTimeoutMs": 10000,
     "dpi": null,
+    "tagOffsetXMm": 0,
+    "tagOffsetYMm": 0,
     "webUser": "admin",
     "webPassword": "PRINTER_WEB_PASSWORD_HERE",
     "webScheme": "https",

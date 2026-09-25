@@ -6,7 +6,7 @@ import { runBridge } from "./bridge";
 import { readHeadDpi } from "./zebra";
 import { DEFAULT_DPI } from "./label";
 
-function loadConfig(): BridgeConfig {
+export function loadConfig(): BridgeConfig {
   const configPath = path.resolve(process.cwd(), "config.json");
   if (!fs.existsSync(configPath)) {
     console.error(`ERROR: config.json not found at ${configPath}`);
@@ -54,9 +54,21 @@ function loadConfig(): BridgeConfig {
       webScheme:            printer.webScheme === "http" ? "http" : "https",
       webRejectUnauthorized: printer.webRejectUnauthorized === true,  // default false (self-signed)
       ...readPrinterDpi(printer.dpi),
+      ...readTagOffset(printer.tagOffsetXMm, "tagOffsetXMm"),
+      ...readTagOffset(printer.tagOffsetYMm, "tagOffsetYMm"),
     },
     logLevel: (c.logLevel as BridgeConfig["logLevel"]) || "info",
   };
+}
+
+function readTagOffset(value: unknown, name: string): { tagOffsetXMm: number } | { tagOffsetYMm: number } | Record<string, never> {
+  if (value === undefined || value === null || value === "") return {};
+  const n = typeof value === "number" ? value : Number(String(value).trim());
+  if (!Number.isFinite(n)) {
+    console.error(`ERROR: printer.${name} must be a number of millimetres, or omit it`);
+    process.exit(1);
+  }
+  return name === "tagOffsetXMm" ? { tagOffsetXMm: n } : { tagOffsetYMm: n };
 }
 
 function readPrinterDpi(value: unknown): { dpi: number } | Record<string, never> {
@@ -134,7 +146,9 @@ async function main() {
   await runBridge(config, reachable);
 }
 
-main().catch((err: unknown) => {
-  console.error("Bridge crashed:", err);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((err: unknown) => {
+    console.error("Bridge crashed:", err);
+    process.exit(1);
+  });
+}

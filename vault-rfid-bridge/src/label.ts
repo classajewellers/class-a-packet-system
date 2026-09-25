@@ -1,19 +1,33 @@
 /**
- * jewellery_v1 ZPL for a 68 mm × 26 mm RFID label on a Zebra ZD621R.
+ * jewellery_v1 ZPL for a fold-over rat-tail RFID tag die-cut in a 68 × 26 mm liner.
  *
- * Encode is a Gen2 96-bit EPC write: ^RFW,H,2,12,1 starts at word 2 of the
- * EPC bank (past the CRC and PC words) and writes 12 bytes. The printer's
- * own rfid.position.program is left alone. ^LT stays 0 so the format does
- * not move that calibrated position.
+ * The encode block is fixed: ^MUD ^MMT ^PW ^LL ^LH0,0 ^LT0 ^LS0 ^CI28, then
+ * ^RFW,H,2,12,1 before any ^FO. Nothing here changes the printer's program
+ * position. The head sits on the left of the liner; the tail to the right is
+ * not printed.
  *
- * Positions are millimetres converted at the printer DPI. 203 dpi is 8 dots/mm
- * (544 × 208). 300 dpi is 300/25.4 dots/mm (803 × 307). ^PW sets the canvas.
- * It does not scale the fields, so the type itself has to be large.
+ * ^FO is the upper-left of a field regardless of rotation. ^A0I and ^BCI
+ * rotate the artwork 180 degrees inside that box, so on the back flag the
+ * SKU line is placed above the barcode. After the tag is folded and turned
+ * over, the barcode is on top and the SKU reads upright underneath it.
  */
 
 export const LABEL_WIDTH_MM = 68;
 export const LABEL_LENGTH_MM = 26;
 export const DEFAULT_DPI = 203;
+
+/**
+ * Head of the rat-tail tag, in millimetres, measured on the liner.
+ * headLeftMm is from the left edge of the label. The fold is horizontal.
+ * Shift a printed job with printer.tagOffsetXMm / tagOffsetYMm; change these
+ * only when the die-cut itself is different.
+ */
+export const TAG_HEAD_MM = {
+  headLeftMm: 3,
+  headWidthMm: 25,
+  foldMm: 13,
+  marginMm: 1.5,
+};
 
 export type LabelData = {
   epc: string;              // 24-char hex
@@ -22,10 +36,38 @@ export type LabelData = {
   metal?: string | null;
   stone?: string | null;
   barcode?: string | null;
+  retailPrice?: number | string | null;
   dpi?: number;
   widthDots?: number;       // optional ^PW override
   lengthDots?: number;      // optional ^LL override
-  programPosition?: string; // SGD rfid.position.program, default "F4"
+  offsetXMm?: number;
+  offsetYMm?: number;
+  programPosition?: string; // ignored; the printer's calibrated position is left alone
+  onWarn?: (message: string) => void;
+};
+
+export type OutlineOptions = {
+  dpi?: number;
+  widthDots?: number;
+  lengthDots?: number;
+  offsetXMm?: number;
+  offsetYMm?: number;
+};
+
+type Rect = { x: number; y: number; w: number; h: number };
+
+export type TagGeometry = {
+  dpi: number;
+  labelWidth: number;
+  labelLength: number;
+  headLeft: number;
+  headRight: number;
+  headTop: number;
+  fold: number;
+  headBottom: number;
+  margin: number;
+  top: Rect;
+  bottom: Rect;
 };
 
 /** Dots per millimetre for a Zebra head. 203 dpi is exactly 8 dpmm. */
@@ -39,6 +81,10 @@ export function mmToDots(mm: number, dpi: number): number {
   return Math.max(1, Math.round(mm * dotsPerMm(dpi)));
 }
 
+function dots(mm: number, dpi: number): number {
+  return Math.round(mm * dotsPerMm(dpi));
+}
+
 export function normalizeDpi(dpi: number | undefined): number {
   if (dpi == null || !Number.isFinite(dpi)) return DEFAULT_DPI;
   const rounded = Math.round(dpi);
@@ -46,128 +92,221 @@ export function normalizeDpi(dpi: number | undefined): number {
   return rounded;
 }
 
-type TextBlock = { text: string; font: number; lines: number; lineGap: number };
+/** "$1,234" for a whole dollar amount, "$1,234.50" when there are cents. Blank when there is no price. */
+export function formatRetailPrice(value: number | string | null | undefined): string | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(String(value).replace(/[^0-9.-]/g, ""));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const cents = Math.round(n * 100);
+  const hasCents = cents % 100 !== 0;
+  const body = (cents / 100).toLocaleString("en-AU", {
+    minimumFractionDigits: hasCents ? 2 : 0,
+    maximumFractionDigits: 2,
+  });
+  return `$${body}`;
+}
+
+export function tagGeometry(
+  dpiInput: number | undefined,
+  offsetXMm = 0,
+  offsetYMm = 0,
+  widthDots?: number,
+  lengthDots?: number,
+): TagGeometry {
+  const dpi = normalizeDpi(dpiInput);
+  const labelWidth = widthDots ?? dots(LABEL_WIDTH_MM, dpi);
+  const labelLength = lengthDots ?? dots(LABEL_LENGTH_MM, dpi);
+  const headLeft = dots(TAG_HEAD_MM.headLeftMm + offsetXMm, dpi);
+  const headRight = dots(TAG_HEAD_MM.headLeftMm + TAG_HEAD_MM.headWidthMm + offsetXMm, dpi);
+  const headTop = dots(offsetYMm, dpi);
+  const fold = dots(TAG_HEAD_MM.foldMm + offsetYMm, dpi);
+  const headBottom = dots(LABEL_LENGTH_MM + offsetYMm, dpi);
+  const margin = dots(TAG_HEAD_MM.marginMm, dpi);
+  const innerW = Math.max(1, headRight - headLeft - margin * 2);
+  return {
+    dpi,
+    labelWidth,
+    labelLength,
+    headLeft,
+    headRight,
+    headTop,
+    fold,
+    headBottom,
+    margin,
+    top: {
+      x: headLeft + margin,
+      y: headTop + margin,
+      w: innerW,
+      h: Math.max(1, fold - headTop - margin * 2),
+    },
+    bottom: {
+      x: headLeft + margin,
+      y: fold + margin,
+      w: innerW,
+      h: Math.max(1, headBottom - fold - margin * 2),
+    },
+  };
+}
 
 /**
- * Generate ZPL II for a jewellery RFID label that fills 68 mm × 26 mm.
- * The EPC write stays before every ^FO. An EPC that is not 24 hex characters
- * throws, and the bridge fails the job instead of sending ZPL.
+ * Generate ZPL II for one rat-tail jewellery tag.
+ * An EPC that is not 24 hex characters throws, and the bridge fails the job
+ * instead of sending ZPL.
  */
 export function generateJewelleryZpl(data: LabelData): string {
   const { epc, sku } = data;
-  const dpi = normalizeDpi(data.dpi);
-  const px = (mm: number) => mmToDots(mm, dpi);
-  const barcodeValue = (data.barcode || sku).trim();
-  const titleText = cleanText(data.title);
-  const showTitle = titleText.length > 0 && titleText.toLowerCase() !== sku.trim().toLowerCase();
-  const detailText = [cleanText(data.metal), cleanText(data.stone)].filter(Boolean).join(" / ");
-
   const epcHex = epc.trim().toLowerCase();
   if (epcHex.length !== 24 || !/^[0-9a-f]{24}$/.test(epcHex)) {
     throw new Error(`Invalid EPC: must be exactly 24 hex characters, got "${epc}"`);
   }
 
-  const width = data.widthDots ?? px(LABEL_WIDTH_MM);
-  const length = data.lengthDots ?? px(LABEL_LENGTH_MM);
-  const marginX = px(1.5);
-  const textW = Math.max(px(10), width - marginX * 2);
-  const gap = px(0.7);
-  const marginTop = px(0.8);
-  const skuH = px(4.8);
-  const titleH = px(3.0);
-  const detailH = px(2.8);
-  const readableH = px(3.8);
-  const marginBottom = px(1.0);
+  const geo = tagGeometry(data.dpi, data.offsetXMm ?? 0, data.offsetYMm ?? 0, data.widthDots, data.lengthDots);
+  const skuText = cleanText(sku);
+  const metalText = cleanText(data.metal);
+  const priceText = formatRetailPrice(data.retailPrice);
 
-  const blocks: TextBlock[] = [{ text: sku.trim(), font: skuH, lines: 1, lineGap: 0 }];
-  if (showTitle) {
-    const perLine = charsPerLine(textW, titleH);
-    const lines = titleText.length > perLine ? 2 : 1;
-    blocks.push({
-      text: clip(titleText, perLine * lines),
-      font: titleH,
-      lines,
-      lineGap: lines > 1 ? px(0.15) : 0,
-    });
-  }
-  if (detailText) {
-    blocks.push({
-      text: clip(detailText, charsPerLine(textW, detailH)),
-      font: detailH,
-      lines: 1,
-      lineGap: 0,
-    });
-  }
-
-  let placed = placeBlocks(blocks, marginTop, gap);
-  let barH = length - placed.barcodeY - readableH - marginBottom;
-  if (barH < px(4)) {
-    const title = blocks.find((block, index) => index > 0 && block.lines > 1);
-    if (title) {
-      title.lines = 1;
-      title.lineGap = 0;
-      title.text = clip(title.text, charsPerLine(textW, title.font));
-      placed = placeBlocks(blocks, marginTop, gap);
-      barH = length - placed.barcodeY - readableH - marginBottom;
-    }
-  }
-  if (barH < 1) barH = 1;
-  if (placed.barcodeY + barH + readableH > length) {
-    barH = Math.max(1, length - placed.barcodeY - marginBottom);
-  }
-
-  let moduleWidth = Math.min(6, Math.max(2, Math.round(0.5 * dotsPerMm(dpi))));
-  const modules = 11 * Math.max(barcodeValue.length, 1) + 35;
-  while (moduleWidth > 2 && modules * moduleWidth > textW) moduleWidth -= 1;
-
-  const fields = placed.blocks.map((block) =>
-    `^FO${marginX},${block.y}^A0N,${block.font},${block.font}^FB${textW},${block.lines},${block.lineGap},L,0^FD${escZpl(block.text)}^FS`
-  );
+  const fields = [
+    ...frontFields(geo, skuText, metalText, priceText),
+    ...backFields(geo, skuText, data.onWarn),
+  ];
 
   return [
     "^XA",
     "^MUD",
     "^MMT",
-    `^PW${width}`,
-    `^LL${length}`,
+    `^PW${geo.labelWidth}`,
+    `^LL${geo.labelLength}`,
     "^LH0,0",
     "^LT0",
     "^LS0",
     "^CI28",
     `^RFW,H,2,12,1^FD${epcHex}^FS`,
     ...fields,
-    `^FO${marginX},${placed.barcodeY}^BY${moduleWidth},2,${barH}^BCN,${barH},Y,N,N^FD${escZpl(barcodeValue)}^FS`,
     "^PQ1",
     "^XZ",
   ].join("\n");
 }
 
-function charsPerLine(textW: number, font: number): number {
-  return Math.max(4, Math.floor(textW / Math.max(1, font * 0.55)));
+/** Alignment label. No RFID write. Boxes are the printable area of each flag. */
+export function generateOutlineZpl(options: OutlineOptions = {}): string {
+  const geo = tagGeometry(options.dpi, options.offsetXMm ?? 0, options.offsetYMm ?? 0, options.widthDots, options.lengthDots);
+  const thickness = 2;
+  const topFont = fitFont("TOP", geo.top.w - 8, Math.min(dots(3.2, geo.dpi), geo.top.h - 8), dots(1.6, geo.dpi));
+  const backFont = fitFont("BACK", geo.bottom.w - 8, Math.min(dots(3.2, geo.dpi), geo.bottom.h - 8), dots(1.6, geo.dpi));
+  const headW = Math.max(1, geo.headRight - geo.headLeft);
+  return [
+    "^XA",
+    "^MUD",
+    "^MMT",
+    `^PW${geo.labelWidth}`,
+    `^LL${geo.labelLength}`,
+    "^LH0,0",
+    "^LT0",
+    "^LS0",
+    "^CI28",
+    `^FO${geo.top.x},${geo.top.y}^GB${geo.top.w},${geo.top.h},${thickness}^FS`,
+    `^FO${geo.bottom.x},${geo.bottom.y}^GB${geo.bottom.w},${geo.bottom.h},${thickness}^FS`,
+    `^FO${geo.headLeft},${geo.fold}^GB${headW},${thickness},${thickness}^FS`,
+    `^FO${geo.top.x + 4},${geo.top.y + 4}^A0N,${topFont},${topFont}^FDTOP^FS`,
+    `^FO${geo.bottom.x + 4},${geo.bottom.y + 4}^A0N,${backFont},${backFont}^FDBACK^FS`,
+    "^PQ1",
+    "^XZ",
+  ].join("\n");
 }
 
-function blockHeight(block: TextBlock): number {
-  return block.font * block.lines + block.lineGap * Math.max(0, block.lines - 1);
-}
+function frontFields(geo: TagGeometry, sku: string, metal: string, price: string | null): string[] {
+  const gap = Math.max(2, dots(0.35, geo.dpi));
+  const lines: Array<{ text: string; pref: number; min: number }> = [
+    { text: sku, pref: dots(4.2, geo.dpi), min: dots(1.1, geo.dpi) },
+  ];
+  if (metal) lines.push({ text: metal, pref: dots(2.3, geo.dpi), min: dots(1.1, geo.dpi) });
+  if (price) lines.push({ text: price, pref: dots(2.5, geo.dpi), min: dots(1.3, geo.dpi) });
 
-function placeBlocks(blocks: TextBlock[], marginTop: number, gap: number): {
-  blocks: Array<TextBlock & { y: number }>;
-  barcodeY: number;
-} {
-  let y = marginTop;
-  const placed = blocks.map((block, index) => {
-    const at = y;
-    y += blockHeight(block);
-    if (index < blocks.length - 1) y += gap;
-    return { ...block, y: at };
+  const gaps = gap * Math.max(0, lines.length - 1);
+  let fonts = lines.map((line) => fitFont(line.text, geo.top.w, line.pref, line.min));
+  let used = fonts.reduce((sum, font) => sum + font, 0) + gaps;
+  if (used > geo.top.h) {
+    const scale = (geo.top.h - gaps) / Math.max(1, used - gaps);
+    fonts = fonts.map((font, i) => Math.max(lines[i].min, Math.floor(font * scale)));
+    used = fonts.reduce((sum, font) => sum + font, 0) + gaps;
+    if (used > geo.top.h) {
+      fonts = fonts.map((font) => Math.max(1, font - 1));
+    }
+  }
+
+  const fields: string[] = [];
+  let y = geo.top.y;
+  lines.forEach((line, i) => {
+    const font = fonts[i];
+    const fitted = clipToWidth(line.text, font, geo.top.w);
+    fields.push(
+      `^FO${geo.top.x},${y}^A0N,${font},${font}^FB${geo.top.w},1,0,C,0^FD${escZpl(fitted)}^FS`,
+    );
+    y += font + gap;
   });
-  return { blocks: placed, barcodeY: y + gap };
+  return fields;
 }
 
-function clip(text: string, max: number): string {
-  if (text.length <= max) return text;
-  if (max <= 3) return text.slice(0, Math.max(0, max));
-  return text.slice(0, max - 3) + "...";
+function backFields(geo: TagGeometry, sku: string, onWarn?: (message: string) => void): string[] {
+  const gap = Math.max(2, dots(0.3, geo.dpi));
+  const preferredModule = geo.dpi >= 250 ? 2 : 1;
+  const modules = code128Modules(sku.length);
+  let moduleWidth = preferredModule;
+  if (modules * moduleWidth > geo.bottom.w) moduleWidth = 1;
+  const barcodeFits = modules * moduleWidth <= geo.bottom.w;
+
+  let textMax = barcodeFits ? Math.min(dots(2.4, geo.dpi), Math.floor(geo.bottom.h * 0.34)) : Math.floor(geo.bottom.h * 0.7);
+  textMax = Math.max(dots(1.4, geo.dpi), textMax);
+  let textFont = fitFont(sku, geo.bottom.w, textMax, dots(1.2, geo.dpi));
+  let barH = geo.bottom.h - textFont - gap;
+  if (barcodeFits && barH < dots(2, geo.dpi)) {
+    textFont = Math.max(dots(1.2, geo.dpi), geo.bottom.h - dots(2, geo.dpi) - gap);
+    barH = geo.bottom.h - textFont - gap;
+  }
+  const text = clipToWidth(sku, textFont, geo.bottom.w);
+  const textW = estimateWidth(text, textFont);
+  const textX = geo.bottom.x + Math.max(0, Math.floor((geo.bottom.w - textW) / 2));
+  // Printer y grows down. The inverted SKU sits nearer the fold than the
+  // barcode, so a 180 degree turn puts the SKU under the barcode.
+  const textY = geo.bottom.y;
+  const fields = [
+    `^FO${textX},${textY}^A0I,${textFont},${textFont}^FD${escZpl(text)}^FS`,
+  ];
+
+  if (!barcodeFits || barH < 8) {
+    onWarn?.(`SKU barcode does not fit the tag head at module width 1; printing the inverted SKU text only`);
+    return fields;
+  }
+
+  const barW = modules * moduleWidth;
+  const barX = geo.bottom.x + Math.max(0, Math.floor((geo.bottom.w - barW) / 2));
+  const barY = textY + textFont + gap;
+  fields.push(`^FO${barX},${barY}^BY${moduleWidth},2,${barH}^BCI,${barH},N,N,N^FD${escZpl(sku)}^FS`);
+  return fields;
+}
+
+/** Code 128 symbol width in modules, including start, check, and stop. */
+function code128Modules(length: number): number {
+  return 11 * Math.max(length, 1) + 35;
+}
+
+/** Font 0 advance is a bit over half the cell height for digits and capitals. */
+function estimateWidth(text: string, font: number): number {
+  return Math.ceil(Math.max(text.length, 1) * font * 0.62);
+}
+
+function fitFont(text: string, maxWidth: number, maxHeight: number, minHeight: number): number {
+  const len = Math.max(text.length, 1);
+  const fitted = Math.floor(maxWidth / (len * 0.62));
+  return Math.max(1, Math.min(maxHeight, Math.max(minHeight, fitted)));
+}
+
+function clipToWidth(text: string, font: number, maxWidth: number): string {
+  let value = text;
+  while (value.length > 1 && estimateWidth(value, font) > maxWidth) {
+    value = value.length > 4 ? value.slice(0, -4) + "..." : value.slice(0, -1);
+  }
+  return value;
 }
 
 function cleanText(value: string | null | undefined): string {

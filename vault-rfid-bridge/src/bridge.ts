@@ -317,10 +317,11 @@ function jobEpc(job: PrintJob): string {
  * The EPC we told the printer to encode (job.label_data.epc) is the correlation
  * key. Best-effort: skipped if printer web creds aren't configured; never throws.
  */
-function labelDataForJob(job: PrintJob, dpi: number): LabelData | null {
+function labelDataForJob(config: BridgeConfig, job: PrintJob, dpi: number): LabelData | null {
   const data = job.label_data;
   if (!data || typeof data.epc !== "string" || typeof data.sku !== "string") return null;
   if (!data.epc.trim() || !data.sku.trim()) return null;
+  const rawPrice = data.retail_price ?? data.price;
   return {
     epc: data.epc.trim(),
     sku: data.sku.trim(),
@@ -328,7 +329,10 @@ function labelDataForJob(job: PrintJob, dpi: number): LabelData | null {
     metal: typeof data.metal === "string" ? data.metal : null,
     stone: typeof data.stone === "string" ? data.stone : null,
     barcode: typeof data.barcode === "string" ? data.barcode : null,
-    programPosition: typeof data.programPosition === "string" ? data.programPosition : undefined,
+    retailPrice: typeof rawPrice === "number" || typeof rawPrice === "string" ? rawPrice : null,
+    offsetXMm: config.printer.tagOffsetXMm ?? 0,
+    offsetYMm: config.printer.tagOffsetYMm ?? 0,
+    onWarn: (message) => log("warn", `Job ${job.id}: ${message}`),
     dpi,
   };
 }
@@ -338,7 +342,7 @@ function labelDataForJob(job: PrintJob, dpi: number): LabelData | null {
 function zplForJob(config: BridgeConfig, job: PrintJob): string {
   if (job.label_template !== "jewellery_v1") return job.zpl_payload;
   const dpi = config.printer.dpi ?? DEFAULT_DPI;
-  const label = labelDataForJob(job, dpi);
+  const label = labelDataForJob(config, job, dpi);
   if (!label) {
     log("warn", `Job ${job.id}: jewellery_v1 is missing label data, sending the stored ZPL`);
     return job.zpl_payload;
