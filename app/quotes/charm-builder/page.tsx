@@ -357,15 +357,15 @@ export default function CharmBuilderPage() {
     }
 
     return (
-      <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
+      <div className="flex flex-col xl:flex-row gap-5 items-stretch xl:items-start">
 
         {/* ── Left: builder ─────────────────────────────────────────── */}
-        <div style={{ flex: "1 1 420px" }}>
+        <div className="min-w-0 flex-1">
 
           {/* Product type */}
           <div style={{ ...card, marginBottom: 12 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>Product</div>
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button onClick={() => setProductType("necklace")} style={btn(productType === "necklace")}>Necklace</button>
               <button onClick={() => setProductType("bracelet")} style={btn(productType === "bracelet")}>
                 Bracelet
@@ -434,7 +434,7 @@ export default function CharmBuilderPage() {
         </div>
 
         {/* ── Right: live price summary ───────────────────────────── */}
-        <div style={{ flex: "0 0 240px", ...card, position: "sticky", top: 20 }}>
+        <div className="w-full xl:w-60 xl:shrink-0 xl:sticky xl:top-5" style={card}>
           <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", marginBottom: 14 }}>Price Summary</div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13, color: "#374151" }}>
@@ -540,7 +540,7 @@ export default function CharmBuilderPage() {
 
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 12, fontWeight: 500, color: "#374151", marginBottom: 6 }}>Metal</div>
-              <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button onClick={() => setAfterMetal("yellow")} style={btn(afterMetal === "yellow")}>Yellow Gold</button>
                 <button onClick={() => setAfterMetal("white")}  style={btn(afterMetal === "white")}>White Gold</button>
               </div>
@@ -613,7 +613,14 @@ export default function CharmBuilderPage() {
 
   // ── Render: page shell
   return (
-    <div style={{ padding: "24px 28px", maxWidth: 1100 }}>
+    <div className="charm-builder" style={{ padding: "24px 28px", maxWidth: 1100 }}>
+      <style>{`
+        @media (max-width: 767px) {
+          .charm-builder { padding: 12px 0 !important; }
+          .charm-mode-tabs { width: 100% !important; }
+          .charm-mode-tabs button { flex: 1 1 auto; padding-left: 10px !important; padding-right: 10px !important; }
+        }
+      `}</style>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: 0, marginBottom: 6 }}>
         Charm Builder
       </h1>
@@ -622,7 +629,7 @@ export default function CharmBuilderPage() {
       </p>
 
       {/* Mode tabs */}
-      <div style={{ display: "flex", gap: 0, marginBottom: 20, border: "1px solid #E8E8F0", borderRadius: 8, overflow: "hidden", width: "fit-content" }}>
+      <div className="charm-mode-tabs" style={{ display: "flex", gap: 0, marginBottom: 20, border: "1px solid #E8E8F0", borderRadius: 8, overflow: "hidden", width: "fit-content", maxWidth: "100%" }}>
         {([
           { key: "build",        label: "New Build" },
           { key: "aftermarket",  label: "Add to Existing Piece" },

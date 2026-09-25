@@ -51,12 +51,15 @@ export default function QuotePreviewScreen({ quote, onNew, brandLogoUrl }: Props
           }
           @page { size: A4 portrait; margin: 15mm; }
         }
+        @media screen and (max-width: 767px) {
+          #quote-doc > div { padding: 16px !important; min-height: 0 !important; }
+        }
       `}</style>
 
-      <div className="min-h-screen bg-gray-100 flex">
+      <div className="min-h-screen bg-gray-100 flex flex-col lg:flex-row">
 
         {/* ── Left panel ── */}
-        <div className="w-72 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col px-6 py-6 sticky top-0 h-screen overflow-y-auto print:hidden">
+        <div className="w-full lg:w-72 lg:flex-shrink-0 bg-white border-b lg:border-b-0 lg:border-r border-gray-200 flex flex-col px-4 py-4 lg:px-6 lg:py-6 lg:sticky lg:top-0 lg:h-screen overflow-y-auto print:hidden">
 
           {/* Back link */}
           <a
@@ -139,10 +142,10 @@ export default function QuotePreviewScreen({ quote, onNew, brandLogoUrl }: Props
         </div>
 
         {/* ── Right panel — A4 preview ── */}
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-4 lg:p-8 min-w-0">
 
           {/* Toolbar above the document */}
-          <div className="max-w-[794px] mx-auto mb-4 flex items-center justify-between print:hidden">
+          <div className="max-w-[794px] mx-auto mb-4 flex flex-wrap items-center justify-between gap-3 print:hidden">
             <p className="text-sm font-medium text-gray-500">Quote Preview</p>
             <button
               onClick={handleDownloadPDF}
@@ -161,12 +164,14 @@ export default function QuotePreviewScreen({ quote, onNew, brandLogoUrl }: Props
            * On screen: white card with shadow, 794px wide, 1123px tall (A4 px).
            * On print: position:fixed, full viewport, shadow removed.
            */}
+          <div className="overflow-x-auto">
           <div
             id="quote-doc"
             className="max-w-[794px] mx-auto bg-white shadow-2xl"
             style={{ minHeight: "1123px" }}
           >
             <QuoteDocument quote={quote} brandLogoUrl={brandLogoUrl} />
+          </div>
           </div>
 
           {/* Bottom breathing room */}

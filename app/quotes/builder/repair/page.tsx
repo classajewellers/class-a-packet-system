@@ -248,7 +248,7 @@ function ItemCard({
         <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", paddingTop: 10, flexShrink: 0 }}>
           Item {idx + 1}
         </div>
-        <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr auto", gap: 10 }}>
+        <div className="repair-item-head" style={{ flex: 1, minWidth: 0 }}>
           <input
             value={item.description}
             onChange={e => onUpdate({ description: e.target.value })}
@@ -652,7 +652,22 @@ function RepairQuoteBuilderInner() {
   ] : [];
 
   return (
-    <div style={{ padding: 24, maxWidth: 1200, margin: "0 auto" }}>
+    <div className="repair-quote" style={{ padding: 24, maxWidth: 1200, margin: "0 auto" }}>
+      <style>{`
+        .repair-layout { display: flex; flex-direction: column; gap: 16px; }
+        .repair-summary { position: static; }
+        .repair-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .repair-item-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+        @media (min-width: 1200px) {
+          .repair-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; }
+          .repair-summary { position: sticky; top: 24px; }
+        }
+        @media (max-width: 767px) {
+          .repair-quote { padding: 12px 0 !important; }
+          .repair-fields, .repair-item-head { grid-template-columns: 1fr; }
+          .repair-item-head select { width: 100% !important; }
+        }
+      `}</style>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 28 }}>
         <Link href="/quotes/builder" style={{ color: "#6B7280", textDecoration: "none", fontSize: 14, display: "flex", alignItems: "center", gap: 4 }}>
@@ -663,7 +678,7 @@ function RepairQuoteBuilderInner() {
         <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1A1A2E", margin: 0 }}>Repair Quote</h1>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 24, alignItems: "start" }}>
+      <div className="repair-layout">
         {/* ── Left column ── */}
         <div>
           {/* Customer */}
@@ -702,7 +717,7 @@ function RepairQuoteBuilderInner() {
                 </div>
               )}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div className="repair-fields">
               <div>
                 <label style={labelStyle}>First name</label>
                 <input value={customer.firstName} onChange={e => setCustomer(c => ({ ...c, firstName: e.target.value }))} style={inputStyle} placeholder="First" />
@@ -748,7 +763,7 @@ function RepairQuoteBuilderInner() {
         </div>
 
         {/* ── Right sidebar ── */}
-        <div style={{ position: "sticky", top: 24 }}>
+        <div className="repair-summary">
           <div style={cardStyle}>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#1A1A2E", marginBottom: 16, textTransform: "uppercase", letterSpacing: "0.05em" }}>Quote Summary</div>
 

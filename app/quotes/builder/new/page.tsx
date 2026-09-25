@@ -638,7 +638,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
   return (
     <div style={{ border: "2px solid #E8E8F0", borderRadius: 14, marginBottom: 16, overflow: "hidden" }}>
       {/* Item header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "#F9FAFB", borderBottom: item.collapsed ? "none" : "1px solid #E8E8F0", cursor: "pointer" }} onClick={() => set("collapsed", !item.collapsed)}>
+      <div className="qb-split" style={{ padding: "12px 16px", background: "#F9FAFB", borderBottom: item.collapsed ? "none" : "1px solid #E8E8F0", cursor: "pointer" }} onClick={() => set("collapsed", !item.collapsed)}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ fontSize: 18, lineHeight: 1 }}>{item.itemType ? ITEM_ICONS[item.itemType as ItemType] : "📦"}</div>
           <div>
@@ -668,7 +668,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
             <div style={headingStyle}>Item Category</div>
             <div style={{ marginBottom: item.itemType ? 16 : 0 }}>
               <label style={{ ...labelStyle, marginBottom: 10 }}>Item Type</label>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+              <div className="qb-cols-3">
                 {ITEM_TYPES.map(t => {
                   const active = item.itemType === t;
                   return (
@@ -778,7 +778,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
 
           {/* Main Stones */}
           <div style={sectionStyle}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", ...headingStyle, marginBottom: 0, paddingBottom: 0, borderBottom: "none" }}>
+            <div className="qb-split" style={{ ...headingStyle, marginBottom: 0, paddingBottom: 0, borderBottom: "none" }}>
               <span>Main Stone</span>
               {item.includeMainStone && (
                 <button onClick={() => { setActiveOptIdx(0); onShowNivoda(item.id, item.stoneOptions[0]?.id ?? ""); }} style={{ padding: "5px 12px", borderRadius: 7, border: "1px solid #635BFF", background: "#EEF2FF", color: "#635BFF", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Browse Stones</button>
@@ -793,7 +793,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
               <div style={{ marginTop: 12 }}>
                 {item.stoneOptions.map((opt, optIdx) => (
                   <div key={opt.id} style={{ marginBottom: 16, padding: "14px 14px 12px", borderRadius: 10, border: "1px solid #E8E8F0", background: "#FAFAFA" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                    <div className="qb-split" style={{ marginBottom: 10 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <input
                           style={{ ...inputStyle, width: 120, padding: "4px 8px", fontSize: 13 }}
@@ -822,7 +822,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                             <button onClick={() => set("stoneOptions", item.stoneOptions.map(o => o.id === opt.id ? { ...o, stones: o.stones.filter(s => s.id !== stone.id) } : o))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 16, color: "#9CA3AF" }}>×</button>
                           )}
                         </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                        <div className="qb-stone-fields">
                           <div>
                             <label style={labelStyle}>Carat Weight</label>
                             <input style={inputStyle} type="number" step="0.01" min="0" value={stone.caratWeight} onChange={e => set("stoneOptions", item.stoneOptions.map(o => o.id === opt.id ? { ...o, stones: o.stones.map(s => s.id === stone.id ? { ...s, caratWeight: e.target.value } : s) } : o))} onFocus={onFocus} onBlur={onBlurField} placeholder="0.00ct" />
@@ -880,7 +880,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                     <span style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>Row {idx + 1}</span>
                     <button onClick={() => set("meleeRows", item.meleeRows.filter(x => x.id !== r.id))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 18, color: "#9CA3AF" }}>×</button>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
+                  <div className="qb-cols-4">
                     <div>
                       <label style={labelStyle}>Origin</label>
                       <select style={inputStyle} value={r.origin} onChange={e => patchMeleeRow(r.id, { origin: e.target.value as MeleeRow["origin"], shape: "", quality: "", caratWeight: "", mm: "" })}>
@@ -918,7 +918,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
                       </select>
                     </div>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div className="qb-stone-fields" style={{ marginBottom: 0 }}>
                     <div>
                       <label style={labelStyle}>Location</label>
                       <input style={inputStyle} type="text" value={r.location} onChange={e => set("meleeRows", item.meleeRows.map(x => x.id === r.id ? { ...x, location: e.target.value } : x))} onFocus={onFocus} onBlur={onBlurField} placeholder="e.g. hidden halo, halo, band" />
@@ -952,18 +952,18 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
           <div style={sectionStyle}>
             <div style={headingStyle}>Add-ons & Labour</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "#F9FAFB", borderRadius: 8, border: "1px solid #E8E8F0" }}>
+              <div className="qb-split" style={{ padding: "8px 12px", background: "#F9FAFB", borderRadius: 8, border: "1px solid #E8E8F0" }}>
                 <span style={{ fontSize: 14, color: "#374151", fontWeight: 500 }}>Labour</span>
                 {isManager && <span style={{ fontSize: 13, color: "#6B7280" }}>${Number(fixedCosts.find(fc => fc.key === "labour")?.amount ?? 300).toFixed(2)}</span>}
               </div>
               {isManager && item.includeMainStone && pricing.mainStoneSettingCost > 0 && (
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "#F9FAFB", borderRadius: 8, border: "1px solid #E8E8F0" }}>
+                <div className="qb-split" style={{ padding: "8px 12px", background: "#F9FAFB", borderRadius: 8, border: "1px solid #E8E8F0" }}>
                   <span style={{ fontSize: 14, color: "#374151" }}>Stone Settings (auto)</span>
                   <span style={{ fontSize: 13, color: "#6B7280" }}>{item.stoneOptions[0]?.stones.length ?? 0} × ${Number(pricing.mainStoneSettingRate).toFixed(2)} = ${Number(pricing.mainStoneSettingCost).toFixed(2)}</span>
                 </div>
               )}
               {pricing.totalMeleeQty > 0 && (
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "#F9FAFB", borderRadius: 8, border: "1px solid #E8E8F0" }}>
+                <div className="qb-split" style={{ padding: "8px 12px", background: "#F9FAFB", borderRadius: 8, border: "1px solid #E8E8F0" }}>
                   <span style={{ fontSize: 14, color: "#374151" }}>Small Stone Settings (auto)</span>
                   {isManager && <span style={{ fontSize: 13, color: "#6B7280" }}>{pricing.totalMeleeQty} × $30.00 = ${Number(pricing.smallSettingsCost).toFixed(2)}</span>}
                 </div>
@@ -971,7 +971,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
 
               {/* Freeform components */}
               {item.components.map((comp, ci) => (
-                <div key={comp.id} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, alignItems: "center" }}>
+                <div key={comp.id} className="qb-component">
                   <input
                     style={inputStyle} type="text" value={comp.name}
                     onChange={e => set("components", item.components.map(x => x.id === comp.id ? { ...x, name: e.target.value } : x))}
@@ -1005,7 +1005,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
 
           {/* AI Description */}
           <div style={sectionStyle}>
-            <div style={{ ...headingStyle, marginBottom: 0, paddingBottom: 0, borderBottom: "none", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div className="qb-split" style={{ ...headingStyle, marginBottom: 0, paddingBottom: 0, borderBottom: "none" }}>
               <span>Quote Description</span>
               <button
                 onClick={async () => {
@@ -1051,7 +1051,7 @@ function ItemCard({ item, index, total, pricing, metalRates, fixedCosts, isManag
           {isManager && (
             <div style={{ padding: "16px 20px" }}>
               <div style={headingStyle}>Price Override</div>
-              <div style={{ background: "#F9FAFB", border: "1px solid #E8E8F0", borderRadius: 10, padding: 14, marginBottom: 14, fontSize: 13 }}>
+              <div className="qb-breakdown" style={{ background: "#F9FAFB", border: "1px solid #E8E8F0", borderRadius: 10, padding: 14, marginBottom: 14, fontSize: 13 }}>
                 <div style={{ fontWeight: 600, color: "#374151", marginBottom: 10 }}>Cost Breakdown</div>
                 {item.metals.filter(m => m.type).map((m, idx) => {
                   const rate = metalRates.find(r => r.metal_type === m.type);
@@ -1696,14 +1696,29 @@ function QuoteBuilderPageInner() {
     <>
     <style>{`
       .qb-outer { padding: 24px; max-width: 1100px; margin: 0 auto; }
-      .qb-grid  { display: grid; grid-template-columns: 1fr 380px; gap: 24px; align-items: start; }
-      .qb-sidebar { position: sticky; top: 24px; }
+      .qb-grid  { display: flex; flex-direction: column; gap: 16px; }
+      .qb-sidebar { position: static; }
       .qb-row2  { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+      .qb-cols-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+      .qb-cols-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
+      .qb-stone-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+      .qb-component { display: grid; grid-template-columns: minmax(0, 1fr) 90px auto; gap: 8px; align-items: center; }
+      .qb-split { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+      .qb-breakdown > div { gap: 8px; }
+      @media (min-width: 1200px) {
+        .qb-grid { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 24px; align-items: start; }
+        .qb-sidebar { position: sticky; top: 24px; }
+      }
       @media (max-width: 767px) {
-        .qb-outer   { padding: 16px; }
-        .qb-grid    { display: flex; flex-direction: column; gap: 16px; }
-        .qb-sidebar { position: static; top: auto; }
-        .qb-row2    { grid-template-columns: 1fr; }
+        .qb-outer { padding: 12px 0; }
+        .qb-row2 { grid-template-columns: 1fr; }
+        .qb-cols-3 { grid-template-columns: 1fr 1fr; }
+        .qb-cols-4, .qb-stone-fields { grid-template-columns: 1fr; }
+        .qb-live-price { font-size: 32px !important; }
+        .qb-breakdown > div { flex-wrap: wrap; }
+      }
+      @media (min-width: 768px) and (max-width: 1199px) {
+        .qb-cols-4 { grid-template-columns: 1fr 1fr; }
       }
     `}</style>
     <div className="qb-outer">
@@ -1813,7 +1828,7 @@ function QuoteBuilderPageInner() {
 
           {/* Charm line items */}
           {charmItems.map(ci => (
-            <div key={ci.id} style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, padding: "16px 20px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div key={ci.id} style={{ background: "#fff", border: "1px solid #E8E8F0", borderRadius: 12, padding: "16px 20px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                   <span style={{ fontSize: 10, background: "#EDE9FE", color: "#4C1D95", padding: "1px 8px", borderRadius: 10, fontWeight: 700, textTransform: "uppercase" }}>CLASS A CUSTOM</span>
@@ -1858,7 +1873,7 @@ function QuoteBuilderPageInner() {
               <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>
                 {(items.length > 1 || charmItems.length > 0) ? "Grand Total (incl. GST)" : "Quoted Price (incl. GST)"}
               </div>
-              <div style={{ fontSize: 40, fontWeight: 800, color: "#1A1A2E", lineHeight: 1 }}>
+              <div className="qb-live-price" style={{ fontSize: 40, fontWeight: 800, color: "#1A1A2E", lineHeight: 1 }}>
                 {grandTotal > 0 ? `$${grandTotal.toLocaleString("en-AU")}` : "—"}
               </div>
             </div>

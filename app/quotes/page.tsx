@@ -150,7 +150,7 @@ export default function QuotesPage() {
     <>
       <div className="max-w-7xl mx-auto space-y-4">
         {/* Page header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 style={{ fontSize: 'var(--vault-text-page-title)', fontWeight: 600, color: 'var(--vault-text)', margin: 0 }}>Sales — Quotes</h1>
           <Link href="/quotes/builder" className="vault-btn vault-btn-primary" style={{ textDecoration: 'none' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>

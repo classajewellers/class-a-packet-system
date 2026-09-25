@@ -9,6 +9,22 @@ export const maxDuration = 30;
 
 const COLORS    = ["D","E","F","G","H","I","J","K","L","M"] as const;
 const CLARITIES = ["FL","IF","VVS1","VVS2","VS1","VS2","SI1","SI2","SI3","I1","I2","I3"] as const;
+const ORDER_TYPES = new Set(["price", "size"]);
+const ORDER_DIRS  = new Set(["ASC", "DESC"]);
+
+function diamondOrder(body: Record<string, unknown>): string {
+  let type = "price";
+  let direction = "ASC";
+  const raw = body.sort;
+  if (raw && typeof raw === "object") {
+    const candidate = raw as { type?: unknown; direction?: unknown };
+    const nextType = String(candidate.type ?? "");
+    const nextDir = String(candidate.direction ?? "").toUpperCase();
+    if (ORDER_TYPES.has(nextType)) type = nextType;
+    if (ORDER_DIRS.has(nextDir)) direction = nextDir;
+  }
+  return `order: { type: ${type}, direction: ${direction} }`;
+}
 
 function expandRange(arr: readonly string[], from: string, to: string): string[] {
   const a = arr.indexOf(from), b = arr.indexOf(to);
@@ -110,7 +126,7 @@ async function runSearch(token: string, body: Record<string, unknown>, tenantId?
           }
           limit: ${limitNum}
           offset: ${offsetNum}
-          order: { type: price, direction: ASC }
+          ${diamondOrder(body)}
         ) {
           total_count
           items {
