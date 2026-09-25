@@ -12,6 +12,7 @@ import {
   parseLineItems,
   isNativeShopifyFormat,
 } from "@/lib/shopify-articles";
+import { attachProductOptionNames } from "@/lib/shopify-option-lookup";
 
 // Fallback tenant for legacy Zapier webhooks that have no X-Shopify-Shop-Domain header.
 // Native Shopify webhooks (registered via OAuth) are identified by shop_domain lookup.
@@ -104,6 +105,9 @@ interface ShopifyLineItem {
   quantity: number;
   price: string;
   properties?: ShopifyProperty[];
+  /** Present on REST orders/create. Used to resolve option names (stone shape). */
+  product_id?: number | string | null;
+  variant_id?: number | string | null;
 }
 
 interface ShopifyAddress {
@@ -386,7 +390,12 @@ function extractDispatchDateZapier(raw: any): string | null {
 // ═══════════════════════════════════════════════════════════════════════════════
 // Called via waitUntil() so the 200 is already sent before any DB work begins.
 
-async function processOrder(rawBody: Record<string, unknown>, tenantId: string, webhookEventId: string): Promise<void> {
+async function processOrder(
+  rawBody: Record<string, unknown>,
+  tenantId: string,
+  webhookEventId: string,
+  shopDomain: string | null,
+): Promise<void> {
   console.log("[shopify/webhook] processOrder started — tenant_id:", tenantId);
   await markWebhookEvent(webhookEventId, { status: "processing" });
   try {
@@ -433,7 +442,11 @@ async function processOrder(rawBody: Record<string, unknown>, tenantId: string, 
     console.log("[shopify/webhook] [native] shipping_address:", JSON.stringify(order.shipping_address ?? null));
     console.log("[shopify/webhook] [native] line_items count:", order.line_items?.length ?? 0);
 
-    articles       = buildArticles(order.line_items ?? []);
+    const lineItemsWithShapes = await attachProductOptionNames(
+      order.line_items ?? [],
+      shopDomain ?? process.env.SHOPIFY_STORE_DOMAIN ?? null,
+    );
+    articles       = buildArticles(lineItemsWithShapes);
     shippingMethod = extractShippingMethodNative(order.shipping_lines);
     dispatchDate   = extractDispatchDateNative(order.line_items);
 
@@ -718,7 +731,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // the row failed here, as a last line of defence — but processOrder()
   // itself is expected to own every real status transition.
   waitUntil(
-    processOrder(rawBody, tenantId, webhookEvent.id).catch((err) =>
+    processOrder(rawBody, tenantId, webhookEvent.id, shopDomain).catch((err) =>
       markFailed(webhookEvent.id, tenantId, externalId, `processOrder threw: ${err instanceof Error ? err.message : String(err)}`)
     )
   );
