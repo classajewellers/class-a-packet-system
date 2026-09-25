@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { CadVersionStatus } from "@/lib/cadStage";
 import { cadRenderError, cadSourceError } from "@/lib/cadStage";
 
@@ -16,6 +16,7 @@ export interface CadVersionRow {
   source_storage_path: string | null;
   created_at: string;
   decided_at: string | null;
+  decided_by_name: string | null;
   drives_casting: boolean;
 }
 
@@ -37,10 +38,16 @@ export default function CadApprovalPanel({
   packetId,
   isManager,
   onPacket,
+  designerName,
+  assignControl,
+  onVersions,
 }: {
   packetId: string;
   isManager: boolean;
   onPacket: (packet: Record<string, unknown>) => void;
+  designerName?: string | null;
+  assignControl?: ReactNode;
+  onVersions?: (versions: CadVersionRow[]) => void;
 }) {
   const [versions, setVersions] = useState<CadVersionRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,13 +71,15 @@ export default function CadApprovalPanel({
         setVersions([]);
         return;
       }
-      setVersions(json.versions ?? []);
+      const next = (json.versions ?? []) as CadVersionRow[];
+      setVersions(next);
+      onVersions?.(next);
     } catch {
       setError("Could not load CAD versions");
     } finally {
       setLoading(false);
     }
-  }, [packetId]);
+  }, [packetId, onVersions]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -149,8 +158,52 @@ export default function CadApprovalPanel({
     fontSize: 13, color: "#1A1A2E", background: "#fff", fontFamily: "inherit", boxSizing: "border-box",
   };
 
+  const latest = versions.reduce<CadVersionRow | null>((best, row) => (
+    !best || row.version_number > best.version_number ? row : best
+  ), null);
+  const fileStatus = latest ? `Files uploaded — Version ${latest.version_number}` : "No file uploaded yet";
+  const approverName = latest?.status === "pending" || !latest?.decided_by_name ? "a manager" : latest.decided_by_name;
+  const approvalStatus = !latest
+    ? "No version to approve yet"
+    : latest.status === "pending"
+      ? "Waiting for approval"
+      : latest.status === "changes_requested"
+        ? "Changes requested"
+        : latest.status === "rejected"
+          ? "Rejected"
+          : "Approved";
+  const decisionWhen = latest?.decided_at
+    ? new Date(latest.decided_at).toLocaleString("en-AU", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+    : null;
+
   return (
     <div>
+      {!loading && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+          <section style={{ border: "1px solid #E8E8F0", borderRadius: 10, padding: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>CAD Design</div>
+            {assignControl ?? (
+              <div style={{ fontSize: 14, fontWeight: 700, color: designerName ? "#1A1A2E" : "#9CA3AF" }}>{designerName ?? "No CAD designer"}</div>
+            )}
+            <div style={{ fontSize: 13, color: "#374151", marginTop: 8 }}>{fileStatus}</div>
+          </section>
+          <section style={{ border: "1px solid #E8E8F0", borderRadius: 10, padding: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>CAD Approval</div>
+            <div style={{ fontSize: 13, color: "#374151" }}>Approver: {approverName}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#1A1A2E", marginTop: 4 }}>{approvalStatus}</div>
+            {latest?.status === "changes_requested" && latest.decision_note && (
+              <div style={{ fontSize: 13, color: "#374151", marginTop: 6 }}>{latest.decision_note}</div>
+            )}
+            {latest?.status === "rejected" && latest.decision_note && (
+              <div style={{ fontSize: 13, color: "#374151", marginTop: 6 }}>{latest.decision_note}</div>
+            )}
+            {latest && latest.status !== "pending" && decisionWhen && (
+              <div style={{ fontSize: 12, color: "#6B7280", marginTop: 6 }}>Decided {decisionWhen}</div>
+            )}
+          </section>
+        </div>
+      )}
+
       <div style={{ fontSize: 13, color: "#4B5563", marginBottom: 12, lineHeight: 1.45 }}>
         Upload a render and the source file on CAD Design. That moves the job to CAD Approval.
         A manager approves that version to move the job to Casting. Only the approved version is used for the casting order.

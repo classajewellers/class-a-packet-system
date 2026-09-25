@@ -36,21 +36,36 @@ export async function GET(
 
     const { data, error } = await supabase
       .from("packet_cad_versions")
-      .select("id, version_number, status, note, decision_note, render_filename, source_filename, render_storage_path, source_storage_path, created_at, decided_at")
+      .select("id, version_number, status, note, decision_note, render_filename, source_filename, render_storage_path, source_storage_path, created_at, decided_at, decided_by")
       .eq("tenant_id", tenantId)
       .eq("packet_id", params.id)
       .order("version_number", { ascending: false });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    const decidedIds = Array.from(new Set(
+      (data ?? []).map((row) => row.decided_by).filter((id): id is string => Boolean(id))
+    ));
+    const approverNames: Record<string, string> = {};
+    if (decidedIds.length > 0) {
+      const { data: people } = await supabase.from("profiles").select("id, full_name").in("id", decidedIds);
+      for (const person of people ?? []) {
+        if (person.id && person.full_name) approverNames[person.id] = person.full_name;
+      }
+    }
 
     const drivingVersion = (data ?? []).reduce((best, row) => {
       if (row.status !== "approved") return best;
       if (!best || row.version_number > best) return row.version_number;
       return best;
     }, 0);
-    const versions = (data ?? []).map((row) => ({
-      ...row,
-      drives_casting: row.status === "approved" && row.version_number === drivingVersion,
-    }));
+    const versions = (data ?? []).map((row) => {
+      const { decided_by, ...rest } = row;
+      return {
+        ...rest,
+        decided_by_name: decided_by ? (approverNames[decided_by] ?? null) : null,
+        drives_casting: row.status === "approved" && row.version_number === drivingVersion,
+      };
+    });
     return NextResponse.json({ versions, cad_required: packet.cad_required === true });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });

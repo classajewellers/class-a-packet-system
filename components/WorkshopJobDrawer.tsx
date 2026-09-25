@@ -5,7 +5,7 @@ import { useUser } from "@/context/UserContext";
 import { formatDateAU, formatCurrency } from "@/lib/formatters";
 import AttachmentsSection from "@/components/AttachmentsSection";
 import WorkshopPurchasing, { useJobPurchases } from "@/components/WorkshopPurchasing";
-import CadApprovalPanel from "@/components/CadApprovalPanel";
+import CadApprovalPanel, { type CadVersionRow } from "@/components/CadApprovalPanel";
 import { castingDueDate, isCastingOverdue, pathwayStepIndex } from "@/lib/cadStage";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -87,7 +87,7 @@ export interface WorkshopConfig {
 
 // ── Internal types ────────────────────────────────────────────────────────────
 
-type TabId = "overview" | "customer" | "items" | "notes" | "production" | "cad" | "materials" | "purchasing" | "pricing" | "qc" | "valuation" | "files" | "messages" | "history";
+type TabId = "overview" | "customer" | "items" | "notes" | "production" | "cad" | "materials" | "pricing" | "qc" | "valuation" | "files" | "messages" | "history";
 
 interface ActivityEvent {
   id: string;
@@ -113,13 +113,12 @@ const FRONT_SECTIONS: { id: TabId; label: string }[] = [
   { id: "items",      label: "Items" },
   { id: "production", label: "Production" },
   { id: "cad",        label: "CAD" },
-  { id: "materials",  label: "Materials" },
+  { id: "materials",  label: "Materials & Purchasing" },
 ];
 
 const MORE_SECTIONS: { id: TabId; label: string }[] = [
   { id: "customer",   label: "Customer" },
   { id: "notes",      label: "Notes" },
-  { id: "purchasing", label: "Purchasing" },
   { id: "pricing",    label: "Pricing" },
   { id: "qc",         label: "QC" },
   { id: "valuation",  label: "Valuation" },
@@ -148,6 +147,13 @@ const BLOCKED_LABELS: Record<string, string> = {
   waiting_approval:      "Waiting: Approval",
   waiting_subcontractor: "Waiting: Subcontractor",
   other:                 "Blocked",
+};
+
+const CAD_APPROVAL_SHORT: Record<string, string> = {
+  pending: "Waiting",
+  approved: "Approved",
+  changes_requested: "Changes",
+  rejected: "Rejected",
 };
 
 const STAGE_LABELS: Record<string, string> = {
@@ -292,6 +298,8 @@ export default function WorkshopJobDrawer({
   const [moreOpen, setMoreOpen] = useState(false);
   const [narrow, setNarrow] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [assignOpen, setAssignOpen] = useState<null | "header" | "cad">(null);
+  const [cadVersions, setCadVersions] = useState<CadVersionRow[]>([]);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 720px)");
@@ -336,6 +344,17 @@ export default function WorkshopJobDrawer({
   }, [packet]);
 
   useEffect(() => { if (user?.name) setQcInspector(user.name); }, [user]);
+
+  useEffect(() => {
+    let ignore = false;
+    fetch(`/api/workshop/packets/${packet.id}/cad`)
+      .then(async (res) => {
+        const json = await res.json().catch(() => ({}));
+        if (!ignore && res.ok && Array.isArray(json.versions)) setCadVersions(json.versions);
+      })
+      .catch(() => {});
+    return () => { ignore = true; };
+  }, [packet.id]);
 
   const h = useCallback(
     () => ({ "Content-Type": "application/json", "x-tenant-id": tenantId }),
@@ -518,6 +537,79 @@ export default function WorkshopJobDrawer({
     return true;
   }
 
+  function assignTeam(cadOnly: boolean) {
+    return config.teamMembers.filter((member) => member.active).filter((member) =>
+      !cadOnly || (member.workshop_role_keys ?? []).includes("cad_designer")
+    );
+  }
+
+  function assignValue(cadOnly: boolean): string {
+    const team = assignTeam(cadOnly);
+    if (local.assigned_to && team.some((member) => member.profile_id === local.assigned_to)) return `tp:${local.assigned_to}`;
+    if (local.workshop_subcontractor_name) {
+      if (team.some((member) => !member.profile_id && member.name === local.workshop_subcontractor_name)) return `tn:${local.workshop_subcontractor_name}`;
+      if (!cadOnly && config.subcontractors.some((sub) => sub.active && sub.name === local.workshop_subcontractor_name)) return `sub:${local.workshop_subcontractor_name}`;
+    }
+    return "";
+  }
+
+  function applyAssign(value: string) {
+    if (!value) { patch({ assigned_to: null, workshop_subcontractor_name: null }); return; }
+    if (value.startsWith("tp:")) { patch({ assigned_to: value.slice(3), workshop_subcontractor_name: null }); return; }
+    if (value.startsWith("tn:")) { patch({ assigned_to: null, workshop_subcontractor_name: value.slice(3) }); return; }
+    patch({ workshop_subcontractor_name: value.slice(4), assigned_to: null });
+  }
+
+  function assigneeName(): string | null {
+    if (local.status === "cad_design") return cadDesignerName();
+    if (local.assigned_to) {
+      return local.assigned_to_name
+        || profiles.find((profile) => profile.id === local.assigned_to)?.full_name
+        || config.teamMembers.find((member) => member.profile_id === local.assigned_to)?.name
+        || null;
+    }
+    return local.workshop_subcontractor_name || null;
+  }
+
+  function cadDesignerName(): string | null {
+    const team = assignTeam(true);
+    if (local.assigned_to) return team.find((member) => member.profile_id === local.assigned_to)?.name ?? null;
+    if (local.workshop_subcontractor_name) {
+      return team.find((member) => !member.profile_id && member.name === local.workshop_subcontractor_name)?.name ?? null;
+    }
+    return null;
+  }
+
+  function renderAssignSelect(cadOnly: boolean) {
+    const team = assignTeam(cadOnly);
+    return (
+      <div style={{ marginTop: 8, maxWidth: 360 }}>
+        <select value={assignValue(cadOnly)} onChange={(e) => { applyAssign(e.target.value); setAssignOpen(null); }} style={INPUT} aria-label={cadOnly ? "CAD Designer" : "Assigned to"}>
+          <option value="">— Unassigned —</option>
+          {team.length > 0 && (
+            <optgroup label={cadOnly ? "CAD Designers" : "Team"}>
+              {team.map((member) => (
+                <option key={member.id} value={member.profile_id ? `tp:${member.profile_id}` : `tn:${member.name}`}>{member.name}</option>
+              ))}
+            </optgroup>
+          )}
+          {!cadOnly && config.subcontractors.filter((sub) => sub.active).length > 0 && (
+            <optgroup label="Subcontractors">
+              {config.subcontractors.filter((sub) => sub.active).map((sub) => (
+                <option key={sub.id} value={`sub:${sub.name}`}>{sub.name}</option>
+              ))}
+            </optgroup>
+          )}
+        </select>
+        {cadOnly && team.length === 0 && (
+          <div style={{ fontSize: 12, color: "#B45309", marginTop: 6 }}>
+            No CAD Designers yet. In Settings → Team, tag a staff member with CAD Designer.
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // ── Tab renderers ─────────────────────────────────────────────────────────
 
   function renderOverview() {
@@ -554,7 +646,14 @@ export default function WorkshopJobDrawer({
           <div style={{ background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: 8, padding: "8px 12px", marginBottom: 14, fontSize: 13, color: "#DC2626" }}>{saveError}</div>
         )}
 
-        <WorkshopPurchasing rows={purchases.rows} error={purchases.error} />
+        <WorkshopPurchasing
+          rows={purchases.rows}
+          error={purchases.error}
+          workshopSupplier={local.workshop_supplier}
+          workshopPoNumber={local.workshop_po_number}
+          variant="summary"
+          onOpen={() => setActiveTab("materials")}
+        />
 
         {LABEL("Stage")}
         <div style={{ display: "flex", alignItems: "flex-start", width: "100%", overflowX: "auto", marginBottom: 16, padding: "2px 0 8px" }}>
@@ -570,6 +669,14 @@ export default function WorkshopJobDrawer({
             if (step !== null) payload.workshop_step_index = step;
             const blockedByApproval = !!local.pending_customer_approval && isNext;
             const canAdvance = isNext && !blockedByApproval;
+            const latestCad = cadVersions.reduce<CadVersionRow | null>((best, row) => (
+              !best || row.version_number > best.version_number ? row : best
+            ), null);
+            const stageCaption = entry.status === "cad_design"
+              ? (cadDesignerName() ?? "")
+              : entry.status === "cad_approval"
+                ? (latestCad ? CAD_APPROVAL_SHORT[latestCad.status] : "")
+                : "";
             const label = (narrow && !active && !isNext) ? stageShort(entry.label) : entry.label;
             return (
               <div key={`${entry.status}_${entry.substatus ?? ""}`} style={{ display: "flex", alignItems: "flex-start", flex: index === 0 ? "0 0 auto" : "1 1 0", minWidth: active || isNext ? 72 : 44 }}>
@@ -588,6 +695,9 @@ export default function WorkshopJobDrawer({
                   </span>
                   <span style={{ width: active ? 14 : 8, height: active ? 14 : 8, borderRadius: "50%", background: active || done ? "#635BFF" : isNext ? "#fff" : "#E5E7EB", border: isNext ? "2px solid #635BFF" : "none", boxShadow: active ? "0 0 0 4px rgba(99,91,255,0.22)" : undefined, boxSizing: "content-box" }} />
                   <span style={{ fontSize: active || isNext ? 12 : 10, lineHeight: 1.2, fontWeight: active || isNext ? 700 : 500, color: active || isNext ? "#1A1A2E" : "#6B7280", textAlign: "center" }}>{label}</span>
+                  {stageCaption ? (
+                    <span style={{ fontSize: 9, lineHeight: 1.2, color: "#6B7280", textAlign: "center", maxWidth: 88, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{stageCaption}</span>
+                  ) : null}
                 </button>
               </div>
             );
@@ -804,10 +914,6 @@ export default function WorkshopJobDrawer({
     );
   }
 
-  function renderPurchasing() {
-    return <WorkshopPurchasing rows={purchases.rows} error={purchases.error} />;
-  }
-
   function renderMaterials() {
     return (
       <div>
@@ -824,25 +930,49 @@ export default function WorkshopJobDrawer({
           <div style={{ fontSize: 12, color: "#6B7280", marginTop: -8, marginBottom: 10 }}>Customer due date: {formatDateAU(local.due_date)}</div>
         )}
         {local.status === "casting" && (
-          <div style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.45 }}>
+          <div style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.45, marginBottom: 12 }}>
             {isCastingOverdue(local)
               ? "This casting is overdue. It is still in Casting, so it is not back. When it returns, move the stage to Polish/Finish or Polish/Set."
               : "Expected return is the workshop due date. While the job stays in Casting past that date, it is overdue. When it returns, move the stage to Polish/Finish or Polish/Set."}
           </div>
         )}
+        <WorkshopPurchasing
+          rows={purchases.rows}
+          error={purchases.error}
+          workshopSupplier={local.workshop_supplier}
+          workshopPoNumber={local.workshop_po_number}
+        />
       </div>
     );
   }
 
   function renderCad() {
+    const designer = cadDesignerName();
     return (
       <CadApprovalPanel
         packetId={local.id}
         isManager={isManager}
-        onPacket={(packet) => {
+        designerName={designer}
+        assignControl={(
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: designer ? "#1A1A2E" : "#9CA3AF" }}>{designer ?? "No CAD designer"}</span>
+              <button
+                type="button"
+                onClick={() => setAssignOpen((open) => open === "cad" ? null : "cad")}
+                style={{ background: "#fff", border: "1px solid #D1D5DB", borderRadius: 8, padding: "4px 10px", fontSize: 12, fontWeight: 700, color: "#1A1A2E", cursor: "pointer" }}
+              >
+                {designer ? "Change" : "Assign"}
+              </button>
+            </div>
+            {assignOpen === "cad" && renderAssignSelect(true)}
+          </div>
+        )}
+        onVersions={setCadVersions}
+        onPacket={(next) => {
           const updated: WorkshopPacket = {
             ...local,
-            ...(packet as Partial<WorkshopPacket>),
+            ...(next as Partial<WorkshopPacket>),
             customer_display_name: local.customer_display_name,
             assigned_to_name: local.assigned_to_name,
           };
@@ -854,17 +984,6 @@ export default function WorkshopJobDrawer({
   }
 
   function renderPricing() {
-    // Assignee dropdown value
-    const assignTeam = config.teamMembers.filter((m) => m.active).filter((m) =>
-      local.status !== "cad_design" || (m.workshop_role_keys ?? []).includes("cad_designer")
-    );
-    let assignVal = "";
-    if (local.assigned_to) assignVal = `tp:${local.assigned_to}`;
-    else if (local.workshop_subcontractor_name) {
-      assignVal = assignTeam.some(m => !m.profile_id && m.name === local.workshop_subcontractor_name)
-        ? `tn:${local.workshop_subcontractor_name}` : local.status === "cad_design" ? "" : `sub:${local.workshop_subcontractor_name}`;
-    }
-
     return (
       <div>
         {FIELD("Job Type",
@@ -875,36 +994,6 @@ export default function WorkshopJobDrawer({
             <option value="online_order">Online Order</option>
             <option value="stock_work">Stock Work</option>
           </select>
-        )}
-        {FIELD(local.status === "cad_design" ? "Assign To (CAD Designer only)" : "Assign To",
-          <select value={assignVal} onChange={e => {
-            const v = e.target.value;
-            if (!v) { patch({ assigned_to: null, workshop_subcontractor_name: null }); return; }
-            if (v.startsWith("tp:")) { patch({ assigned_to: v.slice(3), workshop_subcontractor_name: null }); return; }
-            if (v.startsWith("tn:")) { patch({ assigned_to: null, workshop_subcontractor_name: v.slice(3) }); return; }
-            patch({ workshop_subcontractor_name: v.slice(4), assigned_to: null });
-          }} style={INPUT}>
-            <option value="">— Unassigned —</option>
-            {assignTeam.length > 0 && (
-              <optgroup label={local.status === "cad_design" ? "CAD Designers" : "Team"}>
-                {assignTeam.map(m => (
-                  <option key={m.id} value={m.profile_id ? `tp:${m.profile_id}` : `tn:${m.name}`}>{m.name}</option>
-                ))}
-              </optgroup>
-            )}
-            {local.status !== "cad_design" && config.subcontractors.filter(s => s.active).length > 0 && (
-              <optgroup label="Subcontractors">
-                {config.subcontractors.filter(s => s.active).map(s => (
-                  <option key={s.id} value={`sub:${s.name}`}>{s.name}</option>
-                ))}
-              </optgroup>
-            )}
-          </select>
-        )}
-        {local.status === "cad_design" && assignTeam.length === 0 && (
-          <div style={{ fontSize: 12, color: "#B45309", marginTop: -8, marginBottom: 14 }}>
-            No CAD Designers yet. In Settings → Team, tag a staff member with CAD Designer.
-          </div>
         )}
         {FIELD("Due Date", <input type="date" value={local.due_date ?? ""} onChange={e => patch({ due_date: e.target.value || null })} style={INPUT} />)}
         {FIELD("Staff Member",
@@ -1136,6 +1225,18 @@ export default function WorkshopJobDrawer({
             <div style={{ minWidth: 0 }}>
               <div style={{ fontFamily: "monospace", fontSize: 11, color: "#9CA3AF", marginBottom: 1 }}>{local.reference_number}</div>
               <div style={{ fontWeight: 700, color: "#1A1A2E", fontSize: 17, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName(local)}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13, color: "#6B7280" }}>Assigned to</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: assigneeName() ? "#1A1A2E" : "#9CA3AF" }}>{assigneeName() ?? "Unassigned"}</span>
+                <button
+                  type="button"
+                  onClick={() => setAssignOpen((open) => open === "header" ? null : "header")}
+                  style={{ background: "#fff", border: "1px solid #D1D5DB", borderRadius: 8, padding: "4px 10px", fontSize: 12, fontWeight: 700, color: "#1A1A2E", cursor: "pointer" }}
+                >
+                  {assigneeName() ? "Change" : "Assign"}
+                </button>
+              </div>
+              {assignOpen === "header" && renderAssignSelect(local.status === "cad_design")}
             </div>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 2, flexShrink: 0, position: "relative" }}>
               <button
@@ -1261,7 +1362,6 @@ export default function WorkshopJobDrawer({
           {activeTab === "production" && renderProduction()}
           {activeTab === "cad"        && renderCad()}
           {activeTab === "materials"  && renderMaterials()}
-          {activeTab === "purchasing" && renderPurchasing()}
           {activeTab === "pricing"    && renderPricing()}
           {activeTab === "qc"         && renderQC()}
           {activeTab === "valuation"  && renderValuation()}

@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { formatCurrency } from "@/lib/formatters";
 
-interface PurchaseRow {
+export interface PurchaseRow {
   id: string;
   what: string;
   category: string | null;
@@ -23,20 +22,83 @@ interface PurchaseRow {
   } | null;
 }
 
-const STATUS: Record<string, { label: string; bg: string; fg: string }> = {
-  draft: { label: "Draft", bg: "#F3F4F6", fg: "#374151" },
+export type MaterialLineStatus = "needed" | "ordered" | "received";
+
+export interface MaterialLine {
+  key: string;
+  title: string;
+  status: MaterialLineStatus;
+  poId: string | null;
+  poNumber: string | null;
+  supplier: string | null;
+}
+
+function poKey(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function purchaseStatus(row: PurchaseRow): MaterialLineStatus {
+  const quantity = Number(row.quantity ?? 0);
+  const receivedQty = Number(row.received_quantity ?? 0);
+  if (row.received || (quantity > 0 && receivedQty >= quantity)) return "received";
+  const status = row.purchase_order?.status;
+  if (status && status !== "draft" && status !== "cancelled") return "ordered";
+  return "needed";
+}
+
+// Matching rule:
+// Purchase lines are already this job's lines: the purchasing API loads
+// inventory_po_lines where packet_id is the job. That foreign key is the
+// link. The Materials tab also keeps one free-text order on the packet
+// (workshop_po_number + workshop_supplier). That order is the same purchase
+// when its number matches a linked PO number (trimmed, case-insensitive).
+// A match drops the free-text row so the PO lines are the only rows.
+// A linked PO line whose number does not match still appears — it was bought
+// for this job and is not that free-text order. There is no material-line
+// table and no second id to join on.
+export function mergeMaterialLines(input: {
+  workshopSupplier: string | null;
+  workshopPoNumber: string | null;
+  purchases: PurchaseRow[];
+}): MaterialLine[] {
+  const lines: MaterialLine[] = input.purchases.map((row) => ({
+    key: `po-line:${row.id}`,
+    title: row.what || "Untitled line",
+    status: purchaseStatus(row),
+    poId: row.purchase_order?.id ?? null,
+    poNumber: row.purchase_order?.po_number ?? null,
+    supplier: row.purchase_order?.supplier_name ?? null,
+  }));
+
+  const wanted = poKey(input.workshopPoNumber);
+  const supplier = (input.workshopSupplier ?? "").trim();
+  const matched = wanted !== "" && lines.some((line) => poKey(line.poNumber) === wanted);
+  // A number that matches no linked PO is its own order. A supplier with no
+  // number is only listed when nothing is linked yet — there is no id to
+  // pair that name with a purchase line.
+  if (!matched && (wanted || (supplier && lines.length === 0))) {
+    lines.unshift({
+      key: "packet-order",
+      title: "Workshop materials",
+      status: wanted ? "ordered" : "needed",
+      poId: null,
+      poNumber: input.workshopPoNumber?.trim() || null,
+      supplier: supplier || null,
+    });
+  }
+  return lines;
+}
+
+const LINE_STATUS: Record<MaterialLineStatus, { label: string; bg: string; fg: string }> = {
+  needed: { label: "Needed", bg: "#F3F4F6", fg: "#374151" },
   ordered: { label: "Ordered", bg: "#EFF6FF", fg: "#1D4ED8" },
-  partially_received: { label: "Partly received", bg: "#FFFBEB", fg: "#92400E" },
   received: { label: "Received", bg: "#ECFDF5", fg: "#047857" },
-  cancelled: { label: "Cancelled", bg: "#FEF2F2", fg: "#B91C1C" },
 };
 
-function showDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  const day = value.slice(0, 10);
-  const [y, m, d] = day.split("-");
-  if (!y || !m || !d) return value;
-  return `${d}/${m}/${y}`;
+export function materialsSummary(lines: MaterialLine[]): string {
+  if (lines.length === 0) return "No materials or purchases on this job yet.";
+  const count = (status: MaterialLineStatus) => lines.filter((line) => line.status === status).length;
+  return `Materials: ${count("needed")} needed · ${count("ordered")} ordered · ${count("received")} received`;
 }
 
 export function useJobPurchases(packetId: string, tenantId: string) {
@@ -99,64 +161,86 @@ export function useJobPurchases(packetId: string, tenantId: string) {
 export default function WorkshopPurchasing({
   rows,
   error,
+  workshopSupplier,
+  workshopPoNumber,
+  variant = "list",
+  onOpen,
 }: {
   rows: PurchaseRow[] | null;
   error: string;
+  workshopSupplier?: string | null;
+  workshopPoNumber?: string | null;
+  variant?: "list" | "summary";
+  onOpen?: () => void;
 }) {
+  const lines = rows == null
+    ? null
+    : mergeMaterialLines({
+        workshopSupplier: workshopSupplier ?? null,
+        workshopPoNumber: workshopPoNumber ?? null,
+        purchases: rows,
+      });
+
+  if (variant === "summary") {
+    return (
+      <div style={{ marginBottom: 16 }}>
+        {error ? (
+          <div style={{ fontSize: 13, color: "#B91C1C" }}>{error}</div>
+        ) : (
+          <button
+            type="button"
+            onClick={onOpen}
+            style={{ background: "none", border: "none", padding: 0, fontSize: 13, fontWeight: 600, color: "#4338CA", cursor: onOpen ? "pointer" : "default", textAlign: "left" }}
+          >
+            {lines == null ? "Loading materials…" : materialsSummary(lines)}
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <section style={{ marginBottom: 16 }}>
+    <section>
       <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
-        Purchasing
+        Lines
       </div>
       {error && (
         <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, padding: "8px 12px", fontSize: 13, color: "#B91C1C" }}>
           {error}
         </div>
       )}
-      {!error && rows == null && (
-        <div style={{ fontSize: 13, color: "#9CA3AF" }}>Loading purchases…</div>
+      {!error && lines == null && (
+        <div style={{ fontSize: 13, color: "#9CA3AF" }}>Loading materials…</div>
       )}
-      {!error && rows != null && rows.length === 0 && (
+      {!error && lines != null && lines.length === 0 && (
         <div style={{ fontSize: 13, color: "#6B7280", background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 8, padding: "10px 12px" }}>
-          Nothing ordered for this job yet. A purchase order line shows here when it is linked to this packet — castings, stones, and findings.
+          Nothing needed or ordered for this job yet.
         </div>
       )}
-      {!error && rows != null && rows.length > 0 && (
+      {!error && lines != null && lines.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {rows.map((row) => {
-            const po = row.purchase_order;
-            const status = po?.status ? STATUS[po.status] : null;
+          {lines.map((line) => {
+            const tone = LINE_STATUS[line.status];
+            const poLabel = [line.poNumber, line.supplier].filter(Boolean).join(" · ");
             return (
-              <div key={row.id} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, padding: "10px 12px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>{row.what}</div>
-                  {status && (
-                    <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: status.bg, color: status.fg, whiteSpace: "nowrap" }}>
-                      {status.label}
-                    </span>
-                  )}
+              <div key={line.key} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, padding: "10px 12px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>{line.title}</div>
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: tone.bg, color: tone.fg, whiteSpace: "nowrap" }}>
+                    {tone.label}
+                  </span>
                 </div>
-                {row.category && (
-                  <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>{row.category}</div>
+                {poLabel && (
+                  <div style={{ marginTop: 6, fontSize: 13 }}>
+                    {line.poId ? (
+                      <a href={`/inventory/purchase-orders/${line.poId}`} style={{ fontWeight: 600, color: "#4338CA" }}>
+                        {poLabel}
+                      </a>
+                    ) : (
+                      <span style={{ color: "#374151" }}>{poLabel}</span>
+                    )}
+                  </div>
                 )}
-                <div style={{ fontSize: 12, color: "#374151", marginTop: 6, lineHeight: 1.5 }}>
-                  <div>Supplier: {po?.supplier_name || "No supplier on this order"}</div>
-                  <div>Ordered: {showDate(po?.order_date)}{po?.expected_date ? ` · Expected ${showDate(po.expected_date)}` : ""}</div>
-                  <div>Received: {row.received_quantity} of {row.quantity}{row.received_at ? ` · ${showDate(row.received_at)}` : ""}</div>
-                  {row.estimated_cost != null && <div>Est. cost: {formatCurrency(Number(row.estimated_cost))}</div>}
-                </div>
-                <div style={{ marginTop: 8 }}>
-                  {po ? (
-                    <a
-                      href={`/inventory/purchase-orders/${po.id}`}
-                      style={{ fontSize: 13, fontWeight: 600, color: "#4338CA" }}
-                    >
-                      {po.po_number || "Open purchase order"}
-                    </a>
-                  ) : (
-                    <span style={{ fontSize: 12, color: "#9CA3AF" }}>Purchase order missing</span>
-                  )}
-                </div>
               </div>
             );
           })}
