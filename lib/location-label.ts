@@ -18,7 +18,10 @@ export function formatLocationLabel(location: LocationFields | null | undefined)
   return name || code;
 }
 
-/** Coded locations first, natural code order (HA2 before HA10), then name. */
+/**
+ * Coded locations first. Natural code order puts A1 before AD1, HA2 before HA10,
+ * and word codes (Cust Hold, WS, …) in alphabetical order among them. Then name.
+ */
 export function compareLocations(a: LocationFields, b: LocationFields): number {
   const codeA = typeof a.code === "string" ? a.code.trim() : "";
   const codeB = typeof b.code === "string" ? b.code.trim() : "";
