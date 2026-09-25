@@ -33,10 +33,6 @@ export interface MaterialLine {
   supplier: string | null;
 }
 
-function poKey(value: string | null | undefined): string {
-  return (value ?? "").trim().toLowerCase();
-}
-
 function purchaseStatus(row: PurchaseRow): MaterialLineStatus {
   const quantity = Number(row.quantity ?? 0);
   const receivedQty = Number(row.received_quantity ?? 0);
@@ -46,22 +42,11 @@ function purchaseStatus(row: PurchaseRow): MaterialLineStatus {
   return "needed";
 }
 
-// Matching rule:
-// Purchase lines are already this job's lines: the purchasing API loads
-// inventory_po_lines where packet_id is the job. That foreign key is the
-// link. The Materials tab also keeps one free-text order on the packet
-// (workshop_po_number + workshop_supplier). That order is the same purchase
-// when its number matches a linked PO number (trimmed, case-insensitive).
-// A match drops the free-text row so the PO lines are the only rows.
-// A linked PO line whose number does not match still appears — it was bought
-// for this job and is not that free-text order. There is no material-line
-// table and no second id to join on.
-export function mergeMaterialLines(input: {
-  workshopSupplier: string | null;
-  workshopPoNumber: string | null;
-  purchases: PurchaseRow[];
-}): MaterialLine[] {
-  const lines: MaterialLine[] = input.purchases.map((row) => ({
+// Each row is one inventory_po_lines record whose packet_id is this job
+// (migration 087). That is the link. The packet's workshop_supplier,
+// workshop_po_number and workshop_due_date are the casting order, not lines.
+export function mergeMaterialLines(purchases: PurchaseRow[]): MaterialLine[] {
+  return purchases.map((row) => ({
     key: `po-line:${row.id}`,
     title: row.what || "Untitled line",
     status: purchaseStatus(row),
@@ -69,24 +54,6 @@ export function mergeMaterialLines(input: {
     poNumber: row.purchase_order?.po_number ?? null,
     supplier: row.purchase_order?.supplier_name ?? null,
   }));
-
-  const wanted = poKey(input.workshopPoNumber);
-  const supplier = (input.workshopSupplier ?? "").trim();
-  const matched = wanted !== "" && lines.some((line) => poKey(line.poNumber) === wanted);
-  // A number that matches no linked PO is its own order. A supplier with no
-  // number is only listed when nothing is linked yet — there is no id to
-  // pair that name with a purchase line.
-  if (!matched && (wanted || (supplier && lines.length === 0))) {
-    lines.unshift({
-      key: "packet-order",
-      title: "Workshop materials",
-      status: wanted ? "ordered" : "needed",
-      poId: null,
-      poNumber: input.workshopPoNumber?.trim() || null,
-      supplier: supplier || null,
-    });
-  }
-  return lines;
 }
 
 const LINE_STATUS: Record<MaterialLineStatus, { label: string; bg: string; fg: string }> = {
@@ -161,25 +128,15 @@ export function useJobPurchases(packetId: string, tenantId: string) {
 export default function WorkshopPurchasing({
   rows,
   error,
-  workshopSupplier,
-  workshopPoNumber,
   variant = "list",
   onOpen,
 }: {
   rows: PurchaseRow[] | null;
   error: string;
-  workshopSupplier?: string | null;
-  workshopPoNumber?: string | null;
   variant?: "list" | "summary";
   onOpen?: () => void;
 }) {
-  const lines = rows == null
-    ? null
-    : mergeMaterialLines({
-        workshopSupplier: workshopSupplier ?? null,
-        workshopPoNumber: workshopPoNumber ?? null,
-        purchases: rows,
-      });
+  const lines = rows == null ? null : mergeMaterialLines(rows);
 
   if (variant === "summary") {
     return (

@@ -2,8 +2,6 @@
 
 import { WorkshopJob } from "@/lib/types";
 import { WorkshopTrack, TRACK_LABELS, TRACK_COLOURS } from "@/lib/workshopConfig";
-import { resolveAssigneeName, type AssigneeDirectory } from "@/lib/workshopAssignee";
-import AssigneeMark from "@/components/AssigneeMark";
 
 const CATEGORY_BADGE_STYLES: Record<string, React.CSSProperties> = {
   eng_ring:     { background: '#EEF2FF', color: '#635BFF' },
@@ -40,28 +38,12 @@ function daysInStage(changedAt: string): number {
   return Math.floor((now.getTime() - changed.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-function AssigneeLine({ job, directory }: { job: WorkshopJob; directory?: AssigneeDirectory }) {
-  const name = resolveAssigneeName({
-    assigned_to: job.assigned_to ?? null,
-    assigned_to_name: job.assigned_to_name ?? job.assigned_jeweller,
-    workshop_subcontractor_name: job.workshop_subcontractor_name ?? (job.is_subcontractor ? job.subcontractor_name : null),
-  }, directory);
-  if (!name) return null;
-  return (
-    <p style={{ fontSize: 12, color: "#374151", marginTop: 8, display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-      <AssigneeMark name={name} size={20} />
-      <span title={name} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
-    </p>
-  );
-}
-
 interface Props {
   job: WorkshopJob;
   onClick?: () => void;
-  assigneeDirectory?: AssigneeDirectory;
 }
 
-export default function WorkshopJobCard({ job, onClick, assigneeDirectory }: Props) {
+export default function WorkshopJobCard({ job, onClick }: Props) {
   const today = todayISO();
   const isOverdue = job.due_date != null && job.due_date < today;
   const isDueToday = job.due_date === today;
@@ -130,7 +112,17 @@ export default function WorkshopJobCard({ job, onClick, assigneeDirectory }: Pro
         )}
       </div>
 
-      <AssigneeLine job={job} directory={assigneeDirectory} />
+      {/* Assigned jeweller / sub-contractor */}
+      {(job.assigned_jeweller || job.is_subcontractor) && (
+        <p style={{ fontSize: 12, color: '#6B7280', marginTop: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <svg style={{ width: 12, height: 12, flexShrink: 0 }} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+          </svg>
+          {job.is_subcontractor && job.subcontractor_name
+            ? `Sub.C — ${job.subcontractor_name}`
+            : job.assigned_jeweller}
+        </p>
+      )}
 
       {/* Manufacture type / supplier badges */}
       {(job.manufacture_type || job.workshop_supplier) && (

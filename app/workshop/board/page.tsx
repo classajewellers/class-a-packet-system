@@ -710,10 +710,22 @@ export default function WorkshopBoardPage() {
       return;
     }
     setMoveError(null);
-    setPackets(prev => prev.map(p => p.id === id ? {
-      ...p, ...(payload as Partial<WorkshopPacket>),
-      ...(payload.status !== undefined ? { status_updated_at: new Date().toISOString() } : {}),
-    } : p));
+    setPackets(prev => prev.map(p => {
+      if (p.id !== id) return p;
+      const next: WorkshopPacket = {
+        ...p,
+        ...(payload as Partial<WorkshopPacket>),
+        ...(payload.status !== undefined ? { status_updated_at: new Date().toISOString() } : {}),
+      };
+      if ("assigned_to" in payload || "workshop_subcontractor_name" in payload) {
+        next.assigned_to_name = resolveAssigneeName({
+          assigned_to: next.assigned_to,
+          assigned_to_name: null,
+          workshop_subcontractor_name: next.workshop_subcontractor_name,
+        }, { teamMembers: config.teamMembers });
+      }
+      return next;
+    }));
     try {
       const res = await fetch(`/api/workshop/packets/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json", "x-tenant-id": tenantId }, body: JSON.stringify(payload) });
       const json = await res.json().catch(() => ({}));
@@ -727,7 +739,19 @@ export default function WorkshopBoardPage() {
         return;
       }
       if (json.packet && previous) {
-        const updated = { ...previous, ...json.packet, customer_display_name: previous.customer_display_name, assigned_to_name: previous.assigned_to_name };
+        const updated: WorkshopPacket = {
+          ...previous,
+          ...json.packet,
+          customer_display_name: previous.customer_display_name,
+          assigned_to_name: previous.assigned_to_name,
+        };
+        if ("assigned_to" in payload || "workshop_subcontractor_name" in payload) {
+          updated.assigned_to_name = resolveAssigneeName({
+            assigned_to: updated.assigned_to,
+            assigned_to_name: null,
+            workshop_subcontractor_name: updated.workshop_subcontractor_name,
+          }, { teamMembers: config.teamMembers });
+        }
         setPackets(prev => prev.map(p => p.id === id ? updated : p));
       }
     } catch {

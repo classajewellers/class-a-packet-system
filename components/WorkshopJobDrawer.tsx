@@ -643,8 +643,6 @@ export default function WorkshopJobDrawer({
         <WorkshopPurchasing
           rows={purchases.rows}
           error={purchases.error}
-          workshopSupplier={local.workshop_supplier}
-          workshopPoNumber={local.workshop_po_number}
           variant="summary"
           onOpen={() => setActiveTab("materials")}
         />
@@ -911,31 +909,31 @@ export default function WorkshopJobDrawer({
   function renderMaterials() {
     return (
       <div>
-        {FIELD("Supplier",
-          <input type="text" defaultValue={local.workshop_supplier ?? ""} onBlur={e => { if (e.target.value !== (local.workshop_supplier ?? "")) patch({ workshop_supplier: e.target.value || null }); }} style={INPUT} placeholder="Supplier name…" />
-        )}
-        {FIELD("PO Number",
-          <input type="text" defaultValue={local.workshop_po_number ?? ""} onBlur={e => { if (e.target.value !== (local.workshop_po_number ?? "")) patch({ workshop_po_number: e.target.value || null }); }} style={INPUT} placeholder="PO-…" />
-        )}
-        {FIELD("Expected return",
-          <input type="date" value={local.workshop_due_date ?? ""} onChange={e => patch({ workshop_due_date: e.target.value || null, workshop_due_date_overridden: !!e.target.value })} style={INPUT} />
-        )}
-        {local.due_date && local.due_date !== local.workshop_due_date && (
-          <div style={{ fontSize: 12, color: "#6B7280", marginTop: -8, marginBottom: 10 }}>Customer due date: {formatDateAU(local.due_date)}</div>
-        )}
-        {local.status === "casting" && (
-          <div style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.45, marginBottom: 12 }}>
-            {isCastingOverdue(local)
-              ? "This casting is overdue. It is still in Casting, so it is not back. When it returns, move the stage to Polish/Finish or Polish/Set."
-              : "Expected return is the workshop due date. While the job stays in Casting past that date, it is overdue. When it returns, move the stage to Polish/Finish or Polish/Set."}
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
+            Casting / external work
           </div>
-        )}
-        <WorkshopPurchasing
-          rows={purchases.rows}
-          error={purchases.error}
-          workshopSupplier={local.workshop_supplier}
-          workshopPoNumber={local.workshop_po_number}
-        />
+          {FIELD("Supplier",
+            <input type="text" defaultValue={local.workshop_supplier ?? ""} onBlur={e => { if (e.target.value !== (local.workshop_supplier ?? "")) patch({ workshop_supplier: e.target.value || null }); }} style={INPUT} placeholder="Supplier name…" />
+          )}
+          {FIELD("PO Number",
+            <input type="text" defaultValue={local.workshop_po_number ?? ""} onBlur={e => { if (e.target.value !== (local.workshop_po_number ?? "")) patch({ workshop_po_number: e.target.value || null }); }} style={INPUT} placeholder="PO-…" />
+          )}
+          {FIELD("Expected return",
+            <input type="date" value={local.workshop_due_date ?? ""} onChange={e => patch({ workshop_due_date: e.target.value || null, workshop_due_date_overridden: !!e.target.value })} style={INPUT} />
+          )}
+          {local.due_date && local.due_date !== local.workshop_due_date && (
+            <div style={{ fontSize: 12, color: "#6B7280", marginTop: -8, marginBottom: 10 }}>Customer due date: {formatDateAU(local.due_date)}</div>
+          )}
+          {local.status === "casting" && (
+            <div style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.45 }}>
+              {isCastingOverdue(local)
+                ? "This casting is overdue. It is still in Casting, so it is not back. When it returns, move the stage to Polish/Finish or Polish/Set."
+                : "Expected return is the workshop due date. While the job stays in Casting past that date, it is overdue. When it returns, move the stage to Polish/Finish or Polish/Set."}
+            </div>
+          )}
+        </div>
+        <WorkshopPurchasing rows={purchases.rows} error={purchases.error} />
       </div>
     );
   }

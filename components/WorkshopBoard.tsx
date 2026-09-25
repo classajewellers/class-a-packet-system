@@ -6,7 +6,6 @@ import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea
 import { WorkshopJob } from "@/lib/types";
 import { WorkshopTrack, TRACK_LABELS, TRACK_STAGES, STAGE_LABELS, STAGE_COLOURS, stagesForFilter, trackFromJobType } from "@/lib/workshopConfig";
 import WorkshopJobCard from "@/components/WorkshopJobCard";
-import type { AssigneeDirectory } from "@/lib/workshopAssignee";
 // WorkshopJobDrawer removed — this component is superseded by app/workshop/board/page.tsx
 
 const fieldStyle: React.CSSProperties = {
@@ -44,7 +43,6 @@ interface Props {
   onStageChange: (jobId: string, newStage: string) => Promise<void>;
   onRefresh: () => void;
   onJobDeleted: (id: string) => void;
-  assigneeDirectory?: AssigneeDirectory;
 }
 
 type TrackFilter = WorkshopTrack | "all";
@@ -56,7 +54,7 @@ const TRACK_FILTER_OPTIONS: { value: TrackFilter; label: string }[] = [
   { value: "manufacturing", label: "Manufacturing" },
 ];
 
-export default function WorkshopBoard({ jobs, onStageChange, onRefresh, onJobDeleted, assigneeDirectory }: Props) {
+export default function WorkshopBoard({ jobs, onStageChange, onRefresh, onJobDeleted }: Props) {
   const { user } = useUser();
   const [localJobs, setLocalJobs] = useState<WorkshopJob[]>(jobs);
   const [trackFilter, setTrackFilter] = useState<TrackFilter>("all");
@@ -354,7 +352,7 @@ export default function WorkshopBoard({ jobs, onStageChange, onRefresh, onJobDel
                               {...prov.dragHandleProps}
                               style={{ ...prov.draggableProps.style, opacity: snap.isDragging ? 0.85 : 1 }}
                             >
-                              <WorkshopJobCard job={job} assigneeDirectory={assigneeDirectory} onClick={() => setSelectedJob(job)} />
+                              <WorkshopJobCard job={job} onClick={() => setSelectedJob(job)} />
                             </div>
                           )}
                         </Draggable>
