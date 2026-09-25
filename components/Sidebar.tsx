@@ -181,8 +181,8 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
     );
   }
 
-  function SubSubLink({ href, label }: { href: string; label: string }) {
-    const active = pathname === href || pathname.startsWith(href + "/");
+  function SubSubLink({ href, label, match }: { href: string; label: string; match?: (path: string) => boolean }) {
+    const active = match ? match(pathname) : pathname === href || pathname.startsWith(href + "/");
     return (
       <Link
         href={href}
@@ -351,6 +351,12 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
                   <SubLink href="/inventory/products"                label="Products" />
                   <div style={{ padding: "12px 16px 2px 45px", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(255,255,255,0.45)" }}>RFID</div>
                   <SubSubLink href="/rfid/scan" label="Scan" />
+                  <SubSubLink
+                    href="/rfid/stocktake"
+                    label="Stocktake"
+                    match={(path) => path === "/rfid/stocktake" || (path.startsWith("/rfid/stocktake/") && !path.startsWith("/rfid/stocktake/move"))}
+                  />
+                  <SubSubLink href="/rfid/stocktake/move" label="Stock Movement" />
                   {isManager && <SubLink href="/inventory/purchase-orders" label="Purchasing" />}
                   {isManager && <SubLink href="/inventory/locations"       label="Locations" />}
                   {isManager && <SubLink href="/inventory/suppliers"       label="Suppliers" />}

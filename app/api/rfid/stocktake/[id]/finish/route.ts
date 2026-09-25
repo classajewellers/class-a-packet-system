@@ -7,7 +7,7 @@ import { finishStocktake } from "@/lib/rfid-stocktake-server";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-/** Manager or admin only. Records unscanned expected pieces as missing. Does not change piece status. */
+/** Manager or admin only. Stores the live missing list on the session. Does not change piece status. */
 export async function POST(req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse> {
   const auth = await requireManager(req);
   if (!auth.ok) return auth.response;

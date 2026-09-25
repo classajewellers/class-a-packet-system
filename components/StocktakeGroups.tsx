@@ -2,7 +2,7 @@
 
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { FALLBACK_STATUS_OPTIONS } from "@/lib/pieceResolution";
-import type { StocktakeCounts, StocktakeGroups, StocktakeRow } from "@/lib/rfid-stocktake";
+import { formatStocktakeCounts, type StocktakeCounts, type StocktakeGroups, type StocktakeRow } from "@/lib/rfid-stocktake";
 
 function statusLabel(value: string | null): string {
   if (!value) return "";
@@ -68,8 +68,7 @@ export function StocktakeGroupsView({
   return (
     <div>
       <div style={{ fontSize: 15, fontWeight: 700, color: "#111827", lineHeight: 1.4 }}>
-        Found {counts.found} · Missing {counts.missing} · Somewhere else {counts.elsewhere} · Unknown {counts.unknown}
-        {counts.blank ? ` · ${counts.blank} blank` : ""}
+        {formatStocktakeCounts(counts)}
       </div>
       <Group title="Found" count={counts.found}>
         {groups.found.length === 0 && <Empty />}
@@ -103,6 +102,13 @@ export function StocktakeGroupsView({
           );
         })}
       </Group>
+      {counts.notInStock > 0 && (
+        <Group title="Not in stock" count={counts.notInStock}>
+          {groups.notInStock.map((row) => (
+            <PieceRow key={row.key} row={row} extra="Scanned, but not in stock" />
+          ))}
+        </Group>
+      )}
       <Group title="Unknown" count={counts.unknown}>
         {groups.unknown.length === 0 && counts.blank === 0 && <Empty />}
         {groups.unknown.map((row) => (

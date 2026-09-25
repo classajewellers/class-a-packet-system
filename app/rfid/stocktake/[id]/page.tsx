@@ -37,6 +37,7 @@ export default function StocktakeCountPage() {
     const scanned = [
       ...next.groups.found,
       ...next.groups.elsewhere,
+      ...next.groups.notInStock,
       ...next.groups.unknown,
       ...next.groups.blank,
     ];
@@ -158,6 +159,7 @@ export default function StocktakeCountPage() {
 
   const session = payload?.stocktake;
   const open = session?.status === "in_progress";
+  const statusLabel = session?.status === "completed" ? "Finished" : session?.status === "cancelled" ? "Cancelled" : "In progress";
 
   return (
     <div
@@ -173,13 +175,16 @@ export default function StocktakeCountPage() {
       </h1>
       {session && (
         <p style={{ margin: "0 0 12px", color: "#4B5563", fontSize: 14 }}>
-          {open ? "In progress" : "Finished"} · Started {when(session.started_at)}
+          {statusLabel} · Started {when(session.started_at)}
           {session.started_by_name ? ` by ${session.started_by_name}` : ""}
-          {!open && ` · Finished ${when(session.finished_at)}`}
-          {!open && session.finished_by_name ? ` by ${session.finished_by_name}` : ""}
+          {session.status === "completed" && ` · Finished ${when(session.finished_at)}`}
+          {session.status === "completed" && session.finished_by_name ? ` by ${session.finished_by_name}` : ""}
         </p>
       )}
       {error && <p style={{ background: "#FEF2F2", color: "#991B1B", borderRadius: 10, padding: "12px 14px" }}>{error}</p>}
+      {payload?.warnings?.map((warning) => (
+        <p key={warning} style={{ background: "#FFFBEB", color: "#92400E", borderRadius: 10, padding: "12px 14px" }}>{warning}</p>
+      ))}
       {open && (
         <textarea
           ref={inputRef}

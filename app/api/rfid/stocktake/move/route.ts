@@ -63,7 +63,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   let resolved: Awaited<ReturnType<typeof resolveScanCodes>>;
   try {
-    resolved = await resolveScanCodes(supabase, tenantId, codes.epcs, codes.skus);
+    resolved = await resolveScanCodes(supabase, tenantId, userId, codes.epcs, codes.skus);
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Lookup failed" }, { status: 500 });
   }

@@ -3,7 +3,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { StocktakeCounts, StocktakeSession } from "@/lib/rfid-stocktake";
+import { formatStocktakeCounts, type StocktakeCounts, type StocktakeSession } from "@/lib/rfid-stocktake";
 
 type LocationRow = { id: string; name: string };
 type Listed = StocktakeSession & { counts: StocktakeCounts };
@@ -15,9 +15,8 @@ function when(iso: string | null): string {
   return date.toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" });
 }
 
-function countLine(counts: StocktakeCounts): string {
-  const base = `Found ${counts.found} · Missing ${counts.missing} · Somewhere else ${counts.elsewhere} · Unknown ${counts.unknown}`;
-  return counts.blank ? `${base} · ${counts.blank} blank` : base;
+function byName<T extends { name: string }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => a.name.localeCompare(b.name, "en"));
 }
 
 export default function StocktakeHomePage() {
@@ -38,7 +37,7 @@ export default function StocktakeHomePage() {
       const countJson = await countRes.json().catch(() => ({}));
       if (cancelled) return;
       if (!locRes.ok) setError(locJson.error || "Could not load locations");
-      else setLocations((locJson.locations ?? []).map((row: LocationRow) => ({ id: row.id, name: row.name })));
+      else setLocations(byName((locJson.locations ?? []).map((row: LocationRow) => ({ id: row.id, name: row.name }))));
       if (!countRes.ok) setError(countJson.error || "Could not load counts");
       else setCounts(countJson.stocktakes ?? []);
     })();
@@ -63,12 +62,13 @@ export default function StocktakeHomePage() {
   }
 
   const open = counts.filter((row) => row.status === "in_progress");
-  const finished = counts.filter((row) => row.status === "finished");
+  const finished = counts.filter((row) => row.status === "completed");
+  const cancelled = counts.filter((row) => row.status === "cancelled");
 
   return (
     <div className="stocktake-page">
       <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: "0 0 8px" }}>Stocktake</h1>
-      <Link href="/rfid/stocktake/move" style={linkButton}>Scan to move</Link>
+      <Link href="/rfid/stocktake/move" style={linkButton}>Stock Movement</Link>
       {error && <p style={errorStyle}>{error}</p>}
       <h2 style={sectionTitle}>Start a count</h2>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -87,6 +87,7 @@ export default function StocktakeHomePage() {
       </div>
       <History title="In progress" rows={open} empty="No count in progress." />
       <History title="Finished" rows={finished} empty="No finished counts yet." />
+      {cancelled.length > 0 && <History title="Cancelled" rows={cancelled} empty="" />}
       <style>{pageCss}</style>
     </div>
   );
@@ -104,9 +105,10 @@ function History({ title, rows, empty }: { title: string; rows: Listed[]; empty:
             <div style={{ fontSize: 13, color: "#4B5563", marginTop: 4 }}>
               {when(row.started_at)}
               {row.started_by_name ? ` · ${row.started_by_name}` : ""}
-              {row.status === "finished" && row.finished_by_name ? ` · Finished by ${row.finished_by_name}` : ""}
+              {row.status === "completed" && row.finished_by_name ? ` · Finished by ${row.finished_by_name}` : ""}
+              {row.status === "cancelled" ? " · Cancelled" : ""}
             </div>
-            <div style={{ fontSize: 13, color: "#374151", marginTop: 6 }}>{countLine(row.counts)}</div>
+            <div style={{ fontSize: 13, color: "#374151", marginTop: 6 }}>{formatStocktakeCounts(row.counts)}</div>
           </Link>
         ))}
       </div>

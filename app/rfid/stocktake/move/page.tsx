@@ -34,7 +34,11 @@ export default function ScanToMovePage() {
   useEffect(() => {
     void fetch("/api/inventory/locations")
       .then((res) => res.json())
-      .then((json) => setLocations((json.locations ?? []).map((row: LocationRow) => ({ id: row.id, name: row.name }))))
+      .then((json) => {
+        const rows = (json.locations ?? []).map((row: LocationRow) => ({ id: row.id, name: row.name }));
+        rows.sort((a: LocationRow, b: LocationRow) => a.name.localeCompare(b.name, "en"));
+        setLocations(rows);
+      })
       .catch(() => setError("Could not load locations"));
   }, []);
 
@@ -119,7 +123,7 @@ export default function ScanToMovePage() {
         inputRef.current?.focus();
       }}
     >
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: "0 0 8px" }}>Scan to move</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: "0 0 8px" }}>Stock Movement</h1>
       <Link href="/rfid/stocktake" style={{ color: "#111827", fontSize: 15 }}>Back to Stocktake</Link>
       {error && <p style={{ background: "#FEF2F2", color: "#991B1B", borderRadius: 10, padding: "12px 14px" }}>{error}</p>}
       {!destination && (
@@ -202,6 +206,16 @@ export default function ScanToMovePage() {
               <button type="button" aria-expanded={blanksOpen} onClick={() => setBlanksOpen((open) => !open)} style={blankButton}>
                 {blanksOpen ? "▾" : "▸"} Blank tag (never printed) · {blanks.length}
               </button>
+              {blanksOpen && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+                  {blanks.map((row) => (
+                    <div key={row.key} style={card}>
+                      <div style={{ fontSize: 18, fontWeight: 700 }}>Blank tag (never printed)</div>
+                      <div style={{ fontFamily: "monospace", fontSize: 13, color: "#6B7280", wordBreak: "break-all", marginTop: 4 }}>{row.epc}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </>

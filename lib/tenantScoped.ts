@@ -106,7 +106,7 @@ export function tenantScoped(supabase: SupabaseClient, tenantId: string) {
             : withTenantId(rows, tenantId);
           return base.insert(withTenant as never);
         },
-        upsert(rows: Row | Row[], options?: { onConflict?: string }) {
+        upsert(rows: Row | Row[], options?: { onConflict?: string; ignoreDuplicates?: boolean }) {
           const withTenant = Array.isArray(rows)
             ? rows.map((r) => withTenantId(r, tenantId))
             : withTenantId(rows, tenantId);

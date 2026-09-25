@@ -1,26 +1,73 @@
 /**
- * Server-side stocktake reads and writes. Tenant id is the session tenant
- * passed in by the route — never a request header.
+ * Server-side stocktake reads and writes.
+ *
+ * stocktake_sessions and stocktake_scans force RLS, and app.tenant_id is
+ * transaction-local, so the browser cannot see these rows. Every query here
+ * uses the service-role client with the session tenant and an explicit
+ * tenant_id filter (tenantScoped), the same way inventory_rfid_tags is read.
  */
 import { SupabaseClient } from "@supabase/supabase-js";
 import { tenantScoped } from "@/lib/tenantScoped";
+import { applyHandheldTagReads } from "@/lib/rfid-tag-read";
 import {
   IN_STOCK_STATUS,
   buildStocktakeGroups,
   classifyStocktakeHit,
   isStocktakeSchemaError,
+  missingPieceIds,
   planStocktakeInserts,
+  preferredTagEpc,
   type ExpectedPiece,
   type PlannedLine,
   type StocktakeCounts,
   type StocktakePayload,
+  type StocktakeSession,
   type StocktakeStatus,
   type StoredLine,
+  type StoredResult,
 } from "@/lib/rfid-stocktake";
 
 const EPC_RE = /^[0-9a-f]{24}$/;
+const PIECE_COLUMNS = "id, sku, status, location_id, metal_karat, metal_colour";
 
-type PieceRow = Record<string, unknown>;
+type PieceRow = {
+  id: string;
+  sku: string | null;
+  status: string | null;
+  location_id: string | null;
+  metal_karat: string | null;
+  metal_colour: string | null;
+};
+
+type SessionRow = {
+  id: string;
+  status: string;
+  location_id: string;
+  started_at: string;
+  finished_at: string | null;
+  started_by: string | null;
+  finished_by: string | null;
+  confirmed_missing_piece_ids: string[] | null;
+};
+
+type ScanRow = {
+  id: string;
+  epc: string;
+  piece_id: string | null;
+  result_group: string;
+  scanned_at: string;
+};
+
+export type ResolvedPiece = {
+  id: string;
+  sku: string | null;
+  locationId: string | null;
+  metal: string | null;
+  status: string | null;
+};
+
+export type EpcHit = { epc: string; piece: ResolvedPiece | null; tagStatus: string | null };
+export type SkuHit = { sku: string; piece: ResolvedPiece | null; tagEpc: string | null; tagStatus: string | null };
 
 export type { StocktakePayload };
 
@@ -34,6 +81,26 @@ function metalOf(row: PieceRow | undefined): string | null {
   if (!row) return null;
   const metal = [asText(row.metal_karat), asText(row.metal_colour)].filter(Boolean).join(" ");
   return metal || null;
+}
+
+function pieceOf(row: PieceRow): ResolvedPiece {
+  return {
+    id: String(row.id),
+    sku: asText(row.sku),
+    locationId: asText(row.location_id),
+    metal: metalOf(row),
+    status: asText(row.status),
+  };
+}
+
+function asStatus(value: string): StocktakeStatus {
+  if (value === "completed" || value === "cancelled") return value;
+  return "in_progress";
+}
+
+function uuidList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((id): id is string => typeof id === "string" && id.length > 0);
 }
 
 function schemaOrMessage(error: { code?: string; message?: string } | null): { schema: boolean; message: string } | null {
@@ -61,10 +128,9 @@ async function loadPieces(supabase: SupabaseClient, tenantId: string, ids: strin
   const map = new Map<string, PieceRow>();
   const unique = Array.from(new Set(ids.filter(Boolean)));
   if (!unique.length) return map;
-  const { data, error } = await supabase
+  const { data, error } = await tenantScoped(supabase, tenantId)
     .from("inventory_pieces")
-    .select("*")
-    .eq("tenant_id", tenantId)
+    .select(PIECE_COLUMNS)
     .in("id", unique);
   if (error) throw new Error(error.message);
   for (const row of (data ?? []) as PieceRow[]) map.set(String(row.id), row);
@@ -87,53 +153,127 @@ async function locationNames(supabase: SupabaseClient, tenantId: string, ids: st
   return map;
 }
 
-export async function getStocktake(
+async function liveExpected(
+  supabase: SupabaseClient,
+  tenantId: string,
+  locationId: string,
+): Promise<PieceRow[]> {
+  const { data, error } = await tenantScoped(supabase, tenantId)
+    .from("inventory_pieces")
+    .select(PIECE_COLUMNS)
+    .eq("location_id", locationId)
+    .eq("status", IN_STOCK_STATUS);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as PieceRow[];
+}
+
+function expectedFromPieces(rows: PieceRow[], names: Map<string, string>, onlyIds?: Set<string>): ExpectedPiece[] {
+  const out: ExpectedPiece[] = [];
+  for (const row of rows) {
+    if (onlyIds && !onlyIds.has(String(row.id))) continue;
+    const locationId = asText(row.location_id);
+    out.push({
+      pieceId: String(row.id),
+      sku: asText(row.sku),
+      metal: metalOf(row),
+      status: asText(row.status),
+      locationName: locationId ? names.get(locationId) ?? null : null,
+    });
+  }
+  return out;
+}
+
+function linesFromScans(scans: ScanRow[], pieces: Map<string, PieceRow>, names: Map<string, string>): StoredLine[] {
+  return scans.map((row) => {
+    const pieceId = asText(row.piece_id);
+    const piece = pieceId ? pieces.get(pieceId) : undefined;
+    const locationId = piece ? asText(piece.location_id) : null;
+    const result = row.result_group as StoredResult;
+    return {
+      id: String(row.id),
+      epc: asText(row.epc),
+      sku: piece ? asText(piece.sku) : null,
+      pieceId,
+      result,
+      metal: metalOf(piece),
+      status: piece ? asText(piece.status) : null,
+      locationName: locationId ? names.get(locationId) ?? null : null,
+      locationId,
+    };
+  });
+}
+
+async function loadSession(
   supabase: SupabaseClient,
   tenantId: string,
   stocktakeId: string,
-): Promise<{ ok: true; payload: StocktakePayload } | { ok: false; status: number; error: string; schema?: boolean }> {
-  const { data: session, error } = await tenantScoped(supabase, tenantId)
-    .from("inventory_stocktakes")
-    .select("*")
+): Promise<{ ok: true; session: SessionRow } | { ok: false; status: number; error: string; schema?: boolean }> {
+  const { data, error } = await tenantScoped(supabase, tenantId)
+    .from("stocktake_sessions")
+    .select("id, status, location_id, started_at, finished_at, started_by, finished_by, confirmed_missing_piece_ids")
     .eq("id", stocktakeId)
     .maybeSingle();
   const failed = schemaOrMessage(error);
   if (failed) return { ok: false, status: failed.schema ? 503 : 500, error: failed.message, schema: failed.schema };
-  if (!session) return { ok: false, status: 404, error: "Count not found" };
+  if (!data) return { ok: false, status: 404, error: "Count not found" };
+  return { ok: true, session: data as SessionRow };
+}
 
-  const status: StocktakeStatus = session.status === "finished" ? "finished" : "in_progress";
-  const { data: expectedRows, error: expectedErr } = await tenantScoped(supabase, tenantId)
-    .from("inventory_stocktake_expected")
-    .select("piece_id, sku")
-    .eq("stocktake_id", stocktakeId);
-  const expectedFailed = schemaOrMessage(expectedErr);
-  if (expectedFailed) return { ok: false, status: expectedFailed.schema ? 503 : 500, error: expectedFailed.message, schema: expectedFailed.schema };
+export async function getStocktake(
+  supabase: SupabaseClient,
+  tenantId: string,
+  stocktakeId: string,
+  warnings: string[] = [],
+): Promise<{ ok: true; payload: StocktakePayload } | { ok: false; status: number; error: string; schema?: boolean }> {
+  const loaded = await loadSession(supabase, tenantId, stocktakeId);
+  if (!loaded.ok) return loaded;
+  const session = loaded.session;
+  const status = asStatus(session.status);
 
-  const { data: lineRows, error: lineErr } = await tenantScoped(supabase, tenantId)
-    .from("inventory_stocktake_lines")
-    .select("*")
-    .eq("stocktake_id", stocktakeId)
+  const { data: scanData, error: scanErr } = await tenantScoped(supabase, tenantId)
+    .from("stocktake_scans")
+    .select("id, epc, piece_id, result_group, scanned_at")
+    .eq("session_id", stocktakeId)
     .order("scanned_at", { ascending: true });
-  const lineFailed = schemaOrMessage(lineErr);
-  if (lineFailed) return { ok: false, status: lineFailed.schema ? 503 : 500, error: lineFailed.message, schema: lineFailed.schema };
+  const scanFailed = schemaOrMessage(scanErr);
+  if (scanFailed) return { ok: false, status: scanFailed.schema ? 503 : 500, error: scanFailed.message, schema: scanFailed.schema };
+  const scans = (scanData ?? []) as ScanRow[];
+
+  let expectedRows: PieceRow[] = [];
+  try {
+    if (status === "in_progress") {
+      expectedRows = await liveExpected(supabase, tenantId, String(session.location_id));
+    } else {
+      const confirmed = uuidList(session.confirmed_missing_piece_ids);
+      const found = await loadPieces(supabase, tenantId, confirmed);
+      expectedRows = confirmed.map((id) => found.get(id) ?? {
+        id,
+        sku: null,
+        status: null,
+        location_id: null,
+        metal_karat: null,
+        metal_colour: null,
+      });
+    }
+  } catch (err) {
+    return { ok: false, status: 500, error: err instanceof Error ? err.message : "Could not load pieces" };
+  }
 
   const pieceIds = [
-    ...(expectedRows ?? []).map((row: { piece_id: string }) => String(row.piece_id)),
-    ...(lineRows ?? []).map((row: { piece_id: string | null }) => row.piece_id).filter(Boolean),
-  ] as string[];
+    ...expectedRows.map((row) => String(row.id)),
+    ...scans.map((row) => row.piece_id).filter((id): id is string => !!id),
+  ];
   let pieces: Map<string, PieceRow>;
   try {
     pieces = await loadPieces(supabase, tenantId, pieceIds);
+    for (const row of expectedRows) pieces.set(String(row.id), row);
   } catch (err) {
     return { ok: false, status: 500, error: err instanceof Error ? err.message : "Could not load pieces" };
   }
 
   const locationIds = [String(session.location_id)];
-  for (const row of lineRows ?? []) {
-    if (row.recorded_location_id) locationIds.push(String(row.recorded_location_id));
-  }
   for (const piece of Array.from(pieces.values())) {
-    if (typeof piece.location_id === "string") locationIds.push(piece.location_id);
+    if (piece.location_id) locationIds.push(piece.location_id);
   }
   let names: Map<string, string>;
   try {
@@ -148,122 +288,116 @@ export async function getStocktake(
     [session.started_by, session.finished_by].filter((id): id is string => typeof id === "string"),
   );
 
-  const expected: ExpectedPiece[] = (expectedRows ?? []).map((row: { piece_id: string; sku: string | null }) => {
-    const piece = pieces.get(String(row.piece_id));
-    const locationId = piece && typeof piece.location_id === "string" ? piece.location_id : null;
-    return {
-      pieceId: String(row.piece_id),
-      sku: asText(piece?.sku) || asText(row.sku),
-      metal: metalOf(piece),
-      status: asText(piece?.status),
-      locationName: locationId ? names.get(locationId) ?? null : null,
-    };
-  });
+  const scannedIds = scans.map((row) => (row.piece_id ? String(row.piece_id) : null));
+  const missingIds = new Set(missingPieceIds(expectedRows.map((row) => String(row.id)), scannedIds));
+  const missing = expectedFromPieces(
+    expectedRows.filter((row) => missingIds.has(String(row.id))),
+    names,
+  );
+  const lines = linesFromScans(scans, pieces, names);
+  const view = buildStocktakeGroups(lines, missing, String(session.location_id));
 
-  const lines: StoredLine[] = (lineRows ?? []).map((row: Record<string, unknown>) => {
-    const pieceId = asText(row.piece_id as string | null);
-    const piece = pieceId ? pieces.get(pieceId) : undefined;
-    const recordedId = asText(row.recorded_location_id as string | null);
-    const liveLocationId = piece && typeof piece.location_id === "string" ? piece.location_id : null;
-    return {
-      id: String(row.id),
-      epc: asText(row.epc as string | null),
-      sku: asText(piece?.sku) || asText(row.sku as string | null),
-      pieceId,
-      result: String(row.result) as StoredLine["result"],
-      movedHere: row.moved_here === true,
-      metal: metalOf(piece),
-      status: asText(piece?.status),
-      locationName: recordedId ? names.get(recordedId) ?? null : (liveLocationId ? names.get(liveLocationId) ?? null : null),
-      locationId: recordedId ?? liveLocationId,
-    };
-  });
-
-  const view = buildStocktakeGroups(status, expected, lines);
-  return {
-    ok: true,
-    payload: {
-      stocktake: {
-        id: String(session.id),
-        status,
-        location_id: String(session.location_id),
-        location_name: names.get(String(session.location_id)) ?? null,
-        started_at: String(session.started_at),
-        finished_at: session.finished_at ? String(session.finished_at) : null,
-        started_by_name: typeof session.started_by === "string" ? people.get(session.started_by) ?? null : null,
-        finished_by_name: typeof session.finished_by === "string" ? people.get(session.finished_by) ?? null : null,
-      },
-      groups: view.groups,
-      counts: view.counts,
-    },
+  const stocktake: StocktakeSession = {
+    id: String(session.id),
+    status,
+    location_id: String(session.location_id),
+    location_name: names.get(String(session.location_id)) ?? null,
+    started_at: String(session.started_at),
+    finished_at: session.finished_at ? String(session.finished_at) : null,
+    started_by_name: session.started_by ? people.get(session.started_by) ?? null : null,
+    finished_by_name: session.finished_by ? people.get(session.finished_by) ?? null : null,
   };
+
+  return { ok: true, payload: { stocktake, groups: view.groups, counts: view.counts, warnings } };
 }
 
-export type ListedStocktake = StocktakePayload["stocktake"] & { counts: StocktakeCounts };
+export type ListedStocktake = StocktakeSession & { counts: StocktakeCounts };
 
 export async function listStocktakes(
   supabase: SupabaseClient,
   tenantId: string,
 ): Promise<{ ok: true; stocktakes: ListedStocktake[] } | { ok: false; status: number; error: string; schema?: boolean }> {
   const { data, error } = await tenantScoped(supabase, tenantId)
-    .from("inventory_stocktakes")
-    .select("*")
+    .from("stocktake_sessions")
+    .select("id, status, location_id, started_at, finished_at, started_by, finished_by, confirmed_missing_piece_ids")
     .order("started_at", { ascending: false })
     .limit(50);
   const failed = schemaOrMessage(error);
   if (failed) return { ok: false, status: failed.schema ? 503 : 500, error: failed.message, schema: failed.schema };
-  const sessions = data ?? [];
+  const sessions = (data ?? []) as SessionRow[];
   if (!sessions.length) return { ok: true, stocktakes: [] };
 
-  const ids = sessions.map((row: { id: string }) => String(row.id));
-  const { data: expectedRows, error: expectedErr } = await tenantScoped(supabase, tenantId)
-    .from("inventory_stocktake_expected")
-    .select("stocktake_id, piece_id")
-    .in("stocktake_id", ids);
-  const expectedFailed = schemaOrMessage(expectedErr);
-  if (expectedFailed) return { ok: false, status: expectedFailed.schema ? 503 : 500, error: expectedFailed.message, schema: expectedFailed.schema };
+  const ids = sessions.map((row) => String(row.id));
+  const { data: scanData, error: scanErr } = await tenantScoped(supabase, tenantId)
+    .from("stocktake_scans")
+    .select("id, session_id, epc, piece_id, result_group")
+    .in("session_id", ids);
+  const scanFailed = schemaOrMessage(scanErr);
+  if (scanFailed) return { ok: false, status: scanFailed.schema ? 503 : 500, error: scanFailed.message, schema: scanFailed.schema };
 
-  const { data: lineRows, error: lineErr } = await tenantScoped(supabase, tenantId)
-    .from("inventory_stocktake_lines")
-    .select("stocktake_id, piece_id, result")
-    .in("stocktake_id", ids);
-  const lineFailed = schemaOrMessage(lineErr);
-  if (lineFailed) return { ok: false, status: lineFailed.schema ? 503 : 500, error: lineFailed.message, schema: lineFailed.schema };
+  const scansBySession = new Map<string, ScanRow[]>();
+  for (const row of scanData ?? []) {
+    const sessionId = String(row.session_id);
+    const list = scansBySession.get(sessionId) ?? [];
+    list.push({
+      id: String(row.id),
+      epc: String(row.epc),
+      piece_id: row.piece_id ? String(row.piece_id) : null,
+      result_group: String(row.result_group),
+      scanned_at: "",
+    });
+    scansBySession.set(sessionId, list);
+  }
 
-  const locationIds = sessions.map((row: { location_id: string }) => String(row.location_id));
+  const openLocationIds = sessions
+    .filter((row) => asStatus(row.status) === "in_progress")
+    .map((row) => String(row.location_id));
+  const expectedByLocation = new Map<string, string[]>();
+  if (openLocationIds.length) {
+    const { data: pieceData, error: pieceErr } = await tenantScoped(supabase, tenantId)
+      .from("inventory_pieces")
+      .select("id, location_id")
+      .eq("status", IN_STOCK_STATUS)
+      .in("location_id", Array.from(new Set(openLocationIds)));
+    if (pieceErr) return { ok: false, status: 500, error: pieceErr.message };
+    for (const row of pieceData ?? []) {
+      const locationId = String(row.location_id);
+      const list = expectedByLocation.get(locationId) ?? [];
+      list.push(String(row.id));
+      expectedByLocation.set(locationId, list);
+    }
+  }
+
   let names: Map<string, string>;
   try {
-    names = await locationNames(supabase, tenantId, locationIds);
+    names = await locationNames(supabase, tenantId, sessions.map((row) => String(row.location_id)));
   } catch (err) {
     return { ok: false, status: 500, error: err instanceof Error ? err.message : "Could not load locations" };
   }
   const people = await nameMap(
     supabase,
     tenantId,
-    sessions.flatMap((row: { started_by?: string | null; finished_by?: string | null }) => [row.started_by, row.finished_by].filter((id): id is string => typeof id === "string")),
+    sessions.flatMap((row) => [row.started_by, row.finished_by].filter((id): id is string => typeof id === "string")),
   );
 
-  const stocktakes: ListedStocktake[] = sessions.map((session: Record<string, unknown>) => {
+  const stocktakes: ListedStocktake[] = sessions.map((session) => {
     const id = String(session.id);
-    const status: StocktakeStatus = session.status === "finished" ? "finished" : "in_progress";
-    const expected = (expectedRows ?? [])
-      .filter((row: { stocktake_id: string }) => String(row.stocktake_id) === id)
-      .map((row: { piece_id: string }) => ({ pieceId: String(row.piece_id), sku: null, metal: null, status: null, locationName: null }));
-    const lines: StoredLine[] = (lineRows ?? [])
-      .filter((row: { stocktake_id: string }) => String(row.stocktake_id) === id)
-      .map((row: { piece_id: string | null; result: string }, index: number) => ({
-        id: `${id}:${index}`,
-        epc: null,
-        sku: null,
-        pieceId: row.piece_id ? String(row.piece_id) : null,
-        result: String(row.result) as StoredLine["result"],
-        movedHere: false,
-        metal: null,
-        status: null,
-        locationName: null,
-        locationId: null,
-      }));
-    const view = buildStocktakeGroups(status, expected, lines);
+    const status = asStatus(session.status);
+    const scans = scansBySession.get(id) ?? [];
+    const scannedIds = scans.map((row) => row.piece_id);
+    const expectedIds = status === "in_progress"
+      ? (expectedByLocation.get(String(session.location_id)) ?? [])
+      : uuidList(session.confirmed_missing_piece_ids);
+    const missingIds = missingPieceIds(expectedIds, scannedIds);
+    const lines = linesFromScans(scans, new Map(), names);
+    const missing = missingIds.map((pieceId) => ({
+      pieceId,
+      sku: null,
+      metal: null,
+      status: null,
+      locationName: null,
+    }));
+    const view = buildStocktakeGroups(lines, missing, String(session.location_id));
     return {
       id,
       status,
@@ -271,13 +405,29 @@ export async function listStocktakes(
       location_name: names.get(String(session.location_id)) ?? null,
       started_at: String(session.started_at),
       finished_at: session.finished_at ? String(session.finished_at) : null,
-      started_by_name: typeof session.started_by === "string" ? people.get(session.started_by) ?? null : null,
-      finished_by_name: typeof session.finished_by === "string" ? people.get(session.finished_by) ?? null : null,
+      started_by_name: session.started_by ? people.get(session.started_by) ?? null : null,
+      finished_by_name: session.finished_by ? people.get(session.finished_by) ?? null : null,
       counts: view.counts,
     };
   });
 
   return { ok: true, stocktakes };
+}
+
+async function openSessionId(
+  supabase: SupabaseClient,
+  tenantId: string,
+  locationId: string,
+): Promise<{ ok: true; id: string | null } | { ok: false; status: number; error: string; schema?: boolean }> {
+  const { data, error } = await tenantScoped(supabase, tenantId)
+    .from("stocktake_sessions")
+    .select("id")
+    .eq("location_id", locationId)
+    .eq("status", "in_progress")
+    .maybeSingle();
+  const failed = schemaOrMessage(error);
+  if (failed) return { ok: false, status: failed.schema ? 503 : 500, error: failed.message, schema: failed.schema };
+  return { ok: true, id: data?.id ? String(data.id) : null };
 }
 
 export async function createStocktake(
@@ -294,8 +444,12 @@ export async function createStocktake(
   if (locErr) return { ok: false, status: 500, error: locErr.message };
   if (!location) return { ok: false, status: 404, error: "Location not found" };
 
+  const existing = await openSessionId(supabase, tenantId, locationId);
+  if (!existing.ok) return existing;
+  if (existing.id) return { ok: true, id: existing.id };
+
   const { data: created, error } = await tenantScoped(supabase, tenantId)
-    .from("inventory_stocktakes")
+    .from("stocktake_sessions")
     .insert({
       location_id: locationId,
       status: "in_progress",
@@ -304,101 +458,101 @@ export async function createStocktake(
     })
     .select("id")
     .single();
+  if (error?.code === "23505") {
+    const again = await openSessionId(supabase, tenantId, locationId);
+    if (!again.ok) return again;
+    if (again.id) return { ok: true, id: again.id };
+  }
   const failed = schemaOrMessage(error);
   if (failed) return { ok: false, status: failed.schema ? 503 : 500, error: failed.message, schema: failed.schema };
   if (!created?.id) return { ok: false, status: 500, error: "Could not start the count" };
-  const id = String(created.id);
-
-  const { data: pieces, error: pieceErr } = await supabase
-    .from("inventory_pieces")
-    .select("id, sku, status, location_id")
-    .eq("tenant_id", tenantId)
-    .eq("location_id", locationId)
-    .eq("status", IN_STOCK_STATUS);
-  if (pieceErr) return { ok: false, status: 500, error: pieceErr.message };
-
-  const expected = (pieces ?? []).map((piece: { id: string; sku: string | null }) => ({
-    stocktake_id: id,
-    piece_id: piece.id,
-    sku: piece.sku ?? null,
-  }));
-  if (expected.length) {
-    const { error: expectedErr } = await tenantScoped(supabase, tenantId)
-      .from("inventory_stocktake_expected")
-      .insert(expected);
-    const expectedFailed = schemaOrMessage(expectedErr);
-    if (expectedFailed) return { ok: false, status: expectedFailed.schema ? 503 : 500, error: expectedFailed.message, schema: expectedFailed.schema };
-  }
-
-  return { ok: true, id };
-}
-
-type ResolvedPiece = {
-  id: string;
-  sku: string | null;
-  locationId: string | null;
-  metal: string | null;
-  status: string | null;
-};
-
-function pieceOf(row: PieceRow): ResolvedPiece {
-  return {
-    id: String(row.id),
-    sku: asText(row.sku),
-    locationId: typeof row.location_id === "string" ? row.location_id : null,
-    metal: metalOf(row),
-    status: asText(row.status),
-  };
+  return { ok: true, id: String(created.id) };
 }
 
 export async function resolveScanCodes(
   supabase: SupabaseClient,
   tenantId: string,
+  userId: string,
   epcs: string[],
   skus: string[],
-): Promise<{ epcs: { epc: string; piece: ResolvedPiece | null }[]; skus: { sku: string; piece: ResolvedPiece | null }[] }> {
-  const tagByEpc = new Map<string, string>();
+): Promise<{ epcs: EpcHit[]; skus: SkuHit[] }> {
+  const tagByEpc = new Map<string, { pieceId: string; status: string }>();
   if (epcs.length) {
-    const { data, error } = await supabase
+    const { data, error } = await tenantScoped(supabase, tenantId)
       .from("inventory_rfid_tags")
-      .select("epc, inventory_piece_id")
-      .eq("tenant_id", tenantId)
+      .select("epc, inventory_piece_id, status")
       .in("epc", epcs);
     if (error) throw new Error(error.message);
-    for (const tag of data ?? []) tagByEpc.set(String(tag.epc).toLowerCase(), String(tag.inventory_piece_id));
+    for (const tag of data ?? []) {
+      tagByEpc.set(String(tag.epc).toLowerCase(), {
+        pieceId: String(tag.inventory_piece_id),
+        status: String(tag.status),
+      });
+    }
   }
 
-  const pieceIds = Array.from(new Set(Array.from(tagByEpc.values())));
-  const pieces = await loadPieces(supabase, tenantId, pieceIds);
-
-  const skuHits: { sku: string; piece: ResolvedPiece | null }[] = [];
+  const skuPieces: PieceRow[] = [];
   if (skus.length) {
     const filter = skus.map((sku) => {
       const escaped = sku.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/%/g, "\\%").replace(/_/g, "\\_");
       return `sku.ilike."${escaped}"`;
     }).join(",");
-    const { data, error } = await supabase
+    const { data, error } = await tenantScoped(supabase, tenantId)
       .from("inventory_pieces")
-      .select("*")
-      .eq("tenant_id", tenantId)
+      .select(PIECE_COLUMNS)
       .or(filter);
     if (error) throw new Error(error.message);
-    const bySku = new Map<string, PieceRow>();
-    for (const row of (data ?? []) as PieceRow[]) {
-      const sku = asText(row.sku);
-      if (sku) bySku.set(sku.toLowerCase(), row);
-    }
-    for (const sku of skus) {
-      const row = bySku.get(sku.toLowerCase());
-      skuHits.push({ sku, piece: row ? pieceOf(row) : null });
+    skuPieces.push(...((data ?? []) as PieceRow[]));
+  }
+
+  const pieceIds = skuPieces.map((row) => String(row.id));
+  tagByEpc.forEach((tag) => { pieceIds.push(tag.pieceId); });
+  const pieces = await loadPieces(supabase, tenantId, pieceIds);
+
+  const tagsByPiece = new Map<string, { epc: string; status: string }[]>();
+  if (skuPieces.length) {
+    const { data, error } = await tenantScoped(supabase, tenantId)
+      .from("inventory_rfid_tags")
+      .select("epc, inventory_piece_id, status")
+      .in("inventory_piece_id", skuPieces.map((row) => String(row.id)));
+    if (error) throw new Error(error.message);
+    for (const tag of data ?? []) {
+      const pieceId = String(tag.inventory_piece_id);
+      const list = tagsByPiece.get(pieceId) ?? [];
+      list.push({ epc: String(tag.epc).toLowerCase(), status: String(tag.status) });
+      tagsByPiece.set(pieceId, list);
     }
   }
 
+  const reads: { epc: string; status: string }[] = [];
+  const seenReads = new Set<string>();
+  function addRead(epc: string, status: string) {
+    if (seenReads.has(epc)) return;
+    seenReads.add(epc);
+    reads.push({ epc, status });
+  }
+  for (const epc of epcs) {
+    const tag = tagByEpc.get(epc);
+    if (tag) addRead(epc, tag.status);
+  }
+
+  const skuHits: SkuHit[] = skus.map((sku) => {
+    const row = skuPieces.find((piece) => asText(piece.sku)?.toLowerCase() === sku.toLowerCase());
+    if (!row) return { sku, piece: null, tagEpc: null, tagStatus: null };
+    const tags = tagsByPiece.get(String(row.id)) ?? [];
+    const tagEpc = preferredTagEpc(tags);
+    const tag = tags.find((item) => item.epc === tagEpc);
+    if (tagEpc && tag) addRead(tagEpc, tag.status);
+    return { sku, piece: pieceOf(row), tagEpc, tagStatus: tag?.status ?? null };
+  });
+
+  if (reads.length) await applyHandheldTagReads(supabase, tenantId, userId, reads);
+
   return {
     epcs: epcs.map((epc) => {
-      const pieceId = tagByEpc.get(epc);
-      const row = pieceId ? pieces.get(pieceId) : undefined;
-      return { epc, piece: row ? pieceOf(row) : null };
+      const tag = tagByEpc.get(epc);
+      const row = tag ? pieces.get(tag.pieceId) : undefined;
+      return { epc, piece: row ? pieceOf(row) : null, tagStatus: tag?.status ?? null };
     }),
     skus: skuHits,
   };
@@ -441,44 +595,36 @@ export async function recordStocktakeScans(
   const codes = normaliseCodes(body.epcs, body.skus);
   if ("error" in codes) return { ok: false, status: 400, error: codes.error };
 
-  const { data: session, error } = await tenantScoped(supabase, tenantId)
-    .from("inventory_stocktakes")
-    .select("id, status")
-    .eq("id", stocktakeId)
-    .maybeSingle();
-  const failed = schemaOrMessage(error);
-  if (failed) return { ok: false, status: failed.schema ? 503 : 500, error: failed.message, schema: failed.schema };
-  if (!session) return { ok: false, status: 404, error: "Count not found" };
-  if (session.status === "finished") return { ok: false, status: 409, error: "This count is already finished" };
-
-  const { data: expectedRows, error: expectedErr } = await tenantScoped(supabase, tenantId)
-    .from("inventory_stocktake_expected")
-    .select("piece_id")
-    .eq("stocktake_id", stocktakeId);
-  const expectedFailed = schemaOrMessage(expectedErr);
-  if (expectedFailed) return { ok: false, status: expectedFailed.schema ? 503 : 500, error: expectedFailed.message, schema: expectedFailed.schema };
-  const expectedIds = new Set<string>((expectedRows ?? []).map((row: { piece_id: string }) => String(row.piece_id)));
+  const loaded = await loadSession(supabase, tenantId, stocktakeId);
+  if (!loaded.ok) return loaded;
+  if (loaded.session.status !== "in_progress") {
+    return { ok: false, status: 409, error: "This count is already finished" };
+  }
+  const countLocationId = String(loaded.session.location_id);
 
   const { data: existingRows, error: existingErr } = await tenantScoped(supabase, tenantId)
-    .from("inventory_stocktake_lines")
-    .select("epc, piece_id")
-    .eq("stocktake_id", stocktakeId);
+    .from("stocktake_scans")
+    .select("epc")
+    .eq("session_id", stocktakeId);
   const existingFailed = schemaOrMessage(existingErr);
   if (existingFailed) return { ok: false, status: existingFailed.schema ? 503 : 500, error: existingFailed.message, schema: existingFailed.schema };
 
   let resolved: Awaited<ReturnType<typeof resolveScanCodes>>;
   try {
-    resolved = await resolveScanCodes(supabase, tenantId, codes.epcs, codes.skus);
+    resolved = await resolveScanCodes(supabase, tenantId, userId, codes.epcs, codes.skus);
   } catch (err) {
     return { ok: false, status: 500, error: err instanceof Error ? err.message : "Lookup failed" };
   }
 
+  const warnings: string[] = [];
   const incoming: PlannedLine[] = [];
   for (const hit of resolved.epcs) {
     const result = classifyStocktakeHit({
-      epc: hit.epc,
-      pieceId: hit.piece?.id ?? null,
-      expectedIds,
+      hasPiece: !!hit.piece,
+      hasEpc: true,
+      status: hit.piece?.status ?? null,
+      locationId: hit.piece?.locationId ?? null,
+      countLocationId,
     });
     if (result === "ignore") continue;
     incoming.push({
@@ -486,48 +632,50 @@ export async function recordStocktakeScans(
       sku: hit.piece?.sku ?? null,
       pieceId: hit.piece?.id ?? null,
       result,
-      recordedLocationId: hit.piece?.locationId ?? null,
     });
   }
   for (const hit of resolved.skus) {
+    if (!hit.piece) continue;
+    if (!hit.tagEpc) {
+      warnings.push(`${hit.piece.sku || hit.sku} has no RFID tag, so this scan was not saved.`);
+      continue;
+    }
     const result = classifyStocktakeHit({
-      epc: null,
-      pieceId: hit.piece?.id ?? null,
-      expectedIds,
+      hasPiece: true,
+      hasEpc: true,
+      status: hit.piece.status,
+      locationId: hit.piece.locationId,
+      countLocationId,
     });
     if (result === "ignore") continue;
     incoming.push({
-      epc: null,
-      sku: hit.piece?.sku ?? hit.sku,
-      pieceId: hit.piece?.id ?? null,
+      epc: hit.tagEpc,
+      sku: hit.piece.sku,
+      pieceId: hit.piece.id,
       result,
-      recordedLocationId: hit.piece?.locationId ?? null,
     });
   }
 
   const planned = planStocktakeInserts(
-    (existingRows ?? []).map((row: { epc: string | null; piece_id: string | null }) => ({
-      epc: row.epc ? String(row.epc) : null,
-      pieceId: row.piece_id ? String(row.piece_id) : null,
-    })),
+    (existingRows ?? []).map((row: { epc: string }) => String(row.epc).toLowerCase()),
     incoming,
   );
 
-  const scannedAt = new Date().toISOString();
-  for (const line of planned) {
+  if (planned.length) {
+    const scannedAt = new Date().toISOString();
     const { error: insertErr } = await tenantScoped(supabase, tenantId)
-      .from("inventory_stocktake_lines")
-      .insert({
-        stocktake_id: stocktakeId,
-        epc: line.epc,
-        sku: line.sku,
-        piece_id: line.pieceId,
-        result: line.result,
-        recorded_location_id: line.recordedLocationId,
-        moved_here: false,
-        scanned_by: userId,
-        scanned_at: scannedAt,
-      });
+      .from("stocktake_scans")
+      .upsert(
+        planned.map((line) => ({
+          session_id: stocktakeId,
+          epc: line.epc,
+          piece_id: line.pieceId,
+          result_group: line.result,
+          scanned_by: userId,
+          scanned_at: scannedAt,
+        })),
+        { onConflict: "session_id,epc", ignoreDuplicates: true },
+      );
     if (insertErr && insertErr.code !== "23505") {
       const insertFailed = schemaOrMessage(insertErr);
       if (insertFailed?.schema) return { ok: false, status: 503, error: insertFailed.message, schema: true };
@@ -535,7 +683,7 @@ export async function recordStocktakeScans(
     }
   }
 
-  return getStocktake(supabase, tenantId, stocktakeId);
+  return getStocktake(supabase, tenantId, stocktakeId, warnings);
 }
 
 export async function finishStocktake(
@@ -544,60 +692,31 @@ export async function finishStocktake(
   userId: string,
   stocktakeId: string,
 ): Promise<{ ok: true; payload: StocktakePayload } | { ok: false; status: number; error: string; schema?: boolean }> {
-  const { data: session, error } = await tenantScoped(supabase, tenantId)
-    .from("inventory_stocktakes")
-    .select("id, status")
-    .eq("id", stocktakeId)
-    .maybeSingle();
-  const failed = schemaOrMessage(error);
-  if (failed) return { ok: false, status: failed.schema ? 503 : 500, error: failed.message, schema: failed.schema };
-  if (!session) return { ok: false, status: 404, error: "Count not found" };
+  const loaded = await loadSession(supabase, tenantId, stocktakeId);
+  if (!loaded.ok) return loaded;
+  if (loaded.session.status === "cancelled") {
+    return { ok: false, status: 409, error: "This count is cancelled" };
+  }
 
-  if (session.status !== "finished") {
-    const { data: expectedRows, error: expectedErr } = await tenantScoped(supabase, tenantId)
-      .from("inventory_stocktake_expected")
-      .select("piece_id, sku")
-      .eq("stocktake_id", stocktakeId);
-    const expectedFailed = schemaOrMessage(expectedErr);
-    if (expectedFailed) return { ok: false, status: expectedFailed.schema ? 503 : 500, error: expectedFailed.message, schema: expectedFailed.schema };
-
-    const { data: lineRows, error: lineErr } = await tenantScoped(supabase, tenantId)
-      .from("inventory_stocktake_lines")
-      .select("piece_id")
-      .eq("stocktake_id", stocktakeId);
-    const lineFailed = schemaOrMessage(lineErr);
-    if (lineFailed) return { ok: false, status: lineFailed.schema ? 503 : 500, error: lineFailed.message, schema: lineFailed.schema };
-
-    const scanned = new Set((lineRows ?? []).map((row: { piece_id: string | null }) => row.piece_id).filter(Boolean).map(String));
-    const missing = (expectedRows ?? []).filter((row: { piece_id: string }) => !scanned.has(String(row.piece_id)));
-    const recordedAt = new Date().toISOString();
-    for (const row of missing as { piece_id: string; sku: string | null }[]) {
-      const { error: insertErr } = await tenantScoped(supabase, tenantId)
-        .from("inventory_stocktake_lines")
-        .insert({
-          stocktake_id: stocktakeId,
-          epc: null,
-          sku: row.sku ?? null,
-          piece_id: row.piece_id,
-          result: "missing",
-          recorded_location_id: null,
-          moved_here: false,
-          scanned_by: userId,
-          scanned_at: recordedAt,
-        });
-      if (insertErr && insertErr.code !== "23505") {
-        return { ok: false, status: 500, error: insertErr.message };
-      }
-    }
-
+  if (loaded.session.status === "in_progress") {
+    const current = await getStocktake(supabase, tenantId, stocktakeId);
+    if (!current.ok) return current;
+    const confirmed = current.payload.groups.missing
+      .map((row) => row.pieceId)
+      .filter((id): id is string => !!id);
+    const now = new Date().toISOString();
     const { error: updateErr } = await tenantScoped(supabase, tenantId)
-      .from("inventory_stocktakes")
+      .from("stocktake_sessions")
       .update({
-        status: "finished",
+        status: "completed",
         finished_by: userId,
-        finished_at: new Date().toISOString(),
+        finished_at: now,
+        confirmed_missing_piece_ids: confirmed,
+        confirmed_missing_by: userId,
+        confirmed_missing_at: now,
       })
-      .eq("id", stocktakeId);
+      .eq("id", stocktakeId)
+      .eq("status", "in_progress");
     if (updateErr) return { ok: false, status: 500, error: updateErr.message };
   }
 
@@ -610,11 +729,25 @@ export async function markLineMovedHere(
   stocktakeId: string,
   pieceId: string,
 ): Promise<{ ok: true } | { ok: false; status: number; error: string; schema?: boolean }> {
+  const loaded = await loadSession(supabase, tenantId, stocktakeId);
+  if (!loaded.ok) return loaded;
+  if (loaded.session.status !== "in_progress") return { ok: true };
+
+  const { data: piece, error: pieceErr } = await tenantScoped(supabase, tenantId)
+    .from("inventory_pieces")
+    .select("id, status, location_id")
+    .eq("id", pieceId)
+    .maybeSingle();
+  if (pieceErr) return { ok: false, status: 500, error: pieceErr.message };
+  if (!piece) return { ok: true };
+  if (piece.status !== IN_STOCK_STATUS || piece.location_id !== loaded.session.location_id) return { ok: true };
+
   const { error } = await tenantScoped(supabase, tenantId)
-    .from("inventory_stocktake_lines")
-    .update({ moved_here: true })
-    .eq("stocktake_id", stocktakeId)
-    .eq("piece_id", pieceId);
+    .from("stocktake_scans")
+    .update({ result_group: "found" })
+    .eq("session_id", stocktakeId)
+    .eq("piece_id", pieceId)
+    .eq("result_group", "wrong_location");
   const failed = schemaOrMessage(error);
   if (failed) return { ok: false, status: failed.schema ? 503 : 500, error: failed.message, schema: failed.schema };
   return { ok: true };

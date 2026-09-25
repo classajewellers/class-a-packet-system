@@ -1,20 +1,23 @@
 /**
- * Pure stocktake classification. The live count, finish, and the scan API
- * all use this so a refresh renders the same four groups.
- * Blank versus unknown reuses missingEpcGroup from the handheld scan parser.
+ * Stocktake grouping for the handheld count.
+ * Blank tags are unknown rows whose EPC still has the Impinj prefix.
+ * Missing is not a scan result: it is computed from in-stock pieces at the
+ * location, and stored only when a manager finishes the count.
  */
 import { missingEpcGroup } from "./rfid-scan";
 
-export const STOCKTAKE_SETUP_MESSAGE =
-  "Stocktake tables are not on this database yet. Apply migration 170_inventory_stocktake.sql on staging, then reload.";
+export const STOCKTAKE_SETUP_MESSAGE = "Stocktake isn't set up yet";
 
-export type StocktakeStatus = "in_progress" | "finished";
-export type StocktakeResult = "found" | "elsewhere" | "unknown" | "blank" | "missing";
+export const IN_STOCK_STATUS = "in_stock";
+
+export type StocktakeStatus = "in_progress" | "completed" | "cancelled";
+export type StoredResult = "found" | "wrong_location" | "unknown" | "not_in_stock";
 
 export type StocktakeCounts = {
   found: number;
   missing: number;
   elsewhere: number;
+  notInStock: number;
   unknown: number;
   blank: number;
 };
@@ -32,8 +35,7 @@ export type StoredLine = {
   epc: string | null;
   sku: string | null;
   pieceId: string | null;
-  result: StocktakeResult;
-  movedHere: boolean;
+  result: StoredResult;
   metal: string | null;
   status: string | null;
   locationName: string | null;
@@ -56,6 +58,7 @@ export type StocktakeGroups = {
   found: StocktakeRow[];
   missing: StocktakeRow[];
   elsewhere: StocktakeRow[];
+  notInStock: StocktakeRow[];
   unknown: StocktakeRow[];
   blank: StocktakeRow[];
 };
@@ -75,54 +78,71 @@ export type StocktakePayload = {
   stocktake: StocktakeSession;
   groups: StocktakeGroups;
   counts: StocktakeCounts;
+  warnings: string[];
 };
 
-/** In-stock text status the piece page and stock list already use. */
-export const IN_STOCK_STATUS = "in_stock";
-
 /**
- * A resolved piece that was on the expected snapshot is Found.
- * Any other resolved piece is Somewhere else (other location, or none).
- * An EPC with no Vault tag is Unknown, unless it still has the Impinj
- * factory prefix, in which case it is a blank. A SKU that matches nothing
- * is ignored, same as the handheld scan page.
+ * In stock at the count location is Found. In stock anywhere else, or with
+ * no location, is Somewhere else. Any other piece status is not_in_stock.
+ * An EPC with no Vault tag is Unknown. A SKU that matches nothing is ignored.
  */
 export function classifyStocktakeHit(input: {
-  epc: string | null;
-  pieceId: string | null;
-  expectedIds: ReadonlySet<string>;
-}): "found" | "elsewhere" | "unknown" | "blank" | "ignore" {
-  if (!input.pieceId) {
-    if (!input.epc) return "ignore";
-    return missingEpcGroup(input.epc) === "blank" ? "blank" : "unknown";
-  }
-  return input.expectedIds.has(input.pieceId) ? "found" : "elsewhere";
+  hasPiece: boolean;
+  hasEpc: boolean;
+  status: string | null;
+  locationId: string | null;
+  countLocationId: string;
+}): StoredResult | "ignore" {
+  if (!input.hasPiece) return input.hasEpc ? "unknown" : "ignore";
+  if (input.status !== IN_STOCK_STATUS) return "not_in_stock";
+  if (input.locationId === input.countLocationId) return "found";
+  return "wrong_location";
 }
 
 export type PlannedLine = {
-  epc: string | null;
+  epc: string;
   sku: string | null;
   pieceId: string | null;
-  result: "found" | "elsewhere" | "unknown" | "blank";
-  recordedLocationId: string | null;
+  result: StoredResult;
 };
 
-/** Drop hits this session already stored. Unique per EPC and per piece. */
-export function planStocktakeInserts(
-  existing: { epc: string | null; pieceId: string | null }[],
-  incoming: PlannedLine[],
-): PlannedLine[] {
-  const epcs = new Set(existing.map((row) => row.epc).filter((epc): epc is string => !!epc));
-  const pieces = new Set(existing.map((row) => row.pieceId).filter((id): id is string => !!id));
+/** Drop an EPC this session already stored. Conflict key is (session, epc). */
+export function planStocktakeInserts(existingEpcs: string[], incoming: PlannedLine[]): PlannedLine[] {
+  const seen = new Set(existingEpcs);
   const planned: PlannedLine[] = [];
   for (const line of incoming) {
-    if (line.epc && epcs.has(line.epc)) continue;
-    if (line.pieceId && pieces.has(line.pieceId)) continue;
-    if (line.epc) epcs.add(line.epc);
-    if (line.pieceId) pieces.add(line.pieceId);
+    if (seen.has(line.epc)) continue;
+    seen.add(line.epc);
     planned.push(line);
   }
   return planned;
+}
+
+const READABLE_TAG_STATUSES = ["active", "printed", "pending"];
+
+/** EPC to store for a barcode hit. Damaged, retired and replaced tags are skipped. */
+export function preferredTagEpc(tags: { epc: string; status: string }[]): string | null {
+  let bestEpc: string | null = null;
+  let bestRank = READABLE_TAG_STATUSES.length;
+  for (const tag of tags) {
+    const rank = READABLE_TAG_STATUSES.indexOf(tag.status);
+    if (rank < 0 || rank >= bestRank) continue;
+    bestRank = rank;
+    bestEpc = tag.epc.toLowerCase();
+  }
+  return bestEpc;
+}
+
+export function formatStocktakeCounts(counts: StocktakeCounts): string {
+  const parts = [
+    `Found ${counts.found}`,
+    `Missing ${counts.missing}`,
+    `Somewhere else ${counts.elsewhere}`,
+    `Unknown ${counts.unknown}`,
+  ];
+  if (counts.notInStock) parts.push(`Not in stock ${counts.notInStock}`);
+  if (counts.blank) parts.push(`${counts.blank} blank`);
+  return parts.join(" · ");
 }
 
 export function missingPieceIds(expectedIds: string[], scannedPieceIds: Array<string | null>): string[] {
@@ -133,7 +153,7 @@ export function missingPieceIds(expectedIds: string[], scannedPieceIds: Array<st
   return expectedIds.filter((id) => !scanned.has(id));
 }
 
-function rowFromLine(line: StoredLine): StocktakeRow {
+function rowFromLine(line: StoredLine, movedHere: boolean): StocktakeRow {
   return {
     key: line.id,
     epc: line.epc,
@@ -143,7 +163,7 @@ function rowFromLine(line: StoredLine): StocktakeRow {
     status: line.status,
     locationName: line.locationName,
     locationId: line.locationId,
-    movedHere: line.movedHere,
+    movedHere,
   };
 }
 
@@ -162,30 +182,31 @@ function rowFromExpected(piece: ExpectedPiece): StocktakeRow {
 }
 
 export function buildStocktakeGroups(
-  status: StocktakeStatus,
-  expected: ExpectedPiece[],
   lines: StoredLine[],
+  missing: ExpectedPiece[],
+  countLocationId: string,
 ): { groups: StocktakeGroups; counts: StocktakeCounts } {
-  const found = lines.filter((line) => line.result === "found").map(rowFromLine);
-  const elsewhere = lines.filter((line) => line.result === "elsewhere").map(rowFromLine);
-  const unknown = lines.filter((line) => line.result === "unknown").map(rowFromLine);
-  const blank = lines.filter((line) => line.result === "blank").map(rowFromLine);
-
-  let missing: StocktakeRow[];
-  if (status === "finished") {
-    missing = lines.filter((line) => line.result === "missing").map(rowFromLine);
-  } else {
-    const scanned = new Set(lines.map((line) => line.pieceId).filter((id): id is string => !!id));
-    missing = expected.filter((piece) => !scanned.has(piece.pieceId)).map(rowFromExpected);
-  }
-
-  const groups = { found, missing, elsewhere, unknown, blank };
+  const found = lines.filter((line) => line.result === "found").map((line) => rowFromLine(line, false));
+  const elsewhere = lines
+    .filter((line) => line.result === "wrong_location")
+    .map((line) => rowFromLine(line, !!line.locationId && line.locationId === countLocationId));
+  const notInStock = lines.filter((line) => line.result === "not_in_stock").map((line) => rowFromLine(line, false));
+  const unknownLines = lines.filter((line) => line.result === "unknown");
+  const blank = unknownLines
+    .filter((line) => !!line.epc && missingEpcGroup(line.epc) === "blank")
+    .map((line) => rowFromLine(line, false));
+  const unknown = unknownLines
+    .filter((line) => !line.epc || missingEpcGroup(line.epc) === "unknown")
+    .map((line) => rowFromLine(line, false));
+  const missingRows = missing.map(rowFromExpected);
+  const groups = { found, missing: missingRows, elsewhere, notInStock, unknown, blank };
   return {
     groups,
     counts: {
       found: found.length,
-      missing: missing.length,
+      missing: missingRows.length,
       elsewhere: elsewhere.length,
+      notInStock: notInStock.length,
       unknown: unknown.length,
       blank: blank.length,
     },
@@ -196,5 +217,6 @@ export function isStocktakeSchemaError(error: { code?: string; message?: string 
   if (!error) return false;
   if (error.code === "42P01" || error.code === "PGRST205") return true;
   const message = error.message?.toLowerCase() ?? "";
-  return message.includes("inventory_stocktake") && (message.includes("does not exist") || message.includes("schema cache"));
+  return (message.includes("stocktake_session") || message.includes("stocktake_scan"))
+    && (message.includes("does not exist") || message.includes("schema cache"));
 }
