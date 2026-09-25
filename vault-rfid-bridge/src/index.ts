@@ -34,9 +34,12 @@ function loadConfig(): BridgeConfig {
     process.exit(1);
   }
 
+  const bypass = typeof c.vercelBypassSecret === "string" ? c.vercelBypassSecret.trim() : "";
+
   return {
     vaultApiUrl:          String(c.vaultApiUrl),
     bridgeApiKey:         String(c.bridgeApiKey),
+    ...(bypass ? { vercelBypassSecret: bypass } : {}),
     pollIntervalMs:       Number(c.pollIntervalMs)      || 3000,
     heartbeatIntervalMs:  Number(c.heartbeatIntervalMs) || 30000,
     printer: {

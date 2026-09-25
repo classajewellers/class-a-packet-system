@@ -14,20 +14,86 @@ function log(level: string, msg: string, data?: unknown) {
   }
 }
 
-async function vaultFetch(
+const REDIRECT_LIMIT = 20;
+
+function isVercelProtectionHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/\.$/, "");
+  return host === "vercel.com" || host.endsWith(".vercel.com");
+}
+
+function protectionWarning(config: BridgeConfig, status: number, path: string): string {
+  const message = `Vercel protection blocked the request (HTTP ${status} ${path}). Set vercelBypassSecret in config.json.`;
+  return config.vercelBypassSecret
+    ? `${message} The configured secret may be wrong or expired.`
+    : message;
+}
+
+function vaultHeaders(config: BridgeConfig, extra: HeadersInit | undefined, includeSecrets: boolean): HeadersInit {
+  return {
+    ...(includeSecrets ? { "Authorization": `Bearer ${config.bridgeApiKey}` } : {}),
+    ...(includeSecrets && config.vercelBypassSecret
+      ? { "x-vercel-protection-bypass": config.vercelBypassSecret }
+      : {}),
+    "Content-Type": "application/json",
+    ...(extra ?? {}),
+  };
+}
+
+// Follow non-Vercel redirects the same way fetch did (up to 20 hops; 301/302/303
+// become GET). A 3xx to vercel.com is Deployment Protection SSO and is returned
+// as that 3xx so callers see a failure. Authorization and the bypass secret stay
+// on the original Vault origin only.
+export async function vaultFetch(
   config: BridgeConfig,
   path: string,
   options: RequestInit = {}
 ): Promise<Response> {
-  const url = `${config.vaultApiUrl.replace(/\/$/, "")}${path}`;
-  return fetch(url, {
-    ...options,
-    headers: {
-      "Authorization": `Bearer ${config.bridgeApiKey}`,
-      "Content-Type": "application/json",
-      ...(options.headers ?? {}),
-    },
-  });
+  const startUrl = `${config.vaultApiUrl.replace(/\/$/, "")}${path}`;
+  let currentUrl = startUrl;
+  let method = options.method ?? "GET";
+  let body = options.body;
+  const vaultOrigin = new URL(startUrl).origin;
+
+  for (let hop = 0; hop <= REDIRECT_LIMIT; hop++) {
+    const sameOrigin = new URL(currentUrl).origin === vaultOrigin;
+    const res = await fetch(currentUrl, {
+      ...options,
+      method,
+      body,
+      headers: vaultHeaders(config, options.headers, sameOrigin),
+      redirect: "manual",
+    });
+
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get("location");
+      let next: URL | null = null;
+      try {
+        next = location ? new URL(location, currentUrl) : null;
+      } catch {
+        next = null;
+      }
+      if (!next || isVercelProtectionHost(next.hostname) || hop === REDIRECT_LIMIT) {
+        if (next && isVercelProtectionHost(next.hostname)) {
+          log("warn", protectionWarning(config, res.status, path));
+        }
+        return res;
+      }
+      await res.body?.cancel().catch(() => undefined);
+      currentUrl = next.toString();
+      if (res.status === 301 || res.status === 302 || res.status === 303) {
+        method = "GET";
+        body = undefined;
+      }
+      continue;
+    }
+
+    if (res.status === 401 || res.status === 403) {
+      log("warn", protectionWarning(config, res.status, path));
+    }
+    return res;
+  }
+
+  throw new Error(`Vault redirect limit exceeded for ${path}`);
 }
 
 async function updateJobStatus(
@@ -187,10 +253,11 @@ async function poll(config: BridgeConfig): Promise<void> {
 async function heartbeat(config: BridgeConfig): Promise<void> {
   const printerReachable = await checkPrinterReachable(config);
   try {
-    await vaultFetch(config, "/api/rfid/bridge/heartbeat", {
+    const res = await vaultFetch(config, "/api/rfid/bridge/heartbeat", {
       method: "POST",
       body: JSON.stringify({ version: BRIDGE_VERSION, printer_reachable: printerReachable }),
     });
+    if (!res.ok) return;
     if (!printerReachable) {
       log("warn", `Heartbeat sent — printer ${config.printer.host}:${config.printer.port} unreachable`);
     }

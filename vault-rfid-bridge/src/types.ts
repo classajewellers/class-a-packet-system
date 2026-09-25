@@ -1,6 +1,9 @@
 export interface BridgeConfig {
   vaultApiUrl: string;
   bridgeApiKey: string;
+  // Optional Vercel Deployment Protection bypass for *.vercel.app practice
+  // and branch URLs. Missing or empty disables the header.
+  vercelBypassSecret?: string;
   pollIntervalMs: number;
   heartbeatIntervalMs: number;
   printer: {
