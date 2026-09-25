@@ -8,8 +8,7 @@ import { useUser } from "@/context/UserContext";
 import { hasPermission, canManage } from "@/lib/userTypes";
 import { formatDateAU } from "@/lib/formatters";
 import { isCastingOverdue } from "@/lib/cadStage";
-import { resolveAssigneeName } from "@/lib/workshopAssignee";
-import AssigneeMark from "@/components/AssigneeMark";
+import { assigneeBoardLabel, resolveAssigneeName } from "@/lib/workshopAssignee";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -410,7 +409,7 @@ function ManagerNoticeboard({ messages, leadTimes, tenantId, onRefresh }: { mess
 
 // ── Job Card ──────────────────────────────────────────────────────────────────
 
-function JobCard({ packet, config, accent, grouping, draggingDisabled, focused, onDragStart, onClick, onMove }: {
+function JobCard({ packet, config, grouping, draggingDisabled, focused, onDragStart, onClick, onMove }: {
   packet: WorkshopPacket;
   config: WorkshopConfig;
   accent: string;
@@ -500,12 +499,12 @@ function JobCard({ packet, config, accent, grouping, draggingDisabled, focused, 
             {overdue ? "⚠ " : dueToday ? "⏰ " : ""}{formatDateAU(packet.due_date)}
           </span>
         ) : <span style={{ fontSize: 11, color: "#D1D5DB" }}>No due date</span>}
-        {assignee && (
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, minWidth: 0 }}>
-            <AssigneeMark name={assignee} color={accent} />
-            <span title={assignee} style={{ fontSize: 11, fontWeight: 600, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 88 }}>{assignee}</span>
-          </span>
-        )}
+        <span
+          title={assignee ?? undefined}
+          style={{ fontSize: 11, fontWeight: assignee ? 600 : 500, color: assignee ? "#374151" : "#9CA3AF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 108, minWidth: 0 }}
+        >
+          {assignee ? assigneeBoardLabel(assignee, packet, { teamMembers: config.teamMembers }) : "Unassigned"}
+        </span>
       </div>
 
       {/* Block / Unblock control */}

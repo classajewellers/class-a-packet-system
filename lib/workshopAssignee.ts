@@ -31,6 +31,16 @@ export function resolveAssigneeName(job: AssigneeJob, directory?: AssigneeDirect
   return clean(job.assigned_to_name);
 }
 
+// Board cards: a person's first name, or the subcontractor / free-text name
+// itself. The card truncates that with an ellipsis; the tooltip is the full name.
+export function assigneeBoardLabel(fullName: string, job: AssigneeJob, directory?: AssigneeDirectory): string {
+  const text = fullName.trim();
+  const first = text.split(/\s+/).filter(Boolean)[0] ?? text;
+  const teamPerson = directory?.teamMembers?.some((member) => member.name.trim() === text) ?? false;
+  if (job.assigned_to || teamPerson) return first;
+  return text;
+}
+
 export function assigneeInitials(name: string): string {
   return name.split(" ").filter(Boolean).map((part) => part[0]).join("").toUpperCase().slice(0, 2);
 }
