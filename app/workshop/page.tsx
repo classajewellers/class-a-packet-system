@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { hasPermission, canManage } from "@/lib/userTypes";
 import { formatDateAU } from "@/lib/formatters";
+import { resolveAssigneeName } from "@/lib/workshopAssignee";
+import AssigneeMark from "@/components/AssigneeMark";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -90,10 +92,8 @@ function displayName(p: WorkshopPacket) {
   if (p.job_type === "stock_work") return "Internal";
   return p.customer_display_name || [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "—";
 }
-function resolveAssignee(p: WorkshopPacket) {
-  if (p.assigned_to_name) return p.assigned_to_name;
-  if (p.workshop_subcontractor_name) return p.workshop_subcontractor_name;
-  return null;
+function resolveAssignee(p: WorkshopPacket, config?: WorkshopConfig) {
+  return resolveAssigneeName(p, { teamMembers: config?.teamMembers });
 }
 function isMyJob(p: WorkshopPacket, userId: string | null | undefined) {
   return !!userId && p.assigned_to === userId;
@@ -117,9 +117,6 @@ function relativeTime(iso: string | null): string {
   if (diff < 86400)    return `${Math.floor(diff / 3600)}h ago`;
   if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}d ago`;
   return formatDateAU(iso.split("T")[0]);
-}
-function initials(name: string) {
-  return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
 }
 // Deterministic colour per person, derived from their real name - not a new
 // backend concept, just a display convenience so team members are visually
@@ -160,14 +157,9 @@ function CountBadge({ n }: { n: number }) {
 function OwnerChip({ name }: { name: string | null }) {
   if (!name) return <span style={{ fontSize: 12, color: "var(--vault-text-muted)" }}>Unassigned</span>;
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-      <span style={{
-        width: 20, height: 20, borderRadius: "50%", background: avatarColor(name), color: "#fff",
-        fontSize: 10, fontWeight: 600, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-      }}>
-        {initials(name)}
-      </span>
-      <span style={{ fontSize: 12.5, color: "var(--vault-text)" }}>{name}</span>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+      <AssigneeMark name={name} color={avatarColor(name)} size={20} />
+      <span title={name} style={{ fontSize: 12.5, color: "var(--vault-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
     </span>
   );
 }
@@ -303,7 +295,7 @@ function JobRow({
         ) : (
           <StageChip label={stepLabel} />
         )}
-        <div><OwnerChip name={resolveAssignee(p)} /></div>
+        <div><OwnerChip name={resolveAssignee(p, config)} /></div>
         <div style={{ fontSize: 12.5, color: isOverdue(p) ? "var(--vault-status-error)" : isDueToday(p) ? "var(--vault-status-warning)" : "var(--vault-text-secondary)", fontWeight: (isOverdue(p) || isDueToday(p)) ? 600 : 400 }}>
           {p.due_date ? formatDateAU(p.due_date) : "—"}
         </div>
@@ -400,7 +392,7 @@ export default function WorkshopPage() {
     if (stageFilter     !== "all" && p.status         !== stageFilter)     return false;
     if (deliveryFilter  !== "all" && p.delivery_method !== deliveryFilter)  return false;
     if (assigneeFilter !== "all") {
-      const a = resolveAssignee(p);
+      const a = resolveAssignee(p, config);
       if (a !== assigneeFilter) return false;
     }
     if (q) {
@@ -429,7 +421,7 @@ export default function WorkshopPage() {
       case "job_type":        va = a.job_type ?? ""; vb = b.job_type ?? ""; break;
       case "status":          va = a.status ?? ""; vb = b.status ?? ""; break;
       case "status_updated_at": va = a.status_updated_at ?? ""; vb = b.status_updated_at ?? ""; break;
-      case "assigned":        va = (resolveAssignee(a) ?? "").toLowerCase(); vb = (resolveAssignee(b) ?? "").toLowerCase(); break;
+      case "assigned":        va = (resolveAssignee(a, config) ?? "").toLowerCase(); vb = (resolveAssignee(b, config) ?? "").toLowerCase(); break;
     }
     if (va < vb) return sortDir === "asc" ? -1 : 1;
     if (va > vb) return sortDir === "asc" ? 1 : -1;
@@ -440,8 +432,8 @@ export default function WorkshopPage() {
   // from real fields already on the record (blocked_reason,
   // pending_customer_approval, isOverdue, resolveAssignee). No new data.
   const needsAttention = sorted.filter(p => !!needsAttentionReason(p, config.settings.stale_threshold_days));
-  const inProduction    = sorted.filter(p => !needsAttentionReason(p, config.settings.stale_threshold_days) && !!resolveAssignee(p));
-  const remaining       = sorted.filter(p => !needsAttentionReason(p, config.settings.stale_threshold_days) && !resolveAssignee(p));
+  const inProduction    = sorted.filter(p => !needsAttentionReason(p, config.settings.stale_threshold_days) && !!resolveAssignee(p, config));
+  const remaining       = sorted.filter(p => !needsAttentionReason(p, config.settings.stale_threshold_days) && !resolveAssignee(p, config));
 
   const activeFilterCount = [jobTypeFilter !== "all", stageFilter !== "all", assigneeFilter !== "all", deliveryFilter !== "all"].filter(Boolean).length;
 

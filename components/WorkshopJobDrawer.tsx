@@ -7,6 +7,7 @@ import AttachmentsSection from "@/components/AttachmentsSection";
 import WorkshopPurchasing, { useJobPurchases } from "@/components/WorkshopPurchasing";
 import CadApprovalPanel, { type CadVersionRow } from "@/components/CadApprovalPanel";
 import { castingDueDate, isCastingOverdue, pathwayStepIndex } from "@/lib/cadStage";
+import { resolveAssigneeName } from "@/lib/workshopAssignee";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -561,14 +562,7 @@ export default function WorkshopJobDrawer({
   }
 
   function assigneeName(): string | null {
-    if (local.status === "cad_design") return cadDesignerName();
-    if (local.assigned_to) {
-      return local.assigned_to_name
-        || profiles.find((profile) => profile.id === local.assigned_to)?.full_name
-        || config.teamMembers.find((member) => member.profile_id === local.assigned_to)?.name
-        || null;
-    }
-    return local.workshop_subcontractor_name || null;
+    return resolveAssigneeName(local, { profiles, teamMembers: config.teamMembers });
   }
 
   function cadDesignerName(): string | null {

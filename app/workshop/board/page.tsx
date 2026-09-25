@@ -8,6 +8,8 @@ import { useUser } from "@/context/UserContext";
 import { hasPermission, canManage } from "@/lib/userTypes";
 import { formatDateAU } from "@/lib/formatters";
 import { isCastingOverdue } from "@/lib/cadStage";
+import { resolveAssigneeName } from "@/lib/workshopAssignee";
+import AssigneeMark from "@/components/AssigneeMark";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -163,12 +165,8 @@ function displayName(p: WorkshopPacket) {
   if (p.job_type === "stock_work") return "Internal";
   return p.customer_display_name || [p.customer_first_name, p.customer_last_name].filter(Boolean).join(" ") || "No name";
 }
-function initials(name: string | null) {
-  if (!name) return "?";
-  return name.split(" ").filter(Boolean).map(w => w[0]).join("").toUpperCase().slice(0, 2);
-}
-function resolveAssignee(p: WorkshopPacket): string | null {
-  return p.assigned_to_name || p.workshop_subcontractor_name || null;
+function resolveAssignee(p: WorkshopPacket, config?: WorkshopConfig): string | null {
+  return resolveAssigneeName(p, { teamMembers: config?.teamMembers });
 }
 function resolveStepLabel(p: WorkshopPacket, config: WorkshopConfig): string | null {
   if (!p.workshop_pathway_id) return null;
@@ -433,7 +431,7 @@ function JobCard({ packet, config, accent, grouping, draggingDisabled, focused, 
   const jt       = packet.job_type ?? "repair";
   const jtColor  = JOB_TYPE_COLORS[jt] ?? JOB_TYPE_COLORS.repair;
   const stepLabel = resolveStepLabel(packet, config);
-  const assignee  = resolveAssignee(packet);
+  const assignee  = resolveAssignee(packet, config);
   const leftBorder = packet.pending_customer_approval ? "3px solid #EA580C" : overdue ? "3px solid #EF4444" : stale && !dueToday ? "3px solid #F59E0B" : packet.blocked_reason ? "3px solid #EA580C" : "3px solid transparent";
   const moveOptions = getMoveOptions(packet, grouping, config);
 
@@ -503,8 +501,9 @@ function JobCard({ packet, config, accent, grouping, draggingDisabled, focused, 
           </span>
         ) : <span style={{ fontSize: 11, color: "#D1D5DB" }}>No due date</span>}
         {assignee && (
-          <span style={{ width: 22, height: 22, borderRadius: "50%", background: accent, color: "#fff", fontSize: 9, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            {initials(assignee)}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, minWidth: 0 }}>
+            <AssigneeMark name={assignee} color={accent} />
+            <span title={assignee} style={{ fontSize: 11, fontWeight: 600, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 88 }}>{assignee}</span>
           </span>
         )}
       </div>

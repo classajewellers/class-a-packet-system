@@ -620,6 +620,9 @@ export interface WorkshopJob {
   stage: string;
   track: string;                          // 'repair' | 'collections' | 'manufacturing'
   assigned_jeweller: string | null;
+  assigned_to?: string | null;
+  assigned_to_name?: string | null;
+  workshop_subcontractor_name?: string | null;
   due_date: string | null;
   instructions: string | null;
   is_subcontractor: boolean;
