@@ -1,11 +1,10 @@
 /**
  * jewellery_v1 ZPL for a 68 mm × 26 mm RFID label on a Zebra ZD621R.
  *
- * The encode block is the one that wrote the chip on 25 Sep 2026 (bridge
- * 70cbb44): SGD rfid.position.program "F4" before ^XA, then ^RFW,H,1,6,1
- * immediately before the visual fields. No ^RS. A non-zero ^LT shifts the
- * format relative to that program position and the printer voids the label.
- * ^LT0 is the proven default and clears the label-top the failed layout stored.
+ * Encode is a Gen2 96-bit EPC write: ^RFW,H,2,12,1 starts at word 2 of the
+ * EPC bank (past the CRC and PC words) and writes 12 bytes. The printer's
+ * own rfid.position.program is left alone. ^LT stays 0 so the format does
+ * not move that calibrated position.
  *
  * Positions are millimetres converted at the printer DPI. 203 dpi is 8 dots/mm
  * (544 × 208). 300 dpi is 300/25.4 dots/mm (803 × 307). ^PW sets the canvas.
@@ -51,21 +50,21 @@ type TextBlock = { text: string; font: number; lines: number; lineGap: number };
 
 /**
  * Generate ZPL II for a jewellery RFID label that fills 68 mm × 26 mm.
- * Visual fields change. The RFID commands, their order, and their place
- * before those fields do not.
+ * The EPC write stays before every ^FO. An EPC that is not 24 hex characters
+ * throws, and the bridge fails the job instead of sending ZPL.
  */
 export function generateJewelleryZpl(data: LabelData): string {
   const { epc, sku } = data;
   const dpi = normalizeDpi(data.dpi);
   const px = (mm: number) => mmToDots(mm, dpi);
   const barcodeValue = (data.barcode || sku).trim();
-  const programPosition = (data.programPosition ?? "F4").replace(/[^A-Za-z0-9]/g, "") || "F4";
   const titleText = cleanText(data.title);
   const showTitle = titleText.length > 0 && titleText.toLowerCase() !== sku.trim().toLowerCase();
   const detailText = [cleanText(data.metal), cleanText(data.stone)].filter(Boolean).join(" / ");
 
-  if (epc.length !== 24 || !/^[0-9a-f]+$/i.test(epc)) {
-    throw new Error(`Invalid EPC: must be exactly 24 lowercase hex chars, got "${epc}"`);
+  const epcHex = epc.trim().toLowerCase();
+  if (epcHex.length !== 24 || !/^[0-9a-f]{24}$/.test(epcHex)) {
+    throw new Error(`Invalid EPC: must be exactly 24 hex characters, got "${epc}"`);
   }
 
   const width = data.widthDots ?? px(LABEL_WIDTH_MM);
@@ -126,7 +125,6 @@ export function generateJewelleryZpl(data: LabelData): string {
   );
 
   return [
-    `! U1 setvar "rfid.position.program" "${programPosition}"`,
     "^XA",
     "^MUD",
     "^MMT",
@@ -136,7 +134,7 @@ export function generateJewelleryZpl(data: LabelData): string {
     "^LT0",
     "^LS0",
     "^CI28",
-    `^RFW,H,1,6,1^FD${epc.toLowerCase()}^FS`,
+    `^RFW,H,2,12,1^FD${epcHex}^FS`,
     ...fields,
     `^FO${marginX},${placed.barcodeY}^BY${moduleWidth},2,${barH}^BCN,${barH},Y,N,N^FD${escZpl(barcodeValue)}^FS`,
     "^PQ1",

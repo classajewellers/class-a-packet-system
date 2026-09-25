@@ -234,7 +234,15 @@ async function processJob(config: BridgeConfig, job: PrintJob): Promise<void> {
   log("info", `Sending ZPL for job ${job.id}`);
   await updateJobStatus(config, job.id, "printing");
 
-  const zpl = zplForJob(config, job);
+  let zpl: string;
+  try {
+    zpl = zplForJob(config, job);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log("error", `Job ${job.id}: ${msg} - marked failed`);
+    await updateJobStatus(config, job.id, "failed", msg);
+    return;
+  }
   const bytes = Buffer.byteLength(zpl, "utf8");
   const { pw, ll } = zplDimensions(zpl);
   const zplPath = writeLastJobZpl(zpl);
@@ -340,7 +348,9 @@ function zplForJob(config: BridgeConfig, job: PrintJob): string {
     log("info", `Job ${job.id}: jewellery_v1 laid out at ${dpi} dpi for a 68x26 mm label`);
     return zpl;
   } catch (err: unknown) {
-    log("warn", `Job ${job.id}: could not rebuild jewellery_v1 (${err instanceof Error ? err.message : "invalid label"}), sending the stored ZPL`);
+    const message = err instanceof Error ? err.message : "invalid label";
+    if (message.startsWith("Invalid EPC:")) throw err;
+    log("warn", `Job ${job.id}: could not rebuild jewellery_v1 (${message}), sending the stored ZPL`);
     return job.zpl_payload;
   }
 }
