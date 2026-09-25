@@ -141,14 +141,19 @@ export default function NewPurchaseOrderPage() {
 
   const fetchRef = useCallback(async () => {
     if (!tenantId) return;
-    const [refRes, pktsRes, xeroLoad] = await Promise.all([
+    const [refRes, supplierRes, pktsRes, xeroLoad] = await Promise.all([
       fetch("/api/inventory/reference", { headers }),
+      fetch("/api/inventory/suppliers", { cache: "no-store", headers }),
       fetch("/api/inventory/open-packets", { headers }),
       loadXeroAccounts(headers),
     ]);
     if (refRes.ok) {
       const json = await refRes.json();
       setRef(json);
+      setSuppliers(json.suppliers ?? []);
+    }
+    if (supplierRes.ok) {
+      const json = await supplierRes.json();
       setSuppliers(json.suppliers ?? []);
     }
     if (pktsRes.ok) {
