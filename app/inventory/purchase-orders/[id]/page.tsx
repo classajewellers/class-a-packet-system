@@ -582,9 +582,10 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
   const fetchPo = useCallback(async (opts?: { silent?: boolean }) => {
     if (!tenantId) return;
     if (!opts?.silent) setLoading(true);
-    const [poRes, refRes, prodRes, xeroLoad] = await Promise.all([
+    const [poRes, refRes, supplierRes, prodRes, xeroLoad] = await Promise.all([
       fetch(`/api/inventory/purchase-orders/${params.id}`, { headers }),
       fetch("/api/inventory/reference", { headers }),
+      fetch("/api/inventory/suppliers", { cache: "no-store", headers }),
       fetch("/api/inventory/products?limit=500", { headers }),
       loadXeroAccounts(headers),
     ]);
@@ -596,6 +597,12 @@ export default function PurchaseOrderDetailPage({ params }: { params: { id: stri
       const json = await refRes.json();
       setCategories(json.categories ?? []);
       setLocations(json.locations ?? []);
+      setSuppliers(json.suppliers ?? []);
+    }
+    // Same list as the Suppliers page, including on a received order.
+    // Received does not lock the supplier.
+    if (supplierRes.ok) {
+      const json = await supplierRes.json();
       setSuppliers(json.suppliers ?? []);
     }
     if (prodRes.ok) {
