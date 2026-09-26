@@ -37,7 +37,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       notes,
     });
     if (!moved.ok) return NextResponse.json({ error: moved.error }, { status: moved.status });
-    if (typeof body.stocktake_id === "string" && body.stocktake_id && moved.action === "moved") {
+    if (typeof body.stocktake_id === "string" && body.stocktake_id && (moved.action === "moved" || moved.action === "already")) {
       const marked = await markLineMovedHere(supabase, tenantId, body.stocktake_id, body.piece_id);
       if (!marked.ok) {
         return NextResponse.json(

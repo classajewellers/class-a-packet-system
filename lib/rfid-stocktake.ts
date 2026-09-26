@@ -13,7 +13,8 @@ export const STOCKTAKE_SETUP_MESSAGE = "Stocktake isn't set up yet";
 export const IN_STOCK_STATUS = "in_stock";
 
 export type StocktakeStatus = "in_progress" | "completed" | "cancelled";
-export type StoredResult = "found" | "wrong_location" | "unknown" | "not_in_stock";
+export type StocktakeKind = "location" | "zone" | "whole_shop";
+export type StoredResult = "found" | "wrong_tray" | "nearby_zone" | "wrong_location" | "unknown" | "not_in_stock";
 
 export type StocktakeCounts = {
   found: number;
@@ -28,6 +29,8 @@ export type StocktakeCounts = {
   movedDuring: number;
   resolvedFound: number;
   resolvedMissing: number;
+  wrongTray: number;
+  nearby: number;
 };
 
 export type ExpectedPiece = {
@@ -48,6 +51,8 @@ export type StoredLine = {
   status: string | null;
   locationName: string | null;
   locationId: string | null;
+  detail?: string | null;
+  scannedLocationId?: string | null;
 };
 
 export type StocktakeRow = {
@@ -63,6 +68,7 @@ export type StocktakeRow = {
   detail?: string | null;
   seenAt?: string | null;
   seenByName?: string | null;
+  snapshotLocationLabel?: string | null;
 };
 
 export type StocktakeGroups = {
@@ -75,6 +81,8 @@ export type StocktakeGroups = {
   notTagged: StocktakeRow[];
   soldDuring: StocktakeRow[];
   movedDuring: StocktakeRow[];
+  wrongTray: StocktakeRow[];
+  nearby: StocktakeRow[];
 };
 
 /** One in-stock piece frozen when the count started. */
@@ -92,6 +100,8 @@ export type SnapshotPiece = {
   seenByName: string | null;
   resolution: "found" | "still_missing" | null;
   resolvedLocationId: string | null;
+  snapshotLocationCode?: string | null;
+  snapshotLocationLabel?: string | null;
 };
 
 export type SnapshotKind = "sold" | "moved" | "untagged" | "missing" | "in_count";
@@ -99,13 +109,26 @@ export type SnapshotKind = "sold" | "moved" | "untagged" | "missing" | "in_count
 export type StocktakeSession = {
   id: string;
   status: StocktakeStatus;
-  location_id: string;
+  kind?: StocktakeKind;
+  location_id: string | null;
+  zone_id?: string | null;
+  parent_session_id?: string | null;
   location_name: string | null;
   started_at: string;
   finished_at: string | null;
   started_by_name: string | null;
   finished_by_name: string | null;
 };
+
+export type StocktakeUnit = {
+  id: string;
+  kind: "location" | "zone";
+  name: string;
+  status: StocktakeStatus;
+  counts: StocktakeCounts;
+};
+
+export type MoveTarget = { id: string; label: string };
 
 export type ReportPiece = {
   pieceId: string;
@@ -130,6 +153,8 @@ export type StocktakeReport = {
   notTaggedUnchecked: ReportPiece[];
   soldDuring: ReportPiece[];
   movedDuring: ReportPiece[];
+  wrongTray: ReportPiece[];
+  nearby: ReportPiece[];
   locations: { id: string; label: string }[];
   usesSnapshot: boolean;
 };
@@ -141,6 +166,10 @@ export type StocktakePayload = {
   warnings: string[];
   /** Null on a v1 count. An empty array is a v2 count of an empty location. */
   snapshot?: SnapshotPiece[] | null;
+  /** Tray ids that still count as "here" on a zone count. */
+  scopeLocationIds?: string[] | null;
+  units?: StocktakeUnit[];
+  moveTargets?: MoveTarget[];
 };
 
 /**
@@ -160,6 +189,34 @@ export function classifyStocktakeHit(input: {
   if (input.locationId === input.countLocationId) return "found";
   return "wrong_location";
 }
+
+/** A zone read is found on any tray in the zone. A different tray is wrong_tray. */
+export function classifyZoneScan(input: {
+  hasPiece: boolean;
+  hasEpc: boolean;
+  status: string | null;
+  locationId: string | null;
+  zoneLocationIds: readonly string[];
+  neighbourLocationIds: readonly string[];
+  snapshotLocationId: string | null;
+  inSnapshot: boolean;
+}): StoredResult | "ignore" {
+  if (!input.hasPiece) return input.hasEpc ? "unknown" : "ignore";
+  if (input.status !== IN_STOCK_STATUS) return "not_in_stock";
+  const locationId = input.locationId ?? "";
+  if (input.zoneLocationIds.includes(locationId)) {
+    if (input.inSnapshot && input.snapshotLocationId && locationId !== input.snapshotLocationId) return "wrong_tray";
+    return "found";
+  }
+  if (input.neighbourLocationIds.includes(locationId)) return "nearby_zone";
+  return "wrong_location";
+}
+
+export function wrongTrayDetail(expectedCode: string | null): string {
+  return `wrong tray (expected ${expectedCode || "another tray"})`;
+}
+
+export const NEARBY_READ_DETAIL = "read nearby, probably not moved";
 
 export type PlannedLine = {
   epc: string;
@@ -212,11 +269,19 @@ export function classifySnapshotRow(row: {
   liveLocationId: string | null;
   scanned: boolean;
   resolvedLocationId?: string | null;
+  /** When set, any tray in this list is still inside the count. */
+  scopeLocationIds?: readonly string[] | null;
 }): SnapshotKind {
   if (row.liveStatus && row.liveStatus !== IN_STOCK_STATUS) return "sold";
-  const locationChanged = !!row.liveStatus && (row.liveLocationId ?? null) !== (row.snapshotLocationId ?? null);
+  const scope = row.scopeLocationIds;
+  const locationChanged = scope
+    ? !!row.liveStatus && !scope.includes(row.liveLocationId ?? "")
+    : !!row.liveStatus && (row.liveLocationId ?? null) !== (row.snapshotLocationId ?? null);
   const placedByResolution = locationChanged && !!row.resolvedLocationId && row.liveLocationId === row.resolvedLocationId;
-  if (locationChanged && !placedByResolution) return "moved";
+  if (locationChanged && !placedByResolution) {
+    // A zone read from outside stays on the scan (nearby or far), not Moved.
+    if (!(scope && row.scanned)) return "moved";
+  }
   if (!row.snapshotEpc) return "untagged";
   if (!row.scanned) return "missing";
   return "in_count";
@@ -233,10 +298,10 @@ export function movedDuringCount(locationLabel: string | null): string {
 }
 
 export function formatStocktakeCounts(counts: StocktakeCounts): string {
-  const parts = [
-    `Found ${counts.found}`,
-    `Missing ${counts.missing}`,
-  ];
+  const parts = [`Found ${counts.found}`];
+  if (counts.wrongTray) parts.push(`Wrong tray ${counts.wrongTray}`);
+  if (counts.nearby) parts.push(`Nearby ${counts.nearby}`);
+  parts.push(`Missing ${counts.missing}`);
   if (counts.soldDuring) parts.push(`Sold during count ${counts.soldDuring}`);
   if (counts.movedDuring) parts.push(`Moved during count ${counts.movedDuring}`);
   parts.push(`Somewhere else ${counts.elsewhere}`, `Unknown ${counts.unknown}`);
@@ -279,6 +344,7 @@ function rowFromLine(line: StoredLine, movedHere: boolean): StocktakeRow {
     locationName: line.locationName,
     locationId: line.locationId,
     movedHere,
+    detail: line.detail ?? null,
   };
 }
 
@@ -302,6 +368,8 @@ export function buildStocktakeGroups(
   countLocationId: string,
 ): { groups: StocktakeGroups; counts: StocktakeCounts } {
   const found = lines.filter((line) => line.result === "found").map((line) => rowFromLine(line, false));
+  const wrongTray = lines.filter((line) => line.result === "wrong_tray").map((line) => rowFromLine(line, false));
+  const nearby = lines.filter((line) => line.result === "nearby_zone").map((line) => rowFromLine(line, false));
   const elsewhere = lines
     .filter((line) => line.result === "wrong_location")
     .map((line) => rowFromLine(line, !!line.locationId && line.locationId === countLocationId));
@@ -324,6 +392,8 @@ export function buildStocktakeGroups(
     notTagged: [],
     soldDuring: [],
     movedDuring: [],
+    wrongTray,
+    nearby,
   };
   return {
     groups,
@@ -340,6 +410,8 @@ export function buildStocktakeGroups(
       movedDuring: 0,
       resolvedFound: 0,
       resolvedMissing: 0,
+      wrongTray: wrongTray.length,
+      nearby: nearby.length,
     },
   };
 }
@@ -361,6 +433,7 @@ function snapshotRow(piece: SnapshotPiece, kind: SnapshotKind): StocktakeRow {
     detail,
     seenAt: piece.seenAt,
     seenByName: piece.seenByName,
+    snapshotLocationLabel: piece.snapshotLocationLabel ?? null,
   };
 }
 
@@ -373,6 +446,7 @@ export function assembleStocktake(input: {
   countLocationId: string;
   snapshot: SnapshotPiece[] | null | undefined;
   v1Missing: ExpectedPiece[];
+  scopeLocationIds?: readonly string[] | null;
 }): { groups: StocktakeGroups; counts: StocktakeCounts } {
   if (!input.snapshot) return buildStocktakeGroups(input.lines, input.v1Missing, input.countLocationId);
 
@@ -397,6 +471,7 @@ export function assembleStocktake(input: {
       liveLocationId: piece.liveLocationId,
       scanned: scanned.has(piece.pieceId),
       resolvedLocationId: piece.resolvedLocationId,
+      scopeLocationIds: input.scopeLocationIds,
     });
     if (kind === "sold" || kind === "moved" || kind === "untagged") hide.add(piece.pieceId);
     if (kind === "sold") soldDuring.push(snapshotRow(piece, kind));
@@ -411,10 +486,19 @@ export function assembleStocktake(input: {
       else if (piece.resolution === "still_missing") resolvedMissing += 1;
     }
   }
+  const codeByPiece = new Map<string, string | null>();
+  for (const piece of input.snapshot) codeByPiece.set(piece.pieceId, piece.snapshotLocationCode ?? null);
   const visible: StoredLine[] = [];
   for (const line of input.lines) {
     if (line.pieceId && hide.has(line.pieceId)) continue;
-    visible.push(line);
+    if (line.result === "wrong_tray" && !line.detail) {
+      const code = line.pieceId ? codeByPiece.get(line.pieceId) ?? null : null;
+      visible.push({ ...line, detail: wrongTrayDetail(code) });
+    } else if (line.result === "nearby_zone" && !line.detail) {
+      visible.push({ ...line, detail: NEARBY_READ_DETAIL });
+    } else {
+      visible.push(line);
+    }
   }
   const base = buildStocktakeGroups(visible, [], input.countLocationId);
   return {
@@ -443,12 +527,15 @@ function storedFromGroup(rows: StocktakeRow[] | undefined, result: StoredResult)
     status: row.status,
     locationName: row.locationName,
     locationId: row.locationId,
+    detail: row.detail ?? null,
   }));
 }
 
 function linesFromGroups(groups: StocktakeGroups): StoredLine[] {
   return [
     ...storedFromGroup(groups.found, "found"),
+    ...storedFromGroup(groups.wrongTray, "wrong_tray"),
+    ...storedFromGroup(groups.nearby, "nearby_zone"),
     ...storedFromGroup(groups.elsewhere, "wrong_location"),
     ...storedFromGroup(groups.notInStock, "not_in_stock"),
     ...storedFromGroup(groups.unknown, "unknown"),
@@ -479,9 +566,10 @@ export function absorbStocktakeScans(
   if (payload.snapshot) {
     const view = assembleStocktake({
       lines,
-      countLocationId: payload.stocktake.location_id,
+      countLocationId: payload.stocktake.location_id ?? "",
       snapshot: payload.snapshot,
       v1Missing: [],
+      scopeLocationIds: payload.scopeLocationIds,
     });
     return {
       stocktake: payload.stocktake,
@@ -489,6 +577,9 @@ export function absorbStocktakeScans(
       counts: view.counts,
       warnings,
       snapshot: payload.snapshot,
+      scopeLocationIds: payload.scopeLocationIds,
+      units: payload.units,
+      moveTargets: payload.moveTargets,
     };
   }
   const scanned = new Set<string>();
@@ -506,7 +597,7 @@ export function absorbStocktakeScans(
       locationName: row.locationName,
     });
   }
-  const view = buildStocktakeGroups(lines, missing, payload.stocktake.location_id);
+  const view = buildStocktakeGroups(lines, missing, payload.stocktake.location_id ?? "");
   return {
     stocktake: payload.stocktake,
     groups: view.groups,
@@ -529,9 +620,10 @@ export function applyUntaggedSeen(
   ));
   const view = assembleStocktake({
     lines: linesFromGroups(payload.groups),
-    countLocationId: payload.stocktake.location_id,
+    countLocationId: payload.stocktake.location_id ?? "",
     snapshot,
     v1Missing: [],
+    scopeLocationIds: payload.scopeLocationIds,
   });
   return {
     stocktake: payload.stocktake,
@@ -539,6 +631,9 @@ export function applyUntaggedSeen(
     counts: view.counts,
     warnings: payload.warnings,
     snapshot,
+    scopeLocationIds: payload.scopeLocationIds,
+    units: payload.units,
+    moveTargets: payload.moveTargets,
   };
 }
 

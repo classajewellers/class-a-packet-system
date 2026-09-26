@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
 import { RFID_LOOKUP_DEBOUNCE_MS, parseScanLines, splitScanBuffer } from "@/lib/rfid-scan";
-import { absorbStocktakeScans, applyUntaggedSeen, type StocktakePayload, type StoredLine, type StocktakeRow } from "@/lib/rfid-stocktake";
+import { absorbStocktakeScans, applyUntaggedSeen, formatStocktakeCounts, type StocktakePayload, type StoredLine, type StocktakeRow } from "@/lib/rfid-stocktake";
 import { StocktakeGroupsView } from "@/components/StocktakeGroups";
 
 function when(iso: string | null): string {
@@ -27,6 +27,8 @@ export default function StocktakeCountPage() {
   const [confirming, setConfirming] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [movingId, setMovingId] = useState<string | null>(null);
+  const [pendingMove, setPendingMove] = useState<StocktakeRow | null>(null);
+  const [moveTargetId, setMoveTargetId] = useState("");
   const [seeingId, setSeeingId] = useState<string | null>(null);
   const [startingFresh, setStartingFresh] = useState(false);
   const [draft, setDraft] = useState("");
@@ -134,8 +136,8 @@ export default function StocktakeCountPage() {
     setDraft(rest);
   }
 
-  async function moveHere(row: StocktakeRow) {
-    if (!payload || !row.pieceId) return;
+  async function moveHere(row: StocktakeRow, toLocationId: string) {
+    if (!payload || !row.pieceId || !toLocationId) return;
     setMovingId(row.pieceId);
     setError("");
     const res = await fetch("/api/rfid/stocktake/move", {
@@ -143,7 +145,7 @@ export default function StocktakeCountPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         piece_id: row.pieceId,
-        to_location_id: payload.stocktake.location_id,
+        to_location_id: toLocationId,
         stocktake_id: payload.stocktake.id,
       }),
     });
@@ -153,6 +155,7 @@ export default function StocktakeCountPage() {
       setError(json.error || "Could not move the piece");
       return;
     }
+    setPendingMove(null);
     await load();
   }
 
@@ -192,16 +195,23 @@ export default function StocktakeCountPage() {
 
   const session = payload?.stocktake;
   const open = session?.status === "in_progress";
+  const wholeShop = session?.kind === "whole_shop";
+  const childOfShop = !!session?.parent_session_id;
   const statusLabel = session?.status === "completed" ? "Finished" : session?.status === "cancelled" ? "Cancelled" : "In progress";
 
   async function startNewHere() {
     if (!session) return;
     setStartingFresh(true);
     setError("");
+    const body = session.kind === "whole_shop"
+      ? { whole_shop: true, fresh: true }
+      : session.kind === "zone"
+        ? { zone_id: session.zone_id, fresh: true }
+        : { location_id: session.location_id, fresh: true };
     const res = await fetch("/api/rfid/stocktake", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ location_id: session.location_id, fresh: true }),
+      body: JSON.stringify(body),
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok || !json.id) {
@@ -264,7 +274,12 @@ export default function StocktakeCountPage() {
       {payload?.warnings?.map((warning) => (
         <p key={warning} style={{ background: "#FFFBEB", color: "#92400E", borderRadius: 10, padding: "12px 14px" }}>{warning}</p>
       ))}
-      {open && (
+      {session?.parent_session_id && (
+        <p style={{ margin: "0 0 12px" }}>
+          <Link href={`/rfid/stocktake/${session.parent_session_id}`} style={{ color: "#111827", fontWeight: 700 }}>Back to whole-shop count</Link>
+        </p>
+      )}
+      {open && !wholeShop && (
         <textarea
           ref={inputRef}
           value={draft}
@@ -319,20 +334,56 @@ export default function StocktakeCountPage() {
           </div>
         </div>
       )}
-      {payload && (
+      {wholeShop && payload?.units && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {payload.units.map((unit) => (
+            <Link key={unit.id} href={`/rfid/stocktake/${unit.id}`} style={unitCard}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{unit.name}</div>
+              <div style={{ fontSize: 14, color: "#374151", marginTop: 4 }}>{formatStocktakeCounts(unit.counts)}</div>
+            </Link>
+          ))}
+          {payload.units.length === 0 && <p style={{ color: "#6B7280" }}>No zones to count.</p>}
+        </div>
+      )}
+      {pendingMove && (
+        <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 12, padding: 14, marginBottom: 12 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>Move {pendingMove.sku || "this piece"} here?</div>
+          <p style={{ fontSize: 14, color: "#374151", margin: "8px 0" }}>This writes a movement. The piece status does not change.</p>
+          {session?.kind === "zone" && (
+            <select aria-label="Tray" value={moveTargetId} onChange={(event) => setMoveTargetId(event.target.value)} style={{ width: "100%", minHeight: 48, fontSize: 16, marginBottom: 8 }}>
+              <option value="">Choose a tray</option>
+              {(payload?.moveTargets ?? []).map((target) => (
+                <option key={target.id} value={target.id}>{target.label}</option>
+              ))}
+            </select>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <button
+              type="button"
+              disabled={!pendingMove || movingId === pendingMove.pieceId || (session?.kind === "zone" ? !moveTargetId : !session?.location_id)}
+              onClick={() => { void moveHere(pendingMove, session?.kind === "zone" ? moveTargetId : (session?.location_id || "")); }}
+              style={{ ...primaryButton, width: "100%" }}
+            >
+              {movingId ? "Moving…" : "Confirm move"}
+            </button>
+            <button type="button" onClick={() => setPendingMove(null)} style={{ ...secondaryButton, width: "100%" }}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {payload && !wholeShop && (
         <StocktakeGroupsView
           groups={payload.groups}
           counts={payload.counts}
           countLocationId={session?.location_id ?? null}
           allowMove={open}
           movingId={movingId}
-          onMoveHere={(row) => { void moveHere(row); }}
+          onMoveHere={(row) => { setPendingMove(row); setMoveTargetId(""); }}
           allowSeen={open}
           seeingId={seeingId}
           onSeen={(row, seen) => { void markSeen(row, seen); }}
         />
       )}
-      {open && !confirming && (
+      {open && !confirming && !childOfShop && (
         manager ? (
           <button type="button" onClick={() => setConfirming(true)} style={{ ...primaryButton, width: "100%", marginTop: 20 }}>
             Finish count
@@ -345,6 +396,16 @@ export default function StocktakeCountPage() {
     </div>
   );
 }
+
+const unitCard: CSSProperties = {
+  display: "block",
+  textDecoration: "none",
+  background: "#fff",
+  border: "1px solid #E5E7EB",
+  borderRadius: 12,
+  padding: "14px",
+  minHeight: 64,
+};
 
 const primaryButton: CSSProperties = {
   minHeight: 52,

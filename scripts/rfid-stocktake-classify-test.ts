@@ -10,6 +10,9 @@ import {
   buildStocktakeGroups,
   classifySnapshotRow,
   classifyStocktakeHit,
+  classifyZoneScan,
+  NEARBY_READ_DETAIL,
+  wrongTrayDetail,
   formatNotTaggedSummary,
   formatStocktakeCounts,
   missingPieceIds,
@@ -310,5 +313,70 @@ assert.equal(seen.counts.notTaggedUnchecked, 0);
 assert.equal(seen.groups.notTagged[0].seenByName, "Alex");
 const undone = applyUntaggedSeen(seen, "bare", null, null);
 assert.equal(undone.counts.notTaggedUnchecked, 1);
+
+const zone = [ha1, ha3];
+assert.equal(classifySnapshotRow({
+  snapshotEpc: "abc", snapshotLocationId: ha1, liveStatus: "in_stock", liveLocationId: ha3, scanned: false, scopeLocationIds: zone,
+}), "missing");
+assert.equal(classifySnapshotRow({
+  snapshotEpc: "abc", snapshotLocationId: ha1, liveStatus: "in_stock", liveLocationId: "ws", scanned: false, scopeLocationIds: zone,
+}), "moved");
+assert.equal(classifySnapshotRow({
+  snapshotEpc: "abc", snapshotLocationId: ha1, liveStatus: "in_stock", liveLocationId: "ws", scanned: true, scopeLocationIds: zone,
+}), "in_count");
+assert.equal(classifyZoneScan({
+  hasPiece: true, hasEpc: true, status: "in_stock", locationId: ha3,
+  zoneLocationIds: zone, neighbourLocationIds: ["hb1"], snapshotLocationId: ha1, inSnapshot: true,
+}), "wrong_tray");
+assert.equal(classifyZoneScan({
+  hasPiece: true, hasEpc: true, status: "in_stock", locationId: ha1,
+  zoneLocationIds: zone, neighbourLocationIds: ["hb1"], snapshotLocationId: ha1, inSnapshot: true,
+}), "found");
+assert.equal(classifyZoneScan({
+  hasPiece: true, hasEpc: true, status: "in_stock", locationId: "hb1",
+  zoneLocationIds: zone, neighbourLocationIds: ["hb1"], snapshotLocationId: ha1, inSnapshot: true,
+}), "nearby_zone");
+assert.equal(classifyZoneScan({
+  hasPiece: true, hasEpc: true, status: "in_stock", locationId: "ws",
+  zoneLocationIds: zone, neighbourLocationIds: ["hb1"], snapshotLocationId: ha1, inSnapshot: true,
+}), "wrong_location");
+assert.equal(wrongTrayDetail("HA3"), "wrong tray (expected HA3)");
+
+const zoneView = assembleStocktake({
+  lines: [{
+    id: "tray",
+    epc: "abc",
+    sku: "RING-01",
+    pieceId: "ring-1",
+    result: "wrong_tray",
+    metal: null,
+    status: "in_stock",
+    locationName: "HA3 · Horseshoe A3",
+    locationId: ha3,
+  }, {
+    id: "near",
+    epc: "def",
+    sku: "RING-09",
+    pieceId: "ring-9",
+    result: "nearby_zone",
+    metal: null,
+    status: "in_stock",
+    locationName: "HB1 · Horseshoe B1",
+    locationId: "hb1",
+  }],
+  countLocationId: "",
+  snapshot: [
+    snap({ pieceId: "ring-1", sku: "RING-01", snapshotLocationCode: "HA3", liveLocationId: ha3 }),
+    snap({ pieceId: "ring-9", sku: "RING-09", epc: "def", liveLocationId: "hb1" }),
+  ],
+  v1Missing: [],
+  scopeLocationIds: zone,
+});
+assert.equal(zoneView.groups.wrongTray.length, 1);
+assert.equal(zoneView.groups.wrongTray[0].detail, "wrong tray (expected HA3)");
+assert.equal(zoneView.groups.nearby[0].detail, NEARBY_READ_DETAIL);
+assert.equal(zoneView.counts.missing, 0);
+assert.equal(zoneView.groups.elsewhere.length, 0);
+assert.equal(formatStocktakeCounts(zoneView.counts).startsWith("Found 0 · Wrong tray 1 · Nearby 1 · Missing 0"), true);
 
 console.log("rfid-stocktake-classify-test: ok");

@@ -354,9 +354,10 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
                   <SubSubLink
                     href="/rfid/stocktake"
                     label="Stocktake"
-                    match={(path) => path === "/rfid/stocktake" || (path.startsWith("/rfid/stocktake/") && !path.startsWith("/rfid/stocktake/move"))}
+                    match={(path) => path === "/rfid/stocktake" || (path.startsWith("/rfid/stocktake/") && !path.startsWith("/rfid/stocktake/move") && !path.startsWith("/rfid/stocktake/zones"))}
                   />
                   <SubSubLink href="/rfid/stocktake/move" label="Stock Movement" />
+                  {isManager && <SubSubLink href="/rfid/stocktake/zones" label="Zones" />}
                   {isManager && <SubLink href="/inventory/purchase-orders" label="Purchasing" />}
                   {isManager && <SubLink href="/inventory/locations"       label="Locations" />}
                   {isManager && <SubLink href="/inventory/suppliers"       label="Suppliers" />}

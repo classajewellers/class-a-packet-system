@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useUser } from "@/context/UserContext";
+import { canManage } from "@/lib/userTypes";
 import { formatLocationLabel, locationsForPicker, type LocationFields } from "@/lib/location-label";
 import { formatNotTaggedSummary, formatResolvedSummary, formatStocktakeCounts, type StocktakeCounts, type StocktakeSession } from "@/lib/rfid-stocktake";
 
@@ -26,12 +28,18 @@ function clock(iso: string | null): string {
     .replace(/\s*pm$/i, " PM");
 }
 
+type ZoneChoice = { id: string; label: string };
+
 export default function StocktakeHomePage() {
   const router = useRouter();
+  const { user, hydrated } = useUser();
+  const manager = hydrated && canManage(user?.role);
   const [locations, setLocations] = useState<LocationRow[]>([]);
+  const [zones, setZones] = useState<ZoneChoice[]>([]);
   const [counts, setCounts] = useState<Listed[]>([]);
   const [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState("");
+  const [selectedZoneId, setSelectedZoneId] = useState("");
   const [starting, setStarting] = useState(false);
 
   useEffect(() => {
@@ -44,6 +52,14 @@ export default function StocktakeHomePage() {
         else setLocations(locationsForPicker((json.locations ?? []) as LocationRow[]));
       })
       .catch(() => { if (!cancelled) setError("Could not load locations"); });
+    void fetch("/api/rfid/stocktake/zones")
+      .then(async (res) => {
+        const json = await res.json().catch(() => ({}));
+        if (cancelled || !res.ok) return;
+        const rows = (json.admin?.zones ?? []) as { id: string; label: string }[];
+        setZones(rows.map((row) => ({ id: row.id, label: row.label })));
+      })
+      .catch(() => undefined);
     void fetch("/api/rfid/stocktake")
       .then(async (res) => {
         const json = await res.json().catch(() => ({}));
@@ -60,19 +76,29 @@ export default function StocktakeHomePage() {
   const cancelled = counts.filter((row) => row.status === "cancelled");
   const openByLocation = useMemo(() => {
     const map = new Map<string, Listed>();
-    for (const row of open) map.set(row.location_id, row);
+    for (const row of open) {
+      if (row.location_id) map.set(row.location_id, row);
+    }
     return map;
   }, [open]);
+  const openByZone = useMemo(() => {
+    const map = new Map<string, Listed>();
+    for (const row of open) {
+      if (row.zone_id) map.set(row.zone_id, row);
+    }
+    return map;
+  }, [open]);
+  const openShop = open.find((row) => row.kind === "whole_shop") ?? null;
   const selected = locations.find((row) => row.id === selectedId) ?? null;
   const selectedOpen = selected ? openByLocation.get(selected.id) ?? null : null;
 
-  async function start(locationId: string, fresh: boolean) {
+  async function startBody(body: Record<string, unknown>) {
     setStarting(true);
     setError("");
     const res = await fetch("/api/rfid/stocktake", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ location_id: locationId, fresh }),
+      body: JSON.stringify(body),
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok || !json.id) {
@@ -81,6 +107,10 @@ export default function StocktakeHomePage() {
       return;
     }
     router.push(`/rfid/stocktake/${json.id}`);
+  }
+
+  function start(locationId: string, fresh: boolean) {
+    void startBody({ location_id: locationId, fresh });
   }
 
   return (
@@ -105,19 +135,71 @@ export default function StocktakeHomePage() {
               )}
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
                 <Link href={`/rfid/stocktake/${row.id}`} style={{ ...linkButton, justifyContent: "center" }}>Continue</Link>
-                <button
-                  type="button"
-                  disabled={starting}
-                  onClick={() => { void start(row.location_id, true); }}
-                  style={secondaryButton}
-                >
-                  {starting ? "Starting…" : "Start fresh"}
-                </button>
+                {row.kind !== "whole_shop" && (
+                  <button
+                    type="button"
+                    disabled={starting || (row.kind === "zone" ? !row.zone_id : !row.location_id)}
+                    onClick={() => {
+                      if (row.kind === "zone" && row.zone_id) void startBody({ zone_id: row.zone_id, fresh: true });
+                      else if (row.location_id) start(row.location_id, true);
+                    }}
+                    style={secondaryButton}
+                  >
+                    {starting ? "Starting…" : "Start fresh"}
+                  </button>
+                )}
               </div>
             </div>
           ))}
         </div>
       </section>
+
+      {manager && (
+        <section style={{ marginTop: 18 }}>
+          <h2 style={sectionTitle}>Whole shop</h2>
+          {openShop ? (
+            <Link href={`/rfid/stocktake/${openShop.id}`} style={{ ...linkButton, justifyContent: "center" }}>
+              Continue whole-shop count
+            </Link>
+          ) : (
+            <button type="button" disabled={starting} onClick={() => { void startBody({ whole_shop: true }); }} style={primaryButton}>
+              {starting ? "Starting…" : "Start whole-shop count"}
+            </button>
+          )}
+          <Link href="/rfid/stocktake/zones" style={{ ...linkButton, marginTop: 8 }}>Zones</Link>
+        </section>
+      )}
+
+      <h2 style={sectionTitle}>Start a zone</h2>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {zones.map((zone) => {
+          const picked = zone.id === selectedZoneId;
+          return (
+            <button
+              key={zone.id}
+              type="button"
+              aria-pressed={picked}
+              onClick={() => setSelectedZoneId(zone.id)}
+              style={{ ...locationButton, borderColor: picked ? "#111827" : "#D1D5DB", background: picked ? "#F3F4F6" : "#fff" }}
+            >
+              {zone.label}
+            </button>
+          );
+        })}
+      </div>
+      {selectedZoneId && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+          {openByZone.get(selectedZoneId) ? (
+            <Link href={`/rfid/stocktake/${openByZone.get(selectedZoneId)?.id}`} style={{ ...linkButton, justifyContent: "center" }}>
+              Continue zone count
+            </Link>
+          ) : (
+            <button type="button" disabled={starting} onClick={() => { void startBody({ zone_id: selectedZoneId }); }} style={primaryButton}>
+              {starting ? "Starting…" : "Start zone"}
+            </button>
+          )}
+        </div>
+      )}
 
       <h2 style={sectionTitle}>Start a count</h2>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

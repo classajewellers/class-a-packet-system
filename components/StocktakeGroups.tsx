@@ -2,7 +2,7 @@
 
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { FALLBACK_STATUS_OPTIONS } from "@/lib/pieceResolution";
-import { formatNotTaggedSummary, formatResolvedSummary, formatStocktakeCounts, type StocktakeCounts, type StocktakeGroups, type StocktakeRow } from "@/lib/rfid-stocktake";
+import { formatNotTaggedSummary, formatResolvedSummary, formatStocktakeCounts, NEARBY_READ_DETAIL, type StocktakeCounts, type StocktakeGroups, type StocktakeRow } from "@/lib/rfid-stocktake";
 
 function statusLabel(value: string | null): string {
   if (!value) return "";
@@ -104,6 +104,16 @@ export function StocktakeGroupsView({
         {groups.found.length === 0 && <Empty />}
         {groups.found.map((row) => <PieceRow key={row.key} row={row} />)}
       </Group>
+      {(groups.wrongTray ?? []).length > 0 && (
+        <Group title="Wrong tray" count={groups.wrongTray.length}>
+          {groups.wrongTray.map((row) => <PieceRow key={row.key} row={row} extra={row.detail || "Wrong tray"} />)}
+        </Group>
+      )}
+      {(groups.nearby ?? []).length > 0 && (
+        <Group title="Nearby" count={groups.nearby.length}>
+          {groups.nearby.map((row) => <PieceRow key={row.key} row={row} extra={row.detail || NEARBY_READ_DETAIL} />)}
+        </Group>
+      )}
       <Group title="Missing" count={counts.missing}>
         {groups.missing.length === 0 && <Empty />}
         {groups.missing.map((row) => <PieceRow key={row.key} row={row} extra="Expected, not scanned" />)}

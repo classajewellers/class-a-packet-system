@@ -18,7 +18,9 @@ import {
   buildStocktakeGroups,
   classifySnapshotRow,
   classifyStocktakeHit,
+  classifyZoneScan,
   isStocktakeSchemaError,
+  NEARBY_READ_DETAIL,
   missingPieceIds,
   planStocktakeInserts,
   preferredTag,
@@ -27,14 +29,18 @@ import {
   type PlannedLine,
   type ReportPiece,
   type SnapshotPiece,
+  type MoveTarget,
   type StocktakeCounts,
+  type StocktakeKind,
   type StocktakePayload,
   type StocktakeReport,
   type StocktakeSession,
   type StocktakeStatus,
+  type StocktakeUnit,
   type StoredLine,
   type StoredResult,
 } from "@/lib/rfid-stocktake";
+import { compareLocations, isActiveLocation } from "@/lib/location-label";
 
 const EPC_RE = /^[0-9a-f]{24}$/;
 const PIECE_COLUMNS = "id, sku, status, location_id, metal_karat, metal_colour";
@@ -51,13 +57,16 @@ type PieceRow = {
 type SessionRow = {
   id: string;
   status: string;
-  location_id: string;
+  location_id: string | null;
   started_at: string;
   finished_at: string | null;
   started_by: string | null;
   finished_by: string | null;
   confirmed_missing_piece_ids: string[] | null;
   snapshot_at: string | null;
+  kind: StocktakeKind;
+  zone_id: string | null;
+  parent_session_id: string | null;
 };
 
 type ExpectedDbRow = {
@@ -77,6 +86,7 @@ type ExpectedDbRow = {
 };
 
 const SESSION_COLUMNS = "id, status, location_id, started_at, finished_at, started_by, finished_by, confirmed_missing_piece_ids";
+const SESSION_RICH = `${SESSION_COLUMNS}, snapshot_at, kind, zone_id, parent_session_id`;
 const EXPECTED_COLUMNS = "piece_id, snapshot_location_id, snapshot_status, snapshot_sku, snapshot_epc, snapshot_rfid_tag_id, seen_by, seen_at, resolution, resolved_by, resolved_at, resolved_location_id, resolution_movement_id";
 
 type ScanRow = {
@@ -237,31 +247,67 @@ function linesFromScans(scans: ScanRow[], pieces: Map<string, PieceRow>, names: 
   });
 }
 
+function asKind(value: unknown): StocktakeKind {
+  if (value === "zone" || value === "whole_shop") return value;
+  return "location";
+}
+
+function normaliseSession(row: Record<string, unknown>): SessionRow {
+  return {
+    id: String(row.id),
+    status: String(row.status ?? "in_progress"),
+    location_id: asText(row.location_id),
+    started_at: String(row.started_at),
+    finished_at: row.finished_at ? String(row.finished_at) : null,
+    started_by: asText(row.started_by),
+    finished_by: asText(row.finished_by),
+    confirmed_missing_piece_ids: uuidList(row.confirmed_missing_piece_ids),
+    snapshot_at: row.snapshot_at ? String(row.snapshot_at) : null,
+    kind: asKind(row.kind),
+    zone_id: asText(row.zone_id),
+    parent_session_id: asText(row.parent_session_id),
+  };
+}
+
+async function querySessions(
+  supabase: SupabaseClient,
+  tenantId: string,
+  stocktakeId?: string,
+): Promise<{ ok: true; rows: SessionRow[] } | { ok: false; status: number; error: string; schema?: boolean }> {
+  const run = (columns: string) => {
+    let query = tenantScoped(supabase, tenantId).from("stocktake_sessions").select(columns);
+    if (stocktakeId) return query.eq("id", stocktakeId).maybeSingle();
+    return query.is("parent_session_id", null).order("started_at", { ascending: false }).limit(100);
+  };
+  let result = await run(SESSION_RICH);
+  if (columnMissing(result.error, "kind") || columnMissing(result.error, "zone_id") || columnMissing(result.error, "parent_session")) {
+    let query = tenantScoped(supabase, tenantId).from("stocktake_sessions").select(`${SESSION_COLUMNS}, snapshot_at`);
+    result = stocktakeId
+      ? await query.eq("id", stocktakeId).maybeSingle()
+      : await query.order("started_at", { ascending: false }).limit(100);
+  }
+  if (columnMissing(result.error, "snapshot_at")) {
+    let query = tenantScoped(supabase, tenantId).from("stocktake_sessions").select(SESSION_COLUMNS);
+    result = stocktakeId
+      ? await query.eq("id", stocktakeId).maybeSingle()
+      : await query.order("started_at", { ascending: false }).limit(100);
+  }
+  const failed = schemaOrMessage(result.error);
+  if (failed) return { ok: false, status: failed.schema ? 503 : 500, error: failed.message, schema: failed.schema };
+  const raw = stocktakeId ? (result.data ? [result.data] : []) : (result.data ?? []);
+  return { ok: true, rows: (raw as Record<string, unknown>[]).map(normaliseSession) };
+}
+
 async function loadSession(
   supabase: SupabaseClient,
   tenantId: string,
   stocktakeId: string,
 ): Promise<{ ok: true; session: SessionRow } | { ok: false; status: number; error: string; schema?: boolean }> {
-  const first = await tenantScoped(supabase, tenantId)
-    .from("stocktake_sessions")
-    .select(`${SESSION_COLUMNS}, snapshot_at`)
-    .eq("id", stocktakeId)
-    .maybeSingle();
-  let data = first.data as (SessionRow & { snapshot_at?: string | null }) | null;
-  let error = first.error;
-  if (columnMissing(error, "snapshot_at")) {
-    const retry = await tenantScoped(supabase, tenantId)
-      .from("stocktake_sessions")
-      .select(SESSION_COLUMNS)
-      .eq("id", stocktakeId)
-      .maybeSingle();
-    data = retry.data ? { ...(retry.data as SessionRow), snapshot_at: null } : null;
-    error = retry.error;
-  }
-  const failed = schemaOrMessage(error);
-  if (failed) return { ok: false, status: failed.schema ? 503 : 500, error: failed.message, schema: failed.schema };
-  if (!data) return { ok: false, status: 404, error: "Count not found" };
-  return { ok: true, session: { ...data, snapshot_at: data.snapshot_at ? String(data.snapshot_at) : null } };
+  const loaded = await querySessions(supabase, tenantId, stocktakeId);
+  if (!loaded.ok) return loaded;
+  const session = loaded.rows[0];
+  if (!session) return { ok: false, status: 404, error: "Count not found" };
+  return { ok: true, session };
 }
 
 async function loadExpected(
@@ -302,6 +348,7 @@ export async function getStocktake(
   const loaded = await loadSession(supabase, tenantId, stocktakeId);
   if (!loaded.ok) return loaded;
   const session = loaded.session;
+  if (session.kind === "whole_shop") return presentWholeShop(supabase, tenantId, session, warnings);
   const status = asStatus(session.status);
   const confirmedIds = uuidList(session.confirmed_missing_piece_ids);
 
@@ -338,8 +385,8 @@ export async function getStocktake(
   let v1Rows: PieceRow[] = [];
   if (!useV2) {
     try {
-      if (status === "in_progress") {
-        v1Rows = await liveExpected(supabase, tenantId, String(session.location_id));
+      if (status === "in_progress" && session.location_id) {
+        v1Rows = await liveExpected(supabase, tenantId, session.location_id);
       } else {
         const found = await loadPieces(supabase, tenantId, confirmedIds);
         v1Rows = confirmedIds.map((id) => found.get(id) ?? {
@@ -380,7 +427,7 @@ export async function getStocktake(
     ]);
     extra.forEach((row, id) => pieces.set(id, row));
     seenPeople.forEach((name, id) => people.set(id, name));
-    const locationIds = [String(session.location_id)];
+    const locationIds = session.location_id ? [session.location_id] : [];
     pieces.forEach((row) => {
       if (row.location_id) locationIds.push(row.location_id);
     });
@@ -395,19 +442,34 @@ export async function getStocktake(
   }
 
   const lines = linesFromScans(scans, pieces, names);
-  const countLocationId = String(session.location_id);
+  const countLocationId = session.location_id ?? "";
+  let scopeLocationIds: string[] | null = null;
+  let moveTargets: MoveTarget[] | undefined;
+  let zoneLabel: string | null = null;
+  if (session.kind === "zone" && session.zone_id) {
+    const catalogue = await loadZoneCatalogue(supabase, tenantId);
+    if (!catalogue.ok) return { ok: false, status: catalogue.schema ? 503 : 500, error: catalogue.error, schema: catalogue.schema };
+    const scope = scopeForZone(session.zone_id, catalogue);
+    scopeLocationIds = scope.locationIds;
+    moveTargets = scope.trays.map((tray) => ({ id: tray.id, label: tray.label }));
+    zoneLabel = catalogue.zones.find((zone) => zone.id === session.zone_id)?.label ?? null;
+    scope.trays.forEach((tray) => names.set(tray.id, tray.label));
+  }
   let view: { groups: StocktakePayload["groups"]; counts: StocktakeCounts };
   let snapshot: SnapshotPiece[] | null = null;
   if (useV2) {
     snapshot = expectedLoad.rows.map((row) => {
       const piece = pieces.get(row.piece_id);
       const liveLocationId = piece ? asText(piece.location_id) : null;
+      const snapshotLabel = row.snapshot_location_id ? names.get(row.snapshot_location_id) ?? null : null;
       return {
         pieceId: row.piece_id,
         sku: asText(row.snapshot_sku) || (piece ? asText(piece.sku) : null),
         metal: metalOf(piece),
         epc: row.snapshot_epc,
         snapshotLocationId: row.snapshot_location_id,
+        snapshotLocationCode: codeFromLabel(snapshotLabel),
+        snapshotLocationLabel: snapshotLabel,
         snapshotStatus: row.snapshot_status || IN_STOCK_STATUS,
         liveStatus: piece ? asText(piece.status) : null,
         liveLocationId,
@@ -418,7 +480,7 @@ export async function getStocktake(
         resolvedLocationId: row.resolved_location_id,
       };
     });
-    view = assembleStocktake({ lines, countLocationId, snapshot, v1Missing: [] });
+    view = assembleStocktake({ lines, countLocationId, snapshot, v1Missing: [], scopeLocationIds });
   } else {
     const scannedIds = scans.map((row) => (row.piece_id ? String(row.piece_id) : null));
     const missingIds = new Set(missingPieceIds(v1Rows.map((row) => String(row.id)), scannedIds));
@@ -429,15 +491,21 @@ export async function getStocktake(
   const stocktake: StocktakeSession = {
     id: String(session.id),
     status,
-    location_id: countLocationId,
-    location_name: names.get(countLocationId) ?? null,
+    kind: session.kind,
+    location_id: session.location_id,
+    zone_id: session.zone_id,
+    parent_session_id: session.parent_session_id,
+    location_name: session.kind === "zone" ? zoneLabel : (session.location_id ? names.get(session.location_id) ?? null : null),
     started_at: String(session.started_at),
     finished_at: session.finished_at ? String(session.finished_at) : null,
     started_by_name: session.started_by ? people.get(session.started_by) ?? null : null,
     finished_by_name: session.finished_by ? people.get(session.finished_by) ?? null : null,
   };
 
-  return { ok: true, payload: { stocktake, groups: view.groups, counts: view.counts, warnings, snapshot } };
+  return {
+    ok: true,
+    payload: { stocktake, groups: view.groups, counts: view.counts, warnings, snapshot, scopeLocationIds, moveTargets },
+  };
 }
 
 export type ListedStocktake = StocktakeSession & { counts: StocktakeCounts };
@@ -446,30 +514,16 @@ export async function listStocktakes(
   supabase: SupabaseClient,
   tenantId: string,
 ): Promise<{ ok: true; stocktakes: ListedStocktake[] } | { ok: false; status: number; error: string; schema?: boolean }> {
-  const first = await tenantScoped(supabase, tenantId)
-    .from("stocktake_sessions")
-    .select(`${SESSION_COLUMNS}, snapshot_at`)
-    .order("started_at", { ascending: false })
-    .limit(50);
-  let data = first.data as SessionRow[] | null;
-  let error = first.error;
-  if (columnMissing(error, "snapshot_at")) {
-    const retry = await tenantScoped(supabase, tenantId)
-      .from("stocktake_sessions")
-      .select(SESSION_COLUMNS)
-      .order("started_at", { ascending: false })
-      .limit(50);
-    data = ((retry.data ?? []) as SessionRow[]).map((row) => ({ ...row, snapshot_at: null }));
-    error = retry.error;
-  }
-  const failed = schemaOrMessage(error);
-  if (failed) return { ok: false, status: failed.schema ? 503 : 500, error: failed.message, schema: failed.schema };
-  const sessions = (data ?? []) as SessionRow[];
+  const listed = await querySessions(supabase, tenantId);
+  if (!listed.ok) return listed;
+  const sessions = listed.rows.filter((row) => !row.parent_session_id);
   if (!sessions.length) return { ok: true, stocktakes: [] };
 
   const ids = sessions.map((row) => String(row.id));
   const openLocationIds = Array.from(new Set(
-    sessions.filter((row) => asStatus(row.status) === "in_progress").map((row) => String(row.location_id)),
+    sessions
+      .filter((row) => asStatus(row.status) === "in_progress" && row.kind === "location" && row.location_id)
+      .map((row) => row.location_id as string),
   ));
   const pieceQuery = openLocationIds.length
     ? tenantScoped(supabase, tenantId)
@@ -595,6 +649,13 @@ export async function listStocktakes(
     expectedByLocation.set(locationId, list);
   }
 
+  let catalogue: ZoneCatalogue | null = null;
+  if (sessions.some((row) => row.kind === "zone" || row.kind === "whole_shop")) {
+    const loadedCatalogue = await loadZoneCatalogue(supabase, tenantId);
+    if (!loadedCatalogue.ok) return { ok: false, status: loadedCatalogue.schema ? 503 : 500, error: loadedCatalogue.error, schema: loadedCatalogue.schema };
+    catalogue = loadedCatalogue;
+  }
+
   const stocktakes: ListedStocktake[] = sessions.map((session) => {
     const id = String(session.id);
     const status = asStatus(session.status);
@@ -607,17 +668,23 @@ export async function listStocktakes(
     const lines = linesFromScans(scans, livePieces, names);
     const expectedRows = expectedBySession.get(id) ?? [];
     const useV2 = expectedAvailable && (expectedRows.length > 0 || !!session.snapshot_at);
+    const zoneScope = session.kind === "zone" && session.zone_id && catalogue
+      ? scopeForZone(session.zone_id, catalogue)
+      : null;
     let view: { counts: StocktakeCounts };
     if (useV2) {
       const snapshot: SnapshotPiece[] = expectedRows.map((row) => {
         const piece = livePieces.get(row.piece_id);
         const liveLocationId = piece ? asText(piece.location_id) : null;
+        const snapshotLabel = row.snapshot_location_id ? names.get(row.snapshot_location_id) ?? null : null;
         return {
           pieceId: row.piece_id,
           sku: piece ? asText(piece.sku) : null,
           metal: metalOf(piece),
           epc: row.snapshot_epc,
           snapshotLocationId: row.snapshot_location_id,
+          snapshotLocationCode: codeFromLabel(snapshotLabel),
+          snapshotLocationLabel: snapshotLabel,
           snapshotStatus: row.snapshot_status,
           liveStatus: piece ? asText(piece.status) : null,
           liveLocationId,
@@ -630,9 +697,10 @@ export async function listStocktakes(
       });
       view = assembleStocktake({
         lines,
-        countLocationId: String(session.location_id),
+        countLocationId: session.location_id ?? "",
         snapshot,
         v1Missing: [],
+        scopeLocationIds: zoneScope?.locationIds ?? null,
       });
     } else {
       const missing = missingIds.map((pieceId) => ({
@@ -642,13 +710,23 @@ export async function listStocktakes(
         status: null,
         locationName: null,
       }));
-      view = buildStocktakeGroups(lines, missing, String(session.location_id));
+      view = buildStocktakeGroups(lines, missing, session.location_id ?? "");
     }
+    const zoneLabel = session.zone_id && catalogue
+      ? catalogue.zones.find((zone) => zone.id === session.zone_id)?.label ?? null
+      : null;
     return {
       id,
       status,
-      location_id: String(session.location_id),
-      location_name: names.get(String(session.location_id)) ?? null,
+      kind: session.kind,
+      location_id: session.location_id,
+      zone_id: session.zone_id,
+      parent_session_id: session.parent_session_id,
+      location_name: session.kind === "whole_shop"
+        ? "Whole shop"
+        : session.kind === "zone"
+          ? zoneLabel
+          : (session.location_id ? names.get(session.location_id) ?? null : null),
       started_at: String(session.started_at),
       finished_at: session.finished_at ? String(session.finished_at) : null,
       started_by_name: session.started_by ? people.get(session.started_by) ?? null : null,
@@ -738,7 +816,7 @@ export async function createStocktake(
   if (failed) return { ok: false, status: failed.schema ? 503 : 500, error: failed.message, schema: failed.schema };
   if (!created?.id) return { ok: false, status: 500, error: "Could not start the count" };
   const sessionId = String(created.id);
-  const snap = await writeSnapshot(supabase, tenantId, sessionId, locationId);
+  const snap = await writeSnapshot(supabase, tenantId, sessionId, [locationId]);
   if (!snap.ok) return snap;
   return { ok: true, id: sessionId, continued: false, started_at: startedAt };
 }
@@ -752,13 +830,19 @@ async function writeSnapshot(
   supabase: SupabaseClient,
   tenantId: string,
   sessionId: string,
-  locationId: string,
+  locationIds: string[],
 ): Promise<{ ok: true } | { ok: false; status: number; error: string; schema?: boolean }> {
-  const { data: pieces, error } = await tenantScoped(supabase, tenantId)
-    .from("inventory_pieces")
-    .select("id, sku, status, location_id")
-    .eq("location_id", locationId)
-    .eq("status", IN_STOCK_STATUS);
+  let pieces: { id: string; sku: string | null; status: string | null; location_id: string | null }[] | null = [];
+  let error: { message: string } | null = null;
+  if (locationIds.length) {
+    const pieceResult = await tenantScoped(supabase, tenantId)
+      .from("inventory_pieces")
+      .select("id, sku, status, location_id")
+      .in("location_id", locationIds)
+      .eq("status", IN_STOCK_STATUS);
+    pieces = pieceResult.data as typeof pieces;
+    error = pieceResult.error;
+  }
   if (error) {
     await deleteSession(supabase, tenantId, sessionId);
     return { ok: false, status: 500, error: error.message };
@@ -931,7 +1015,14 @@ function normaliseCodes(rawEpcs: unknown, rawSkus: unknown): { epcs: string[]; s
 }
 
 function asResult(value: string): StoredResult {
-  if (value === "found" || value === "wrong_location" || value === "not_in_stock" || value === "unknown") return value;
+  if (
+    value === "found"
+    || value === "wrong_tray"
+    || value === "nearby_zone"
+    || value === "wrong_location"
+    || value === "not_in_stock"
+    || value === "unknown"
+  ) return value;
   return "unknown";
 }
 
@@ -953,7 +1044,10 @@ export async function recordStocktakeScans(
   if (loaded.session.status !== "in_progress") {
     return { ok: false, status: 409, error: "This count is already finished" };
   }
-  const countLocationId = String(loaded.session.location_id);
+  if (loaded.session.kind === "whole_shop") {
+    return { ok: false, status: 409, error: "Open a zone from this whole-shop count to scan." };
+  }
+  const countLocationId = loaded.session.location_id ?? "";
   const existingFailed = schemaOrMessage(existingResult.error);
   if (existingFailed) return { ok: false, status: existingFailed.schema ? 503 : 500, error: existingFailed.message, schema: existingFailed.schema };
   const existingRows = existingResult.data;
@@ -965,17 +1059,48 @@ export async function recordStocktakeScans(
     return { ok: false, status: 500, error: err instanceof Error ? err.message : "Lookup failed" };
   }
 
-  const warnings: string[] = [];
-  const incoming: PlannedLine[] = [];
-  for (const hit of resolved.epcs) {
-    const result = classifyStocktakeHit({
-      hasPiece: !!hit.piece,
-      hasEpc: true,
-      status: hit.piece?.status ?? null,
-      locationId: hit.piece?.locationId ?? null,
+  let zoneLocations: string[] | null = null;
+  let neighbourLocations: string[] = [];
+  const snapshotLocationByPiece = new Map<string, string | null>();
+  if (loaded.session.kind === "zone" && loaded.session.zone_id) {
+    const catalogue = await loadZoneCatalogue(supabase, tenantId);
+    if (!catalogue.ok) return { ok: false, status: catalogue.schema ? 503 : 500, error: catalogue.error, schema: catalogue.schema };
+    const scope = scopeForZone(loaded.session.zone_id, catalogue);
+    zoneLocations = scope.locationIds;
+    neighbourLocations = scope.neighbourLocationIds;
+    const expected = await loadExpected(supabase, tenantId, stocktakeId);
+    for (const row of expected.rows) snapshotLocationByPiece.set(row.piece_id, row.snapshot_location_id);
+  }
+
+  function classifyHit(piece: { id: string; status: string | null; locationId: string | null } | null, hasEpc: boolean): StoredResult | "ignore" {
+    if (zoneLocations) {
+      return classifyZoneScan({
+        hasPiece: !!piece,
+        hasEpc,
+        status: piece?.status ?? null,
+        locationId: piece?.locationId ?? null,
+        zoneLocationIds: zoneLocations,
+        neighbourLocationIds: neighbourLocations,
+        snapshotLocationId: piece ? snapshotLocationByPiece.get(piece.id) ?? null : null,
+        inSnapshot: !!piece && snapshotLocationByPiece.has(piece.id),
+      });
+    }
+    return classifyStocktakeHit({
+      hasPiece: !!piece,
+      hasEpc,
+      status: piece?.status ?? null,
+      locationId: piece?.locationId ?? null,
       countLocationId,
     });
+  }
+
+  const warnings: string[] = [];
+  const incoming: PlannedLine[] = [];
+  const scannedLocationByPiece = new Map<string, string | null>();
+  for (const hit of resolved.epcs) {
+    const result = classifyHit(hit.piece, true);
     if (result === "ignore") continue;
+    if (hit.piece) scannedLocationByPiece.set(hit.piece.id, hit.piece.locationId);
     incoming.push({
       epc: hit.epc,
       sku: hit.piece?.sku ?? null,
@@ -989,14 +1114,9 @@ export async function recordStocktakeScans(
       warnings.push(`${hit.piece.sku || hit.sku} has no RFID tag, so this scan was not saved.`);
       continue;
     }
-    const result = classifyStocktakeHit({
-      hasPiece: true,
-      hasEpc: true,
-      status: hit.piece.status,
-      locationId: hit.piece.locationId,
-      countLocationId,
-    });
+    const result = classifyHit(hit.piece, true);
     if (result === "ignore") continue;
+    scannedLocationByPiece.set(hit.piece.id, hit.piece.locationId);
     incoming.push({
       epc: hit.tagEpc,
       sku: hit.piece.sku,
@@ -1023,6 +1143,7 @@ export async function recordStocktakeScans(
         result_group: line.result,
         scanned_by: userId,
         scanned_at: scannedAt,
+        scanned_location_id: line.pieceId ? scannedLocationByPiece.get(line.pieceId) ?? null : null,
       })),
       { onConflict: "session_id,epc", ignoreDuplicates: true },
     )
@@ -1074,6 +1195,7 @@ export async function finishStocktake(
   tenantId: string,
   userId: string,
   stocktakeId: string,
+  options?: { allowChild?: boolean },
 ): Promise<{ ok: true; payload: StocktakePayload } | { ok: false; status: number; error: string; schema?: boolean }> {
   const loaded = await loadSession(supabase, tenantId, stocktakeId);
   if (!loaded.ok) return loaded;
@@ -1081,8 +1203,49 @@ export async function finishStocktake(
     return { ok: false, status: 409, error: "This count is cancelled" };
   }
 
+  if (loaded.session.parent_session_id && !options?.allowChild) {
+    return { ok: false, status: 409, error: "Finish the whole-shop count. This zone stays open until then." };
+  }
+
+  if (loaded.session.status === "in_progress" && loaded.session.kind === "whole_shop") {
+    const { data: children, error: childErr } = await tenantScoped(supabase, tenantId)
+      .from("stocktake_sessions")
+      .select("id")
+      .eq("parent_session_id", stocktakeId)
+      .eq("status", "in_progress");
+    if (childErr) return { ok: false, status: 500, error: childErr.message };
+    for (const child of children ?? []) {
+      const done = await finishStocktake(supabase, tenantId, userId, String(child.id), { allowChild: true });
+      if (!done.ok) return done;
+    }
+    const { data: closed, error: closedErr } = await tenantScoped(supabase, tenantId)
+      .from("stocktake_sessions")
+      .select("confirmed_missing_piece_ids")
+      .eq("parent_session_id", stocktakeId);
+    if (closedErr) return { ok: false, status: 500, error: closedErr.message };
+    const confirmed = new Set<string>();
+    for (const row of closed ?? []) {
+      for (const id of uuidList(row.confirmed_missing_piece_ids)) confirmed.add(id);
+    }
+    const now = new Date().toISOString();
+    const { error: updateErr } = await tenantScoped(supabase, tenantId)
+      .from("stocktake_sessions")
+      .update({
+        status: "completed",
+        finished_by: userId,
+        finished_at: now,
+        confirmed_missing_piece_ids: Array.from(confirmed),
+        confirmed_missing_by: userId,
+        confirmed_missing_at: now,
+      })
+      .eq("id", stocktakeId)
+      .eq("status", "in_progress");
+    if (updateErr) return { ok: false, status: 500, error: updateErr.message };
+    return getStocktake(supabase, tenantId, stocktakeId);
+  }
+
   if (loaded.session.status === "in_progress") {
-    const locationId = String(loaded.session.location_id);
+    const locationId = loaded.session.location_id ?? "";
     let expectedLoad: { available: boolean; rows: ExpectedDbRow[] };
     let scanRows: { piece_id: string | null }[];
     try {
@@ -1114,6 +1277,12 @@ export async function finishStocktake(
       for (const row of scanRows) {
         if (row.piece_id) scanned.add(String(row.piece_id));
       }
+      let scopeLocationIds: string[] | null = null;
+      if (loaded.session.kind === "zone" && loaded.session.zone_id) {
+        const catalogue = await loadZoneCatalogue(supabase, tenantId);
+        if (!catalogue.ok) return { ok: false, status: catalogue.schema ? 503 : 500, error: catalogue.error, schema: catalogue.schema };
+        scopeLocationIds = scopeForZone(loaded.session.zone_id, catalogue).locationIds;
+      }
       confirmed = [];
       for (const row of expectedLoad.rows) {
         const piece = live.get(row.piece_id);
@@ -1124,6 +1293,7 @@ export async function finishStocktake(
           liveLocationId: piece ? asText(piece.location_id) : null,
           scanned: scanned.has(row.piece_id),
           resolvedLocationId: row.resolved_location_id,
+          scopeLocationIds,
         });
         if (kind === "missing") confirmed.push(row.piece_id);
       }
@@ -1183,11 +1353,23 @@ export async function markLineMovedHere(
     .maybeSingle();
   if (pieceErr) return { ok: false, status: 500, error: pieceErr.message };
   if (!piece) return { ok: true };
-  if (piece.status !== IN_STOCK_STATUS || piece.location_id !== loaded.session.location_id) return { ok: true };
+  if (piece.status !== IN_STOCK_STATUS) return { ok: true };
+  let nextResult: StoredResult = "found";
+  if (loaded.session.kind === "zone" && loaded.session.zone_id) {
+    const catalogue = await loadZoneCatalogue(supabase, tenantId);
+    if (!catalogue.ok) return { ok: false, status: catalogue.schema ? 503 : 500, error: catalogue.error, schema: catalogue.schema };
+    const scope = scopeForZone(loaded.session.zone_id, catalogue);
+    if (!piece.location_id || !scope.locationIds.includes(String(piece.location_id))) return { ok: true };
+    const expected = await loadExpected(supabase, tenantId, stocktakeId);
+    const snap = expected.rows.find((row) => row.piece_id === pieceId);
+    if (snap?.snapshot_location_id && snap.snapshot_location_id !== piece.location_id) nextResult = "wrong_tray";
+  } else if (piece.location_id !== loaded.session.location_id) {
+    return { ok: true };
+  }
 
   const { error } = await tenantScoped(supabase, tenantId)
     .from("stocktake_scans")
-    .update({ result_group: "found" })
+    .update({ result_group: nextResult, scanned_location_id: piece.location_id })
     .eq("session_id", stocktakeId)
     .eq("piece_id", pieceId)
     .eq("result_group", "wrong_location");
@@ -1276,6 +1458,9 @@ export async function getStocktakeReport(
   tenantId: string,
   stocktakeId: string,
 ): Promise<{ ok: true; report: StocktakeReport } | { ok: false; status: number; error: string; schema?: boolean }> {
+  const head = await loadSession(supabase, tenantId, stocktakeId);
+  if (!head.ok) return head;
+  if (head.session.kind === "whole_shop") return combinedWholeShopReport(supabase, tenantId, head.session);
   const loaded = await getStocktake(supabase, tenantId, stocktakeId);
   if (!loaded.ok) return loaded;
   const payload = loaded.payload;
@@ -1289,7 +1474,7 @@ export async function getStocktakeReport(
   const byPiece = new Map<string, ExpectedDbRow>();
   for (const row of expectedRows) byPiece.set(row.piece_id, row);
 
-  const sources: { section: "missing" | "untagged" | "sold" | "moved"; source: ReportSource }[] = [];
+  const sources: { section: "missing" | "untagged" | "sold" | "moved" | "wrong_tray" | "nearby"; source: ReportSource }[] = [];
   const countLocation = payload.stocktake.location_name || "Location";
   for (const row of payload.groups.missing) {
     if (!row.pieceId) continue;
@@ -1302,7 +1487,7 @@ export async function getStocktakeReport(
         metal: row.metal,
         epc: expected?.snapshot_epc ?? row.epc,
         detail: row.detail ?? null,
-        locationLabel: (expected?.snapshot_location_id && payload.stocktake.location_name) || countLocation,
+        locationLabel: row.snapshotLocationLabel || countLocation,
       },
     });
   }
@@ -1344,6 +1529,34 @@ export async function getStocktakeReport(
         metal: row.metal,
         epc: row.epc,
         detail: row.detail ?? null,
+        locationLabel: row.locationName || countLocation,
+      },
+    });
+  }
+  for (const row of payload.groups.wrongTray ?? []) {
+    if (!row.pieceId) continue;
+    sources.push({
+      section: "wrong_tray",
+      source: {
+        pieceId: row.pieceId,
+        sku: row.sku,
+        metal: row.metal,
+        epc: row.epc,
+        detail: row.detail || "wrong tray",
+        locationLabel: row.snapshotLocationLabel || row.locationName || countLocation,
+      },
+    });
+  }
+  for (const row of payload.groups.nearby ?? []) {
+    if (!row.pieceId) continue;
+    sources.push({
+      section: "nearby",
+      source: {
+        pieceId: row.pieceId,
+        sku: row.sku,
+        metal: row.metal,
+        epc: row.epc,
+        detail: row.detail || NEARBY_READ_DETAIL,
         locationLabel: row.locationName || countLocation,
       },
     });
@@ -1502,6 +1715,8 @@ export async function getStocktakeReport(
       notTaggedUnchecked: sources.filter((item) => item.section === "untagged").map((item) => toReport(item.source)),
       soldDuring: sources.filter((item) => item.section === "sold").map((item) => toReport(item.source)),
       movedDuring: sources.filter((item) => item.section === "moved").map((item) => toReport(item.source)),
+      wrongTray: sources.filter((item) => item.section === "wrong_tray").map((item) => toReport(item.source)),
+      nearby: sources.filter((item) => item.section === "nearby").map((item) => toReport(item.source)),
       locations,
       usesSnapshot: !!payload.snapshot,
     },
@@ -1529,7 +1744,27 @@ export async function resolveExpectedPiece(
     return { ok: false, status: 500, error: err instanceof Error ? err.message : "Could not resolve the piece" };
   }
   if (!expected.available) return { ok: false, status: 503, error: "stocktake_expected", schema: true };
-  const row = expected.rows.find((item) => item.piece_id === pieceId);
+  let ownerId = stocktakeId;
+  let ownerKind: StocktakeKind = loaded.session.kind;
+  let ownerZoneId = loaded.session.zone_id;
+  let row = expected.rows.find((item) => item.piece_id === pieceId);
+  if (!row && loaded.session.kind === "whole_shop") {
+    const { data: children, error: childErr } = await tenantScoped(supabase, tenantId)
+      .from("stocktake_sessions")
+      .select("id, kind, zone_id")
+      .eq("parent_session_id", stocktakeId);
+    if (childErr) return { ok: false, status: 500, error: childErr.message };
+    for (const child of children ?? []) {
+      const childExpected = await loadExpected(supabase, tenantId, String(child.id));
+      const found = childExpected.rows.find((item) => item.piece_id === pieceId);
+      if (!found) continue;
+      row = found;
+      ownerId = String(child.id);
+      ownerKind = asKind(child.kind);
+      ownerZoneId = asText(child.zone_id);
+      break;
+    }
+  }
   if (!row) return { ok: false, status: 404, error: "That piece is not on this count" };
   if (!row.snapshot_epc) return { ok: false, status: 400, error: "Untagged pieces are checked with Seen" };
 
@@ -1538,13 +1773,18 @@ export async function resolveExpectedPiece(
   try {
     const [pieces, scans] = await Promise.all([
       loadPieces(supabase, tenantId, [pieceId]),
-      tenantScoped(supabase, tenantId).from("stocktake_scans").select("piece_id").eq("session_id", stocktakeId).eq("piece_id", pieceId),
+      tenantScoped(supabase, tenantId).from("stocktake_scans").select("piece_id").eq("session_id", ownerId).eq("piece_id", pieceId),
     ]);
     live = pieces.get(pieceId);
     if (scans.error) return { ok: false, status: 500, error: scans.error.message };
     scanned = (scans.data ?? []).length > 0;
   } catch (err) {
     return { ok: false, status: 500, error: err instanceof Error ? err.message : "Could not resolve the piece" };
+  }
+  let scopeLocationIds: string[] | null = null;
+  if (ownerKind === "zone" && ownerZoneId) {
+    const catalogue = await loadZoneCatalogue(supabase, tenantId);
+    if (catalogue.ok) scopeLocationIds = scopeForZone(ownerZoneId, catalogue).locationIds;
   }
   const kind = classifySnapshotRow({
     snapshotEpc: row.snapshot_epc,
@@ -1553,6 +1793,7 @@ export async function resolveExpectedPiece(
     liveLocationId: live ? asText(live.location_id) : null,
     scanned,
     resolvedLocationId: row.resolved_location_id,
+    scopeLocationIds,
   });
   if (kind !== "missing") return { ok: false, status: 409, error: "That piece is not on the missing list" };
 
@@ -1588,11 +1829,483 @@ export async function resolveExpectedPiece(
   const { data, error } = await tenantScoped(supabase, tenantId)
     .from("stocktake_expected")
     .update(patch)
-    .eq("session_id", stocktakeId)
+    .eq("session_id", ownerId)
     .eq("piece_id", pieceId)
     .select("piece_id");
   if (error) return { ok: false, status: 500, error: error.message };
   if (!data?.length) return { ok: false, status: 404, error: "That piece is not on this count" };
+  return { ok: true };
+}
+
+function codeFromLabel(label: string | null): string | null {
+  if (!label) return null;
+  const parts = label.split(" · ");
+  return parts.length > 1 ? parts[0] : null;
+}
+
+type ZoneRow = { id: string; code: string | null; name: string; label: string; active: boolean };
+type TrayRow = { id: string; code: string | null; name: string; label: string; zoneId: string | null; active: boolean };
+type NeighbourRow = { zoneAId: string; zoneBId: string };
+type ZoneCatalogue = { ok: true; zones: ZoneRow[]; trays: TrayRow[]; neighbours: NeighbourRow[] };
+
+function zoneLabelOf(zone: { code?: string | null; name?: string | null }): string {
+  return formatLocationLabel({ code: zone.code, name: zone.name }) || "Zone";
+}
+
+async function loadZoneCatalogue(
+  supabase: SupabaseClient,
+  tenantId: string,
+): Promise<ZoneCatalogue | { ok: false; status: number; error: string; schema?: boolean }> {
+  const [zoneResult, locationResult, neighbourResult] = await Promise.all([
+    tenantScoped(supabase, tenantId).from("stocktake_zones").select("id, code, name, active"),
+    tenantScoped(supabase, tenantId).from("inventory_locations").select("id, code, name, active, stocktake_zone_id"),
+    tenantScoped(supabase, tenantId).from("stocktake_zone_neighbours").select("zone_a_id, zone_b_id"),
+  ]);
+  if (relationMissing(zoneResult.error, "stocktake_zones") || columnMissing(locationResult.error, "stocktake_zone_id")) {
+    return { ok: false, status: 503, error: zoneResult.error?.message || locationResult.error?.message || "stocktake_zones", schema: true };
+  }
+  if (zoneResult.error) return { ok: false, status: 500, error: zoneResult.error.message };
+  if (locationResult.error) return { ok: false, status: 500, error: locationResult.error.message };
+  if (neighbourResult.error && !relationMissing(neighbourResult.error, "stocktake_zone_neighbours")) {
+    return { ok: false, status: 500, error: neighbourResult.error.message };
+  }
+  const zones = ((zoneResult.data ?? []) as { id: string; code: string | null; name: string | null; active: boolean | null }[])
+    .map((row) => ({
+      id: String(row.id),
+      code: asText(row.code),
+      name: asText(row.name) || "Zone",
+      label: zoneLabelOf(row),
+      active: row.active !== false,
+    }))
+    .sort(compareLocations);
+  const trays = ((locationResult.data ?? []) as { id: string; code: string | null; name: string | null; active: boolean | null; stocktake_zone_id: string | null }[])
+    .map((row) => ({
+      id: String(row.id),
+      code: asText(row.code),
+      name: asText(row.name) || "Location",
+      label: formatLocationLabel(row),
+      zoneId: asText(row.stocktake_zone_id),
+      active: isActiveLocation(row),
+    }))
+    .sort(compareLocations);
+  const neighbours = neighbourResult.error
+    ? []
+    : ((neighbourResult.data ?? []) as { zone_a_id: string; zone_b_id: string }[]).map((row) => ({
+      zoneAId: String(row.zone_a_id),
+      zoneBId: String(row.zone_b_id),
+    }));
+  return { ok: true, zones, trays, neighbours };
+}
+
+function scopeForZone(zoneId: string, catalogue: ZoneCatalogue): { locationIds: string[]; neighbourLocationIds: string[]; trays: TrayRow[] } {
+  const trays = catalogue.trays.filter((tray) => tray.zoneId === zoneId);
+  const neighbourZones = new Set<string>();
+  for (const pair of catalogue.neighbours) {
+    if (pair.zoneAId === zoneId) neighbourZones.add(pair.zoneBId);
+    if (pair.zoneBId === zoneId) neighbourZones.add(pair.zoneAId);
+  }
+  const neighbourLocationIds: string[] = [];
+  for (const tray of catalogue.trays) {
+    if (tray.zoneId && neighbourZones.has(tray.zoneId)) neighbourLocationIds.push(tray.id);
+  }
+  return { locationIds: trays.map((tray) => tray.id), neighbourLocationIds, trays };
+}
+
+function conflictMessage(error: { code?: string; message?: string } | null, fallback: string): string | null {
+  if (error?.code !== "23505") return null;
+  const message = error.message ?? "";
+  if (message.includes("one_open_whole_shop")) return "A whole-shop count is already open.";
+  if (message.includes("one_open_per_zone")) return "This zone already has an open count.";
+  if (message.includes("one_open_per_location")) return "This location already has an open count.";
+  return fallback;
+}
+
+async function presentWholeShop(
+  supabase: SupabaseClient,
+  tenantId: string,
+  session: SessionRow,
+  warnings: string[],
+): Promise<{ ok: true; payload: StocktakePayload } | { ok: false; status: number; error: string; schema?: boolean }> {
+  const { data, error } = await tenantScoped(supabase, tenantId)
+    .from("stocktake_sessions")
+    .select("id")
+    .eq("parent_session_id", session.id);
+  if (error) return { ok: false, status: 500, error: error.message };
+  const units: StocktakeUnit[] = [];
+  for (const child of data ?? []) {
+    const view = await getStocktake(supabase, tenantId, String(child.id));
+    if (!view.ok) return view;
+    units.push({
+      id: view.payload.stocktake.id,
+      kind: view.payload.stocktake.kind === "zone" ? "zone" : "location",
+      name: view.payload.stocktake.location_name || "Zone",
+      status: view.payload.stocktake.status,
+      counts: view.payload.counts,
+    });
+  }
+  units.sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true, sensitivity: "base" }));
+  const people = await nameMap(supabase, tenantId, [session.started_by, session.finished_by].filter((id): id is string => !!id));
+  const blank = buildStocktakeGroups([], [], "");
+  const stocktake: StocktakeSession = {
+    id: session.id,
+    status: asStatus(session.status),
+    kind: "whole_shop",
+    location_id: null,
+    zone_id: null,
+    parent_session_id: null,
+    location_name: "Whole shop",
+    started_at: session.started_at,
+    finished_at: session.finished_at,
+    started_by_name: session.started_by ? people.get(session.started_by) ?? null : null,
+    finished_by_name: session.finished_by ? people.get(session.finished_by) ?? null : null,
+  };
+  return {
+    ok: true,
+    payload: {
+      stocktake,
+      groups: blank.groups,
+      counts: blank.counts,
+      warnings,
+      snapshot: null,
+      units,
+    },
+  };
+}
+
+function addCounts(total: StocktakeCounts, extra: StocktakeCounts): void {
+  total.found += extra.found || 0;
+  total.missing += extra.missing || 0;
+  total.elsewhere += extra.elsewhere || 0;
+  total.notInStock += extra.notInStock || 0;
+  total.unknown += extra.unknown || 0;
+  total.blank += extra.blank || 0;
+  total.notTaggedSeen += extra.notTaggedSeen || 0;
+  total.notTaggedUnchecked += extra.notTaggedUnchecked || 0;
+  total.soldDuring += extra.soldDuring || 0;
+  total.movedDuring += extra.movedDuring || 0;
+  total.resolvedFound += extra.resolvedFound || 0;
+  total.resolvedMissing += extra.resolvedMissing || 0;
+  total.wrongTray += extra.wrongTray || 0;
+  total.nearby += extra.nearby || 0;
+}
+
+async function combinedWholeShopReport(
+  supabase: SupabaseClient,
+  tenantId: string,
+  session: SessionRow,
+): Promise<{ ok: true; report: StocktakeReport } | { ok: false; status: number; error: string; schema?: boolean }> {
+  const parent = await getStocktake(supabase, tenantId, session.id);
+  if (!parent.ok) return parent;
+  const { data, error } = await tenantScoped(supabase, tenantId)
+    .from("stocktake_sessions")
+    .select("id")
+    .eq("parent_session_id", session.id);
+  if (error) return { ok: false, status: 500, error: error.message };
+  const parts: StocktakeReport[] = [];
+  for (const child of data ?? []) {
+    const report = await getStocktakeReport(supabase, tenantId, String(child.id));
+    if (!report.ok) return report;
+    parts.push(report.report);
+  }
+  const counts = buildStocktakeGroups([], [], "").counts;
+  const grouped = new Map<string, ReportPiece[]>();
+  const notTaggedUnchecked: ReportPiece[] = [];
+  const soldDuring: ReportPiece[] = [];
+  const movedDuring: ReportPiece[] = [];
+  const wrongTray: ReportPiece[] = [];
+  const nearby: ReportPiece[] = [];
+  for (const report of parts) {
+    addCounts(counts, report.counts);
+    for (const group of report.missingByLocation) {
+      const list = grouped.get(group.location) ?? [];
+      list.push(...group.pieces);
+      grouped.set(group.location, list);
+    }
+    notTaggedUnchecked.push(...report.notTaggedUnchecked);
+    soldDuring.push(...report.soldDuring);
+    movedDuring.push(...report.movedDuring);
+    wrongTray.push(...(report.wrongTray ?? []));
+    nearby.push(...(report.nearby ?? []));
+  }
+  const missingByLocation: { location: string; pieces: ReportPiece[] }[] = [];
+  grouped.forEach((pieces, location) => missingByLocation.push({ location, pieces }));
+  missingByLocation.sort((a, b) => a.location.localeCompare(b.location, "en", { numeric: true, sensitivity: "base" }));
+  return {
+    ok: true,
+    report: {
+      stocktake: parent.payload.stocktake,
+      counts,
+      missingByLocation,
+      notTaggedUnchecked,
+      soldDuring,
+      movedDuring,
+      wrongTray,
+      nearby,
+      locations: parts[0]?.locations ?? [],
+      usesSnapshot: true,
+    },
+  };
+}
+
+async function cancelSession(
+  supabase: SupabaseClient,
+  tenantId: string,
+  userId: string,
+  sessionId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const now = new Date().toISOString();
+  const children = await tenantScoped(supabase, tenantId)
+    .from("stocktake_sessions")
+    .update({ status: "cancelled", finished_at: now, finished_by: userId })
+    .eq("parent_session_id", sessionId)
+    .eq("status", "in_progress");
+  if (children.error && !columnMissing(children.error, "parent_session")) {
+    return { ok: false, error: children.error.message };
+  }
+  const { error } = await tenantScoped(supabase, tenantId)
+    .from("stocktake_sessions")
+    .update({ status: "cancelled", finished_at: now, finished_by: userId })
+    .eq("id", sessionId)
+    .eq("status", "in_progress");
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function createZoneStocktake(
+  supabase: SupabaseClient,
+  tenantId: string,
+  userId: string,
+  zoneId: string,
+  options?: { fresh?: boolean },
+): Promise<
+  | { ok: true; id: string; continued: boolean; started_at: string | null }
+  | { ok: false; status: number; error: string; schema?: boolean }
+> {
+  const catalogue = await loadZoneCatalogue(supabase, tenantId);
+  if (!catalogue.ok) return catalogue;
+  const zone = catalogue.zones.find((item) => item.id === zoneId);
+  if (!zone || !zone.active) return { ok: false, status: 404, error: "Zone not found" };
+  const { data: existing, error: existingErr } = await tenantScoped(supabase, tenantId)
+    .from("stocktake_sessions")
+    .select("id, started_at")
+    .eq("zone_id", zoneId)
+    .eq("status", "in_progress")
+    .maybeSingle();
+  if (existingErr) {
+    if (columnMissing(existingErr, "zone_id")) return { ok: false, status: 503, error: existingErr.message, schema: true };
+    return { ok: false, status: 500, error: existingErr.message };
+  }
+  if (existing?.id && !options?.fresh) {
+    return { ok: true, id: String(existing.id), continued: true, started_at: existing.started_at ? String(existing.started_at) : null };
+  }
+  if (existing?.id && options?.fresh) {
+    const closed = await cancelSession(supabase, tenantId, userId, String(existing.id));
+    if (!closed.ok) return { ok: false, status: 500, error: closed.error };
+  }
+  const startedAt = new Date().toISOString();
+  const { data: created, error } = await tenantScoped(supabase, tenantId)
+    .from("stocktake_sessions")
+    .insert({
+      kind: "zone",
+      zone_id: zoneId,
+      location_id: null,
+      status: "in_progress",
+      started_by: userId,
+      started_at: startedAt,
+    })
+    .select("id")
+    .single();
+  const conflict = conflictMessage(error, "This zone already has an open count.");
+  if (conflict) {
+    const again = await tenantScoped(supabase, tenantId)
+      .from("stocktake_sessions")
+      .select("id, started_at")
+      .eq("zone_id", zoneId)
+      .eq("status", "in_progress")
+      .maybeSingle();
+    if (again.data?.id) return { ok: true, id: String(again.data.id), continued: true, started_at: again.data.started_at ? String(again.data.started_at) : null };
+    return { ok: false, status: 409, error: conflict };
+  }
+  if (error) return { ok: false, status: 500, error: error.message };
+  if (!created?.id) return { ok: false, status: 500, error: "Could not start the count" };
+  const scope = scopeForZone(zoneId, catalogue);
+  const snap = await writeSnapshot(supabase, tenantId, String(created.id), scope.locationIds);
+  if (!snap.ok) return snap;
+  return { ok: true, id: String(created.id), continued: false, started_at: startedAt };
+}
+
+export async function createWholeShopStocktake(
+  supabase: SupabaseClient,
+  tenantId: string,
+  userId: string,
+  options?: { fresh?: boolean },
+): Promise<
+  | { ok: true; id: string; continued: boolean; started_at: string | null }
+  | { ok: false; status: number; error: string; schema?: boolean }
+> {
+  const catalogue = await loadZoneCatalogue(supabase, tenantId);
+  if (!catalogue.ok) return catalogue;
+  const { data: existing, error: existingErr } = await tenantScoped(supabase, tenantId)
+    .from("stocktake_sessions")
+    .select("id, started_at")
+    .eq("kind", "whole_shop")
+    .eq("status", "in_progress")
+    .maybeSingle();
+  if (existingErr) {
+    if (columnMissing(existingErr, "kind")) return { ok: false, status: 503, error: existingErr.message, schema: true };
+    return { ok: false, status: 500, error: existingErr.message };
+  }
+  if (existing?.id && !options?.fresh) {
+    return { ok: true, id: String(existing.id), continued: true, started_at: existing.started_at ? String(existing.started_at) : null };
+  }
+  if (existing?.id && options?.fresh) {
+    const closed = await cancelSession(supabase, tenantId, userId, String(existing.id));
+    if (!closed.ok) return { ok: false, status: 500, error: closed.error };
+  }
+  const startedAt = new Date().toISOString();
+  const { data: created, error } = await tenantScoped(supabase, tenantId)
+    .from("stocktake_sessions")
+    .insert({
+      kind: "whole_shop",
+      zone_id: null,
+      location_id: null,
+      status: "in_progress",
+      started_by: userId,
+      started_at: startedAt,
+    })
+    .select("id")
+    .single();
+  const parentConflict = conflictMessage(error, "A whole-shop count is already open.");
+  if (parentConflict) return { ok: false, status: 409, error: parentConflict };
+  if (error || !created?.id) return { ok: false, status: 500, error: error?.message || "Could not start the whole-shop count" };
+  const parentId = String(created.id);
+  const units: { kind: "zone" | "location"; zoneId: string | null; locationId: string | null; locationIds: string[] }[] = [];
+  for (const zone of catalogue.zones) {
+    if (!zone.active) continue;
+    units.push({ kind: "zone", zoneId: zone.id, locationId: null, locationIds: scopeForZone(zone.id, catalogue).locationIds });
+  }
+  for (const tray of catalogue.trays) {
+    if (!tray.active || tray.zoneId) continue;
+    units.push({ kind: "location", zoneId: null, locationId: tray.id, locationIds: [tray.id] });
+  }
+  for (const unit of units) {
+    const { data: child, error: childErr } = await tenantScoped(supabase, tenantId)
+      .from("stocktake_sessions")
+      .insert({
+        kind: unit.kind,
+        zone_id: unit.zoneId,
+        location_id: unit.locationId,
+        parent_session_id: parentId,
+        status: "in_progress",
+        started_by: userId,
+        started_at: startedAt,
+      })
+      .select("id")
+      .single();
+    const childConflict = conflictMessage(childErr, unit.kind === "zone"
+      ? "This zone already has an open count."
+      : "This location already has an open count.");
+    if (childConflict || childErr || !child?.id) {
+      await deleteSession(supabase, tenantId, parentId);
+      return { ok: false, status: 409, error: childConflict || childErr?.message || "Could not open every zone" };
+    }
+    const snap = await writeSnapshot(supabase, tenantId, String(child.id), unit.locationIds);
+    if (!snap.ok) {
+      await deleteSession(supabase, tenantId, parentId);
+      return snap;
+    }
+  }
+  return { ok: true, id: parentId, continued: false, started_at: startedAt };
+}
+
+export type ZoneAdmin = {
+  zones: {
+    id: string;
+    label: string;
+    locations: { id: string; label: string }[];
+  }[];
+  unassigned: { id: string; label: string }[];
+  neighbours: { zoneAId: string; zoneBId: string; label: string }[];
+};
+
+export async function getZoneAdmin(
+  supabase: SupabaseClient,
+  tenantId: string,
+): Promise<{ ok: true; admin: ZoneAdmin } | { ok: false; status: number; error: string; schema?: boolean }> {
+  const catalogue = await loadZoneCatalogue(supabase, tenantId);
+  if (!catalogue.ok) return catalogue;
+  const zones = catalogue.zones.filter((zone) => zone.active).map((zone) => ({
+    id: zone.id,
+    label: zone.label,
+    locations: catalogue.trays.filter((tray) => tray.zoneId === zone.id).map((tray) => ({ id: tray.id, label: tray.label })),
+  }));
+  const unassigned = catalogue.trays.filter((tray) => tray.active && !tray.zoneId).map((tray) => ({ id: tray.id, label: tray.label }));
+  const nameById = new Map<string, string>();
+  for (const zone of catalogue.zones) nameById.set(zone.id, zone.label);
+  const neighbours = catalogue.neighbours.map((pair) => ({
+    zoneAId: pair.zoneAId,
+    zoneBId: pair.zoneBId,
+    label: `${nameById.get(pair.zoneAId) || "Zone"} and ${nameById.get(pair.zoneBId) || "Zone"}`,
+  }));
+  return { ok: true, admin: { zones, unassigned, neighbours } };
+}
+
+export async function assignLocationZone(
+  supabase: SupabaseClient,
+  tenantId: string,
+  locationId: string,
+  zoneId: string | null,
+): Promise<{ ok: true } | { ok: false; status: number; error: string; schema?: boolean }> {
+  if (zoneId) {
+    const catalogue = await loadZoneCatalogue(supabase, tenantId);
+    if (!catalogue.ok) return catalogue;
+    if (!catalogue.zones.some((zone) => zone.id === zoneId)) return { ok: false, status: 404, error: "Zone not found" };
+  }
+  const { data, error } = await tenantScoped(supabase, tenantId)
+    .from("inventory_locations")
+    .update({ stocktake_zone_id: zoneId })
+    .eq("id", locationId)
+    .select("id");
+  if (columnMissing(error, "stocktake_zone_id")) return { ok: false, status: 503, error: error?.message || "stocktake_zone_id", schema: true };
+  if (error) return { ok: false, status: 500, error: error.message };
+  if (!data?.length) return { ok: false, status: 404, error: "Location not found" };
+  return { ok: true };
+}
+
+export async function addZoneNeighbour(
+  supabase: SupabaseClient,
+  tenantId: string,
+  userId: string,
+  zoneA: string,
+  zoneB: string,
+): Promise<{ ok: true } | { ok: false; status: number; error: string; schema?: boolean }> {
+  if (!zoneA || !zoneB || zoneA === zoneB) return { ok: false, status: 400, error: "Pick two different zones" };
+  const zoneAId = zoneA < zoneB ? zoneA : zoneB;
+  const zoneBId = zoneA < zoneB ? zoneB : zoneA;
+  const { error } = await tenantScoped(supabase, tenantId)
+    .from("stocktake_zone_neighbours")
+    .insert({ zone_a_id: zoneAId, zone_b_id: zoneBId, created_by: userId });
+  if (relationMissing(error, "stocktake_zone_neighbours")) return { ok: false, status: 503, error: error?.message || "stocktake_zone_neighbours", schema: true };
+  if (error?.code === "23505") return { ok: false, status: 409, error: "Those zones are already neighbours" };
+  if (error) return { ok: false, status: 500, error: error.message };
+  return { ok: true };
+}
+
+export async function removeZoneNeighbour(
+  supabase: SupabaseClient,
+  tenantId: string,
+  zoneA: string,
+  zoneB: string,
+): Promise<{ ok: true } | { ok: false; status: number; error: string; schema?: boolean }> {
+  const zoneAId = zoneA < zoneB ? zoneA : zoneB;
+  const zoneBId = zoneA < zoneB ? zoneB : zoneA;
+  const { error } = await tenantScoped(supabase, tenantId)
+    .from("stocktake_zone_neighbours")
+    .delete()
+    .eq("zone_a_id", zoneAId)
+    .eq("zone_b_id", zoneBId);
+  if (relationMissing(error, "stocktake_zone_neighbours")) return { ok: false, status: 503, error: error?.message || "stocktake_zone_neighbours", schema: true };
+  if (error) return { ok: false, status: 500, error: error.message };
   return { ok: true };
 }
 

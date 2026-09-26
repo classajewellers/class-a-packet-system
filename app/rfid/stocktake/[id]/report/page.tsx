@@ -140,6 +140,8 @@ export default function StocktakeReportPage() {
           <Extra title="Not tagged, not checked" pieces={report.notTaggedUnchecked} />
           <Extra title="Sold during count" pieces={report.soldDuring} />
           <Extra title="Moved during count" pieces={report.movedDuring} />
+          <Extra title="Wrong tray" pieces={report.wrongTray ?? []} />
+          <Extra title="Read nearby, probably not moved" pieces={report.nearby ?? []} />
 
           <section className="report-sign">
             <div style={{ display: "flex", gap: 24, marginTop: 28, flexWrap: "wrap" }}>
