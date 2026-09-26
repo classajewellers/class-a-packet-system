@@ -347,13 +347,21 @@ html, body {
 .print-only { display: none; }
 @page { size: A4; margin: 16mm; }
 @media print {
+  html, body {
+    background: #fff !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
   .app-shell, .app-main, .app-content {
     display: block !important;
     height: auto !important;
+    min-height: 0 !important;
     overflow: visible !important;
     background: #fff !important;
   }
-  .app-shell > aside, .app-main > header, .no-print { display: none !important; }
+  .app-shell > aside,
+  .app-main > header,
+  .no-print { display: none !important; }
   .app-content { padding: 0 !important; }
   .print-only { display: block !important; }
 }

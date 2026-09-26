@@ -43,6 +43,7 @@ export default function VaultReportButton() {
     <>
       {/* Floating button */}
       <button
+        className="no-print"
         onClick={() => setOpen(true)}
         title="Report a bug or share an idea"
         style={{
@@ -71,6 +72,7 @@ export default function VaultReportButton() {
       {/* Modal */}
       {open && (
         <div
+          className="no-print"
           style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
           onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
         >
