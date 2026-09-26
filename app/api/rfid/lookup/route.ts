@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/require-auth";
 import { applyHandheldTagReads } from "@/lib/rfid-tag-read";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
-import { loadLocationLabels } from "@/lib/load-locations";
+import { loadLocationLabels, uuidIds } from "@/lib/load-locations";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -38,10 +38,11 @@ function statusOf(row: PieceRow): string | null {
   return asText(row.status);
 }
 
-function piecePayload(row: PieceRow, locationName: string | null) {
+function piecePayload(row: PieceRow, locationName: string | null, name: string | null) {
   return {
     id: String(row.id),
     sku: asText(row.sku),
+    name,
     metal: metalOf(row),
     retail_price: priceOf(row),
     status: statusOf(row),
@@ -178,10 +179,34 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   }
 
+  const productNames = new Map<string, string>();
+  const productIds = uuidIds([
+    ...Array.from(piecesById.values()).map((row) => row.product_id),
+    ...skuHits.map((hit) => hit.piece?.product_id),
+  ]);
+  if (productIds.length) {
+    const { data, error } = await supabase
+      .from("inventory_products")
+      .select("id, name")
+      .eq("tenant_id", tenantId)
+      .in("id", productIds);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    for (const row of data ?? []) {
+      const name = asText(row.name);
+      if (name) productNames.set(String(row.id), name);
+    }
+  }
+
   function locationName(row: PieceRow | null): string | null {
     if (!row || typeof row.location_id !== "string") return null;
     const name = locationNames.get(row.location_id);
     return name && name.trim() ? name : null;
+  }
+
+  function pieceName(row: PieceRow): string | null {
+    const productId = asText(row.product_id);
+    if (productId && productNames.has(productId)) return productNames.get(productId) ?? null;
+    return asText(row.title);
   }
 
   const epcResults = epcs.map((epc) => {
@@ -194,14 +219,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       epc,
       found: true,
       tag_status: tag.status,
-      piece: piece ? piecePayload(piece, locationName(piece)) : null,
+      piece: piece ? piecePayload(piece, locationName(piece), pieceName(piece)) : null,
     };
   });
 
   const skuResults = skuHits.map((hit) => ({
     sku: hit.sku,
     found: !!hit.piece,
-    piece: hit.piece ? piecePayload(hit.piece, locationName(hit.piece)) : null,
+    piece: hit.piece ? piecePayload(hit.piece, locationName(hit.piece), pieceName(hit.piece)) : null,
   }));
 
   return NextResponse.json({ epcs: epcResults, skus: skuResults });
