@@ -4,6 +4,7 @@ import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { tenantScoped } from "@/lib/tenantScoped";
 import { generateJewelleryZpl } from "@/lib/rfid-label";
 import { loadTagCopy } from "@/lib/rfid-tag-copy";
+import { postRelayJob, printRelayEnabled } from "@/lib/rfid-relay";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -87,13 +88,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Retirement happens atomically at verification time (POST /api/rfid/pieces/[id]/verify).
 
   // ── Check for an active printer for this tenant ────────────────────────────
-  const { data: printer } = await tenantScoped(supabase, tenantId)
+  const rich = await tenantScoped(supabase, tenantId)
     .from("rfid_printers")
-    .select("id")
+    .select("id, relay_enabled")
     .eq("is_active", true)
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
+  let printer: { id: string; relay_enabled?: boolean | null } | null = null;
+  if (rich.error && /relay_enabled|column/i.test(rich.error.message)) {
+    const plain = await tenantScoped(supabase, tenantId)
+      .from("rfid_printers")
+      .select("id")
+      .eq("is_active", true)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (plain.error) return NextResponse.json({ error: plain.error.message }, { status: 500 });
+    printer = plain.data;
+  } else if (rich.error) {
+    return NextResponse.json({ error: rich.error.message }, { status: 500 });
+  } else {
+    printer = rich.data;
+  }
 
   if (!printer) {
     return NextResponse.json(
@@ -262,6 +279,42 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .from("inventory_rfid_tags")
     .update({ print_job_id: job.id })
     .eq("id", tag.id);
+
+  // The bridge stays the default. The relay is used only when the feature flag
+  // is on and this printer row is marked relay_enabled.
+  const useRelay = printRelayEnabled() && printer.relay_enabled === true;
+  if (useRelay) {
+    const delivered = await postRelayJob({
+      job_id: job.id,
+      printer_id: printer.id,
+      zpl: zplPayload,
+      expect_epc: epc,
+    });
+    if (!delivered.ok) {
+      const nowFailed = new Date().toISOString();
+      await tenantScoped(supabase, tenantId).from("print_jobs").update({
+        status: "failed",
+        failed_at: nowFailed,
+        last_error: delivered.error,
+      }).eq("id", job.id);
+      await tenantScoped(supabase, tenantId).from("inventory_rfid_tags").update({
+        status: "damaged",
+        retired_at: nowFailed,
+        retirement_reason: "print_failed",
+      }).eq("id", tag.id);
+      return NextResponse.json(
+        { error: `Could not send the job to the print relay. ${delivered.error}` },
+        { status: 502 },
+      );
+    }
+    const started = new Date().toISOString();
+    await tenantScoped(supabase, tenantId).from("print_jobs").update({
+      status: "printing",
+      claimed_at: started,
+      started_at: started,
+    }).eq("id", job.id);
+    return NextResponse.json({ print_job: { ...job, status: "printing" }, rfid_tag: tag, via: "relay" }, { status: 201 });
+  }
 
   return NextResponse.json({ print_job: job, rfid_tag: tag }, { status: 201 });
 }

@@ -1,0 +1,25 @@
+name = "vault-print-relay"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# workers.dev only. No custom domain in this slice.
+workers_dev = true
+
+[durable_objects]
+bindings = [
+  { name = "PRINTER", class_name = "PrinterSession" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["PrinterSession"]
+
+[[kv_namespaces]]
+binding = "TOKENS"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
+
+# Set the secret and the webhook with wrangler. Do not put the secret here.
+#   wrangler secret put RELAY_HMAC_SECRET
+#   wrangler secret put VAULT_WEBHOOK_URL
