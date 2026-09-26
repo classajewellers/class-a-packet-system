@@ -350,16 +350,13 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
                   <SubLink href="/inventory"                         label="Stock" />
                   <SubLink href="/inventory/products"                label="Products" />
                   <div style={{ padding: "12px 16px 2px 45px", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(255,255,255,0.45)" }}>RFID</div>
-                  <SubSubLink href="/rfid/scan" label="Scan" />
                   <SubSubLink
                     href="/rfid/stocktake"
                     label="Stocktake"
                     match={(path) => path === "/rfid/stocktake" || (path.startsWith("/rfid/stocktake/") && !path.startsWith("/rfid/stocktake/move") && !path.startsWith("/rfid/stocktake/zones"))}
                   />
                   <SubSubLink href="/rfid/stocktake/move" label="Stock Movement" />
-                  {isManager && <SubSubLink href="/rfid/stocktake/zones" label="Zones" />}
                   {isManager && <SubLink href="/inventory/purchase-orders" label="Purchasing" />}
-                  {isManager && <SubLink href="/inventory/locations"       label="Locations" />}
                   {isManager && <SubLink href="/inventory/suppliers"       label="Suppliers" />}
                 </div>
               )}
@@ -422,6 +419,10 @@ export default function Sidebar({ onOpenAI, mobileOpen, onClose }: Props) {
                   {can("settings") && <SubLink href="/settings/staff"     label="Staff" />}
                   {can("settings") && <SubLink href="/settings/vip-tiers" label="VIP Tiers" />}
                   {can("settings") && isManager && <SubLink href="/settings/tenants" label="Stores" />}
+                  <div style={{ padding: "12px 16px 2px 45px", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(255,255,255,0.45)" }}>Stocktake & RFID</div>
+                  <SubSubLink href="/rfid/scan" label="Scan" />
+                  {isManager && <SubSubLink href="/rfid/stocktake/zones" label="Zones" />}
+                  {isManager && <SubSubLink href="/inventory/locations" label="Locations" />}
                   {can("workshop") && isManager && <SubLink href="/workshop/settings" label="Workshop" />}
                   {isManager       && <SubLink href="/inventory/settings"  label="Inventory" />}
                   {isManager       && <SubLink href="/quotes/settings"     label="Repair Quoting" />}
