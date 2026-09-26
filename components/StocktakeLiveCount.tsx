@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { liveProgress, trayCode } from "@/lib/stocktake-live";
-import { setStocktakeMuted, stocktakeMuted } from "@/lib/stocktake-audio";
+import { STOCKTAKE_MUTE_EVENT, setStocktakeMuted, stocktakeMuted } from "@/lib/stocktake-audio";
 import type { StocktakePayload, StocktakeRow } from "@/lib/rfid-stocktake";
 import { PieceThumb } from "@/components/PieceThumb";
 
@@ -18,6 +18,7 @@ export function StocktakeLiveCount({
   allowMove,
   movingId,
   onMoveHere,
+  onFind,
 }: {
   payload: StocktakePayload;
   heardPieceIds: ReadonlySet<string>;
@@ -30,11 +31,17 @@ export function StocktakeLiveCount({
   allowMove: boolean;
   movingId: string | null;
   onMoveHere: (row: StocktakeRow) => void;
+  onFind: (row: StocktakeRow) => void;
 }) {
   const progress = liveProgress(payload, heardPieceIds);
   const [foundOpen, setFoundOpen] = useState(false);
   const [muted, setMuted] = useState(false);
-  useEffect(() => { setMuted(stocktakeMuted()); }, []);
+  useEffect(() => {
+    const sync = () => setMuted(stocktakeMuted());
+    sync();
+    window.addEventListener(STOCKTAKE_MUTE_EVENT, sync);
+    return () => window.removeEventListener(STOCKTAKE_MUTE_EVENT, sync);
+  }, []);
 
   return (
     <div>
@@ -81,7 +88,12 @@ export function StocktakeLiveCount({
       {progress.stillToFind.length === 0 && <p style={empty}>All tagged pieces have been read.</p>}
       <div style={{ display: "flex", flexDirection: "column" }}>
         {progress.stillToFind.map((row) => (
-          <StillRow key={row.key} row={row} tray={zoneCount ? trayCode(row.snapshotLocationLabel) : null} />
+          <StillRow
+            key={row.key}
+            row={row}
+            tray={zoneCount ? trayCode(row.snapshotLocationLabel) : null}
+            action={row.epc ? <FindButton onClick={() => onFind(row)} /> : null}
+          />
         ))}
       </div>
 
@@ -119,7 +131,7 @@ export function StocktakeLiveCount({
   );
 }
 
-function StillRow({ row, tray, extra }: { row: StocktakeRow; tray: string | null; extra?: string | null }) {
+function StillRow({ row, tray, extra, action }: { row: StocktakeRow; tray: string | null; extra?: string | null; action?: ReactNode }) {
   return (
     <div style={rowStyle}>
       <PieceThumb pieceId={row.pieceId} />
@@ -131,7 +143,16 @@ function StillRow({ row, tray, extra }: { row: StocktakeRow; tray: string | null
           <div style={{ fontSize: 13, color: "#4B5563", marginTop: 2 }}>{[tray, extra].filter(Boolean).join(" · ")}</div>
         )}
       </div>
+      {action}
     </div>
+  );
+}
+
+function FindButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} style={findButton}>
+      Find this ring
+    </button>
   );
 }
 
@@ -282,4 +303,17 @@ const seenButton: CSSProperties = {
   border: "1px solid #D1D5DB",
   background: "#fff",
   fontWeight: 700,
+};
+const findButton: CSSProperties = {
+  flex: "0 0 auto",
+  minHeight: 40,
+  maxWidth: 108,
+  padding: "4px 8px",
+  borderRadius: 8,
+  border: "1px solid #111827",
+  background: "#fff",
+  color: "#111827",
+  fontSize: 13,
+  fontWeight: 700,
+  lineHeight: 1.15,
 };

@@ -35,6 +35,34 @@ export function expectedEpcSet(pieces: { epc: string | null }[]): Set<string> {
   return set;
 }
 
+/** How often this tag was read in the recent window. The wedge has no signal strength. */
+export const PROXIMITY_WINDOW_MS = 1500;
+
+export function readsPerSecond(
+  timestamps: readonly number[],
+  now: number,
+  windowMs = PROXIMITY_WINDOW_MS,
+): number {
+  if (windowMs <= 0) return 0;
+  const start = now - windowMs;
+  let count = 0;
+  for (const ts of timestamps) {
+    if (ts > start && ts <= now) count += 1;
+  }
+  return count / (windowMs / 1000);
+}
+
+/** 0 is absent, 1 is a strong run of reads (about 6 per second). */
+export function proximityLevel(rate: number): number {
+  if (!Number.isFinite(rate) || rate <= 0) return 0;
+  return Math.min(1, rate / 6);
+}
+
+/** Slow tick when the tag is quiet, fast tick when it is read often. */
+export function proximityGapMs(rate: number): number {
+  return Math.round(1100 - proximityLevel(rate) * 980);
+}
+
 export function trayCode(label: string | null | undefined): string | null {
   if (!label) return null;
   const trimmed = label.trim();

@@ -23,6 +23,8 @@ export function stocktakeMuted(): boolean {
   }
 }
 
+export const STOCKTAKE_MUTE_EVENT = "vault-stocktake-mute";
+
 export function setStocktakeMuted(muted: boolean): void {
   if (typeof window === "undefined") return;
   try {
@@ -30,6 +32,7 @@ export function setStocktakeMuted(muted: boolean): void {
   } catch {
     /* private mode */
   }
+  window.dispatchEvent(new Event(STOCKTAKE_MUTE_EVENT));
 }
 
 /** Call from a click or tap. Safe to call again. */

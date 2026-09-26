@@ -1676,6 +1676,7 @@ export async function getStocktakeReport(
       price: money(piece?.retail_price),
       lastSeen: lastSeen(source.pieceId, expected),
       epcTail: epcTail(source.epc || expected?.snapshot_epc || null),
+      epc: (source.epc || expected?.snapshot_epc || "").trim().toLowerCase() || null,
       locationLabel: snapshotLocation || source.locationLabel,
       detail: source.detail,
       resolution: expected?.resolution ?? null,

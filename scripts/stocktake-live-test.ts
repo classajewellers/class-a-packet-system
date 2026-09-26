@@ -3,7 +3,8 @@
  * Run: npx tsx scripts/stocktake-live-test.ts
  */
 import assert from "node:assert/strict";
-import { classifyRead, expectedEpcSet, liveProgress, trayCode } from "../lib/stocktake-live.ts";
+import { classifyRead, expectedEpcSet, liveProgress, proximityGapMs, readsPerSecond, trayCode } from "../lib/stocktake-live.ts";
+import { epcsFromLines } from "../lib/rfid-scan.ts";
 import { assembleStocktake, type SnapshotPiece, type StocktakePayload } from "../lib/rfid-stocktake.ts";
 
 const epc = (n: number) => n.toString(16).padStart(24, "0");
@@ -83,5 +84,14 @@ assert.equal(heard.stillToFind.some((row) => row.pieceId === "p1"), false);
 const again = liveProgress(payload, new Set(["p1"]));
 assert.equal(classifyRead(epc(1), new Set([epc(1)]), expected), "repeat");
 assert.equal(again.found, 1);
+
+const now = 10_000;
+assert.equal(readsPerSecond([], now), 0);
+assert.equal(readsPerSecond([now - 100, now - 200, now - 400], now), 2);
+assert.equal(readsPerSecond([now - 5000, now - 100], now), 1 / 1.5);
+assert.ok(proximityGapMs(0) > proximityGapMs(2));
+assert.ok(proximityGapMs(2) > proximityGapMs(8));
+const repeated = epcsFromLines([epc(1), epc(1), epc(2)]);
+assert.deepEqual(repeated, [epc(1), epc(1), epc(2)]);
 
 console.log("stocktake-live-test: ok");

@@ -109,6 +109,15 @@ export function parseScanLine(line: string): ParsedScanLine {
   return { epcs, sku: sku || null };
 }
 
+/** Every EPC in order, including the same tag read again on a later line. */
+export function epcsFromLines(lines: string[]): string[] {
+  const epcs: string[] = [];
+  for (const line of lines) {
+    for (const epc of parseScanLine(line).epcs) epcs.push(epc);
+  }
+  return epcs;
+}
+
 /** Parse complete lines, lowercase EPCs, and drop duplicates. */
 export function parseScanLines(lines: string[]): { epcs: string[]; skus: string[] } {
   const epcs: string[] = [];

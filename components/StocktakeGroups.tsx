@@ -67,6 +67,7 @@ export function StocktakeGroupsView({
   allowSeen,
   seeingId,
   onSeen,
+  onFind,
 }: {
   groups: StocktakeGroups;
   counts: StocktakeCounts;
@@ -77,6 +78,7 @@ export function StocktakeGroupsView({
   allowSeen?: boolean;
   seeingId?: string | null;
   onSeen?: (row: StocktakeRow, seen: boolean) => void;
+  onFind?: (row: StocktakeRow) => void;
 }) {
   const notTagged = groups.notTagged ?? [];
   const soldDuring = groups.soldDuring ?? [];
@@ -116,7 +118,16 @@ export function StocktakeGroupsView({
       )}
       <Group title="Missing" count={counts.missing}>
         {groups.missing.length === 0 && <Empty />}
-        {groups.missing.map((row) => <PieceRow key={row.key} row={row} extra="Expected, not scanned" />)}
+        {groups.missing.map((row) => (
+          <PieceRow
+            key={row.key}
+            row={row}
+            extra="Expected, not scanned"
+            action={onFind && row.epc ? (
+              <button type="button" onClick={() => onFind(row)} style={moveButton}>Find this ring</button>
+            ) : null}
+          />
+        ))}
       </Group>
       {notTagged.length > 0 && (
         <Group title="Not tagged" count={notTagged.length}>

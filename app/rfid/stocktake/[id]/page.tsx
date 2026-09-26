@@ -10,6 +10,8 @@ import { useScanBatch } from "@/lib/useRfidScan";
 import { absorbStocktakeScans, applyUntaggedSeen, formatStocktakeCounts, type SnapshotPiece, type StocktakePayload, type StoredLine, type StocktakeRow } from "@/lib/rfid-stocktake";
 import { StocktakeGroupsView } from "@/components/StocktakeGroups";
 import { StocktakeLiveCount } from "@/components/StocktakeLiveCount";
+import { StocktakeFinder } from "@/components/StocktakeFinder";
+import { trayCode } from "@/lib/stocktake-live";
 import { beepFound, primeStocktakeAudio } from "@/lib/stocktake-audio";
 import { classifyRead, expectedEpcSet } from "@/lib/stocktake-live";
 
@@ -39,9 +41,11 @@ export default function StocktakeCountPage() {
   const [heard, setHeard] = useState<Set<string>>(() => new Set());
   const [flash, setFlash] = useState(false);
   const [toast, setToast] = useState("");
+  const [finder, setFinder] = useState<StocktakeRow | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const payloadRef = useRef<StocktakePayload | null>(null);
   const heardRef = useRef<Set<string>>(new Set());
+  const finderRef = useRef<StocktakeRow | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/rfid/stocktake/${id}`);
@@ -146,12 +150,26 @@ export default function StocktakeCountPage() {
       heardRef.current = next;
       return next;
     });
+    if (finderRef.current) return;
     setFlash(true);
     window.setTimeout(() => setFlash(false), 700);
     const names = newly.slice(0, 3).map((piece) => piece.sku || "Piece");
     setToast(newly.length > 3 ? `${names.join(", ")} +${newly.length - 3}` : names.join(", "));
     window.setTimeout(() => setToast(""), 1600);
     newly.forEach((_, index) => { window.setTimeout(() => beepFound(), index * 80); });
+  }
+
+  function openFinder(row: StocktakeRow) {
+    if (!row.epc) return;
+    primeStocktakeAudio();
+    finderRef.current = row;
+    setFinder(row);
+  }
+
+  function closeFinder() {
+    finderRef.current = null;
+    setFinder(null);
+    window.setTimeout(() => inputRef.current?.focus(), 0);
   }
 
   function ingest(value: string) {
@@ -322,6 +340,7 @@ export default function StocktakeCountPage() {
             ingest(`${draft}\n`);
           }}
           onBlur={(event) => {
+            if (finderRef.current) return;
             const next = event.relatedTarget as HTMLElement | null;
             if (next?.closest("a, button")) return;
             window.setTimeout(() => inputRef.current?.focus(), 0);
@@ -408,6 +427,7 @@ export default function StocktakeCountPage() {
           allowMove={open}
           movingId={movingId}
           onMoveHere={(row) => { setPendingMove(row); setMoveTargetId(""); }}
+          onFind={openFinder}
         />
       )}
       {payload && !wholeShop && !Array.isArray(payload.snapshot) && (
@@ -421,6 +441,17 @@ export default function StocktakeCountPage() {
           allowSeen={open}
           seeingId={seeingId}
           onSeen={(row, seen) => { void markSeen(row, seen); }}
+          onFind={openFinder}
+        />
+      )}
+      {finder?.epc && (
+        <StocktakeFinder
+          sku={finder.sku || "—"}
+          pieceId={finder.pieceId || ""}
+          epc={finder.epc}
+          tray={session?.kind === "zone" ? trayCode(finder.snapshotLocationLabel) : null}
+          onScan={(epc) => { noteFresh(pushTokens([epc]).epcs); }}
+          onClose={closeFinder}
         />
       )}
       {open && !confirming && !childOfShop && (

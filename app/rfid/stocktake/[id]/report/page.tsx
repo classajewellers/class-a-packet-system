@@ -12,6 +12,9 @@ import {
   type ReportPiece,
   type StocktakeReport,
 } from "@/lib/rfid-stocktake";
+import { trayCode } from "@/lib/stocktake-live";
+import { primeStocktakeAudio } from "@/lib/stocktake-audio";
+import { StocktakeFinder } from "@/components/StocktakeFinder";
 
 function when(iso: string | null): string {
   if (!iso) return "—";
@@ -29,6 +32,7 @@ export default function StocktakeReportPage() {
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [locations, setLocations] = useState<Record<string, string>>({});
+  const [finder, setFinder] = useState<ReportPiece | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/rfid/stocktake/${id}/report`);
@@ -102,6 +106,7 @@ export default function StocktakeReportPage() {
                       locations={report.locations}
                       onLocation={(value) => setLocations((prev) => ({ ...prev, [first.pieceId]: value }))}
                       onResolve={(resolution) => { void resolve(first, resolution); }}
+                      onFind={() => { primeStocktakeAudio(); setFinder(first); }}
                     />
                   )}
                 </div>
@@ -115,8 +120,9 @@ export default function StocktakeReportPage() {
                     locationValue={locations[piece.pieceId] ?? ""}
                     locations={report.locations}
                     onLocation={(value) => setLocations((prev) => ({ ...prev, [piece.pieceId]: value }))}
-                    onResolve={(resolution) => { void resolve(piece, resolution); }}
-                  />
+                      onResolve={(resolution) => { void resolve(piece, resolution); }}
+                      onFind={() => { primeStocktakeAudio(); setFinder(piece); }}
+                    />
                 ))}
               </section>
             );
@@ -142,6 +148,15 @@ export default function StocktakeReportPage() {
           </section>
         </>
       )}
+      {finder?.epc && (
+        <StocktakeFinder
+          sku={finder.sku}
+          pieceId={finder.pieceId}
+          epc={finder.epc}
+          tray={trayCode(finder.locationLabel)}
+          onClose={() => setFinder(null)}
+        />
+      )}
       <style>{`
         .stocktake-report { max-width: 800px; margin: 0 auto; color: #111827; overflow-x: hidden; }
         .stocktake-report * { box-sizing: border-box; }
@@ -165,6 +180,7 @@ function MissingPiece({
   locations,
   onLocation,
   onResolve,
+  onFind,
 }: {
   piece: ReportPiece;
   manager: boolean;
@@ -174,6 +190,7 @@ function MissingPiece({
   locations: { id: string; label: string }[];
   onLocation: (value: string) => void;
   onResolve: (resolution: "found" | "still_missing") => void;
+  onFind: () => void;
 }) {
   return (
     <article className="report-piece" style={pieceCard}>
@@ -192,6 +209,11 @@ function MissingPiece({
         <span style={tick} /> Found
         <span style={{ ...tick, marginLeft: 16 }} /> Still missing
       </div>
+      {piece.epc && (
+        <button type="button" className="no-print" onClick={onFind} style={{ ...secondaryButton, marginTop: 8 }}>
+          Find this ring
+        </button>
+      )}
       {manager && finished && (
         <div className="no-print" style={{ marginTop: 10 }}>
           <label style={{ display: "block", fontSize: 13, color: "#374151", marginBottom: 4 }} htmlFor={`loc-${piece.pieceId}`}>

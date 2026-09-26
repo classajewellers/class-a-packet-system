@@ -138,6 +138,7 @@ export type ReportPiece = {
   price: string | null;
   lastSeen: string | null;
   epcTail: string | null;
+  epc: string | null;
   locationLabel: string;
   detail: string | null;
   resolution: "found" | "still_missing" | null;
