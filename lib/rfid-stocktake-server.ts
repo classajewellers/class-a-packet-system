@@ -2221,10 +2221,12 @@ export async function createWholeShopStocktake(
 export type ZoneAdmin = {
   zones: {
     id: string;
+    code: string | null;
+    name: string;
     label: string;
-    locations: { id: string; label: string }[];
+    locations: { id: string; code: string | null; name: string; label: string }[];
   }[];
-  unassigned: { id: string; label: string }[];
+  unassigned: { id: string; code: string | null; name: string; label: string }[];
   neighbours: { zoneAId: string; zoneBId: string; label: string }[];
 };
 
@@ -2236,10 +2238,22 @@ export async function getZoneAdmin(
   if (!catalogue.ok) return catalogue;
   const zones = catalogue.zones.filter((zone) => zone.active).map((zone) => ({
     id: zone.id,
+    code: zone.code,
+    name: zone.name,
     label: zone.label,
-    locations: catalogue.trays.filter((tray) => tray.zoneId === zone.id).map((tray) => ({ id: tray.id, label: tray.label })),
+    locations: catalogue.trays.filter((tray) => tray.zoneId === zone.id).map((tray) => ({
+      id: tray.id,
+      code: tray.code,
+      name: tray.name,
+      label: tray.label,
+    })),
   }));
-  const unassigned = catalogue.trays.filter((tray) => tray.active && !tray.zoneId).map((tray) => ({ id: tray.id, label: tray.label }));
+  const unassigned = catalogue.trays.filter((tray) => tray.active && !tray.zoneId).map((tray) => ({
+    id: tray.id,
+    code: tray.code,
+    name: tray.name,
+    label: tray.label,
+  }));
   const nameById = new Map<string, string>();
   for (const zone of catalogue.zones) nameById.set(zone.id, zone.label);
   const neighbours = catalogue.neighbours.map((pair) => ({
