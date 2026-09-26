@@ -36,6 +36,37 @@ function asText(value: unknown): string | null {
   return trimmed || null;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A real uuid. The strings "null" and "undefined" are not uuids. */
+export function isUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID_RE.test(value.trim());
+}
+
+/** Drop nulls and the literal strings "null" / "undefined" before an .in() or .eq(). */
+export function uuidIds(values: readonly unknown[]): string[] {
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const value of values) {
+    if (!isUuid(value)) continue;
+    const id = value.trim();
+    const key = id.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    ids.push(id);
+  }
+  return ids;
+}
+
+function locationLabel(row: { name?: unknown; code?: unknown; active?: unknown }, markHidden: boolean): string {
+  const label = formatLocationLabel({
+    name: typeof row.name === "string" ? row.name : null,
+    code: typeof row.code === "string" ? row.code : null,
+  });
+  if (markHidden && row.active === false) return label ? `${label} (hidden)` : "Hidden location";
+  return label;
+}
+
 function normalise(row: Record<string, unknown>, assumeActive: boolean): LoadedLocation {
   return {
     id: String(row.id),
@@ -71,19 +102,21 @@ export async function loadLocations(
 export async function loadLocationLabels(
   supabase: SupabaseClient,
   tenantId: string,
-  ids: string[],
+  ids: readonly unknown[],
+  options?: { markHidden?: boolean },
 ): Promise<Map<string, string>> {
-  const unique = Array.from(new Set(ids.filter(Boolean)));
+  const unique = uuidIds(ids);
   const map = new Map<string, string>();
   if (!unique.length) return map;
+  const markHidden = options?.markHidden === true;
 
   const full = await tenantScoped(supabase, tenantId)
     .from("inventory_locations")
-    .select("id, name, code")
+    .select(markHidden ? "id, name, code, active" : "id, name, code")
     .in("id", unique);
   if (!full.error) {
     for (const row of full.data ?? []) {
-      map.set(String(row.id), formatLocationLabel({ name: row.name, code: row.code }));
+      map.set(String(row.id), locationLabel(row, markHidden));
     }
     return map;
   }
@@ -95,7 +128,7 @@ export async function loadLocationLabels(
     .in("id", unique);
   if (base.error) throw new Error(base.error.message);
   for (const row of base.data ?? []) {
-    map.set(String(row.id), formatLocationLabel({ name: row.name, code: null }));
+    map.set(String(row.id), locationLabel({ ...row, code: null }, false));
   }
   return map;
 }

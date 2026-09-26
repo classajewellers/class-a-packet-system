@@ -9,7 +9,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { tenantScoped } from "@/lib/tenantScoped";
 import { applyHandheldTagReads } from "@/lib/rfid-tag-read";
-import { loadLocationLabels, loadLocations } from "@/lib/load-locations";
+import { isUuid, loadLocationLabels, loadLocations, uuidIds } from "@/lib/load-locations";
 import { formatLocationLabel, locationsForPicker } from "@/lib/location-label";
 import { movePieceToLocation } from "@/lib/move-piece-location";
 import {
@@ -165,8 +165,8 @@ function schemaOrMessage(error: { code?: string; message?: string } | null): { s
   return { schema: false, message: error.message ?? "Stocktake failed" };
 }
 
-async function nameMap(supabase: SupabaseClient, tenantId: string, ids: string[]): Promise<Map<string, string>> {
-  const unique = Array.from(new Set(ids.filter(Boolean)));
+async function nameMap(supabase: SupabaseClient, tenantId: string, ids: readonly unknown[]): Promise<Map<string, string>> {
+  const unique = uuidIds(ids);
   const map = new Map<string, string>();
   if (!unique.length) return map;
   const { data } = await tenantScoped(supabase, tenantId)
@@ -180,9 +180,9 @@ async function nameMap(supabase: SupabaseClient, tenantId: string, ids: string[]
   return map;
 }
 
-async function loadPieces(supabase: SupabaseClient, tenantId: string, ids: string[]): Promise<Map<string, PieceRow>> {
+async function loadPieces(supabase: SupabaseClient, tenantId: string, ids: readonly unknown[]): Promise<Map<string, PieceRow>> {
   const map = new Map<string, PieceRow>();
-  const unique = Array.from(new Set(ids.filter(Boolean)));
+  const unique = uuidIds(ids);
   if (!unique.length) return map;
   const { data, error } = await tenantScoped(supabase, tenantId)
     .from("inventory_pieces")
@@ -193,8 +193,8 @@ async function loadPieces(supabase: SupabaseClient, tenantId: string, ids: strin
   return map;
 }
 
-async function locationNames(supabase: SupabaseClient, tenantId: string, ids: string[]): Promise<Map<string, string>> {
-  return loadLocationLabels(supabase, tenantId, ids);
+async function locationNames(supabase: SupabaseClient, tenantId: string, ids: readonly unknown[]): Promise<Map<string, string>> {
+  return loadLocationLabels(supabase, tenantId, ids, { markHidden: true });
 }
 
 async function liveExpected(
@@ -202,6 +202,7 @@ async function liveExpected(
   tenantId: string,
   locationId: string,
 ): Promise<PieceRow[]> {
+  if (!isUuid(locationId)) return [];
   const { data, error } = await tenantScoped(supabase, tenantId)
     .from("inventory_pieces")
     .select(PIECE_COLUMNS)
@@ -513,18 +514,18 @@ export type ListedStocktake = StocktakeSession & { counts: StocktakeCounts };
 export async function listStocktakes(
   supabase: SupabaseClient,
   tenantId: string,
-): Promise<{ ok: true; stocktakes: ListedStocktake[] } | { ok: false; status: number; error: string; schema?: boolean }> {
+): Promise<{ ok: true; stocktakes: ListedStocktake[]; warning: string | null } | { ok: false; status: number; error: string; schema?: boolean }> {
   const listed = await querySessions(supabase, tenantId);
   if (!listed.ok) return listed;
   const sessions = listed.rows.filter((row) => !row.parent_session_id);
-  if (!sessions.length) return { ok: true, stocktakes: [] };
+  if (!sessions.length) return { ok: true, stocktakes: [], warning: null };
 
-  const ids = sessions.map((row) => String(row.id));
-  const openLocationIds = Array.from(new Set(
+  const ids = uuidIds(sessions.map((row) => row.id));
+  const openLocationIds = uuidIds(
     sessions
-      .filter((row) => asStatus(row.status) === "in_progress" && row.kind === "location" && row.location_id)
-      .map((row) => row.location_id as string),
-  ));
+      .filter((row) => asStatus(row.status) === "in_progress" && row.kind === "location")
+      .map((row) => row.location_id),
+  );
   const pieceQuery = openLocationIds.length
     ? tenantScoped(supabase, tenantId)
       .from("inventory_pieces")
@@ -533,11 +534,12 @@ export async function listStocktakes(
       .in("location_id", openLocationIds)
     : Promise.resolve({ data: [] as { id: string; location_id: string }[], error: null });
 
-  let scanData: { session_id: string; id: string; epc: string; piece_id: string | null; result_group: string }[];
-  let pieceData: { id: string; location_id: string }[];
-  let names: Map<string, string>;
-  let people: Map<string, string>;
+  let scanData: { session_id: string; id: string; epc: string; piece_id: string | null; result_group: string }[] = [];
+  let pieceData: { id: string; location_id: string }[] = [];
+  let names = new Map<string, string>();
+  let people = new Map<string, string>();
   let expectedAvailable = true;
+  const warnings: string[] = [];
   let expectedData: {
     session_id: string;
     piece_id: string;
@@ -547,42 +549,42 @@ export async function listStocktakes(
     resolution: "found" | "still_missing" | null;
     resolved_location_id: string | null;
   }[] = [];
-  try {
-    const [scanResult, pieceResult, nameResult, peopleResult, expectedResult] = await Promise.all([
-      tenantScoped(supabase, tenantId)
+  const [scanResult, pieceResult, nameResult, peopleResult, expectedResult] = await Promise.all([
+    ids.length
+      ? tenantScoped(supabase, tenantId)
         .from("stocktake_scans")
         .select("id, session_id, epc, piece_id, result_group")
-        .in("session_id", ids),
-      pieceQuery,
-      locationNames(supabase, tenantId, sessions.map((row) => String(row.location_id))),
-      nameMap(
-        supabase,
-        tenantId,
-        sessions.flatMap((row) => [row.started_by, row.finished_by].filter((id): id is string => typeof id === "string")),
-      ),
-      tenantScoped(supabase, tenantId)
+        .in("session_id", ids)
+      : Promise.resolve({ data: [], error: null }),
+    pieceQuery,
+    locationNames(supabase, tenantId, sessions.map((row) => row.location_id)).catch((err: unknown) => {
+      warnings.push(err instanceof Error ? err.message : "Could not load locations");
+      return new Map<string, string>();
+    }),
+    nameMap(supabase, tenantId, sessions.flatMap((row) => [row.started_by, row.finished_by])).catch((err: unknown) => {
+      warnings.push(err instanceof Error ? err.message : "Could not load names");
+      return new Map<string, string>();
+    }),
+    ids.length
+      ? tenantScoped(supabase, tenantId)
         .from("stocktake_expected")
         .select("session_id, piece_id, snapshot_epc, snapshot_location_id, seen_at, resolution, resolved_location_id")
-        .in("session_id", ids),
-    ]);
-    const scanFailed = schemaOrMessage(scanResult.error);
-    if (scanFailed) return { ok: false, status: scanFailed.schema ? 503 : 500, error: scanFailed.message, schema: scanFailed.schema };
-    if (pieceResult.error) return { ok: false, status: 500, error: pieceResult.error.message };
-    if (expectedResult.error) {
-      if (relationMissing(expectedResult.error, "stocktake_expected") || columnMissing(expectedResult.error, "snapshot_")) {
-        expectedAvailable = false;
-      } else {
-        return { ok: false, status: 500, error: expectedResult.error.message };
-      }
-    } else {
-      expectedData = expectedResult.data ?? [];
+        .in("session_id", ids)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (scanResult.error) warnings.push(scanResult.error.message);
+  else scanData = scanResult.data ?? [];
+  if (pieceResult.error) warnings.push(pieceResult.error.message);
+  else pieceData = pieceResult.data ?? [];
+  names = nameResult;
+  people = peopleResult;
+  if (expectedResult.error) {
+    expectedAvailable = false;
+    if (!relationMissing(expectedResult.error, "stocktake_expected") && !columnMissing(expectedResult.error, "snapshot_")) {
+      warnings.push(expectedResult.error.message);
     }
-    scanData = scanResult.data ?? [];
-    pieceData = pieceResult.data ?? [];
-    names = nameResult;
-    people = peopleResult;
-  } catch (err) {
-    return { ok: false, status: 500, error: err instanceof Error ? err.message : "Could not load counts" };
+  } else {
+    expectedData = expectedResult.data ?? [];
   }
 
   const expectedBySession = new Map<string, ExpectedDbRow[]>();
@@ -615,7 +617,7 @@ export async function listStocktakes(
     try {
       livePieces = await loadPieces(supabase, tenantId, livePieceIds);
     } catch (err) {
-      return { ok: false, status: 500, error: err instanceof Error ? err.message : "Could not load counts" };
+      warnings.push(err instanceof Error ? err.message : "Could not load pieces");
     }
     const extraLocations: string[] = [];
     livePieces.forEach((piece) => {
@@ -652,8 +654,8 @@ export async function listStocktakes(
   let catalogue: ZoneCatalogue | null = null;
   if (sessions.some((row) => row.kind === "zone" || row.kind === "whole_shop")) {
     const loadedCatalogue = await loadZoneCatalogue(supabase, tenantId);
-    if (!loadedCatalogue.ok) return { ok: false, status: loadedCatalogue.schema ? 503 : 500, error: loadedCatalogue.error, schema: loadedCatalogue.schema };
-    catalogue = loadedCatalogue;
+    if (!loadedCatalogue.ok) warnings.push(loadedCatalogue.error);
+    else catalogue = loadedCatalogue;
   }
 
   const stocktakes: ListedStocktake[] = sessions.map((session) => {
@@ -662,7 +664,7 @@ export async function listStocktakes(
     const scans = scansBySession.get(id) ?? [];
     const scannedIds = scans.map((row) => row.piece_id);
     const expectedIds = status === "in_progress"
-      ? (expectedByLocation.get(String(session.location_id)) ?? [])
+      ? (session.location_id ? expectedByLocation.get(session.location_id) ?? [] : [])
       : uuidList(session.confirmed_missing_piece_ids);
     const missingIds = missingPieceIds(expectedIds, scannedIds);
     const lines = linesFromScans(scans, livePieces, names);
@@ -735,7 +737,7 @@ export async function listStocktakes(
     };
   });
 
-  return { ok: true, stocktakes };
+  return { ok: true, stocktakes, warning: warnings[0] ?? null };
 }
 
 async function openSession(
@@ -743,6 +745,7 @@ async function openSession(
   tenantId: string,
   locationId: string,
 ): Promise<{ ok: true; id: string | null; started_at: string | null } | { ok: false; status: number; error: string; schema?: boolean }> {
+  if (!isUuid(locationId)) return { ok: true, id: null, started_at: null };
   const { data, error } = await tenantScoped(supabase, tenantId)
     .from("stocktake_sessions")
     .select("id, started_at")
@@ -768,6 +771,7 @@ export async function createStocktake(
   | { ok: true; id: string; continued: boolean; started_at: string | null }
   | { ok: false; status: number; error: string; schema?: boolean }
 > {
+  if (!isUuid(locationId)) return { ok: false, status: 400, error: "Location not found" };
   const [locationResult, existing] = await Promise.all([
     tenantScoped(supabase, tenantId).from("inventory_locations").select("id").eq("id", locationId).maybeSingle(),
     openSession(supabase, tenantId, locationId),
@@ -1297,6 +1301,8 @@ export async function finishStocktake(
         });
         if (kind === "missing") confirmed.push(row.piece_id);
       }
+    } else if (!isUuid(locationId)) {
+      confirmed = missingPieceIds([], scanRows.map((row) => row.piece_id));
     } else {
       const { data: liveRows, error: liveErr } = await tenantScoped(supabase, tenantId)
         .from("inventory_pieces")
@@ -1562,11 +1568,8 @@ export async function getStocktakeReport(
     });
   }
 
-  const pieceIds = sources.map((item) => item.source.pieceId);
-  const tagIds: string[] = [];
-  for (const row of expectedRows) {
-    if (row.snapshot_rfid_tag_id) tagIds.push(row.snapshot_rfid_tag_id);
-  }
+  const pieceIds = uuidIds(sources.map((item) => item.source.pieceId));
+  const tagIds = uuidIds(expectedRows.map((row) => row.snapshot_rfid_tag_id));
   type PieceExtra = {
     id: string;
     sku: string | null;
@@ -1622,11 +1625,12 @@ export async function getStocktakeReport(
       tags.push({ ...row, id, inventory_piece_id: row.inventory_piece_id ? String(row.inventory_piece_id) : null });
     }
     people = peopleResult;
-    if (productIds.length) {
+    const productIdList = uuidIds(productIds);
+    if (productIdList.length) {
       const { data, error } = await tenantScoped(supabase, tenantId)
         .from("inventory_products")
         .select("id, name, description")
-        .in("id", productIds);
+        .in("id", productIdList);
       if (error) return { ok: false, status: 500, error: error.message };
       for (const row of data ?? []) {
         const name = asText(row.name) || asText(row.description);
@@ -2072,6 +2076,21 @@ async function cancelSession(
   return { ok: true };
 }
 
+export async function cancelStocktake(
+  supabase: SupabaseClient,
+  tenantId: string,
+  userId: string,
+  stocktakeId: string,
+): Promise<{ ok: true } | { ok: false; status: number; error: string; schema?: boolean }> {
+  if (!isUuid(stocktakeId)) return { ok: false, status: 404, error: "Count not found" };
+  const loaded = await loadSession(supabase, tenantId, stocktakeId);
+  if (!loaded.ok) return loaded;
+  if (loaded.session.status !== "in_progress") return { ok: false, status: 409, error: "This count is not open" };
+  const closed = await cancelSession(supabase, tenantId, userId, stocktakeId);
+  if (!closed.ok) return { ok: false, status: 500, error: closed.error };
+  return { ok: true };
+}
+
 export async function createZoneStocktake(
   supabase: SupabaseClient,
   tenantId: string,
@@ -2271,14 +2290,16 @@ export async function assignLocationZone(
   locationId: string,
   zoneId: string | null,
 ): Promise<{ ok: true } | { ok: false; status: number; error: string; schema?: boolean }> {
-  if (zoneId) {
+  if (!isUuid(locationId)) return { ok: false, status: 404, error: "Location not found" };
+  const zone = isUuid(zoneId) ? zoneId : null;
+  if (zone) {
     const catalogue = await loadZoneCatalogue(supabase, tenantId);
     if (!catalogue.ok) return catalogue;
-    if (!catalogue.zones.some((zone) => zone.id === zoneId)) return { ok: false, status: 404, error: "Zone not found" };
+    if (!catalogue.zones.some((item) => item.id === zone)) return { ok: false, status: 404, error: "Zone not found" };
   }
   const { data, error } = await tenantScoped(supabase, tenantId)
     .from("inventory_locations")
-    .update({ stocktake_zone_id: zoneId })
+    .update({ stocktake_zone_id: zone })
     .eq("id", locationId)
     .select("id");
   if (columnMissing(error, "stocktake_zone_id")) return { ok: false, status: 503, error: error?.message || "stocktake_zone_id", schema: true };
@@ -2294,7 +2315,7 @@ export async function addZoneNeighbour(
   zoneA: string,
   zoneB: string,
 ): Promise<{ ok: true } | { ok: false; status: number; error: string; schema?: boolean }> {
-  if (!zoneA || !zoneB || zoneA === zoneB) return { ok: false, status: 400, error: "Pick two different zones" };
+  if (!isUuid(zoneA) || !isUuid(zoneB) || zoneA === zoneB) return { ok: false, status: 400, error: "Pick two different zones" };
   const zoneAId = zoneA < zoneB ? zoneA : zoneB;
   const zoneBId = zoneA < zoneB ? zoneB : zoneA;
   const { error } = await tenantScoped(supabase, tenantId)
@@ -2312,6 +2333,7 @@ export async function removeZoneNeighbour(
   zoneA: string,
   zoneB: string,
 ): Promise<{ ok: true } | { ok: false; status: number; error: string; schema?: boolean }> {
+  if (!isUuid(zoneA) || !isUuid(zoneB)) return { ok: false, status: 400, error: "Pick two different zones" };
   const zoneAId = zoneA < zoneB ? zoneA : zoneB;
   const zoneBId = zoneA < zoneB ? zoneB : zoneA;
   const { error } = await tenantScoped(supabase, tenantId)

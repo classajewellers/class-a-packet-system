@@ -38,6 +38,8 @@ export default function StocktakeHomePage() {
   const [zones, setZones] = useState<ZoneChoice[]>([]);
   const [counts, setCounts] = useState<Listed[]>([]);
   const [error, setError] = useState("");
+  const [placeError, setPlaceError] = useState("");
+  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState("");
   const [selectedZoneId, setSelectedZoneId] = useState("");
   const [starting, setStarting] = useState(false);
@@ -48,10 +50,10 @@ export default function StocktakeHomePage() {
       .then(async (res) => {
         const json = await res.json().catch(() => ({}));
         if (cancelled) return;
-        if (!res.ok) setError(json.error || "Could not load locations");
+        if (!res.ok) setPlaceError(json.error || "Could not load locations");
         else setLocations(locationsForPicker((json.locations ?? []) as LocationRow[]));
       })
-      .catch(() => { if (!cancelled) setError("Could not load locations"); });
+      .catch(() => { if (!cancelled) setPlaceError("Could not load locations"); });
     void fetch("/api/rfid/stocktake/zones")
       .then(async (res) => {
         const json = await res.json().catch(() => ({}));
@@ -65,7 +67,10 @@ export default function StocktakeHomePage() {
         const json = await res.json().catch(() => ({}));
         if (cancelled) return;
         if (!res.ok) setError(json.error || "Could not load counts");
-        else setCounts(json.stocktakes ?? []);
+        else {
+          setCounts(json.stocktakes ?? []);
+          setError(typeof json.warning === "string" ? json.warning : "");
+        }
       })
       .catch(() => { if (!cancelled) setError("Could not load counts"); });
     return () => { cancelled = true; };
@@ -113,6 +118,26 @@ export default function StocktakeHomePage() {
     void startBody({ location_id: locationId, fresh });
   }
 
+  async function cancelCount(id: string) {
+    setStarting(true);
+    setError("");
+    const res = await fetch("/api/rfid/stocktake", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cancel_id: id }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(json.error || "Could not cancel the count");
+      setStarting(false);
+      return;
+    }
+    setCounts(json.stocktakes ?? []);
+    setError(typeof json.warning === "string" ? json.warning : "");
+    setConfirmCancelId(null);
+    setStarting(false);
+  }
+
   return (
     <div className="stocktake-page">
       <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: "0 0 8px" }}>Stocktake</h1>
@@ -135,6 +160,15 @@ export default function StocktakeHomePage() {
               )}
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
                 <Link href={`/rfid/stocktake/${row.id}`} style={{ ...linkButton, justifyContent: "center" }}>Continue</Link>
+                {confirmCancelId === row.id ? (
+                  <button type="button" disabled={starting} onClick={() => { void cancelCount(row.id); }} style={secondaryButton}>
+                    {starting ? "Cancelling…" : "Confirm cancel"}
+                  </button>
+                ) : (
+                  <button type="button" disabled={starting} onClick={() => setConfirmCancelId(row.id)} style={secondaryButton}>
+                    Cancel
+                  </button>
+                )}
                 {row.kind !== "whole_shop" && (
                   <button
                     type="button"
@@ -202,6 +236,7 @@ export default function StocktakeHomePage() {
       )}
 
       <h2 style={sectionTitle}>Start a count</h2>
+      {placeError && <p style={errorStyle}>{placeError}</p>}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {locations.map((location) => {
           const picked = location.id === selectedId;
@@ -217,7 +252,7 @@ export default function StocktakeHomePage() {
             </button>
           );
         })}
-        {locations.length === 0 && !error && <p style={{ color: "#6B7280", margin: 0 }}>No locations yet.</p>}
+        {locations.length === 0 && !placeError && <p style={{ color: "#6B7280", margin: 0 }}>No locations yet.</p>}
       </div>
       {selected && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
@@ -349,4 +384,4 @@ const cardLink: CSSProperties = {
   padding: "12px 14px",
   minHeight: 72,
 };
-const pageCss = `.stocktake-page { max-width: 720px; margin: 0 auto; overflow-x: hidden; }`;
+const pageCss = `.stocktake-page { max-width: 720px; margin: 0 auto; overflow-x: hidden; padding-bottom: 96px; }`;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, requireManager } from "@/lib/require-auth";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { STOCKTAKE_SETUP_MESSAGE } from "@/lib/rfid-stocktake";
+import { isUuid } from "@/lib/load-locations";
 import { addZoneNeighbour, assignLocationZone, getZoneAdmin, removeZoneNeighbour } from "@/lib/rfid-stocktake-server";
 
 export const dynamic = "force-dynamic";
@@ -31,19 +32,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const supabase = await createTenantSupabaseClient(auth.ctx.tenantId);
   const tenantId = auth.ctx.tenantId;
   if (action === "assign") {
-    const locationId = typeof body?.location_id === "string" ? body.location_id : "";
-    const zoneId = typeof body?.zone_id === "string" && body.zone_id ? body.zone_id : null;
+    const locationId = isUuid(body?.location_id) ? body.location_id : "";
+    const zoneId = isUuid(body?.zone_id) ? body.zone_id : null;
     if (!locationId) return NextResponse.json({ error: "location_id is required" }, { status: 400 });
     const result = await assignLocationZone(supabase, tenantId, locationId, zoneId);
     if (!result.ok) return fail(result);
   } else if (action === "add_neighbour") {
-    const zoneA = typeof body?.zone_a_id === "string" ? body.zone_a_id : "";
-    const zoneB = typeof body?.zone_b_id === "string" ? body.zone_b_id : "";
+    const zoneA = isUuid(body?.zone_a_id) ? body.zone_a_id : "";
+    const zoneB = isUuid(body?.zone_b_id) ? body.zone_b_id : "";
     const result = await addZoneNeighbour(supabase, tenantId, auth.ctx.userId, zoneA, zoneB);
     if (!result.ok) return fail(result);
   } else if (action === "remove_neighbour") {
-    const zoneA = typeof body?.zone_a_id === "string" ? body.zone_a_id : "";
-    const zoneB = typeof body?.zone_b_id === "string" ? body.zone_b_id : "";
+    const zoneA = isUuid(body?.zone_a_id) ? body.zone_a_id : "";
+    const zoneB = isUuid(body?.zone_b_id) ? body.zone_b_id : "";
     const result = await removeZoneNeighbour(supabase, tenantId, zoneA, zoneB);
     if (!result.ok) return fail(result);
   } else {
