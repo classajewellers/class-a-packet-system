@@ -2,7 +2,6 @@
 
 import type { CSSProperties } from "react";
 import {
-  DEFAULT_DPI,
   LABEL_LENGTH_MM,
   LABEL_WIDTH_MM,
   placeBack,
@@ -10,6 +9,7 @@ import {
   tagGeometry,
   type TagCopy,
 } from "@/lib/rfid-label";
+import { previewDpiCaption, UNKNOWN_PREVIEW_LAYOUT, type PreviewLayout } from "@/lib/rfid-preview-layout";
 
 type Props = {
   copy: TagCopy;
@@ -17,14 +17,28 @@ type Props = {
   error: string;
   onPrint: () => void;
   onCancel: () => void;
+  layout?: PreviewLayout | null;
 };
 
 /**
  * To-scale flag preview. Coordinates come from the same layout module as the ZPL.
- * 203 dpi is 8 dots per millimetre, which is the stored label and the Labelary check.
+ * DPI is the printer's reported head, or the bridge config override, when Vault
+ * has a printer check. Otherwise the caption stays "at 203 dpi".
  */
-export default function RfidTagPreview({ copy, printing, error, onPrint, onCancel }: Props) {
-  const geo = tagGeometry(DEFAULT_DPI);
+export default function RfidTagPreview({ copy, printing, error, onPrint, onCancel, layout }: Props) {
+  const resolved = layout ?? UNKNOWN_PREVIEW_LAYOUT;
+  const geo = tagGeometry(
+    resolved.dpi,
+    resolved.offsetXMm ?? 0,
+    resolved.offsetYMm ?? 0,
+    undefined,
+    resolved.lengthDots,
+    {
+      headLeftMm: resolved.headLeftMm,
+      headTopMm: resolved.headTopMm,
+      labelLengthMm: resolved.labelLengthMm,
+    },
+  );
   const front = placeFrontLines(geo.top, geo.dpi, copy);
   const back = placeBack(geo.bottom, geo.dpi, copy.sku);
   const headW = Math.max(1, geo.headRight - geo.headLeft);
@@ -41,7 +55,7 @@ export default function RfidTagPreview({ copy, printing, error, onPrint, onCance
       <div style={sheet}>
         <h2 style={{ margin: "0 0 4px", fontSize: 20 }}>Preview tag</h2>
         <p style={{ margin: "0 0 12px", fontSize: 13, color: "#6B7280" }}>
-          {LABEL_WIDTH_MM} × {LABEL_LENGTH_MM} mm at {DEFAULT_DPI} dpi. The tail is not printed.
+          {LABEL_WIDTH_MM} × {resolved.labelLengthMm ?? LABEL_LENGTH_MM} mm {previewDpiCaption(resolved)}. The tail is not printed.
         </p>
         <svg
           viewBox={`0 0 ${geo.labelWidth} ${geo.labelLength}`}

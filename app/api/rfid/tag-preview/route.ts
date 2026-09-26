@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/require-auth";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { tenantScoped } from "@/lib/tenantScoped";
 import { loadTagCopy } from "@/lib/rfid-tag-copy";
+import { previewLayoutFromCheck, UNKNOWN_PREVIEW_LAYOUT } from "@/lib/rfid-preview-layout";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -28,9 +29,27 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!piece) return NextResponse.json({ error: "Piece not found" }, { status: 404 });
 
+  let layout = UNKNOWN_PREVIEW_LAYOUT;
+  const { data: printer, error: printerErr } = await tenantScoped(supabase, tenantId)
+    .from("rfid_printers")
+    .select("last_check, head_dpi")
+    .eq("is_active", true)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (printerErr && !/last_check|head_dpi|column/i.test(printerErr.message)) {
+    console.warn("[rfid/tag-preview] printer check lookup failed:", printerErr.message);
+  }
+  if (!printerErr && printer) {
+    layout = previewLayoutFromCheck(
+      (printer as { last_check?: unknown }).last_check,
+      (printer as { head_dpi?: unknown }).head_dpi,
+    );
+  }
+
   try {
     const copy = await loadTagCopy(supabase, tenantId, pieceId, piece);
-    return NextResponse.json({ copy });
+    return NextResponse.json({ copy, layout });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Could not load the tag" },

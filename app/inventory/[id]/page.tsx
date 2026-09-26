@@ -13,6 +13,7 @@ import { FALLBACK_STATUS_OPTIONS } from "@/lib/pieceResolution";
 import { formatLocationLabel, locationsForPicker } from "@/lib/location-label";
 import RfidTagPreview from "@/components/RfidTagPreview";
 import type { TagCopy } from "@/lib/rfid-label";
+import type { PreviewLayout } from "@/lib/rfid-preview-layout";
 import {
   ArrowLeft, Edit2, Save, X, ArrowRight,
   Lock, AlertTriangle, TrendingDown, Package, MapPin, Clock, DollarSign, Bookmark, BookmarkX,
@@ -265,7 +266,7 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
   const [printing, setPrinting]       = useState(false);
   const [confirming, setConfirming]   = useState(false);
   const [actionError, setActionError] = useState("");
-  const [preview, setPreview]         = useState<{ replace: boolean; copy: TagCopy | null; loading: boolean } | null>(null);
+  const [preview, setPreview]         = useState<{ replace: boolean; copy: TagCopy | null; layout?: PreviewLayout | null; loading: boolean } | null>(null);
   const [pollTimer, setPollTimer]     = useState<ReturnType<typeof setInterval> | null>(null);
 
   const fetchRfid = useCallback(async () => {
@@ -335,7 +336,7 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
         setPreview(null);
         return;
       }
-      setPreview({ replace, copy: data.copy, loading: false });
+      setPreview({ replace, copy: data.copy, layout: data.layout ?? null, loading: false });
     } catch {
       setActionError("Could not preview the tag");
       setPreview(null);
@@ -483,6 +484,7 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
       {preview?.copy && (
         <RfidTagPreview
           copy={preview.copy}
+          layout={preview.layout}
           printing={printing}
           error={actionError}
           onCancel={() => { if (!printing) setPreview(null); }}
