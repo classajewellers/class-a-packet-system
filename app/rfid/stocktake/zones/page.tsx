@@ -22,6 +22,13 @@ function mirrorsOnlyLocation(zone: Zone): boolean {
   return zone.locations.length === 1 && samePlace(zone, zone.locations[0]);
 }
 
+/** This row's own mirrored zone reads "Own zone" so the name is not repeated. */
+function zoneOptionLabel(option: Zone, location: Place): string {
+  const only = option.locations.length === 1 ? option.locations[0] : null;
+  if (only && only.id === location.id && samePlace(option, location)) return "Own zone";
+  return option.label;
+}
+
 function trayCount(count: number): string {
   return count === 1 ? "1 tray" : `${count} trays`;
 }
@@ -193,7 +200,7 @@ function LocationRow({
         >
           <option value="">No zone</option>
           {zones.map((option) => (
-            <option key={option.id} value={option.id}>{option.label}</option>
+            <option key={option.id} value={option.id}>{zoneOptionLabel(option, location)}</option>
           ))}
         </select>
       </div>
