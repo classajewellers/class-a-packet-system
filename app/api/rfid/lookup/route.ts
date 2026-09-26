@@ -45,6 +45,7 @@ function piecePayload(row: PieceRow, locationName: string | null) {
     metal: metalOf(row),
     retail_price: priceOf(row),
     status: statusOf(row),
+    location_id: typeof row.location_id === "string" ? row.location_id : null,
     location_name: locationName,
   };
 }
