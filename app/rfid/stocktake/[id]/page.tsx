@@ -5,9 +5,13 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
-import { RFID_LOOKUP_DEBOUNCE_MS, parseScanLines, splitScanBuffer } from "@/lib/rfid-scan";
-import { absorbStocktakeScans, applyUntaggedSeen, formatStocktakeCounts, type StocktakePayload, type StoredLine, type StocktakeRow } from "@/lib/rfid-stocktake";
+import { splitScanBuffer } from "@/lib/rfid-scan";
+import { useScanBatch } from "@/lib/useRfidScan";
+import { absorbStocktakeScans, applyUntaggedSeen, formatStocktakeCounts, type SnapshotPiece, type StocktakePayload, type StoredLine, type StocktakeRow } from "@/lib/rfid-stocktake";
 import { StocktakeGroupsView } from "@/components/StocktakeGroups";
+import { StocktakeLiveCount } from "@/components/StocktakeLiveCount";
+import { beepFound, primeStocktakeAudio } from "@/lib/stocktake-audio";
+import { classifyRead, expectedEpcSet } from "@/lib/stocktake-live";
 
 function when(iso: string | null): string {
   if (!iso) return "—";
@@ -32,26 +36,12 @@ export default function StocktakeCountPage() {
   const [seeingId, setSeeingId] = useState<string | null>(null);
   const [startingFresh, setStartingFresh] = useState(false);
   const [draft, setDraft] = useState("");
+  const [heard, setHeard] = useState<Set<string>>(() => new Set());
+  const [flash, setFlash] = useState(false);
+  const [toast, setToast] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const seenEpcs = useRef(new Set<string>());
-  const seenSkus = useRef(new Set<string>());
-  const queue = useRef<{ epcs: string[]; skus: string[] }>({ epcs: [], skus: [] });
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const flushing = useRef(false);
-
-  const remember = useCallback((next: StocktakePayload) => {
-    const scanned = [
-      ...next.groups.found,
-      ...next.groups.elsewhere,
-      ...next.groups.notInStock,
-      ...next.groups.unknown,
-      ...next.groups.blank,
-    ];
-    for (const row of scanned) {
-      if (row.epc) seenEpcs.current.add(row.epc);
-      if (row.sku) seenSkus.current.add(row.sku.toLowerCase());
-    }
-  }, []);
+  const payloadRef = useRef<StocktakePayload | null>(null);
+  const heardRef = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/rfid/stocktake/${id}`);
@@ -60,19 +50,14 @@ export default function StocktakeCountPage() {
       setError(json.error || "Could not open this count");
       return;
     }
-    remember(json);
+    payloadRef.current = json;
     setPayload(json);
-  }, [id, remember]);
+  }, [id]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { inputRef.current?.focus(); }, [payload?.stocktake.status]);
 
-  const flush = useCallback(async () => {
-    if (flushing.current) return;
-    const epcs = queue.current.epcs.splice(0, 200);
-    const skus = queue.current.skus.splice(0, Math.max(0, 200 - epcs.length));
-    if (!epcs.length && !skus.length) return;
-    flushing.current = true;
+  const { pushTokens, remember } = useScanBatch(async ({ epcs, skus }) => {
     try {
       const res = await fetch(`/api/rfid/stocktake/${id}/scans`, {
         method: "POST",
@@ -82,57 +67,96 @@ export default function StocktakeCountPage() {
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || "Could not save the scan");
       const added = (json.added ?? []) as StoredLine[];
-      for (const line of added) {
-        if (line.epc) seenEpcs.current.add(line.epc);
-        if (line.sku) seenSkus.current.add(line.sku.toLowerCase());
-      }
-      let merged = false;
       setPayload((prev) => {
-        if (!prev) return prev;
-        merged = true;
-        return absorbStocktakeScans(prev, added, json.warnings ?? []);
+        const next = prev ? absorbStocktakeScans(prev, added, json.warnings ?? []) : prev;
+        payloadRef.current = next;
+        return next;
       });
-      if (!merged) await load();
+      setHeard((prev) => {
+        const next = new Set(prev);
+        for (const line of added) {
+          if (line.pieceId) next.delete(line.pieceId);
+        }
+        heardRef.current = next;
+        return next;
+      });
       setError("");
     } catch (err) {
-      for (const epc of epcs) seenEpcs.current.delete(epc);
-      for (const sku of skus) seenSkus.current.delete(sku.toLowerCase());
+      const snap = payloadRef.current?.snapshot ?? [];
+      const byEpc = new Map<string, string>();
+      for (const piece of snap) {
+        if (piece.epc) byEpc.set(piece.epc.toLowerCase(), piece.pieceId);
+      }
+      setHeard((prev) => {
+        const next = new Set(prev);
+        for (const epc of epcs) {
+          const pieceId = byEpc.get(epc);
+          if (pieceId) next.delete(pieceId);
+        }
+        heardRef.current = next;
+        return next;
+      });
       setError(err instanceof Error ? err.message : "Could not save the scan");
-    } finally {
-      flushing.current = false;
-      if (queue.current.epcs.length || queue.current.skus.length) {
-        timer.current = setTimeout(() => { void flush(); }, RFID_LOOKUP_DEBOUNCE_MS);
+      throw err;
+    }
+  }, { releaseOnError: true });
+
+  useEffect(() => {
+    if (!payload) return;
+    const epcs: string[] = [];
+    const skus: string[] = [];
+    const groups = [
+      payload.groups.found,
+      payload.groups.wrongTray ?? [],
+      payload.groups.nearby ?? [],
+      payload.groups.elsewhere,
+      payload.groups.notInStock,
+      payload.groups.unknown,
+      payload.groups.blank,
+    ];
+    for (const rows of groups) {
+      for (const row of rows) {
+        if (row.epc) epcs.push(row.epc);
+        if (row.sku) skus.push(row.sku);
       }
     }
-  }, [id, remember]);
+    remember(epcs, skus);
+  }, [payload, remember]);
 
-  function schedule() {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => { void flush(); }, RFID_LOOKUP_DEBOUNCE_MS);
-  }
-
-  function pushLines(lines: string[]) {
-    const parsed = parseScanLines(lines);
-    let queued = false;
-    for (const epc of parsed.epcs) {
-      if (seenEpcs.current.has(epc)) continue;
-      seenEpcs.current.add(epc);
-      queue.current.epcs.push(epc);
-      queued = true;
+  function noteFresh(epcs: string[]) {
+    const current = payloadRef.current;
+    if (!current?.snapshot || !epcs.length) return;
+    const byEpc = new Map<string, SnapshotPiece>();
+    for (const piece of current.snapshot) {
+      if (piece.epc) byEpc.set(piece.epc.toLowerCase(), piece);
     }
-    for (const sku of parsed.skus) {
-      const key = sku.toLowerCase();
-      if (seenSkus.current.has(key)) continue;
-      seenSkus.current.add(key);
-      queue.current.skus.push(sku);
-      queued = true;
+    const expected = expectedEpcSet(current.snapshot);
+    const missing = new Set(current.groups.missing.map((row) => row.pieceId).filter((pieceId): pieceId is string => !!pieceId));
+    const newly: SnapshotPiece[] = [];
+    for (const epc of epcs) {
+      if (classifyRead(epc, new Set(), expected) !== "new") continue;
+      const piece = byEpc.get(epc);
+      if (!piece || !missing.has(piece.pieceId) || heardRef.current.has(piece.pieceId)) continue;
+      newly.push(piece);
     }
-    if (queued) schedule();
+    if (!newly.length) return;
+    setHeard((prev) => {
+      const next = new Set(prev);
+      for (const piece of newly) next.add(piece.pieceId);
+      heardRef.current = next;
+      return next;
+    });
+    setFlash(true);
+    window.setTimeout(() => setFlash(false), 700);
+    const names = newly.slice(0, 3).map((piece) => piece.sku || "Piece");
+    setToast(newly.length > 3 ? `${names.join(", ")} +${newly.length - 3}` : names.join(", "));
+    window.setTimeout(() => setToast(""), 1600);
+    newly.forEach((_, index) => { window.setTimeout(() => beepFound(), index * 80); });
   }
 
   function ingest(value: string) {
     const { complete, rest } = splitScanBuffer(value);
-    if (complete.length) pushLines(complete);
+    if (complete.length) noteFresh(pushTokens(complete).epcs);
     setDraft(rest);
   }
 
@@ -187,7 +211,7 @@ export default function StocktakeCountPage() {
       setError(json.error || "Could not finish the count");
       return;
     }
-    remember(json);
+    payloadRef.current = json;
     setPayload(json);
     setConfirming(false);
     router.push(`/rfid/stocktake/${id}/report`);
@@ -226,6 +250,7 @@ export default function StocktakeCountPage() {
     <div
       className="stocktake-page"
       onPointerDown={(event) => {
+        primeStocktakeAudio();
         const target = event.target as HTMLElement | null;
         if (target?.closest("a, button, textarea")) return;
         inputRef.current?.focus();
@@ -370,7 +395,22 @@ export default function StocktakeCountPage() {
           </div>
         </div>
       )}
-      {payload && !wholeShop && (
+      {payload && !wholeShop && Array.isArray(payload.snapshot) && (
+        <StocktakeLiveCount
+          payload={payload}
+          heardPieceIds={heard}
+          zoneCount={session?.kind === "zone"}
+          flash={flash}
+          toast={toast}
+          allowSeen={open}
+          seeingId={seeingId}
+          onSeen={(row, seen) => { void markSeen(row, seen); }}
+          allowMove={open}
+          movingId={movingId}
+          onMoveHere={(row) => { setPendingMove(row); setMoveTargetId(""); }}
+        />
+      )}
+      {payload && !wholeShop && !Array.isArray(payload.snapshot) && (
         <StocktakeGroupsView
           groups={payload.groups}
           counts={payload.counts}
@@ -392,7 +432,7 @@ export default function StocktakeCountPage() {
           <p style={{ marginTop: 20, color: "#4B5563", fontSize: 15 }}>A manager finishes the count.</p>
         )
       )}
-      <style>{`.stocktake-page { max-width: 720px; margin: 0 auto; overflow-x: hidden; } .stocktake-skel { background: #E5E7EB; border-radius: 10px; animation: stocktake-pulse 1.2s ease-in-out infinite; } @keyframes stocktake-pulse { 50% { opacity: 0.45; } }`}</style>
+      <style>{`.stocktake-page { max-width: 720px; margin: 0 auto; overflow-x: hidden; padding-bottom: 96px; } .stocktake-skel { background: #E5E7EB; border-radius: 10px; animation: stocktake-pulse 1.2s ease-in-out infinite; } @keyframes stocktake-pulse { 50% { opacity: 0.45; } }`}</style>
     </div>
   );
 }

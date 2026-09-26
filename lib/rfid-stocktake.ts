@@ -531,7 +531,7 @@ function storedFromGroup(rows: StocktakeRow[] | undefined, result: StoredResult)
   }));
 }
 
-function linesFromGroups(groups: StocktakeGroups): StoredLine[] {
+export function linesFromGroups(groups: StocktakeGroups): StoredLine[] {
   return [
     ...storedFromGroup(groups.found, "found"),
     ...storedFromGroup(groups.wrongTray, "wrong_tray"),
