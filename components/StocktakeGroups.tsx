@@ -2,7 +2,7 @@
 
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { FALLBACK_STATUS_OPTIONS } from "@/lib/pieceResolution";
-import { formatNotTaggedSummary, formatStocktakeCounts, type StocktakeCounts, type StocktakeGroups, type StocktakeRow } from "@/lib/rfid-stocktake";
+import { formatNotTaggedSummary, formatResolvedSummary, formatStocktakeCounts, type StocktakeCounts, type StocktakeGroups, type StocktakeRow } from "@/lib/rfid-stocktake";
 
 function statusLabel(value: string | null): string {
   if (!value) return "";
@@ -93,6 +93,11 @@ export function StocktakeGroupsView({
       {notTaggedLine && (
         <div style={{ fontSize: 15, fontWeight: 700, color: "#111827", lineHeight: 1.4, marginTop: 4 }}>
           {notTaggedLine}
+        </div>
+      )}
+      {formatResolvedSummary(counts) && (
+        <div style={{ fontSize: 15, fontWeight: 700, color: "#111827", lineHeight: 1.4, marginTop: 4 }}>
+          {formatResolvedSummary(counts)}
         </div>
       )}
       <Group title="Found" count={counts.found}>

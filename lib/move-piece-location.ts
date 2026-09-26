@@ -21,6 +21,7 @@ export type MovePieceResult =
       sku: string | null;
       fromLocationId: string | null;
       fromLocationName: string | null;
+      movementId: string | null;
     }
   | { ok: false; status: number; error: string };
 
@@ -49,10 +50,10 @@ export async function movePieceToLocation(
   const fromLocationName = fromLocationId ? labels.get(fromLocationId) ?? null : null;
 
   if (fromLocationId === input.toLocationId) {
-    return { ok: true, action: "already", pieceId: input.pieceId, sku, fromLocationId, fromLocationName };
+    return { ok: true, action: "already", pieceId: input.pieceId, sku, fromLocationId, fromLocationName, movementId: null };
   }
 
-  const { error: movErr } = await tenantScoped(supabase, tenantId)
+  const { data: movement, error: movErr } = await tenantScoped(supabase, tenantId)
     .from("inventory_movements")
     .insert({
       piece_id: input.pieceId,
@@ -61,7 +62,9 @@ export async function movePieceToLocation(
       moved_by: input.movedBy,
       notes: input.notes,
       moved_at: new Date().toISOString(),
-    });
+    })
+    .select("id")
+    .single();
   if (movErr) return { ok: false, status: 500, error: movErr.message };
 
   const { error: updateErr } = await tenantScoped(supabase, tenantId)
@@ -70,5 +73,13 @@ export async function movePieceToLocation(
     .eq("id", input.pieceId);
   if (updateErr) return { ok: false, status: 500, error: updateErr.message };
 
-  return { ok: true, action: "moved", pieceId: input.pieceId, sku, fromLocationId, fromLocationName };
+  return {
+    ok: true,
+    action: "moved",
+    pieceId: input.pieceId,
+    sku,
+    fromLocationId,
+    fromLocationName,
+    movementId: movement?.id ? String(movement.id) : null,
+  };
 }

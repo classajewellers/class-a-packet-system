@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
@@ -186,6 +187,7 @@ export default function StocktakeCountPage() {
     remember(json);
     setPayload(json);
     setConfirming(false);
+    router.push(`/rfid/stocktake/${id}/report`);
   }
 
   const session = payload?.stocktake;
@@ -242,14 +244,21 @@ export default function StocktakeCountPage() {
         </p>
       )}
       {session && session.status !== "in_progress" && (
-        <button
-          type="button"
-          onClick={() => { void startNewHere(); }}
-          disabled={startingFresh}
-          style={{ ...primaryButton, width: "100%", marginBottom: 12 }}
-        >
-          {startingFresh ? "Starting…" : "Start new count here"}
-        </button>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+          {session.status === "completed" && (
+            <Link href={`/rfid/stocktake/${id}/report`} style={{ ...primaryButton, display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}>
+              Report
+            </Link>
+          )}
+          <button
+            type="button"
+            onClick={() => { void startNewHere(); }}
+            disabled={startingFresh}
+            style={{ ...primaryButton, width: "100%", background: session.status === "completed" ? "#fff" : "#111827", color: session.status === "completed" ? "#111827" : "#fff", border: "1px solid #111827" }}
+          >
+            {startingFresh ? "Starting…" : "Start new count here"}
+          </button>
+        </div>
       )}
       {error && <p style={{ background: "#FEF2F2", color: "#991B1B", borderRadius: 10, padding: "12px 14px" }}>{error}</p>}
       {payload?.warnings?.map((warning) => (

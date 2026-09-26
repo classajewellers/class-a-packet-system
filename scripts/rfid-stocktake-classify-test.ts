@@ -208,6 +208,8 @@ function snap(partial: Partial<SnapshotPiece> & Pick<SnapshotPiece, "pieceId">):
     liveLocationLabel: "HA1 · Horseshoe A1",
     seenAt: null,
     seenByName: null,
+    resolution: null,
+    resolvedLocationId: null,
     ...partial,
   };
 }
@@ -229,6 +231,9 @@ assert.equal(classifySnapshotRow({
 assert.equal(classifySnapshotRow({
   snapshotEpc: "abc", snapshotLocationId: ha1, liveStatus: "in_stock", liveLocationId: ha3, scanned: true,
 }), "moved");
+assert.equal(classifySnapshotRow({
+  snapshotEpc: "abc", snapshotLocationId: ha1, liveStatus: "in_stock", liveLocationId: ha3, scanned: false, resolvedLocationId: ha3,
+}), "missing");
 
 const foundLine: StoredLine = {
   id: "scan-ring-1",

@@ -9,7 +9,9 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { tenantScoped } from "@/lib/tenantScoped";
 import { applyHandheldTagReads } from "@/lib/rfid-tag-read";
-import { loadLocationLabels } from "@/lib/load-locations";
+import { loadLocationLabels, loadLocations } from "@/lib/load-locations";
+import { formatLocationLabel, locationsForPicker } from "@/lib/location-label";
+import { movePieceToLocation } from "@/lib/move-piece-location";
 import {
   IN_STOCK_STATUS,
   assembleStocktake,
@@ -23,9 +25,11 @@ import {
   preferredTagEpc,
   type ExpectedPiece,
   type PlannedLine,
+  type ReportPiece,
   type SnapshotPiece,
   type StocktakeCounts,
   type StocktakePayload,
+  type StocktakeReport,
   type StocktakeSession,
   type StocktakeStatus,
   type StoredLine,
@@ -62,12 +66,18 @@ type ExpectedDbRow = {
   snapshot_status: string;
   snapshot_sku: string;
   snapshot_epc: string | null;
+  snapshot_rfid_tag_id: string | null;
   seen_by: string | null;
   seen_at: string | null;
+  resolution: "found" | "still_missing" | null;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  resolved_location_id: string | null;
+  resolution_movement_id: string | null;
 };
 
 const SESSION_COLUMNS = "id, status, location_id, started_at, finished_at, started_by, finished_by, confirmed_missing_piece_ids";
-const EXPECTED_COLUMNS = "piece_id, snapshot_location_id, snapshot_status, snapshot_sku, snapshot_epc, seen_by, seen_at";
+const EXPECTED_COLUMNS = "piece_id, snapshot_location_id, snapshot_status, snapshot_sku, snapshot_epc, snapshot_rfid_tag_id, seen_by, seen_at, resolution, resolved_by, resolved_at, resolved_location_id, resolution_movement_id";
 
 type ScanRow = {
   id: string;
@@ -271,9 +281,15 @@ async function loadExpected(
     ...row,
     piece_id: String(row.piece_id),
     snapshot_epc: row.snapshot_epc ? String(row.snapshot_epc).toLowerCase() : null,
+    snapshot_rfid_tag_id: row.snapshot_rfid_tag_id ? String(row.snapshot_rfid_tag_id) : null,
     seen_by: row.seen_by ? String(row.seen_by) : null,
     seen_at: row.seen_at ? String(row.seen_at) : null,
     snapshot_location_id: row.snapshot_location_id ? String(row.snapshot_location_id) : null,
+    resolution: row.resolution === "found" || row.resolution === "still_missing" ? row.resolution : null,
+    resolved_by: row.resolved_by ? String(row.resolved_by) : null,
+    resolved_at: row.resolved_at ? String(row.resolved_at) : null,
+    resolved_location_id: row.resolved_location_id ? String(row.resolved_location_id) : null,
+    resolution_movement_id: row.resolution_movement_id ? String(row.resolution_movement_id) : null,
   })) };
 }
 
@@ -398,6 +414,8 @@ export async function getStocktake(
         liveLocationLabel: liveLocationId ? names.get(liveLocationId) ?? null : null,
         seenAt: row.seen_at,
         seenByName: row.seen_by ? people.get(row.seen_by) ?? null : null,
+        resolution: row.resolution,
+        resolvedLocationId: row.resolved_location_id,
       };
     });
     view = assembleStocktake({ lines, countLocationId, snapshot, v1Missing: [] });
@@ -472,6 +490,8 @@ export async function listStocktakes(
     snapshot_epc: string | null;
     snapshot_location_id: string | null;
     seen_at: string | null;
+    resolution: "found" | "still_missing" | null;
+    resolved_location_id: string | null;
   }[] = [];
   try {
     const [scanResult, pieceResult, nameResult, peopleResult, expectedResult] = await Promise.all([
@@ -488,7 +508,7 @@ export async function listStocktakes(
       ),
       tenantScoped(supabase, tenantId)
         .from("stocktake_expected")
-        .select("session_id, piece_id, snapshot_epc, snapshot_location_id, seen_at")
+        .select("session_id, piece_id, snapshot_epc, snapshot_location_id, seen_at, resolution, resolved_location_id")
         .in("session_id", ids),
     ]);
     const scanFailed = schemaOrMessage(scanResult.error);
@@ -521,8 +541,14 @@ export async function listStocktakes(
       snapshot_status: IN_STOCK_STATUS,
       snapshot_sku: "",
       snapshot_epc: row.snapshot_epc ? String(row.snapshot_epc).toLowerCase() : null,
+      snapshot_rfid_tag_id: null,
       seen_by: null,
       seen_at: row.seen_at ? String(row.seen_at) : null,
+      resolution: row.resolution === "found" || row.resolution === "still_missing" ? row.resolution : null,
+      resolved_by: null,
+      resolved_at: null,
+      resolved_location_id: row.resolved_location_id ? String(row.resolved_location_id) : null,
+      resolution_movement_id: null,
     });
     expectedBySession.set(sessionId, list);
   }
@@ -598,6 +624,8 @@ export async function listStocktakes(
           liveLocationLabel: liveLocationId ? names.get(liveLocationId) ?? null : null,
           seenAt: row.seen_at,
           seenByName: null,
+          resolution: row.resolution,
+          resolvedLocationId: row.resolved_location_id,
         };
       });
       view = assembleStocktake({
@@ -1095,6 +1123,7 @@ export async function finishStocktake(
           liveStatus: piece ? asText(piece.status) : null,
           liveLocationId: piece ? asText(piece.location_id) : null,
           scanned: scanned.has(row.piece_id),
+          resolvedLocationId: row.resolved_location_id,
         });
         if (kind === "missing") confirmed.push(row.piece_id);
       }
@@ -1206,6 +1235,365 @@ export async function setExpectedSeen(
     seenAt: data[0].seen_at ? String(data[0].seen_at) : seenAt,
     seenByName,
   };
+}
+
+function epcTail(epc: string | null): string | null {
+  if (!epc) return null;
+  const clean = epc.trim();
+  if (!clean) return null;
+  return clean.slice(-6).toUpperCase();
+}
+
+function money(value: unknown): string | null {
+  if (value == null || value === "") return null;
+  const amount = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(amount)) return null;
+  return new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(amount);
+}
+
+function stocktakeDay(iso: string | null): string {
+  const date = iso ? new Date(iso) : new Date();
+  const when = Number.isNaN(date.getTime()) ? new Date() : date;
+  return when.toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "Australia/Adelaide",
+  });
+}
+
+type ReportSource = {
+  pieceId: string;
+  sku: string | null;
+  metal: string | null;
+  epc: string | null;
+  detail: string | null;
+  locationLabel: string;
+};
+
+export async function getStocktakeReport(
+  supabase: SupabaseClient,
+  tenantId: string,
+  stocktakeId: string,
+): Promise<{ ok: true; report: StocktakeReport } | { ok: false; status: number; error: string; schema?: boolean }> {
+  const loaded = await getStocktake(supabase, tenantId, stocktakeId);
+  if (!loaded.ok) return loaded;
+  const payload = loaded.payload;
+  let expectedRows: ExpectedDbRow[] = [];
+  try {
+    const expected = await loadExpected(supabase, tenantId, stocktakeId);
+    expectedRows = expected.rows;
+  } catch (err) {
+    return { ok: false, status: 500, error: err instanceof Error ? err.message : "Could not load the report" };
+  }
+  const byPiece = new Map<string, ExpectedDbRow>();
+  for (const row of expectedRows) byPiece.set(row.piece_id, row);
+
+  const sources: { section: "missing" | "untagged" | "sold" | "moved"; source: ReportSource }[] = [];
+  const countLocation = payload.stocktake.location_name || "Location";
+  for (const row of payload.groups.missing) {
+    if (!row.pieceId) continue;
+    const expected = byPiece.get(row.pieceId);
+    sources.push({
+      section: "missing",
+      source: {
+        pieceId: row.pieceId,
+        sku: row.sku,
+        metal: row.metal,
+        epc: expected?.snapshot_epc ?? row.epc,
+        detail: row.detail ?? null,
+        locationLabel: (expected?.snapshot_location_id && payload.stocktake.location_name) || countLocation,
+      },
+    });
+  }
+  for (const row of payload.groups.notTagged) {
+    if (!row.pieceId || row.seenAt) continue;
+    sources.push({
+      section: "untagged",
+      source: {
+        pieceId: row.pieceId,
+        sku: row.sku,
+        metal: row.metal,
+        epc: null,
+        detail: null,
+        locationLabel: countLocation,
+      },
+    });
+  }
+  for (const row of payload.groups.soldDuring) {
+    if (!row.pieceId) continue;
+    sources.push({
+      section: "sold",
+      source: {
+        pieceId: row.pieceId,
+        sku: row.sku,
+        metal: row.metal,
+        epc: row.epc,
+        detail: row.detail ?? null,
+        locationLabel: countLocation,
+      },
+    });
+  }
+  for (const row of payload.groups.movedDuring) {
+    if (!row.pieceId) continue;
+    sources.push({
+      section: "moved",
+      source: {
+        pieceId: row.pieceId,
+        sku: row.sku,
+        metal: row.metal,
+        epc: row.epc,
+        detail: row.detail ?? null,
+        locationLabel: row.locationName || countLocation,
+      },
+    });
+  }
+
+  const pieceIds = sources.map((item) => item.source.pieceId);
+  const tagIds: string[] = [];
+  for (const row of expectedRows) {
+    if (row.snapshot_rfid_tag_id) tagIds.push(row.snapshot_rfid_tag_id);
+  }
+  type PieceExtra = {
+    id: string;
+    sku: string | null;
+    product_id: string | null;
+    retail_price: number | string | null;
+    metal_karat: string | null;
+    metal_colour: string | null;
+  };
+  type TagExtra = { id: string; inventory_piece_id: string | null; epc: string | null; status: string | null; last_seen_at: string | null };
+  let pieces = new Map<string, PieceExtra>();
+  let tags: TagExtra[] = [];
+  let productNames = new Map<string, string>();
+  let people = new Map<string, string>();
+  try {
+    const personIds: string[] = [];
+    for (const row of expectedRows) {
+      if (row.resolved_by) personIds.push(row.resolved_by);
+    }
+    const [pieceResult, tagByPiece, tagById, peopleResult] = await Promise.all([
+      pieceIds.length
+        ? tenantScoped(supabase, tenantId)
+          .from("inventory_pieces")
+          .select("id, sku, product_id, retail_price, metal_karat, metal_colour")
+          .in("id", pieceIds)
+        : Promise.resolve({ data: [], error: null }),
+      pieceIds.length
+        ? tenantScoped(supabase, tenantId)
+          .from("inventory_rfid_tags")
+          .select("id, inventory_piece_id, epc, status, last_seen_at")
+          .in("inventory_piece_id", pieceIds)
+        : Promise.resolve({ data: [], error: null }),
+      tagIds.length
+        ? tenantScoped(supabase, tenantId)
+          .from("inventory_rfid_tags")
+          .select("id, inventory_piece_id, epc, status, last_seen_at")
+          .in("id", tagIds)
+        : Promise.resolve({ data: [], error: null }),
+      nameMap(supabase, tenantId, personIds),
+    ]);
+    if (pieceResult.error) return { ok: false, status: 500, error: pieceResult.error.message };
+    if (tagByPiece.error) return { ok: false, status: 500, error: tagByPiece.error.message };
+    if (tagById.error) return { ok: false, status: 500, error: tagById.error.message };
+    const productIds: string[] = [];
+    for (const row of (pieceResult.data ?? []) as PieceExtra[]) {
+      pieces.set(String(row.id), row);
+      if (row.product_id) productIds.push(String(row.product_id));
+    }
+    const seenTags = new Set<string>();
+    for (const row of [...(tagById.data ?? []), ...(tagByPiece.data ?? [])] as TagExtra[]) {
+      const id = String(row.id);
+      if (seenTags.has(id)) continue;
+      seenTags.add(id);
+      tags.push({ ...row, id, inventory_piece_id: row.inventory_piece_id ? String(row.inventory_piece_id) : null });
+    }
+    people = peopleResult;
+    if (productIds.length) {
+      const { data, error } = await tenantScoped(supabase, tenantId)
+        .from("inventory_products")
+        .select("id, name, description")
+        .in("id", productIds);
+      if (error) return { ok: false, status: 500, error: error.message };
+      for (const row of data ?? []) {
+        const name = asText(row.name) || asText(row.description);
+        if (name) productNames.set(String(row.id), name);
+      }
+    }
+  } catch (err) {
+    return { ok: false, status: 500, error: err instanceof Error ? err.message : "Could not load the report" };
+  }
+
+  const locationIds: string[] = [];
+  for (const row of expectedRows) {
+    if (row.snapshot_location_id) locationIds.push(row.snapshot_location_id);
+    if (row.resolved_location_id) locationIds.push(row.resolved_location_id);
+  }
+  let labels = new Map<string, string>();
+  try {
+    labels = await locationNames(supabase, tenantId, locationIds);
+  } catch (err) {
+    return { ok: false, status: 500, error: err instanceof Error ? err.message : "Could not load the report" };
+  }
+
+  function lastSeen(pieceId: string, expected: ExpectedDbRow | undefined): string | null {
+    if (expected?.snapshot_rfid_tag_id) {
+      const tag = tags.find((item) => item.id === expected.snapshot_rfid_tag_id);
+      return tag?.last_seen_at ? String(tag.last_seen_at) : null;
+    }
+    const pieceTags = tags.filter((item) => item.inventory_piece_id === pieceId);
+    const best = preferredTag(pieceTags.map((item) => ({ id: item.id, epc: item.epc || "", status: item.status || "" })));
+    if (!best) return null;
+    const tag = pieceTags.find((item) => (item.epc || "").toLowerCase() === best.epc);
+    return tag?.last_seen_at ? String(tag.last_seen_at) : null;
+  }
+
+  function toReport(source: ReportSource): ReportPiece {
+    const expected = byPiece.get(source.pieceId);
+    const piece = pieces.get(source.pieceId);
+    const description = piece?.product_id ? productNames.get(piece.product_id) ?? null : null;
+    const metal = [asText(piece?.metal_karat), asText(piece?.metal_colour)].filter(Boolean).join(" ") || source.metal;
+    const snapshotLocation = expected?.snapshot_location_id ? labels.get(expected.snapshot_location_id) ?? null : null;
+    const resolvedLocation = expected?.resolved_location_id ? labels.get(expected.resolved_location_id) ?? null : null;
+    return {
+      pieceId: source.pieceId,
+      sku: asText(source.sku) || asText(piece?.sku) || asText(expected?.snapshot_sku) || "—",
+      description,
+      metal,
+      price: money(piece?.retail_price),
+      lastSeen: lastSeen(source.pieceId, expected),
+      epcTail: epcTail(source.epc || expected?.snapshot_epc || null),
+      locationLabel: snapshotLocation || source.locationLabel,
+      detail: source.detail,
+      resolution: expected?.resolution ?? null,
+      resolvedByName: expected?.resolved_by ? people.get(expected.resolved_by) ?? null : null,
+      resolvedAt: expected?.resolved_at ?? null,
+      resolvedLocationLabel: resolvedLocation,
+    };
+  }
+
+  const missingPieces = sources.filter((item) => item.section === "missing").map((item) => toReport(item.source));
+  const grouped = new Map<string, ReportPiece[]>();
+  for (const piece of missingPieces) {
+    const list = grouped.get(piece.locationLabel) ?? [];
+    list.push(piece);
+    grouped.set(piece.locationLabel, list);
+  }
+  const missingByLocation: { location: string; pieces: ReportPiece[] }[] = [];
+  grouped.forEach((groupPieces, location) => missingByLocation.push({ location, pieces: groupPieces }));
+
+  let locations: { id: string; label: string }[] = [];
+  try {
+    const loadedLocations = await loadLocations(supabase, tenantId);
+    locations = locationsForPicker(loadedLocations.locations).map((location) => ({
+      id: location.id,
+      label: formatLocationLabel(location),
+    }));
+  } catch {
+    locations = [];
+  }
+
+  return {
+    ok: true,
+    report: {
+      stocktake: payload.stocktake,
+      counts: payload.counts,
+      missingByLocation,
+      notTaggedUnchecked: sources.filter((item) => item.section === "untagged").map((item) => toReport(item.source)),
+      soldDuring: sources.filter((item) => item.section === "sold").map((item) => toReport(item.source)),
+      movedDuring: sources.filter((item) => item.section === "moved").map((item) => toReport(item.source)),
+      locations,
+      usesSnapshot: !!payload.snapshot,
+    },
+  };
+}
+
+export async function resolveExpectedPiece(
+  supabase: SupabaseClient,
+  tenantId: string,
+  userId: string,
+  stocktakeId: string,
+  pieceId: string,
+  resolution: "found" | "still_missing",
+  locationId: string | null,
+): Promise<{ ok: true } | { ok: false; status: number; error: string; schema?: boolean }> {
+  const loaded = await loadSession(supabase, tenantId, stocktakeId);
+  if (!loaded.ok) return loaded;
+  if (loaded.session.status !== "completed") {
+    return { ok: false, status: 409, error: "Finish the count before resolving missing pieces" };
+  }
+  let expected: { available: boolean; rows: ExpectedDbRow[] };
+  try {
+    expected = await loadExpected(supabase, tenantId, stocktakeId);
+  } catch (err) {
+    return { ok: false, status: 500, error: err instanceof Error ? err.message : "Could not resolve the piece" };
+  }
+  if (!expected.available) return { ok: false, status: 503, error: "stocktake_expected", schema: true };
+  const row = expected.rows.find((item) => item.piece_id === pieceId);
+  if (!row) return { ok: false, status: 404, error: "That piece is not on this count" };
+  if (!row.snapshot_epc) return { ok: false, status: 400, error: "Untagged pieces are checked with Seen" };
+
+  let live: PieceRow | undefined;
+  let scanned = false;
+  try {
+    const [pieces, scans] = await Promise.all([
+      loadPieces(supabase, tenantId, [pieceId]),
+      tenantScoped(supabase, tenantId).from("stocktake_scans").select("piece_id").eq("session_id", stocktakeId).eq("piece_id", pieceId),
+    ]);
+    live = pieces.get(pieceId);
+    if (scans.error) return { ok: false, status: 500, error: scans.error.message };
+    scanned = (scans.data ?? []).length > 0;
+  } catch (err) {
+    return { ok: false, status: 500, error: err instanceof Error ? err.message : "Could not resolve the piece" };
+  }
+  const kind = classifySnapshotRow({
+    snapshotEpc: row.snapshot_epc,
+    snapshotLocationId: row.snapshot_location_id,
+    liveStatus: live ? asText(live.status) : null,
+    liveLocationId: live ? asText(live.location_id) : null,
+    scanned,
+    resolvedLocationId: row.resolved_location_id,
+  });
+  if (kind !== "missing") return { ok: false, status: 409, error: "That piece is not on the missing list" };
+
+  let movementId: string | null = null;
+  let resolvedLocationId: string | null = row.resolved_location_id;
+  if (resolution === "found" && locationId) {
+    const moved = await movePieceToLocation(supabase, tenantId, {
+      pieceId,
+      toLocationId: locationId,
+      movedBy: userId,
+      notes: `Found after stocktake ${stocktakeDay(loaded.session.finished_at)}`,
+    });
+    if (!moved.ok) return { ok: false, status: moved.status, error: moved.error };
+    movementId = moved.movementId;
+    resolvedLocationId = locationId;
+  } else if (resolution === "found") {
+    resolvedLocationId = null;
+  }
+
+  const patch: {
+    resolution: "found" | "still_missing";
+    resolved_by: string;
+    resolved_at: string;
+    resolved_location_id?: string | null;
+    resolution_movement_id?: string;
+  } = {
+    resolution,
+    resolved_by: userId,
+    resolved_at: new Date().toISOString(),
+  };
+  if (resolution === "found") patch.resolved_location_id = resolvedLocationId;
+  if (movementId) patch.resolution_movement_id = movementId;
+  const { data, error } = await tenantScoped(supabase, tenantId)
+    .from("stocktake_expected")
+    .update(patch)
+    .eq("session_id", stocktakeId)
+    .eq("piece_id", pieceId)
+    .select("piece_id");
+  if (error) return { ok: false, status: 500, error: error.message };
+  if (!data?.length) return { ok: false, status: 404, error: "That piece is not on this count" };
+  return { ok: true };
 }
 
 export { normaliseCodes };

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatLocationLabel, locationsForPicker, type LocationFields } from "@/lib/location-label";
-import { formatNotTaggedSummary, formatStocktakeCounts, type StocktakeCounts, type StocktakeSession } from "@/lib/rfid-stocktake";
+import { formatNotTaggedSummary, formatResolvedSummary, formatStocktakeCounts, type StocktakeCounts, type StocktakeSession } from "@/lib/rfid-stocktake";
 
 type LocationRow = LocationFields & { id: string; name: string };
 type Listed = StocktakeSession & { counts: StocktakeCounts };
@@ -180,19 +180,29 @@ function History({ title, rows, empty }: { title: string; rows: Listed[]; empty:
       {rows.length === 0 && <p style={{ color: "#6B7280", margin: 0 }}>{empty}</p>}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {rows.map((row) => (
-          <Link key={row.id} href={`/rfid/stocktake/${row.id}`} style={cardLink}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{row.location_name || "Location"}</div>
-            <div style={{ fontSize: 13, color: "#4B5563", marginTop: 4 }}>
-              {when(row.started_at)}
-              {row.started_by_name ? ` · ${row.started_by_name}` : ""}
-              {row.status === "completed" && row.finished_by_name ? ` · Finished by ${row.finished_by_name}` : ""}
-              {row.status === "cancelled" ? " · Cancelled" : ""}
-            </div>
-            <div style={{ fontSize: 13, color: "#374151", marginTop: 6 }}>{formatStocktakeCounts(row.counts)}</div>
-            {formatNotTaggedSummary(row.counts) && (
-              <div style={{ fontSize: 13, color: "#374151", marginTop: 4 }}>{formatNotTaggedSummary(row.counts)}</div>
+          <div key={row.id} style={cardLink}>
+            <Link href={`/rfid/stocktake/${row.id}`} style={{ textDecoration: "none", color: "inherit" }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{row.location_name || "Location"}</div>
+              <div style={{ fontSize: 13, color: "#4B5563", marginTop: 4 }}>
+                {when(row.started_at)}
+                {row.started_by_name ? ` · ${row.started_by_name}` : ""}
+                {row.status === "completed" && row.finished_by_name ? ` · Finished by ${row.finished_by_name}` : ""}
+                {row.status === "cancelled" ? " · Cancelled" : ""}
+              </div>
+              <div style={{ fontSize: 13, color: "#374151", marginTop: 6 }}>{formatStocktakeCounts(row.counts)}</div>
+              {formatNotTaggedSummary(row.counts) && (
+                <div style={{ fontSize: 13, color: "#374151", marginTop: 4 }}>{formatNotTaggedSummary(row.counts)}</div>
+              )}
+              {formatResolvedSummary(row.counts) && (
+                <div style={{ fontSize: 13, color: "#374151", marginTop: 4 }}>{formatResolvedSummary(row.counts)}</div>
+              )}
+            </Link>
+            {row.status === "completed" && (
+              <Link href={`/rfid/stocktake/${row.id}/report`} style={{ ...linkButton, marginTop: 10, justifyContent: "center", background: "#fff", color: "#111827", border: "1px solid #111827" }}>
+                Report
+              </Link>
             )}
-          </Link>
+          </div>
         ))}
       </div>
     </section>

@@ -344,6 +344,20 @@ html, body {
   animation: contentFadeIn .25s ease;
 }
 
+.print-only { display: none; }
+@page { size: A4; margin: 16mm; }
+@media print {
+  .app-shell, .app-main, .app-content {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  .app-shell > aside, .app-main > header, .no-print { display: none !important; }
+  .app-content { padding: 0 !important; }
+  .print-only { display: inline !important; }
+}
+
 @media (max-width: 767px) {
   .app-content {
     padding: 16px 16px 80px;

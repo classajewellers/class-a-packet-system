@@ -26,6 +26,8 @@ export type StocktakeCounts = {
   notTaggedUnchecked: number;
   soldDuring: number;
   movedDuring: number;
+  resolvedFound: number;
+  resolvedMissing: number;
 };
 
 export type ExpectedPiece = {
@@ -88,6 +90,8 @@ export type SnapshotPiece = {
   liveLocationLabel: string | null;
   seenAt: string | null;
   seenByName: string | null;
+  resolution: "found" | "still_missing" | null;
+  resolvedLocationId: string | null;
 };
 
 export type SnapshotKind = "sold" | "moved" | "untagged" | "missing" | "in_count";
@@ -101,6 +105,33 @@ export type StocktakeSession = {
   finished_at: string | null;
   started_by_name: string | null;
   finished_by_name: string | null;
+};
+
+export type ReportPiece = {
+  pieceId: string;
+  sku: string;
+  description: string | null;
+  metal: string | null;
+  price: string | null;
+  lastSeen: string | null;
+  epcTail: string | null;
+  locationLabel: string;
+  detail: string | null;
+  resolution: "found" | "still_missing" | null;
+  resolvedByName: string | null;
+  resolvedAt: string | null;
+  resolvedLocationLabel: string | null;
+};
+
+export type StocktakeReport = {
+  stocktake: StocktakeSession;
+  counts: StocktakeCounts;
+  missingByLocation: { location: string; pieces: ReportPiece[] }[];
+  notTaggedUnchecked: ReportPiece[];
+  soldDuring: ReportPiece[];
+  movedDuring: ReportPiece[];
+  locations: { id: string; label: string }[];
+  usesSnapshot: boolean;
 };
 
 export type StocktakePayload = {
@@ -180,9 +211,12 @@ export function classifySnapshotRow(row: {
   liveStatus: string | null;
   liveLocationId: string | null;
   scanned: boolean;
+  resolvedLocationId?: string | null;
 }): SnapshotKind {
   if (row.liveStatus && row.liveStatus !== IN_STOCK_STATUS) return "sold";
-  if (row.liveStatus && (row.liveLocationId ?? null) !== (row.snapshotLocationId ?? null)) return "moved";
+  const locationChanged = !!row.liveStatus && (row.liveLocationId ?? null) !== (row.snapshotLocationId ?? null);
+  const placedByResolution = locationChanged && !!row.resolvedLocationId && row.liveLocationId === row.resolvedLocationId;
+  if (locationChanged && !placedByResolution) return "moved";
   if (!row.snapshotEpc) return "untagged";
   if (!row.scanned) return "missing";
   return "in_count";
@@ -217,6 +251,13 @@ export function formatNotTaggedSummary(counts: Pick<StocktakeCounts, "notTaggedS
   const unchecked = counts.notTaggedUnchecked ?? 0;
   if (seen + unchecked === 0) return null;
   return `Not tagged: ${seen} seen / ${unchecked} not checked`;
+}
+
+export function formatResolvedSummary(counts: Pick<StocktakeCounts, "resolvedFound" | "resolvedMissing">): string | null {
+  const found = counts.resolvedFound ?? 0;
+  const missing = counts.resolvedMissing ?? 0;
+  if (found + missing === 0) return null;
+  return `Resolved: ${found} found, ${missing} still missing`;
 }
 
 export function missingPieceIds(expectedIds: string[], scannedPieceIds: Array<string | null>): string[] {
@@ -297,6 +338,8 @@ export function buildStocktakeGroups(
       notTaggedUnchecked: 0,
       soldDuring: 0,
       movedDuring: 0,
+      resolvedFound: 0,
+      resolvedMissing: 0,
     },
   };
 }
@@ -344,6 +387,8 @@ export function assembleStocktake(input: {
   const missing: StocktakeRow[] = [];
   let notTaggedSeen = 0;
   let notTaggedUnchecked = 0;
+  let resolvedFound = 0;
+  let resolvedMissing = 0;
   for (const piece of input.snapshot) {
     const kind = classifySnapshotRow({
       snapshotEpc: piece.epc,
@@ -351,6 +396,7 @@ export function assembleStocktake(input: {
       liveStatus: piece.liveStatus,
       liveLocationId: piece.liveLocationId,
       scanned: scanned.has(piece.pieceId),
+      resolvedLocationId: piece.resolvedLocationId,
     });
     if (kind === "sold" || kind === "moved" || kind === "untagged") hide.add(piece.pieceId);
     if (kind === "sold") soldDuring.push(snapshotRow(piece, kind));
@@ -359,7 +405,11 @@ export function assembleStocktake(input: {
       notTagged.push(snapshotRow(piece, kind));
       if (piece.seenAt) notTaggedSeen += 1;
       else notTaggedUnchecked += 1;
-    } else if (kind === "missing") missing.push(snapshotRow(piece, kind));
+    } else if (kind === "missing") {
+      missing.push(snapshotRow(piece, kind));
+      if (piece.resolution === "found") resolvedFound += 1;
+      else if (piece.resolution === "still_missing") resolvedMissing += 1;
+    }
   }
   const visible: StoredLine[] = [];
   for (const line of input.lines) {
@@ -376,6 +426,8 @@ export function assembleStocktake(input: {
       notTaggedUnchecked,
       soldDuring: soldDuring.length,
       movedDuring: movedDuring.length,
+      resolvedFound,
+      resolvedMissing,
     },
   };
 }
