@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
 import { RFID_LOOKUP_DEBOUNCE_MS, parseScanLines, splitScanBuffer } from "@/lib/rfid-scan";
-import { absorbStocktakeScans, type StocktakePayload, type StoredLine, type StocktakeRow } from "@/lib/rfid-stocktake";
+import { absorbStocktakeScans, applyUntaggedSeen, type StocktakePayload, type StoredLine, type StocktakeRow } from "@/lib/rfid-stocktake";
 import { StocktakeGroupsView } from "@/components/StocktakeGroups";
 
 function when(iso: string | null): string {
@@ -26,6 +26,7 @@ export default function StocktakeCountPage() {
   const [confirming, setConfirming] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [movingId, setMovingId] = useState<string | null>(null);
+  const [seeingId, setSeeingId] = useState<string | null>(null);
   const [startingFresh, setStartingFresh] = useState(false);
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -152,6 +153,24 @@ export default function StocktakeCountPage() {
       return;
     }
     await load();
+  }
+
+  async function markSeen(row: StocktakeRow, seen: boolean) {
+    if (!row.pieceId) return;
+    setSeeingId(row.pieceId);
+    setError("");
+    const res = await fetch(`/api/rfid/stocktake/${id}/seen`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ piece_id: row.pieceId, seen }),
+    });
+    const json = await res.json().catch(() => ({}));
+    setSeeingId(null);
+    if (!res.ok) {
+      setError(json.error || "Could not save that");
+      return;
+    }
+    setPayload((prev) => (prev ? applyUntaggedSeen(prev, row.pieceId as string, json.seenAt ?? null, json.seenByName ?? null) : prev));
   }
 
   async function finish() {
@@ -299,6 +318,9 @@ export default function StocktakeCountPage() {
           allowMove={open}
           movingId={movingId}
           onMoveHere={(row) => { void moveHere(row); }}
+          allowSeen={open}
+          seeingId={seeingId}
+          onSeen={(row, seen) => { void markSeen(row, seen); }}
         />
       )}
       {open && !confirming && (

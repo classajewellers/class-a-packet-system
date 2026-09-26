@@ -5,13 +5,19 @@
 import assert from "node:assert/strict";
 import {
   absorbStocktakeScans,
+  applyUntaggedSeen,
+  assembleStocktake,
   buildStocktakeGroups,
+  classifySnapshotRow,
   classifyStocktakeHit,
+  formatNotTaggedSummary,
   formatStocktakeCounts,
   missingPieceIds,
   planStocktakeInserts,
   preferredTagEpc,
+  type SnapshotPiece,
   type StocktakePayload,
+  type StoredLine,
 } from "../lib/rfid-stocktake.ts";
 
 const floor = "floor";
@@ -187,5 +193,117 @@ assert.equal(merged.counts.missing, 1);
 assert.equal(merged.groups.missing[0].sku, "RING-03");
 assert.equal(merged.groups.found[0].locationName, "HA1 · Horseshoe A1");
 assert.deepEqual(merged.warnings, ["kept"]);
+
+const ha1 = "ha1";
+const ha3 = "ha3";
+function snap(partial: Partial<SnapshotPiece> & Pick<SnapshotPiece, "pieceId">): SnapshotPiece {
+  return {
+    sku: partial.pieceId,
+    metal: null,
+    epc: partial.epc === undefined ? "abc" : partial.epc,
+    snapshotLocationId: ha1,
+    snapshotStatus: "in_stock",
+    liveStatus: "in_stock",
+    liveLocationId: ha1,
+    liveLocationLabel: "HA1 · Horseshoe A1",
+    seenAt: null,
+    seenByName: null,
+    ...partial,
+  };
+}
+assert.equal(classifySnapshotRow({
+  snapshotEpc: "abc", snapshotLocationId: ha1, liveStatus: "in_stock", liveLocationId: ha1, scanned: false,
+}), "missing");
+assert.equal(classifySnapshotRow({
+  snapshotEpc: "abc", snapshotLocationId: ha1, liveStatus: "in_stock", liveLocationId: ha1, scanned: true,
+}), "in_count");
+assert.equal(classifySnapshotRow({
+  snapshotEpc: null, snapshotLocationId: ha1, liveStatus: "in_stock", liveLocationId: ha1, scanned: false,
+}), "untagged");
+assert.equal(classifySnapshotRow({
+  snapshotEpc: "abc", snapshotLocationId: ha1, liveStatus: "sold", liveLocationId: ha3, scanned: false,
+}), "sold");
+assert.equal(classifySnapshotRow({
+  snapshotEpc: null, snapshotLocationId: ha1, liveStatus: "workshop", liveLocationId: ha1, scanned: false,
+}), "sold");
+assert.equal(classifySnapshotRow({
+  snapshotEpc: "abc", snapshotLocationId: ha1, liveStatus: "in_stock", liveLocationId: ha3, scanned: true,
+}), "moved");
+
+const foundLine: StoredLine = {
+  id: "scan-ring-1",
+  epc: "aa3a06d60e1f4eb67b5c0f69",
+  sku: "RING-01",
+  pieceId: "ring-1",
+  result: "found",
+  metal: null,
+  status: "in_stock",
+  locationName: "HA1 · Horseshoe A1",
+  locationId: ha1,
+};
+const elsewhereLine: StoredLine = {
+  id: "scan-stray",
+  epc: "ffffffffffffffffffffffff",
+  sku: "STRAY",
+  pieceId: "stray",
+  result: "wrong_location",
+  metal: null,
+  status: "in_stock",
+  locationName: "HA3 · Horseshoe A3",
+  locationId: ha3,
+};
+const snapshotView = assembleStocktake({
+  lines: [foundLine, elsewhereLine],
+  countLocationId: ha1,
+  snapshot: [
+    snap({ pieceId: "ring-1", sku: "RING-01", epc: "aa3a06d60e1f4eb67b5c0f69" }),
+    snap({ pieceId: "ring-3", sku: "RING-03", epc: "7ba37d16b67943817d8b64c5" }),
+    snap({ pieceId: "bare", sku: "BARE", epc: null }),
+    snap({ pieceId: "gone", sku: "GONE", epc: "111", liveStatus: "sold", liveLocationId: ha1 }),
+    snap({
+      pieceId: "shifted",
+      sku: "SHIFT",
+      epc: "222",
+      liveLocationId: ha3,
+      liveLocationLabel: "HA3 · Horseshoe A3",
+    }),
+  ],
+  v1Missing: [],
+});
+assert.equal(snapshotView.counts.missing, 1);
+assert.equal(snapshotView.groups.missing[0].sku, "RING-03");
+assert.equal(snapshotView.counts.found, 1);
+assert.equal(snapshotView.counts.elsewhere, 1);
+assert.equal(snapshotView.groups.elsewhere[0].sku, "STRAY");
+assert.equal(snapshotView.groups.notTagged[0].sku, "BARE");
+assert.equal(snapshotView.counts.notTaggedUnchecked, 1);
+assert.equal(snapshotView.groups.soldDuring[0].detail, "Sold during count");
+assert.equal(snapshotView.groups.movedDuring[0].detail, "Moved during count (now at HA3 · Horseshoe A3)");
+assert.equal(formatNotTaggedSummary(snapshotView.counts), "Not tagged: 0 seen / 1 not checked");
+assert.equal(
+  formatStocktakeCounts(view.counts),
+  "Found 1 · Missing 1 · Somewhere else 2 · Unknown 1 · Not in stock 1 · 1 blank",
+);
+
+const withSnapshot: StocktakePayload = {
+  stocktake: live.stocktake,
+  groups: snapshotView.groups,
+  counts: snapshotView.counts,
+  warnings: [],
+  snapshot: [
+    snap({ pieceId: "ring-1", sku: "RING-01", epc: "aa3a06d60e1f4eb67b5c0f69" }),
+    snap({ pieceId: "ring-3", sku: "RING-03", epc: "7ba37d16b67943817d8b64c5" }),
+    snap({ pieceId: "bare", sku: "BARE", epc: null }),
+  ],
+};
+const scannedBare = absorbStocktakeScans(withSnapshot, [foundLine]);
+assert.equal(scannedBare.counts.missing, 1);
+assert.equal(scannedBare.groups.missing[0].sku, "RING-03");
+const seen = applyUntaggedSeen(scannedBare, "bare", "2026-09-25T23:40:00.000Z", "Alex");
+assert.equal(seen.counts.notTaggedSeen, 1);
+assert.equal(seen.counts.notTaggedUnchecked, 0);
+assert.equal(seen.groups.notTagged[0].seenByName, "Alex");
+const undone = applyUntaggedSeen(seen, "bare", null, null);
+assert.equal(undone.counts.notTaggedUnchecked, 1);
 
 console.log("rfid-stocktake-classify-test: ok");

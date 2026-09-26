@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatLocationLabel, locationsForPicker, type LocationFields } from "@/lib/location-label";
-import { formatStocktakeCounts, type StocktakeCounts, type StocktakeSession } from "@/lib/rfid-stocktake";
+import { formatNotTaggedSummary, formatStocktakeCounts, type StocktakeCounts, type StocktakeSession } from "@/lib/rfid-stocktake";
 
 type LocationRow = LocationFields & { id: string; name: string };
 type Listed = StocktakeSession & { counts: StocktakeCounts };
@@ -100,6 +100,9 @@ export default function StocktakeHomePage() {
                 Continue count started {clock(row.started_at)}
               </div>
               <div style={{ fontSize: 13, color: "#374151", marginTop: 6 }}>{formatStocktakeCounts(row.counts)}</div>
+              {formatNotTaggedSummary(row.counts) && (
+                <div style={{ fontSize: 13, color: "#374151", marginTop: 4 }}>{formatNotTaggedSummary(row.counts)}</div>
+              )}
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
                 <Link href={`/rfid/stocktake/${row.id}`} style={{ ...linkButton, justifyContent: "center" }}>Continue</Link>
                 <button
@@ -186,6 +189,9 @@ function History({ title, rows, empty }: { title: string; rows: Listed[]; empty:
               {row.status === "cancelled" ? " · Cancelled" : ""}
             </div>
             <div style={{ fontSize: 13, color: "#374151", marginTop: 6 }}>{formatStocktakeCounts(row.counts)}</div>
+            {formatNotTaggedSummary(row.counts) && (
+              <div style={{ fontSize: 13, color: "#374151", marginTop: 4 }}>{formatNotTaggedSummary(row.counts)}</div>
+            )}
           </Link>
         ))}
       </div>

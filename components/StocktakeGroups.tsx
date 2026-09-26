@@ -2,7 +2,7 @@
 
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { FALLBACK_STATUS_OPTIONS } from "@/lib/pieceResolution";
-import { formatStocktakeCounts, type StocktakeCounts, type StocktakeGroups, type StocktakeRow } from "@/lib/rfid-stocktake";
+import { formatNotTaggedSummary, formatStocktakeCounts, type StocktakeCounts, type StocktakeGroups, type StocktakeRow } from "@/lib/rfid-stocktake";
 
 function statusLabel(value: string | null): string {
   if (!value) return "";
@@ -50,6 +50,13 @@ function Group({ title, count, children }: { title: string; count: number; child
   );
 }
 
+function whenSeen(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" });
+}
+
 export function StocktakeGroupsView({
   groups,
   counts,
@@ -57,6 +64,9 @@ export function StocktakeGroupsView({
   onMoveHere,
   movingId,
   allowMove,
+  allowSeen,
+  seeingId,
+  onSeen,
 }: {
   groups: StocktakeGroups;
   counts: StocktakeCounts;
@@ -64,12 +74,27 @@ export function StocktakeGroupsView({
   onMoveHere?: (row: StocktakeRow) => void;
   movingId?: string | null;
   allowMove?: boolean;
+  allowSeen?: boolean;
+  seeingId?: string | null;
+  onSeen?: (row: StocktakeRow, seen: boolean) => void;
 }) {
+  const notTagged = groups.notTagged ?? [];
+  const soldDuring = groups.soldDuring ?? [];
+  const movedDuring = groups.movedDuring ?? [];
+  const notTaggedLine = formatNotTaggedSummary(counts);
+  const soldTitle = soldDuring.length > 0 && soldDuring.every((row) => row.detail && row.detail === soldDuring[0].detail)
+    ? soldDuring[0].detail || "Sold during count"
+    : "Sold during count";
   return (
     <div>
       <div style={{ fontSize: 15, fontWeight: 700, color: "#111827", lineHeight: 1.4 }}>
         {formatStocktakeCounts(counts)}
       </div>
+      {notTaggedLine && (
+        <div style={{ fontSize: 15, fontWeight: 700, color: "#111827", lineHeight: 1.4, marginTop: 4 }}>
+          {notTaggedLine}
+        </div>
+      )}
       <Group title="Found" count={counts.found}>
         {groups.found.length === 0 && <Empty />}
         {groups.found.map((row) => <PieceRow key={row.key} row={row} />)}
@@ -78,6 +103,39 @@ export function StocktakeGroupsView({
         {groups.missing.length === 0 && <Empty />}
         {groups.missing.map((row) => <PieceRow key={row.key} row={row} extra="Expected, not scanned" />)}
       </Group>
+      {notTagged.length > 0 && (
+        <Group title="Not tagged" count={notTagged.length}>
+          {notTagged.map((row) => (
+            <PieceRow
+              key={row.key}
+              row={row}
+              extra={row.seenAt
+                ? `Seen${row.seenByName ? ` by ${row.seenByName}` : ""} · ${whenSeen(row.seenAt)}`
+                : "No tag. Check this piece by eye."}
+              action={allowSeen ? (
+                <button
+                  type="button"
+                  onClick={() => onSeen?.(row, !row.seenAt)}
+                  disabled={seeingId === row.pieceId}
+                  style={row.seenAt ? undoButton : moveButton}
+                >
+                  {seeingId === row.pieceId ? "Saving…" : row.seenAt ? "Undo" : "Seen"}
+                </button>
+              ) : null}
+            />
+          ))}
+        </Group>
+      )}
+      {soldDuring.length > 0 && (
+        <Group title={soldTitle || "Sold during count"} count={soldDuring.length}>
+          {soldDuring.map((row) => <PieceRow key={row.key} row={row} extra={row.detail || "Sold during count"} />)}
+        </Group>
+      )}
+      {movedDuring.length > 0 && (
+        <Group title="Moved during count" count={movedDuring.length}>
+          {movedDuring.map((row) => <PieceRow key={row.key} row={row} extra={row.detail || "Moved during count"} />)}
+        </Group>
+      )}
       <Group title="Somewhere else" count={counts.elsewhere}>
         {groups.elsewhere.length === 0 && <Empty />}
         {groups.elsewhere.map((row) => {
@@ -166,6 +224,12 @@ const moveButton: CSSProperties = {
   fontSize: 16,
   fontWeight: 700,
   cursor: "pointer",
+};
+
+const undoButton: CSSProperties = {
+  ...moveButton,
+  background: "#fff",
+  color: "#111827",
 };
 
 const blankButton: CSSProperties = {
