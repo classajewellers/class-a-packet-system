@@ -11,6 +11,8 @@ import PiecePassportCard from "@/components/PiecePassportCard";
 import type { PiecePassport } from "@/lib/piecePassport";
 import { FALLBACK_STATUS_OPTIONS } from "@/lib/pieceResolution";
 import { formatLocationLabel, locationsForPicker } from "@/lib/location-label";
+import RfidTagPreview from "@/components/RfidTagPreview";
+import type { TagCopy } from "@/lib/rfid-label";
 import {
   ArrowLeft, Edit2, Save, X, ArrowRight,
   Lock, AlertTriangle, TrendingDown, Package, MapPin, Clock, DollarSign, Bookmark, BookmarkX,
@@ -263,6 +265,7 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
   const [printing, setPrinting]       = useState(false);
   const [confirming, setConfirming]   = useState(false);
   const [actionError, setActionError] = useState("");
+  const [preview, setPreview]         = useState<{ replace: boolean; copy: TagCopy | null; loading: boolean } | null>(null);
   const [pollTimer, setPollTimer]     = useState<ReturnType<typeof setInterval> | null>(null);
 
   const fetchRfid = useCallback(async () => {
@@ -311,11 +314,31 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
         body: JSON.stringify({ piece_id: pieceId, replace }),
       });
       const data = await res.json();
-      if (!res.ok) { setActionError(data.error ?? "Print request failed"); setPrinting(false); return; }
+      if (!res.ok) { setActionError(data.error ?? "Print request failed"); setPrinting(false); return false; }
       await fetchRfid();
+      return true;
     } catch {
       setActionError("Network error — is your bridge running?");
       setPrinting(false);
+      return false;
+    }
+  };
+
+  const openPreview = async (replace: boolean) => {
+    setActionError("");
+    setPreview({ replace, copy: null, loading: true });
+    try {
+      const res = await fetch(`/api/rfid/tag-preview?piece_id=${encodeURIComponent(pieceId)}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setActionError(data.error ?? "Could not preview the tag");
+        setPreview(null);
+        return;
+      }
+      setPreview({ replace, copy: data.copy, loading: false });
+    } catch {
+      setActionError("Could not preview the tag");
+      setPreview(null);
     }
   };
 
@@ -453,15 +476,32 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
         </div>
       )}
 
-      {actionError && (
+      {actionError && !preview?.copy && (
         <p style={{ margin: "0 0 10px", fontSize: 12, color: "#DC2626" }}>{actionError}</p>
+      )}
+
+      {preview?.copy && (
+        <RfidTagPreview
+          copy={preview.copy}
+          printing={printing}
+          error={actionError}
+          onCancel={() => { if (!printing) setPreview(null); }}
+          onPrint={() => {
+            void handlePrint(preview.replace).then((ok) => { if (ok) setPreview(null); });
+          }}
+        />
+      )}
+      {preview?.loading && (
+        <div role="dialog" aria-label="Preview tag" style={{ position: "fixed", inset: 0, zIndex: 70, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <p style={{ background: "#fff", borderRadius: 12, padding: 20, margin: 0 }}>Loading preview…</p>
+        </div>
       )}
 
       {isManager && (
         <div className="rfid-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
           {/* Print: available when no active/printed tag and no job in flight */}
           {!activeTag && !printedTag && !activeJob && (
-            <button onClick={() => handlePrint(false)} disabled={printing}
+            <button onClick={() => { void openPreview(false); }} disabled={printing}
               style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #D1D5DB", background: printing ? "#F3F4F6" : "#fff", color: printing ? "#9CA3AF" : "#111827", fontSize: 13, cursor: printing ? "not-allowed" : "pointer", fontWeight: 500 }}>
               <Printer size={13} />
               {printing ? "Sending…" : "Print RFID Tag"}
@@ -488,7 +528,7 @@ function RfidPanel({ pieceId, tenantId, isManager }: { pieceId: string; tenantId
 
           {/* Replace: available only when an active (verified) tag exists */}
           {activeTag && !activeJob && (
-            <button onClick={() => handlePrint(true)} disabled={printing}
+            <button onClick={() => { void openPreview(true); }} disabled={printing}
               style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", fontSize: 13, cursor: printing ? "not-allowed" : "pointer" }}>
               <Printer size={13} />
               Replace Tag

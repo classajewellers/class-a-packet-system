@@ -17,6 +17,8 @@
  * over, the barcode is on top and the SKU reads upright underneath it.
  */
 
+import { placeBack, placeFrontLines, type TagCopy } from "./tag-layout";
+
 export const LABEL_WIDTH_MM = 68;
 /** Label face height. At 300 dpi this is ^LL425. */
 export const LABEL_LENGTH_MM = 36;
@@ -44,9 +46,13 @@ export type LabelData = {
   sku: string;
   title?: string | null;
   metal?: string | null;
-  stone?: string | null;
+  /** Main-stone carat. The layout module formats this as "0.50ct". */
+  carat?: number | string | null;
+  /** Main-stone shape, already resolved from the piece, variant, or other_specs. */
+  shape?: string | null;
+  diamondType?: string | null;
+  fingerSize?: string | null;
   barcode?: string | null;
-  retailPrice?: number | string | null;
   dpi?: number;
   widthDots?: number;       // optional ^PW override
   lengthDots?: number;      // optional ^LL override; wins over labelLengthMm
@@ -106,20 +112,6 @@ export function normalizeDpi(dpi: number | undefined): number {
   const rounded = Math.round(dpi);
   if (rounded < 150 || rounded > 600) return DEFAULT_DPI;
   return rounded;
-}
-
-/** "$1,234" for a whole dollar amount, "$1,234.50" when there are cents. Blank when there is no price. */
-export function formatRetailPrice(value: number | string | null | undefined): string | null {
-  if (value == null || value === "") return null;
-  const n = typeof value === "number" ? value : Number(String(value).replace(/[^0-9.-]/g, ""));
-  if (!Number.isFinite(n) || n <= 0) return null;
-  const cents = Math.round(n * 100);
-  const hasCents = cents % 100 !== 0;
-  const body = (cents / 100).toLocaleString("en-AU", {
-    minimumFractionDigits: hasCents ? 2 : 0,
-    maximumFractionDigits: 2,
-  });
-  return `$${body}`;
 }
 
 export function tagGeometry(
@@ -189,11 +181,17 @@ export function generateJewelleryZpl(data: LabelData): string {
     labelLengthMm: data.labelLengthMm,
   });
   const skuText = cleanText(sku);
-  const metalText = cleanText(data.metal);
-  const priceText = formatRetailPrice(data.retailPrice);
+  const copy: TagCopy = {
+    sku: skuText,
+    metal: data.metal,
+    carat: data.carat,
+    shape: data.shape,
+    diamondType: data.diamondType,
+    fingerSize: data.fingerSize,
+  };
 
   const fields = [
-    ...frontFields(geo, skuText, metalText, priceText),
+    ...frontZpl(geo, copy),
     ...backFields(geo, skuText, data.onWarn),
   ];
 
@@ -245,99 +243,37 @@ export function generateOutlineZpl(options: OutlineOptions = {}): string {
   ].join("\n");
 }
 
-function frontFields(geo: TagGeometry, sku: string, metal: string, price: string | null): string[] {
-  const gap = Math.max(2, dots(0.35, geo.dpi));
-  const lines: Array<{ text: string; pref: number; min: number }> = [
-    { text: sku, pref: dots(4.2, geo.dpi), min: dots(1.1, geo.dpi) },
-  ];
-  if (metal) lines.push({ text: metal, pref: dots(2.3, geo.dpi), min: dots(1.1, geo.dpi) });
-  if (price) lines.push({ text: price, pref: dots(2.5, geo.dpi), min: dots(1.3, geo.dpi) });
-
-  const gaps = gap * Math.max(0, lines.length - 1);
-  let fonts = lines.map((line) => fitFont(line.text, geo.top.w, line.pref, line.min));
-  let used = fonts.reduce((sum, font) => sum + font, 0) + gaps;
-  if (used > geo.top.h) {
-    const scale = (geo.top.h - gaps) / Math.max(1, used - gaps);
-    fonts = fonts.map((font, i) => Math.max(lines[i].min, Math.floor(font * scale)));
-    used = fonts.reduce((sum, font) => sum + font, 0) + gaps;
-    if (used > geo.top.h) {
-      fonts = fonts.map((font) => Math.max(1, font - 1));
-    }
-  }
-
-  const fields: string[] = [];
-  let y = geo.top.y;
-  lines.forEach((line, i) => {
-    const font = fonts[i];
-    const fitted = clipToWidth(line.text, font, geo.top.w);
-    fields.push(
-      `^FO${geo.top.x},${y}^A0N,${font},${font}^FB${geo.top.w},1,0,C,0^FD${escZpl(fitted)}^FS`,
-    );
-    y += font + gap;
+function frontZpl(geo: TagGeometry, copy: TagCopy): string[] {
+  return placeFrontLines(geo.top, geo.dpi, copy).flatMap((line) => {
+    const field = `^FO${line.x},${line.y}^A0N,${line.font},${line.font}^FB${line.width},1,0,C,0^FD${escZpl(line.text)}^FS`;
+    if (!line.bold) return [field];
+    // A second pass one dot to the right is the reliable bold for font 0.
+    // The first command stays on the flag origin.
+    return [
+      field,
+      `^FO${line.x + 1},${line.y}^A0N,${line.font},${line.font}^FB${line.width},1,0,C,0^FD${escZpl(line.text)}^FS`,
+    ];
   });
-  return fields;
 }
 
 function backFields(geo: TagGeometry, sku: string, onWarn?: (message: string) => void): string[] {
-  const gap = Math.max(2, dots(0.3, geo.dpi));
-  const preferredModule = geo.dpi >= 250 ? 2 : 1;
-  const modules = code128Modules(sku.length);
-  let moduleWidth = preferredModule;
-  if (modules * moduleWidth > geo.bottom.w) moduleWidth = 1;
-  const barcodeFits = modules * moduleWidth <= geo.bottom.w;
-
-  let textMax = barcodeFits ? Math.min(dots(2.4, geo.dpi), Math.floor(geo.bottom.h * 0.34)) : Math.floor(geo.bottom.h * 0.7);
-  textMax = Math.max(dots(1.4, geo.dpi), textMax);
-  let textFont = fitFont(sku, geo.bottom.w, textMax, dots(1.2, geo.dpi));
-  let barH = geo.bottom.h - textFont - gap;
-  if (barcodeFits && barH < dots(2, geo.dpi)) {
-    textFont = Math.max(dots(1.2, geo.dpi), geo.bottom.h - dots(2, geo.dpi) - gap);
-    barH = geo.bottom.h - textFont - gap;
-  }
-  const text = clipToWidth(sku, textFont, geo.bottom.w);
-  const textW = estimateWidth(text, textFont);
-  const textX = geo.bottom.x + Math.max(0, Math.floor((geo.bottom.w - textW) / 2));
+  const placed = placeBack(geo.bottom, geo.dpi, sku);
+  if (placed.warning) onWarn?.(placed.warning);
   // Printer y grows down. The inverted SKU sits nearer the fold than the
   // barcode, so a 180 degree turn puts the SKU under the barcode.
-  const textY = geo.bottom.y;
   const fields = [
-    `^FO${textX},${textY}^A0I,${textFont},${textFont}^FD${escZpl(text)}^FS`,
+    `^FO${placed.text.x},${placed.text.y}^A0I,${placed.text.font},${placed.text.font}^FD${escZpl(placed.text.text)}^FS`,
   ];
-
-  if (!barcodeFits || barH < 8) {
-    onWarn?.(`SKU barcode does not fit the tag head at module width 1; printing the inverted SKU text only`);
-    return fields;
-  }
-
-  const barW = modules * moduleWidth;
-  const barX = geo.bottom.x + Math.max(0, Math.floor((geo.bottom.w - barW) / 2));
-  const barY = textY + textFont + gap;
-  fields.push(`^FO${barX},${barY}^BY${moduleWidth},2,${barH}^BCI,${barH},N,N,N^FD${escZpl(sku)}^FS`);
+  if (!placed.barcode) return fields;
+  const bar = placed.barcode;
+  fields.push(`^FO${bar.x},${bar.y}^BY${bar.module},2,${bar.height}^BCI,${bar.height},N,N,N^FD${escZpl(bar.data)}^FS`);
   return fields;
-}
-
-/** Code 128 symbol width in modules, including start, check, and stop. */
-function code128Modules(length: number): number {
-  return 11 * Math.max(length, 1) + 35;
-}
-
-/** Font 0 advance is a bit over half the cell height for digits and capitals. */
-function estimateWidth(text: string, font: number): number {
-  return Math.ceil(Math.max(text.length, 1) * font * 0.62);
 }
 
 function fitFont(text: string, maxWidth: number, maxHeight: number, minHeight: number): number {
   const len = Math.max(text.length, 1);
   const fitted = Math.floor(maxWidth / (len * 0.62));
   return Math.max(1, Math.min(maxHeight, Math.max(minHeight, fitted)));
-}
-
-function clipToWidth(text: string, font: number, maxWidth: number): string {
-  let value = text;
-  while (value.length > 1 && estimateWidth(value, font) > maxWidth) {
-    value = value.length > 4 ? value.slice(0, -4) + "..." : value.slice(0, -1);
-  }
-  return value;
 }
 
 function cleanText(value: string | null | undefined): string {

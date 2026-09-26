@@ -4,6 +4,7 @@
  */
 export {
   generateJewelleryZpl,
+  tagGeometry,
   mmToDots,
   dotsPerMm,
   normalizeDpi,
@@ -11,4 +12,18 @@ export {
   LABEL_WIDTH_MM,
   LABEL_LENGTH_MM,
   type LabelData,
+  type TagGeometry,
 } from "../vault-rfid-bridge/src/label";
+
+export {
+  FRONT_FIELDS,
+  frontCopyLines,
+  formatDetail,
+  placeBack,
+  placeFrontLines,
+  resolveStoneShape,
+  truncateToWidth,
+  type FlagBox,
+  type PlacedLine,
+  type TagCopy,
+} from "../vault-rfid-bridge/src/tag-layout";

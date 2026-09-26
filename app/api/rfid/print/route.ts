@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { tenantScoped } from "@/lib/tenantScoped";
 import { generateJewelleryZpl } from "@/lib/rfid-label";
+import { loadTagCopy } from "@/lib/rfid-tag-copy";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -105,9 +106,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const { data: piece, error: pErr } = await tenantScoped(supabase, tenantId)
     .from("inventory_pieces")
     .select(`
-      id, sku, notes, barcode, retail_price,
+      id, sku, notes, barcode,
       metal_karat, metal_colour,
-      diamond_carat, diamond_colour, diamond_type
+      diamond_carat, diamond_colour, diamond_type,
+      finger_size
     `)
     .eq("id", piece_id)
     .maybeSingle();
@@ -159,21 +161,35 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // stored copy is laid out at the generator default (203 dpi). The bridge does not send this
   // string for jewellery_v1. It rebuilds the same label_data at the printer's
   // reported head resolution, or printer.dpi in config.json.
-  const p = piece as any;
-  const metalName  = [p.metal_karat, p.metal_colour].filter(Boolean).join(" ") || null;
-  const stoneName  = p.diamond_type && p.diamond_type !== "None"
-    ? [p.diamond_carat ? `${p.diamond_carat}ct` : null, p.diamond_colour, p.diamond_type]
-        .filter(Boolean).join(" ")
-    : null;
+  const p = piece as {
+    sku: string;
+    barcode?: string | null;
+    metal_karat?: string | null;
+    metal_colour?: string | null;
+    diamond_carat?: number | string | null;
+    diamond_type?: string | null;
+    finger_size?: string | null;
+  };
+  let copy;
+  try {
+    copy = await loadTagCopy(supabase, tenantId, piece_id, p);
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Could not load the tag fields" },
+      { status: 500 },
+    );
+  }
 
   const zplPayload = generateJewelleryZpl({
     epc,
-    sku:         piece.sku,
-    title:       designName ?? piece.sku,
-    metal:       metalName,
-    stone:       stoneName,
-    barcode:     p.barcode ?? piece.sku,
-    retailPrice: p.retail_price ?? null,
+    sku: piece.sku,
+    title: designName ?? piece.sku,
+    metal: copy.metal,
+    carat: copy.carat,
+    shape: copy.shape,
+    diamondType: copy.diamondType,
+    fingerSize: copy.fingerSize,
+    barcode: p.barcode ?? piece.sku,
   });
 
   // ── Create RFID tag record ─────────────────────────────────────────────────
@@ -215,12 +231,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       zpl_payload:     zplPayload,
       label_data: {
         epc,
-        sku:     piece.sku,
-        title:   designName ?? piece.sku,
-        metal:   metalName,
-        stone:   stoneName,
+        sku: piece.sku,
+        title: designName ?? piece.sku,
+        metal: copy.metal,
+        carat: copy.carat,
+        shape: copy.shape,
+        diamond_type: copy.diamondType,
+        finger_size: copy.fingerSize,
         barcode: p.barcode ?? piece.sku,
-        retail_price: p.retail_price ?? null,
       },
       label_template:  "jewellery_v1",
       idempotency_key: idempotencyKey,

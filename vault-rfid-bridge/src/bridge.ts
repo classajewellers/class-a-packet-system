@@ -321,15 +321,17 @@ function labelDataForJob(config: BridgeConfig, job: PrintJob, dpi: number): Labe
   const data = job.label_data;
   if (!data || typeof data.epc !== "string" || typeof data.sku !== "string") return null;
   if (!data.epc.trim() || !data.sku.trim()) return null;
-  const rawPrice = data.retail_price ?? data.price;
+  const carat = data.carat ?? data.diamond_carat;
   return {
     epc: data.epc.trim(),
     sku: data.sku.trim(),
     title: typeof data.title === "string" ? data.title : null,
     metal: typeof data.metal === "string" ? data.metal : null,
-    stone: typeof data.stone === "string" ? data.stone : null,
+    carat: typeof carat === "number" || typeof carat === "string" ? carat : null,
+    shape: typeof data.shape === "string" ? data.shape : typeof data.stone_shape === "string" ? data.stone_shape : null,
+    diamondType: typeof data.diamond_type === "string" ? data.diamond_type : typeof data.diamondType === "string" ? data.diamondType : null,
+    fingerSize: typeof data.finger_size === "string" ? data.finger_size : typeof data.fingerSize === "string" ? data.fingerSize : null,
     barcode: typeof data.barcode === "string" ? data.barcode : null,
-    retailPrice: typeof rawPrice === "number" || typeof rawPrice === "string" ? rawPrice : null,
     offsetXMm: config.printer.tagOffsetXMm ?? 0,
     offsetYMm: config.printer.tagOffsetYMm ?? 0,
     ...(config.printer.labelLengthDots != null ? { lengthDots: config.printer.labelLengthDots } : {}),
