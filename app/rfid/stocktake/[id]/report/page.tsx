@@ -86,56 +86,41 @@ export default function StocktakeReportPage() {
 
           <h2 style={sectionTitle}>Missing</h2>
           {report.missingByLocation.length === 0 && <p style={meta}>No missing pieces.</p>}
-          {report.missingByLocation.map((group, index) => (
-            <section key={group.location} className={index > 0 ? "report-break stocktake-report-group" : "stocktake-report-group"}>
-              <h3 style={groupTitle}>{group.location}</h3>
-              {group.pieces.map((piece) => (
-                <article key={piece.pieceId} style={pieceCard}>
-                  <div style={sku}>{piece.sku}</div>
-                  <div style={meta}>{[piece.description, piece.metal, piece.price].filter(Boolean).join(" · ") || "—"}</div>
-                  <div style={meta}>Last seen {piece.lastSeen ? when(piece.lastSeen) : "never"}{piece.epcTail ? ` · Tag ${piece.epcTail}` : ""}</div>
-                  {piece.resolution && (
-                    <div style={meta}>
-                      {piece.resolution === "found" ? "Found" : "Still missing"}
-                      {piece.resolution === "found" && piece.resolvedLocationLabel ? ` at ${piece.resolvedLocationLabel}` : ""}
-                      {piece.resolvedByName ? ` · ${piece.resolvedByName}` : ""}
-                      {piece.resolvedAt ? ` · ${when(piece.resolvedAt)}` : ""}
-                    </div>
+          {report.missingByLocation.map((group) => {
+            const [first, ...rest] = group.pieces;
+            return (
+              <section key={group.location} className="stocktake-report-group">
+                <div className="report-keep">
+                  <h3 style={groupTitle}>{group.location}</h3>
+                  {first && (
+                    <MissingPiece
+                      piece={first}
+                      manager={manager}
+                      finished={finished}
+                      busy={busyId === first.pieceId}
+                      locationValue={locations[first.pieceId] ?? ""}
+                      locations={report.locations}
+                      onLocation={(value) => setLocations((prev) => ({ ...prev, [first.pieceId]: value }))}
+                      onResolve={(resolution) => { void resolve(first, resolution); }}
+                    />
                   )}
-                  <div className="print-only" style={{ marginTop: 8 }}>
-                    <span style={tick} /> Found
-                    <span style={{ ...tick, marginLeft: 16 }} /> Still missing
-                  </div>
-                  {manager && finished && (
-                    <div className="no-print" style={{ marginTop: 10 }}>
-                      <label style={{ display: "block", fontSize: 13, color: "#374151", marginBottom: 4 }} htmlFor={`loc-${piece.pieceId}`}>
-                        Location if found
-                      </label>
-                      <select
-                        id={`loc-${piece.pieceId}`}
-                        value={locations[piece.pieceId] ?? ""}
-                        onChange={(event) => setLocations((prev) => ({ ...prev, [piece.pieceId]: event.target.value }))}
-                        style={selectStyle}
-                      >
-                        <option value="">Leave location</option>
-                        {report.locations.map((location) => (
-                          <option key={location.id} value={location.id}>{location.label}</option>
-                        ))}
-                      </select>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        <button type="button" disabled={busyId === piece.pieceId} onClick={() => { void resolve(piece, "found"); }} style={piece.resolution === "found" ? chosen : primaryButton}>
-                          {busyId === piece.pieceId ? "Saving…" : "Found"}
-                        </button>
-                        <button type="button" disabled={busyId === piece.pieceId} onClick={() => { void resolve(piece, "still_missing"); }} style={piece.resolution === "still_missing" ? chosen : secondaryButton}>
-                          Still missing
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </article>
-              ))}
-            </section>
-          ))}
+                </div>
+                {rest.map((piece) => (
+                  <MissingPiece
+                    key={piece.pieceId}
+                    piece={piece}
+                    manager={manager}
+                    finished={finished}
+                    busy={busyId === piece.pieceId}
+                    locationValue={locations[piece.pieceId] ?? ""}
+                    locations={report.locations}
+                    onLocation={(value) => setLocations((prev) => ({ ...prev, [piece.pieceId]: value }))}
+                    onResolve={(resolution) => { void resolve(piece, resolution); }}
+                  />
+                ))}
+              </section>
+            );
+          })}
 
           <Extra title="Not tagged, not checked" pieces={report.notTaggedUnchecked} />
           <Extra title="Sold during count" pieces={report.soldDuring} />
@@ -143,7 +128,7 @@ export default function StocktakeReportPage() {
           <Extra title="Wrong tray" pieces={report.wrongTray ?? []} />
           <Extra title="Read nearby, probably not moved" pieces={report.nearby ?? []} />
 
-          <section className="report-sign">
+          <section className="report-keep report-sign">
             <div style={{ display: "flex", gap: 24, marginTop: 28, flexWrap: "wrap" }}>
               <div style={{ flex: "1 1 220px" }}>
                 <div style={meta}>Signed</div>
@@ -160,29 +145,104 @@ export default function StocktakeReportPage() {
       <style>{`
         .stocktake-report { max-width: 800px; margin: 0 auto; color: #111827; overflow-x: hidden; }
         .stocktake-report * { box-sizing: border-box; }
-        .report-break { break-before: page; }
-        .report-sign { break-inside: avoid; }
+        .report-piece, .report-keep { break-inside: avoid; page-break-inside: avoid; }
         @media print {
           .stocktake-report { max-width: none; }
+          .stocktake-report .no-print { display: none !important; }
+          .stocktake-report .print-only { display: block !important; }
         }
       `}</style>
     </div>
   );
 }
 
+function MissingPiece({
+  piece,
+  manager,
+  finished,
+  busy,
+  locationValue,
+  locations,
+  onLocation,
+  onResolve,
+}: {
+  piece: ReportPiece;
+  manager: boolean;
+  finished: boolean;
+  busy: boolean;
+  locationValue: string;
+  locations: { id: string; label: string }[];
+  onLocation: (value: string) => void;
+  onResolve: (resolution: "found" | "still_missing") => void;
+}) {
+  return (
+    <article className="report-piece" style={pieceCard}>
+      <div style={sku}>{piece.sku}</div>
+      <div style={meta}>{[piece.description, piece.metal, piece.price].filter(Boolean).join(" · ") || "—"}</div>
+      <div style={meta}>Last seen {piece.lastSeen ? when(piece.lastSeen) : "never"}{piece.epcTail ? ` · Tag ${piece.epcTail}` : ""}</div>
+      {piece.resolution && (
+        <div style={meta}>
+          {piece.resolution === "found" ? "Found" : "Still missing"}
+          {piece.resolution === "found" && piece.resolvedLocationLabel ? ` at ${piece.resolvedLocationLabel}` : ""}
+          {piece.resolvedByName ? ` · ${piece.resolvedByName}` : ""}
+          {piece.resolvedAt ? ` · ${when(piece.resolvedAt)}` : ""}
+        </div>
+      )}
+      <div className="print-only" style={{ marginTop: 8 }}>
+        <span style={tick} /> Found
+        <span style={{ ...tick, marginLeft: 16 }} /> Still missing
+      </div>
+      {manager && finished && (
+        <div className="no-print" style={{ marginTop: 10 }}>
+          <label style={{ display: "block", fontSize: 13, color: "#374151", marginBottom: 4 }} htmlFor={`loc-${piece.pieceId}`}>
+            Location if found
+          </label>
+          <select
+            id={`loc-${piece.pieceId}`}
+            value={locationValue}
+            onChange={(event) => onLocation(event.target.value)}
+            style={selectStyle}
+          >
+            <option value="">Leave location</option>
+            {locations.map((location) => (
+              <option key={location.id} value={location.id}>{location.label}</option>
+            ))}
+          </select>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <button type="button" disabled={busy} onClick={() => onResolve("found")} style={piece.resolution === "found" ? chosen : primaryButton}>
+              {busy ? "Saving…" : "Found"}
+            </button>
+            <button type="button" disabled={busy} onClick={() => onResolve("still_missing")} style={piece.resolution === "still_missing" ? chosen : secondaryButton}>
+              Still missing
+            </button>
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
 function Extra({ title, pieces }: { title: string; pieces: ReportPiece[] }) {
   if (!pieces.length) return null;
+  const [first, ...rest] = pieces;
   return (
-    <section className="report-break">
-      <h2 style={sectionTitle}>{title}</h2>
-      {pieces.map((piece) => (
-        <article key={piece.pieceId} style={pieceCard}>
-          <div style={sku}>{piece.sku}</div>
-          <div style={meta}>{[piece.description, piece.metal, piece.price, piece.detail].filter(Boolean).join(" · ") || "—"}</div>
-          <div style={meta}>Last seen {piece.lastSeen ? when(piece.lastSeen) : "never"}{piece.epcTail ? ` · Tag ${piece.epcTail}` : ""}</div>
-        </article>
-      ))}
+    <section>
+      <div className="report-keep">
+        <h2 style={sectionTitle}>{title}</h2>
+        <ExtraPiece piece={first} />
+      </div>
+      {rest.map((piece) => <ExtraPiece key={piece.pieceId} piece={piece} />)}
     </section>
+  );
+}
+
+function ExtraPiece({ piece }: { piece: ReportPiece }) {
+  return (
+    <article className="report-piece" style={pieceCard}>
+      <div style={sku}>{piece.sku}</div>
+      <div style={meta}>{[piece.description, piece.metal, piece.price, piece.detail].filter(Boolean).join(" · ") || "—"}</div>
+      <div style={meta}>Last seen {piece.lastSeen ? when(piece.lastSeen) : "never"}{piece.epcTail ? ` · Tag ${piece.epcTail}` : ""}</div>
+    </article>
   );
 }
 
