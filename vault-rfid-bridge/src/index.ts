@@ -5,6 +5,7 @@ import { BridgeConfig } from "./types";
 import { runBridge } from "./bridge";
 import { readHeadDpi } from "./zebra";
 import { DEFAULT_DPI } from "./label";
+import { formatPrinterCheckReport, printerCheckAnswered, runPrinterCheck } from "./printer-check";
 
 export function loadConfig(): BridgeConfig {
   const configPath = path.resolve(process.cwd(), "config.json");
@@ -137,6 +138,12 @@ function testTcpReachable(host: string, port: number, timeoutMs: number): Promis
 
 async function main() {
   const config = loadConfig();
+  if (process.argv.includes("--printer-check")) {
+    const report = await runPrinterCheck(config);
+    console.log(formatPrinterCheckReport(report));
+    process.exit(printerCheckAnswered(report) ? 0 : 1);
+  }
+
   const ts = new Date().toISOString();
   console.log(`[${ts}] [INFO] Vault RFID Bridge starting`);
   console.log(`[${ts}] [INFO] Vault URL : ${config.vaultApiUrl}`);
@@ -170,6 +177,16 @@ async function main() {
       config.printer.dpi = DEFAULT_DPI;
       console.log(`[${ts}] [INFO] Printer head resolution: no reply, using ${DEFAULT_DPI} dpi`);
     }
+  }
+
+  // Read-only getvar check. Logged here and posted to Vault. A failure does not
+  // stop printing, and this does not change any printer setting.
+  try {
+    const report = await runPrinterCheck(config);
+    console.log(formatPrinterCheckReport(report));
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.log(`[${new Date().toISOString()}] [WARN] Printer check failed: ${message}`);
   }
 
   await runBridge(config, reachable);

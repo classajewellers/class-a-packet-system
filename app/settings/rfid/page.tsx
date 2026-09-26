@@ -47,6 +47,60 @@ function fmtDate(d: string | null | undefined) {
   return new Date(d).toLocaleString("en-AU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
+type PrinterCheckSummary = {
+  firmware?: string | null;
+  dpi?: number | null;
+  clock?: "ok" | "skewed" | "unknown" | null;
+  clock_detail?: string | null;
+  weblink_configured?: boolean | null;
+  cert_files?: string[] | null;
+};
+
+type PrinterCheck = {
+  checked_at?: string | null;
+  summary?: PrinterCheckSummary | null;
+};
+
+function clockLabel(clock: PrinterCheckSummary["clock"]): string {
+  if (clock === "ok") return "OK";
+  if (clock === "skewed") return "Skewed";
+  return "Unknown";
+}
+
+function PrinterCheckPanel({ printer }: { printer: { display_name?: string; last_check?: PrinterCheck | null; head_dpi?: number | null } }) {
+  const check = printer.last_check;
+  const summary = check?.summary;
+  const dpi = summary?.dpi ?? printer.head_dpi ?? null;
+  return (
+    <div aria-label={`Printer check ${printer.display_name ?? ""}`.trim()} style={{ marginTop: 14, padding: 14, borderRadius: 10, background: "var(--vault-surface)", border: "1px solid var(--vault-border)" }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--vault-text)", marginBottom: 8 }}>
+        Printer check{printer.display_name ? ` — ${printer.display_name}` : ""}
+      </div>
+      {!summary ? (
+        <p style={{ margin: 0, fontSize: 13, color: "var(--vault-text-muted)" }}>
+          No printer check yet. On the shop computer, in the bridge folder, run npm run printer-check.
+        </p>
+      ) : (
+        <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "160px 1fr", gap: "6px 12px", fontSize: 13 }}>
+          <dt style={{ color: "var(--vault-text-muted)" }}>Firmware</dt>
+          <dd style={{ margin: 0 }}>{summary.firmware || "—"}</dd>
+          <dt style={{ color: "var(--vault-text-muted)" }}>DPI</dt>
+          <dd style={{ margin: 0 }}>{dpi ?? "—"}</dd>
+          <dt style={{ color: "var(--vault-text-muted)" }}>Clock</dt>
+          <dd style={{ margin: 0 }}>{clockLabel(summary.clock)}{summary.clock_detail ? ` — ${summary.clock_detail}` : ""}</dd>
+          <dt style={{ color: "var(--vault-text-muted)" }}>Weblink configured</dt>
+          <dd style={{ margin: 0 }}>{summary.weblink_configured ? "Yes" : "No"}</dd>
+          <dt style={{ color: "var(--vault-text-muted)" }}>Cert files</dt>
+          <dd style={{ margin: 0 }}>{summary.cert_files && summary.cert_files.length ? summary.cert_files.join(", ") : "None listed"}</dd>
+        </dl>
+      )}
+      {check?.checked_at && (
+        <p style={{ margin: "8px 0 0", fontSize: 11, color: "var(--vault-text-muted)" }}>Latest check {fmtDate(check.checked_at)}</p>
+      )}
+    </div>
+  );
+}
+
 function BridgeOnline({ lastHeartbeat }: { lastHeartbeat: string | null }) {
   if (!lastHeartbeat) return <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--vault-text-muted)" }}><WifiOff size={12} /> Never connected</span>;
   const age = Date.now() - new Date(lastHeartbeat).getTime();
@@ -239,6 +293,9 @@ export default function RfidSettingsPage() {
             </tbody>
           </table>
         )}
+        {(data?.printers ?? []).map((p: { id: string; display_name?: string; last_check?: PrinterCheck | null; head_dpi?: number | null }) => (
+          <PrinterCheckPanel key={p.id} printer={p} />
+        ))}
         {!hasBridge && isManager && (
           <div style={{ marginTop: 16 }}>
             {!hasPrinter ? (
