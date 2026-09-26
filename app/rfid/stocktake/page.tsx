@@ -1,387 +1,94 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useUser } from "@/context/UserContext";
-import { canManage } from "@/lib/userTypes";
-import { formatLocationLabel, locationsForPicker, type LocationFields } from "@/lib/location-label";
-import { formatNotTaggedSummary, formatResolvedSummary, formatStocktakeCounts, type StocktakeCounts, type StocktakeSession } from "@/lib/rfid-stocktake";
 
-type LocationRow = LocationFields & { id: string; name: string };
-type Listed = StocktakeSession & { counts: StocktakeCounts };
+type ZoneRow = {
+  id: string;
+  name: string;
+  lastCountedAt: string | null;
+  open: boolean;
+};
 
-function when(iso: string | null): string {
-  if (!iso) return "";
+function countedOn(iso: string | null): string {
+  if (!iso) return "Never counted";
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" });
+  if (Number.isNaN(date.getTime())) return "Never counted";
+  const label = date.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
+  return `Last counted ${label}`;
 }
-
-function clock(iso: string | null): string {
-  if (!iso) return "";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return date
-    .toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit", hour12: true })
-    .replace(/\s*am$/i, " AM")
-    .replace(/\s*pm$/i, " PM");
-}
-
-type ZoneChoice = { id: string; label: string };
 
 export default function StocktakeHomePage() {
-  const router = useRouter();
-  const { user, hydrated } = useUser();
-  const manager = hydrated && canManage(user?.role);
-  const [locations, setLocations] = useState<LocationRow[]>([]);
-  const [zones, setZones] = useState<ZoneChoice[]>([]);
-  const [counts, setCounts] = useState<Listed[]>([]);
+  const [zones, setZones] = useState<ZoneRow[]>([]);
   const [error, setError] = useState("");
-  const [placeError, setPlaceError] = useState("");
-  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState("");
-  const [selectedZoneId, setSelectedZoneId] = useState("");
-  const [starting, setStarting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    void fetch("/api/inventory/locations")
+    void fetch("/api/rfid/stocktake/board")
       .then(async (res) => {
         const json = await res.json().catch(() => ({}));
         if (cancelled) return;
-        if (!res.ok) setPlaceError(json.error || "Could not load locations");
-        else setLocations(locationsForPicker((json.locations ?? []) as LocationRow[]));
-      })
-      .catch(() => { if (!cancelled) setPlaceError("Could not load locations"); });
-    void fetch("/api/rfid/stocktake/zones")
-      .then(async (res) => {
-        const json = await res.json().catch(() => ({}));
-        if (cancelled || !res.ok) return;
-        const rows = (json.admin?.zones ?? []) as { id: string; label: string }[];
-        setZones(rows.map((row) => ({ id: row.id, label: row.label })));
-      })
-      .catch(() => undefined);
-    void fetch("/api/rfid/stocktake")
-      .then(async (res) => {
-        const json = await res.json().catch(() => ({}));
-        if (cancelled) return;
-        if (!res.ok) setError(json.error || "Could not load counts");
+        if (!res.ok) setError(json.error || "Could not load zones");
         else {
-          setCounts(json.stocktakes ?? []);
+          setZones(json.zones ?? []);
           setError(typeof json.warning === "string" ? json.warning : "");
         }
       })
-      .catch(() => { if (!cancelled) setError("Could not load counts"); });
+      .catch(() => { if (!cancelled) setError("Could not load zones"); });
     return () => { cancelled = true; };
   }, []);
 
-  const open = counts.filter((row) => row.status === "in_progress");
-  const finished = counts.filter((row) => row.status === "completed");
-  const cancelled = counts.filter((row) => row.status === "cancelled");
-  const openByLocation = useMemo(() => {
-    const map = new Map<string, Listed>();
-    for (const row of open) {
-      if (row.location_id) map.set(row.location_id, row);
-    }
-    return map;
-  }, [open]);
-  const openByZone = useMemo(() => {
-    const map = new Map<string, Listed>();
-    for (const row of open) {
-      if (row.zone_id) map.set(row.zone_id, row);
-    }
-    return map;
-  }, [open]);
-  const openShop = open.find((row) => row.kind === "whole_shop") ?? null;
-  const selected = locations.find((row) => row.id === selectedId) ?? null;
-  const selectedOpen = selected ? openByLocation.get(selected.id) ?? null : null;
-
-  async function startBody(body: Record<string, unknown>) {
-    setStarting(true);
-    setError("");
-    const res = await fetch("/api/rfid/stocktake", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok || !json.id) {
-      setError(json.error || "Could not start the count");
-      setStarting(false);
-      return;
-    }
-    router.push(`/rfid/stocktake/${json.id}`);
-  }
-
-  function start(locationId: string, fresh: boolean) {
-    void startBody({ location_id: locationId, fresh });
-  }
-
-  async function cancelCount(id: string) {
-    setStarting(true);
-    setError("");
-    const res = await fetch("/api/rfid/stocktake", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cancel_id: id }),
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setError(json.error || "Could not cancel the count");
-      setStarting(false);
-      return;
-    }
-    setCounts(json.stocktakes ?? []);
-    setError(typeof json.warning === "string" ? json.warning : "");
-    setConfirmCancelId(null);
-    setStarting(false);
-  }
-
   return (
     <div className="stocktake-page">
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: "0 0 8px" }}>Stocktake</h1>
-      <Link href="/rfid/stocktake/move" style={linkButton}>Stock Movement</Link>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: "0 0 10px" }}>Stocktake</h1>
       {error && <p style={errorStyle}>{error}</p>}
-
-      <section style={{ marginTop: 18 }}>
-        <h2 style={sectionTitle}>Open counts</h2>
-        {open.length === 0 && <p style={{ color: "#6B7280", margin: 0 }}>No count in progress.</p>}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {open.map((row) => (
-            <div key={row.id} style={cardLink}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{row.location_name || "Location"}</div>
-              <div style={{ fontSize: 13, color: "#4B5563", marginTop: 4 }}>
-                Continue count started {clock(row.started_at)}
-              </div>
-              <div style={{ fontSize: 13, color: "#374151", marginTop: 6 }}>{formatStocktakeCounts(row.counts)}</div>
-              {formatNotTaggedSummary(row.counts) && (
-                <div style={{ fontSize: 13, color: "#374151", marginTop: 4 }}>{formatNotTaggedSummary(row.counts)}</div>
-              )}
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
-                <Link href={`/rfid/stocktake/${row.id}`} style={{ ...linkButton, justifyContent: "center" }}>Continue</Link>
-                {confirmCancelId === row.id ? (
-                  <button type="button" disabled={starting} onClick={() => { void cancelCount(row.id); }} style={secondaryButton}>
-                    {starting ? "Cancelling…" : "Confirm cancel"}
-                  </button>
-                ) : (
-                  <button type="button" disabled={starting} onClick={() => setConfirmCancelId(row.id)} style={secondaryButton}>
-                    Cancel
-                  </button>
-                )}
-                {row.kind !== "whole_shop" && (
-                  <button
-                    type="button"
-                    disabled={starting || (row.kind === "zone" ? !row.zone_id : !row.location_id)}
-                    onClick={() => {
-                      if (row.kind === "zone" && row.zone_id) void startBody({ zone_id: row.zone_id, fresh: true });
-                      else if (row.location_id) start(row.location_id, true);
-                    }}
-                    style={secondaryButton}
-                  >
-                    {starting ? "Starting…" : "Start fresh"}
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {manager && (
-        <section style={{ marginTop: 18 }}>
-          <h2 style={sectionTitle}>Whole shop</h2>
-          {openShop ? (
-            <Link href={`/rfid/stocktake/${openShop.id}`} style={{ ...linkButton, justifyContent: "center" }}>
-              Continue whole-shop count
-            </Link>
-          ) : (
-            <button type="button" disabled={starting} onClick={() => { void startBody({ whole_shop: true }); }} style={primaryButton}>
-              {starting ? "Starting…" : "Start whole-shop count"}
-            </button>
-          )}
-          <Link href="/rfid/stocktake/zones" style={{ ...linkButton, marginTop: 8 }}>Zones</Link>
-        </section>
-      )}
-
-      <h2 style={sectionTitle}>Start a zone</h2>
+      {!error && zones.length === 0 && <p style={{ color: "#6B7280", margin: 0 }}>No zones yet.</p>}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {zones.map((zone) => {
-          const picked = zone.id === selectedZoneId;
-          return (
-            <button
-              key={zone.id}
-              type="button"
-              aria-pressed={picked}
-              onClick={() => setSelectedZoneId(zone.id)}
-              style={{ ...locationButton, borderColor: picked ? "#111827" : "#D1D5DB", background: picked ? "#F3F4F6" : "#fff" }}
-            >
-              {zone.label}
-            </button>
-          );
-        })}
+        {zones.map((zone) => (
+          <Link key={zone.id} href={`/rfid/stocktake/zone/${zone.id}`} style={rowStyle}>
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 18, fontWeight: 700, color: "#111827" }}>{zone.name}</span>
+              <span style={{ display: "block", fontSize: 14, color: "#4B5563", marginTop: 2 }}>{countedOn(zone.lastCountedAt)}</span>
+            </span>
+            {zone.open && <span style={badge}>Continue</span>}
+          </Link>
+        ))}
       </div>
-      {selectedZoneId && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-          {openByZone.get(selectedZoneId) ? (
-            <Link href={`/rfid/stocktake/${openByZone.get(selectedZoneId)?.id}`} style={{ ...linkButton, justifyContent: "center" }}>
-              Continue zone count
-            </Link>
-          ) : (
-            <button type="button" disabled={starting} onClick={() => { void startBody({ zone_id: selectedZoneId }); }} style={primaryButton}>
-              {starting ? "Starting…" : "Start zone"}
-            </button>
-          )}
-        </div>
-      )}
-
-      <h2 style={sectionTitle}>Start a count</h2>
-      {placeError && <p style={errorStyle}>{placeError}</p>}
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {locations.map((location) => {
-          const picked = location.id === selectedId;
-          return (
-            <button
-              key={location.id}
-              type="button"
-              aria-pressed={picked}
-              onClick={() => setSelectedId(location.id)}
-              style={{ ...locationButton, borderColor: picked ? "#111827" : "#D1D5DB", background: picked ? "#F3F4F6" : "#fff" }}
-            >
-              {formatLocationLabel(location)}
-            </button>
-          );
-        })}
-        {locations.length === 0 && !placeError && <p style={{ color: "#6B7280", margin: 0 }}>No locations yet.</p>}
-      </div>
-      {selected && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-          {selectedOpen ? (
-            <>
-              <Link href={`/rfid/stocktake/${selectedOpen.id}`} style={{ ...linkButton, justifyContent: "center" }}>
-                Continue count started {clock(selectedOpen.started_at)}
-              </Link>
-              <button
-                type="button"
-                disabled={starting}
-                onClick={() => { void start(selected.id, true); }}
-                style={secondaryButton}
-              >
-                {starting ? "Starting…" : "Start fresh"}
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              disabled={starting}
-              onClick={() => { void start(selected.id, false); }}
-              style={primaryButton}
-            >
-              {starting ? "Starting…" : "Start"}
-            </button>
-          )}
-        </div>
-      )}
-
-      <History title="Finished" rows={finished} empty="No finished counts yet." />
-      {cancelled.length > 0 && <History title="Cancelled" rows={cancelled} empty="" />}
       <style>{pageCss}</style>
     </div>
   );
 }
 
-function History({ title, rows, empty }: { title: string; rows: Listed[]; empty: string }) {
-  return (
-    <section style={{ marginTop: 22 }}>
-      <h2 style={sectionTitle}>{title}</h2>
-      {rows.length === 0 && <p style={{ color: "#6B7280", margin: 0 }}>{empty}</p>}
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {rows.map((row) => (
-          <div key={row.id} style={cardLink}>
-            <Link href={`/rfid/stocktake/${row.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{row.location_name || "Location"}</div>
-              <div style={{ fontSize: 13, color: "#4B5563", marginTop: 4 }}>
-                {when(row.started_at)}
-                {row.started_by_name ? ` · ${row.started_by_name}` : ""}
-                {row.status === "completed" && row.finished_by_name ? ` · Finished by ${row.finished_by_name}` : ""}
-                {row.status === "cancelled" ? " · Cancelled" : ""}
-              </div>
-              <div style={{ fontSize: 13, color: "#374151", marginTop: 6 }}>{formatStocktakeCounts(row.counts)}</div>
-              {formatNotTaggedSummary(row.counts) && (
-                <div style={{ fontSize: 13, color: "#374151", marginTop: 4 }}>{formatNotTaggedSummary(row.counts)}</div>
-              )}
-              {formatResolvedSummary(row.counts) && (
-                <div style={{ fontSize: 13, color: "#374151", marginTop: 4 }}>{formatResolvedSummary(row.counts)}</div>
-              )}
-            </Link>
-            {row.status === "completed" && (
-              <Link href={`/rfid/stocktake/${row.id}/report`} style={{ ...linkButton, marginTop: 10, justifyContent: "center", background: "#fff", color: "#111827", border: "1px solid #111827" }}>
-                Report
-              </Link>
-            )}
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
+const pageCss = `.stocktake-page { max-width: 720px; margin: 0 auto; overflow-x: hidden; padding-bottom: 128px; }`;
 
-const sectionTitle: CSSProperties = { fontSize: 16, fontWeight: 700, color: "#111827", margin: "18px 0 8px" };
-const errorStyle: CSSProperties = { background: "#FEF2F2", color: "#991B1B", borderRadius: 10, padding: "12px 14px", fontSize: 15 };
-const locationButton: CSSProperties = {
-  minHeight: 52,
-  textAlign: "left",
-  padding: "12px 14px",
-  borderRadius: 12,
-  border: "1px solid #D1D5DB",
-  background: "#fff",
-  fontSize: 18,
-  fontWeight: 700,
-  color: "#111827",
-  cursor: "pointer",
-  width: "100%",
-};
-const primaryButton: CSSProperties = {
-  minHeight: 52,
-  width: "100%",
-  border: "none",
-  borderRadius: 10,
-  background: "#111827",
-  color: "#fff",
-  fontSize: 16,
-  fontWeight: 700,
-  cursor: "pointer",
-};
-const secondaryButton: CSSProperties = {
-  minHeight: 52,
-  width: "100%",
-  borderRadius: 10,
-  border: "1px solid #D1D5DB",
-  background: "#fff",
-  color: "#111827",
-  fontSize: 16,
-  fontWeight: 700,
-  cursor: "pointer",
-};
-const linkButton: CSSProperties = {
-  display: "inline-flex",
+const rowStyle: CSSProperties = {
+  display: "flex",
   alignItems: "center",
-  minHeight: 48,
-  padding: "0 16px",
-  borderRadius: 10,
-  background: "#111827",
-  color: "#fff",
-  textDecoration: "none",
-  fontWeight: 700,
-  fontSize: 16,
-};
-const cardLink: CSSProperties = {
-  display: "block",
-  textDecoration: "none",
+  justifyContent: "space-between",
+  gap: 12,
+  minHeight: 56,
+  padding: "12px 14px",
   background: "#fff",
   border: "1px solid #E5E7EB",
   borderRadius: 12,
-  padding: "12px 14px",
-  minHeight: 72,
+  textDecoration: "none",
+  color: "#111827",
 };
-const pageCss = `.stocktake-page { max-width: 720px; margin: 0 auto; overflow-x: hidden; padding-bottom: 128px; }`;
+
+const badge: CSSProperties = {
+  flex: "0 0 auto",
+  background: "#111827",
+  color: "#fff",
+  borderRadius: 999,
+  padding: "6px 10px",
+  fontSize: 13,
+  fontWeight: 700,
+};
+
+const errorStyle: CSSProperties = {
+  background: "#FEF2F2",
+  color: "#991B1B",
+  borderRadius: 10,
+  padding: "12px 14px",
+  margin: "0 0 10px",
+};

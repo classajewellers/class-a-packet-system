@@ -8,10 +8,12 @@ import { epcsFromLines } from "../lib/rfid-scan.ts";
 import {
   annotateSameZoneLines,
   assembleStocktake,
+  buildZoneBoard,
   movedHereDetail,
   noteMovedHere,
   sameZonePlaceDetail,
   wholeShopProgressLabel,
+  zoneBoardLabel,
   type SnapshotPiece,
   type StocktakePayload,
   type StoredLine,
@@ -153,5 +155,63 @@ assert.equal(moved.groups.elsewhere.length, 0);
 assert.equal(moved.groups.found.length, 1);
 assert.equal(moved.groups.found[0].detail, "Moved to HA2 ✓");
 assert.equal(moved.groups.found[0].sku, "RING-02");
+
+assert.equal(zoneBoardLabel({ name: "Horseshoe A" }, [
+  { code: "HA1", name: "Horseshoe A1" },
+  { code: "HA2", name: "Horseshoe A2" },
+]), "Horseshoe A");
+assert.equal(zoneBoardLabel({ name: "Arch 1" }, [{ code: "A1", name: "Arch 1" }]), "A1 · Arch 1");
+
+const board = buildZoneBoard([
+  {
+    id: "ha",
+    code: "HA",
+    name: "Horseshoe A",
+    locations: [
+      { id: "ha1", code: "HA1", name: "Horseshoe A1" },
+      { id: "ha2", code: "HA2", name: "Horseshoe A2" },
+    ],
+  },
+  {
+    id: "a1",
+    code: "A1",
+    name: "Arch 1",
+    locations: [{ id: "loc-a1", code: "A1", name: "Arch 1" }],
+  },
+], [
+  {
+    id: "ha2-count",
+    status: "in_progress",
+    kind: "location",
+    zoneId: null,
+    locationId: "ha2",
+    finishedAt: null,
+    startedAt: "2026-09-26T01:23:37.000Z",
+  },
+  {
+    id: "old",
+    status: "completed",
+    kind: "zone",
+    zoneId: "ha",
+    locationId: null,
+    finishedAt: "2026-09-01T00:00:00.000Z",
+    startedAt: "2026-09-01T00:00:00.000Z",
+  },
+  {
+    id: "shop",
+    status: "in_progress",
+    kind: "whole_shop",
+    zoneId: null,
+    locationId: null,
+    finishedAt: null,
+    startedAt: "2026-09-26T01:13:10.000Z",
+  },
+]);
+assert.equal(board[0].name, "A1 · Arch 1");
+assert.equal(board[0].open, false);
+assert.equal(board[0].lastCountedAt, null);
+assert.equal(board[1].name, "Horseshoe A");
+assert.equal(board[1].open, true);
+assert.equal(board[1].lastCountedAt, "2026-09-01T00:00:00.000Z");
 
 console.log("stocktake-live-test: ok");

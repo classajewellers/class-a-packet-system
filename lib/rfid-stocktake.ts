@@ -5,6 +5,7 @@
  * counts, with no expected rows, still use the live in-stock list.
  * Missing is not a scan result. It is stored only when a manager finishes.
  */
+import { compareLocations, formatLocationLabel } from "./location-label";
 import { FALLBACK_STATUS_OPTIONS } from "./pieceResolution";
 import { missingEpcGroup } from "./rfid-scan";
 
@@ -144,6 +145,76 @@ export function sameZonePlaceDetail(place: string): string {
 
 export function movedHereDetail(place: string): string {
   return `Moved to ${place} ✓`;
+}
+
+export type ZoneBoardLocation = { id: string; code: string | null; name: string };
+
+export type ZoneBoardZone = {
+  id: string;
+  code: string | null;
+  name: string;
+  locations: ZoneBoardLocation[];
+};
+
+export type ZoneBoardSession = {
+  id: string;
+  status: StocktakeStatus;
+  kind: StocktakeKind;
+  zoneId: string | null;
+  locationId: string | null;
+  finishedAt: string | null;
+  startedAt: string;
+};
+
+export type ZoneBoardRow = {
+  id: string;
+  name: string;
+  lastCountedAt: string | null;
+  open: boolean;
+};
+
+/** A multi-tray zone uses its name. A one-location zone is that location. */
+export function zoneBoardLabel(zone: { name: string }, locations: { code: string | null; name: string }[]): string {
+  if (locations.length === 1) return formatLocationLabel(locations[0]) || zone.name || "Zone";
+  return zone.name || "Zone";
+}
+
+function laterIso(current: string | null, next: string | null): string | null {
+  if (!next) return current;
+  if (!current) return next;
+  return next > current ? next : current;
+}
+
+/** One row per active zone, newest completed count, and whether a count is open. */
+export function buildZoneBoard(zones: ZoneBoardZone[], sessions: ZoneBoardSession[]): ZoneBoardRow[] {
+  const rows = zones.map((zone) => {
+    const locationIds = new Set(zone.locations.map((location) => location.id));
+    let lastCountedAt: string | null = null;
+    let open = false;
+    for (const session of sessions) {
+      if (session.kind === "whole_shop") continue;
+      const matches = session.kind === "zone"
+        ? session.zoneId === zone.id
+        : !!session.locationId && locationIds.has(session.locationId);
+      if (!matches) continue;
+      if (session.status === "in_progress") open = true;
+      if (session.status === "completed") lastCountedAt = laterIso(lastCountedAt, session.finishedAt || session.startedAt);
+    }
+    return {
+      id: zone.id,
+      name: zoneBoardLabel(zone, zone.locations),
+      lastCountedAt,
+      open,
+      code: zone.code,
+    };
+  });
+  rows.sort((a, b) => compareLocations({ code: a.code, name: a.name }, { code: b.code, name: b.name }));
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    lastCountedAt: row.lastCountedAt,
+    open: row.open,
+  }));
 }
 
 export type MoveTarget = { id: string; label: string };

@@ -277,7 +277,6 @@ export default function StocktakeCountPage() {
     payloadRef.current = json;
     setPayload(json);
     setConfirming(false);
-    router.push(`/rfid/stocktake/${id}/report`);
   }
 
   const session = payload?.stocktake;
@@ -341,13 +340,27 @@ export default function StocktakeCountPage() {
           {session.status === "completed" && session.finished_by_name ? ` by ${session.finished_by_name}` : ""}
         </p>
       )}
+      {session?.status === "completed" && payload && (
+        <section style={{ marginBottom: 16 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, margin: "0 0 8px" }}>Missing ({payload.groups.missing.length})</h2>
+          {payload.groups.missing.length === 0 && <p style={{ color: "#6B7280", margin: "0 0 12px" }}>Nothing missing.</p>}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+            {payload.groups.missing.map((row) => (
+              <div key={row.key} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: "12px 14px", minHeight: 56 }}>
+                <div style={{ fontFamily: "monospace", fontSize: 18, fontWeight: 700 }}>{row.sku || "Piece"}</div>
+                {session.kind === "zone" && row.snapshotLocationLabel && (
+                  <div style={{ fontSize: 14, color: "#4B5563", marginTop: 2 }}>{trayCode(row.snapshotLocationLabel)}</div>
+                )}
+              </div>
+            ))}
+          </div>
+          <Link href={`/rfid/stocktake/${id}/report`} style={{ ...primaryButton, display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}>
+            Printable report
+          </Link>
+        </section>
+      )}
       {session && session.status !== "in_progress" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-          {session.status === "completed" && (
-            <Link href={`/rfid/stocktake/${id}/report`} style={{ ...primaryButton, display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}>
-              Report
-            </Link>
-          )}
           <button
             type="button"
             onClick={() => { void startNewHere(); }}
@@ -453,7 +466,7 @@ export default function StocktakeCountPage() {
           {payload.units.length === 0 && <p style={{ color: "#6B7280" }}>No zones to count.</p>}
         </div>
       )}
-      {payload && !wholeShop && Array.isArray(payload.snapshot) && (
+      {payload && open && !wholeShop && Array.isArray(payload.snapshot) && (
         <StocktakeLiveCount
           payload={payload}
           heardPieceIds={heard}
@@ -476,7 +489,7 @@ export default function StocktakeCountPage() {
           onFind={openFinder}
         />
       )}
-      {payload && !wholeShop && !Array.isArray(payload.snapshot) && (
+      {payload && open && !wholeShop && !Array.isArray(payload.snapshot) && (
         <StocktakeGroupsView
           groups={payload.groups}
           counts={payload.counts}

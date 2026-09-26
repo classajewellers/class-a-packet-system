@@ -40,8 +40,11 @@ import {
   type StocktakeUnit,
   type StoredLine,
   type StoredResult,
+  type ZoneBoardSession,
   WHOLE_SHOP_PART_NOTE,
+  buildZoneBoard,
   wholeShopProgressLabel,
+  zoneBoardLabel,
 } from "@/lib/rfid-stocktake";
 import { compareLocations, isActiveLocation } from "@/lib/location-label";
 
@@ -2425,6 +2428,166 @@ export type ZoneAdmin = {
   unassigned: { id: string; code: string | null; name: string; label: string }[];
   neighbours: { zoneAId: string; zoneBId: string; label: string }[];
 };
+
+export type ZoneBoardDetail = {
+  id: string;
+  name: string;
+  expected: number;
+  notTagged: number;
+  lastCountedAt: string | null;
+  openZoneId: string | null;
+  openLocations: { sessionId: string; label: string }[];
+};
+
+export async function listZoneBoard(
+  supabase: SupabaseClient,
+  tenantId: string,
+): Promise<{ ok: true; rows: ReturnType<typeof buildZoneBoard>; warning: string | null } | { ok: false; status: number; error: string; schema?: boolean }> {
+  const catalogue = await loadZoneCatalogue(supabase, tenantId);
+  if (!catalogue.ok) return catalogue;
+  const listed = await tenantScoped(supabase, tenantId)
+    .from("stocktake_sessions")
+    .select("id, status, kind, zone_id, location_id, finished_at, started_at, parent_session_id")
+    .in("status", ["completed", "in_progress"])
+    .order("started_at", { ascending: false })
+    .limit(1000);
+  let warning: string | null = null;
+  const sessions: ZoneBoardSession[] = [];
+  if (listed.error) warning = listed.error.message;
+  else {
+    for (const row of listed.data ?? []) {
+      if (row.parent_session_id) continue;
+      const status = asStatus(String(row.status ?? ""));
+      if (status === "cancelled") continue;
+      sessions.push({
+        id: String(row.id),
+        status,
+        kind: asKind(row.kind),
+        zoneId: asText(row.zone_id),
+        locationId: asText(row.location_id),
+        finishedAt: row.finished_at ? String(row.finished_at) : null,
+        startedAt: row.started_at ? String(row.started_at) : "",
+      });
+    }
+  }
+  const zones = catalogue.zones.filter((zone) => zone.active).map((zone) => ({
+    id: zone.id,
+    code: zone.code,
+    name: zone.name,
+    locations: catalogue.trays.filter((tray) => tray.active && tray.zoneId === zone.id).map((tray) => ({
+      id: tray.id,
+      code: tray.code,
+      name: tray.name,
+    })),
+  }));
+  return { ok: true, rows: buildZoneBoard(zones, sessions), warning };
+}
+
+export async function getZoneDetail(
+  supabase: SupabaseClient,
+  tenantId: string,
+  zoneId: string,
+): Promise<{ ok: true; detail: ZoneBoardDetail } | { ok: false; status: number; error: string; schema?: boolean }> {
+  if (!isUuid(zoneId)) return { ok: false, status: 404, error: "Zone not found" };
+  const catalogue = await loadZoneCatalogue(supabase, tenantId);
+  if (!catalogue.ok) return catalogue;
+  const zone = catalogue.zones.find((item) => item.id === zoneId && item.active);
+  if (!zone) return { ok: false, status: 404, error: "Zone not found" };
+  const locations = catalogue.trays.filter((tray) => tray.active && tray.zoneId === zone.id);
+  const locationIds = locations.map((tray) => tray.id);
+  let pieceIds: string[] = [];
+  if (locationIds.length) {
+    const pieces = await tenantScoped(supabase, tenantId)
+      .from("inventory_pieces")
+      .select("id")
+      .in("location_id", locationIds)
+      .eq("status", IN_STOCK_STATUS);
+    if (pieces.error) return { ok: false, status: 500, error: pieces.error.message };
+    pieceIds = (pieces.data ?? []).map((row: { id: string }) => String(row.id));
+  }
+  let notTagged = pieceIds.length;
+  if (pieceIds.length) {
+    const tags = await tenantScoped(supabase, tenantId)
+      .from("inventory_rfid_tags")
+      .select("inventory_piece_id, epc, status")
+      .in("inventory_piece_id", pieceIds);
+    if (tags.error) return { ok: false, status: 500, error: tags.error.message };
+    const byPiece = new Map<string, { epc: string; status: string }[]>();
+    for (const tag of tags.data ?? []) {
+      const pieceId = String(tag.inventory_piece_id);
+      const list = byPiece.get(pieceId) ?? [];
+      list.push({ epc: String(tag.epc), status: String(tag.status) });
+      byPiece.set(pieceId, list);
+    }
+    notTagged = 0;
+    for (const pieceId of pieceIds) {
+      if (!preferredTag(byPiece.get(pieceId) ?? [])) notTagged += 1;
+    }
+  }
+  const [zoneOpen, locationOpen, zoneDone, locationDone] = await Promise.all([
+    tenantScoped(supabase, tenantId)
+      .from("stocktake_sessions")
+      .select("id, parent_session_id")
+      .eq("zone_id", zone.id)
+      .eq("status", "in_progress")
+      .limit(5),
+    locationIds.length
+      ? tenantScoped(supabase, tenantId)
+        .from("stocktake_sessions")
+        .select("id, location_id, parent_session_id, started_at")
+        .in("location_id", locationIds)
+        .eq("status", "in_progress")
+        .order("started_at", { ascending: false })
+      : Promise.resolve({ data: [] as { id: string; location_id: string | null; parent_session_id: string | null }[], error: null }),
+    tenantScoped(supabase, tenantId)
+      .from("stocktake_sessions")
+      .select("finished_at, started_at")
+      .eq("zone_id", zone.id)
+      .eq("status", "completed")
+      .order("finished_at", { ascending: false })
+      .limit(1),
+    locationIds.length
+      ? tenantScoped(supabase, tenantId)
+        .from("stocktake_sessions")
+        .select("finished_at, started_at")
+        .in("location_id", locationIds)
+        .eq("status", "completed")
+        .order("finished_at", { ascending: false })
+        .limit(1)
+      : Promise.resolve({ data: [] as { finished_at: string | null; started_at: string | null }[], error: null }),
+  ]);
+  if (zoneOpen.error) return { ok: false, status: 500, error: zoneOpen.error.message };
+  if (locationOpen.error) return { ok: false, status: 500, error: locationOpen.error.message };
+  type OpenRow = { id: string; parent_session_id?: string | null; location_id?: string | null };
+  const openZone = ((zoneOpen.data ?? []) as OpenRow[]).find((row) => !row.parent_session_id);
+  const openLocations = ((locationOpen.data ?? []) as OpenRow[])
+    .filter((row) => !row.parent_session_id && row.location_id)
+    .map((row) => {
+      const tray = locations.find((item) => item.id === String(row.location_id));
+      const code = tray?.code || (tray ? formatLocationLabel(tray) : "Location");
+      return { sessionId: String(row.id), label: code };
+    });
+  const doneAt = (rows: { finished_at?: string | null; started_at?: string | null }[] | null): string | null => {
+    const row = rows?.[0];
+    if (!row) return null;
+    return row.finished_at ? String(row.finished_at) : (row.started_at ? String(row.started_at) : null);
+  };
+  const zoneWhen = zoneDone.error ? null : doneAt(zoneDone.data);
+  const locationWhen = locationDone.error ? null : doneAt(locationDone.data);
+  const lastCountedAt = !zoneWhen ? locationWhen : !locationWhen ? zoneWhen : (zoneWhen > locationWhen ? zoneWhen : locationWhen);
+  return {
+    ok: true,
+    detail: {
+      id: zone.id,
+      name: zoneBoardLabel(zone, locations),
+      expected: pieceIds.length,
+      notTagged,
+      lastCountedAt,
+      openZoneId: openZone?.id ? String(openZone.id) : null,
+      openLocations,
+    },
+  };
+}
 
 export async function getZoneAdmin(
   supabase: SupabaseClient,
