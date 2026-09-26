@@ -43,6 +43,7 @@ import {
   type ZoneBoardSession,
   WHOLE_SHOP_PART_NOTE,
   buildZoneBoard,
+  openCountIdsInZone,
   wholeShopProgressLabel,
   zoneBoardLabel,
 } from "@/lib/rfid-stocktake";
@@ -1799,6 +1800,7 @@ export async function resolveExpectedPiece(
   }
   if (!row) return { ok: false, status: 404, error: "That piece is not on this count" };
   if (!row.snapshot_epc) return { ok: false, status: 400, error: "Untagged pieces are checked with Seen" };
+  if (resolution === "still_missing" && row.resolution === "still_missing") return { ok: true };
 
   let live: PieceRow | undefined;
   let scanned = false;
@@ -2287,6 +2289,74 @@ async function insertZoneSession(
   };
 }
 
+async function cancelSessionIds(
+  supabase: SupabaseClient,
+  tenantId: string,
+  userId: string,
+  ids: string[],
+): Promise<{ ok: true; ids: string[] } | { ok: false; error: string }> {
+  if (!ids.length) return { ok: true, ids: [] };
+  const now = new Date().toISOString();
+  const { data, error } = await tenantScoped(supabase, tenantId)
+    .from("stocktake_sessions")
+    .update({ status: "cancelled", finished_at: now, finished_by: userId })
+    .in("id", ids)
+    .eq("status", "in_progress")
+    .select("id");
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, ids: (data ?? []).map((row: { id: string }) => String(row.id)) };
+}
+
+async function restoreSessionIds(
+  supabase: SupabaseClient,
+  tenantId: string,
+  ids: string[],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!ids.length) return { ok: true };
+  const { error } = await tenantScoped(supabase, tenantId)
+    .from("stocktake_sessions")
+    .update({ status: "in_progress", finished_at: null, finished_by: null })
+    .in("id", ids)
+    .eq("status", "cancelled");
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+async function loadOpenIdsInZone(
+  supabase: SupabaseClient,
+  tenantId: string,
+  zoneId: string,
+  locationIds: string[],
+): Promise<{ ok: true; ids: string[] } | { ok: false; status: number; error: string; schema?: boolean }> {
+  const [zoneRows, locationRows] = await Promise.all([
+    tenantScoped(supabase, tenantId)
+      .from("stocktake_sessions")
+      .select("id, status, kind, zone_id, location_id")
+      .eq("zone_id", zoneId)
+      .eq("status", "in_progress"),
+    locationIds.length
+      ? tenantScoped(supabase, tenantId)
+        .from("stocktake_sessions")
+        .select("id, status, kind, zone_id, location_id")
+        .in("location_id", locationIds)
+        .eq("status", "in_progress")
+      : Promise.resolve({ data: [] as { id: string; status: string; kind: string | null; zone_id: string | null; location_id: string | null }[], error: null }),
+  ]);
+  if (zoneRows.error) {
+    if (columnMissing(zoneRows.error, "zone_id")) return { ok: false, status: 503, error: zoneRows.error.message, schema: true };
+    return { ok: false, status: 500, error: zoneRows.error.message };
+  }
+  if (locationRows.error) return { ok: false, status: 500, error: locationRows.error.message };
+  const sessions = [...(zoneRows.data ?? []), ...(locationRows.data ?? [])].map((row) => ({
+    id: String(row.id),
+    status: String(row.status ?? "in_progress"),
+    kind: row.kind ? String(row.kind) : null,
+    zoneId: row.zone_id ? String(row.zone_id) : null,
+    locationId: row.location_id ? String(row.location_id) : null,
+  }));
+  return { ok: true, ids: openCountIdsInZone(zoneId, locationIds, sessions) };
+}
+
 export async function createZoneStocktake(
   supabase: SupabaseClient,
   tenantId: string,
@@ -2298,18 +2368,47 @@ export async function createZoneStocktake(
   if (!catalogue.ok) return catalogue;
   const zone = catalogue.zones.find((item) => item.id === zoneId);
   if (!zone || !zone.active) return { ok: false, status: 404, error: "Zone not found" };
+  const scope = scopeForZone(zoneId, catalogue);
   const existing = await findOpenZone(supabase, tenantId, zoneId);
   if (!existing.ok) return existing;
-  if (existing.row?.parent_session_id) return continuedZone(existing.row);
   if (existing.row && !options?.fresh) return continuedZone(existing.row);
-  if (existing.row && options?.fresh) {
-    const closed = await cancelSession(supabase, tenantId, userId, existing.row.id);
-    if (!closed.ok) return { ok: false, status: 500, error: closed.error };
+
+  let cancelled: string[] = [];
+  if (options?.fresh) {
+    const openIds = await loadOpenIdsInZone(supabase, tenantId, zoneId, scope.locationIds);
+    if (!openIds.ok) return openIds;
+    if (openIds.ids.length) {
+      const closed = await cancelSessionIds(supabase, tenantId, userId, openIds.ids);
+      if (!closed.ok) return { ok: false, status: 500, error: closed.error };
+      if (closed.ids.length !== openIds.ids.length) {
+        const restored = await restoreSessionIds(supabase, tenantId, closed.ids);
+        const changed = "The open count changed. Continue it, or start fresh again.";
+        if (!restored.ok) {
+          return { ok: false, status: 409, error: `${changed} The open count could not be put back: ${restored.error}` };
+        }
+        return { ok: false, status: 409, error: changed };
+      }
+      cancelled = closed.ids;
+    }
   }
+
   const shop = await findOpenWholeShop(supabase, tenantId);
-  if (!shop.ok) return shop;
-  const scope = scopeForZone(zoneId, catalogue);
-  return insertZoneSession(supabase, tenantId, userId, zoneId, shop.id, scope.locationIds);
+  if (!shop.ok) {
+    const restored = await restoreSessionIds(supabase, tenantId, cancelled);
+    if (!restored.ok) {
+      return { ok: false, status: shop.status, error: `${shop.error} The open count could not be put back: ${restored.error}`, schema: shop.schema };
+    }
+    return shop;
+  }
+  const started = await insertZoneSession(supabase, tenantId, userId, zoneId, shop.id, scope.locationIds);
+  if (!started.ok) {
+    const restored = await restoreSessionIds(supabase, tenantId, cancelled);
+    if (!restored.ok) {
+      return { ok: false, status: started.status, error: `${started.error} The open count could not be put back: ${restored.error}`, schema: started.schema };
+    }
+    return started;
+  }
+  return started;
 }
 
 export async function createWholeShopStocktake(

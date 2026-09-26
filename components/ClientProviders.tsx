@@ -32,6 +32,12 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const isSetPassword = pathname === "/set-password";
   const isPublicPage  = pathname.startsWith("/claim/") || PUBLIC_PAGE_PATTERN.test(pathname);
   const isNoShellPage = NO_SHELL_PAGES.has(pathname);
+  // The floating report button covers Find this ring, the finder, and the movement controls.
+  const hideQuickAction =
+    pathname === "/rfid/stocktake/move" ||
+    pathname.startsWith("/rfid/stocktake/zone/") ||
+    (/^\/rfid\/stocktake\/[^/]+$/.test(pathname) && pathname !== "/rfid/stocktake/zones") ||
+    /^\/rfid\/stocktake\/[^/]+\/report$/.test(pathname);
   const [aiOpen, setAiOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
@@ -105,7 +111,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
           </main>
         </div>
         <AIAssistant open={aiOpen} onClose={() => setAiOpen(false)} />
-        <VaultReportButton />
+        {!hideQuickAction && <VaultReportButton />}
       </div>
     </BillingContext.Provider>
   );

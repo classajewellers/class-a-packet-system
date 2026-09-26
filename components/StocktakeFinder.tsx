@@ -17,6 +17,9 @@ export function StocktakeFinder({
   tray,
   onScan,
   onClose,
+  onCantFind,
+  cantFindBusy = false,
+  cantFindError = "",
 }: {
   sku: string;
   pieceId: string;
@@ -25,6 +28,10 @@ export function StocktakeFinder({
   /** Called for a real read of this tag. Repeats are included; the caller dedupes saves. */
   onScan?: (epc: string) => void;
   onClose: () => void;
+  /** Open count: just go back. Finished count: the caller marks Still missing. */
+  onCantFind: () => void;
+  cantFindBusy?: boolean;
+  cantFindError?: string;
 }) {
   const target = epc.toLowerCase();
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -32,6 +39,7 @@ export function StocktakeFinder({
   const [draft, setDraft] = useState("");
   const [level, setLevel] = useState(0);
   const [muted, setMuted] = useState(false);
+  const [hintOpen, setHintOpen] = useState(false);
 
   useEffect(() => {
     const sync = () => setMuted(stocktakeMuted());
@@ -74,9 +82,10 @@ export function StocktakeFinder({
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "#F9FAFB", overflow: "auto", padding: "16px 16px 96px" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 80, background: "#F9FAFB", overflow: "auto", padding: "16px 16px 176px" }}>
       <div style={{ maxWidth: 720, margin: "0 auto" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <button type="button" onClick={onClose} style={backLink}>Back</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
           <h1 style={{ flex: 1, fontSize: 22, fontWeight: 800, margin: 0 }}>Find this ring</h1>
           <button
             type="button"
@@ -100,9 +109,22 @@ export function StocktakeFinder({
         <div aria-label="Closeness" style={{ marginTop: 18, height: 16, borderRadius: 8, background: "#E5E7EB", overflow: "hidden" }}>
           <div style={{ width: `${Math.round(level * 100)}%`, height: "100%", background: level > 0.66 ? "#16A34A" : level > 0.2 ? "#CA8A04" : "#9CA3AF" }} />
         </div>
-        <p style={{ fontSize: 14, color: "#374151", lineHeight: 1.45 }}>
-          The beep speeds up as this tag is read more often. This page only hears the tag number the gun types, not how strong the signal is. In DataWedge, open the profile, then RFID Input, Configure reader settings, and turn Filter duplicate tags off so the same tag keeps being sent while you hold the trigger.
+        <p style={{ fontSize: 15, color: "#374151", lineHeight: 1.4, margin: "12px 0 0" }}>
+          Walk slowly, it beeps faster as you get closer.
         </p>
+        <button
+          type="button"
+          aria-expanded={hintOpen}
+          onClick={() => setHintOpen((open) => !open)}
+          style={hintLink}
+        >
+          Not beeping?
+        </button>
+        {hintOpen && (
+          <p style={{ fontSize: 14, color: "#374151", lineHeight: 1.45, margin: "4px 0 0" }}>
+            In InfoWedge, RFID settings, turn off Filter duplicate tags.
+          </p>
+        )}
         <textarea
           ref={inputRef}
           value={draft}
@@ -126,17 +148,64 @@ export function StocktakeFinder({
           }}
           style={{ width: "100%", boxSizing: "border-box", minHeight: 56, fontSize: 16, padding: 12, borderRadius: 10, border: "1px solid #D1D5DB" }}
         />
-        <button
-          type="button"
-          onClick={onClose}
-          style={{ marginTop: 12, minHeight: 48, width: "100%", border: "none", borderRadius: 10, background: "#111827", color: "#fff", fontSize: 16, fontWeight: 700 }}
-        >
-          Found it
-        </button>
+        {cantFindError && <p style={{ color: "#991B1B", fontSize: 14, margin: "10px 0 0" }}>{cantFindError}</p>}
+        <div style={{ display: "flex", gap: 8, marginTop: 12, marginRight: 72 }}>
+          <button type="button" onClick={onClose} style={foundButton}>Found it</button>
+          <button type="button" onClick={onCantFind} disabled={cantFindBusy} style={cantButton}>
+            {cantFindBusy ? "Saving…" : "Can't find it"}
+          </button>
+        </div>
       </div>
     </div>
   );
 }
+
+const backLink: CSSProperties = {
+  background: "none",
+  border: "none",
+  padding: 0,
+  minHeight: 44,
+  fontSize: 16,
+  fontWeight: 700,
+  color: "#111827",
+  cursor: "pointer",
+};
+
+const hintLink: CSSProperties = {
+  background: "none",
+  border: "none",
+  padding: 0,
+  marginTop: 4,
+  minHeight: 32,
+  fontSize: 14,
+  fontWeight: 700,
+  color: "#1D4ED8",
+  cursor: "pointer",
+};
+
+const actionButton: CSSProperties = {
+  flex: 1,
+  minHeight: 52,
+  borderRadius: 10,
+  fontSize: 16,
+  fontWeight: 700,
+  padding: "8px 10px",
+  cursor: "pointer",
+};
+
+const foundButton: CSSProperties = {
+  ...actionButton,
+  border: "none",
+  background: "#111827",
+  color: "#fff",
+};
+
+const cantButton: CSSProperties = {
+  ...actionButton,
+  border: "1px solid #D1D5DB",
+  background: "#fff",
+  color: "#111827",
+};
 
 const muteButton: CSSProperties = {
   minHeight: 40,

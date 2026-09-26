@@ -519,6 +519,7 @@ export default function StocktakeCountPage() {
           tray={session?.kind === "zone" ? trayCode(finder.snapshotLocationLabel) : null}
           onScan={(epc) => { noteFresh(pushTokens([epc]).epcs); }}
           onClose={closeFinder}
+          onCantFind={closeFinder}
         />
       )}
       {open && !confirming && !childOfShop && (

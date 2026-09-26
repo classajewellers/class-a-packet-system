@@ -1,5 +1,5 @@
 /**
- * Tell a DataWedge / InfoWedge burst from a person typing.
+ * Tell an InfoWedge scan burst from a person typing.
  * A wedge dumps a code as fast keystrokes and ends with Enter.
  * A person leaves gaps between keys. The trailing fast run is the code,
  * so a scan that lands after a half-typed search is still just the scan.

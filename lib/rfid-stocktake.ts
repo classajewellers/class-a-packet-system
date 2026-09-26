@@ -217,6 +217,35 @@ export function buildZoneBoard(zones: ZoneBoardZone[], sessions: ZoneBoardSessio
   }));
 }
 
+/**
+ * Open counts a Start fresh must cancel before a new zone snapshot.
+ * A location count inside the zone counts, including one with no zone_id.
+ * Completed counts and other zones stay out. Whole-shop parents are not zone counts.
+ */
+export function openCountIdsInZone(
+  zoneId: string,
+  locationIds: readonly string[],
+  sessions: {
+    id: string;
+    status: string;
+    kind?: string | null;
+    zoneId: string | null;
+    locationId: string | null;
+  }[],
+): string[] {
+  const locations = new Set(locationIds);
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const session of sessions) {
+    if (session.status !== "in_progress" || session.kind === "whole_shop") continue;
+    const inZone = session.zoneId === zoneId || (!!session.locationId && locations.has(session.locationId));
+    if (!inZone || seen.has(session.id)) continue;
+    seen.add(session.id);
+    ids.push(session.id);
+  }
+  return ids;
+}
+
 export type MoveTarget = { id: string; label: string };
 
 export type ReportPiece = {

@@ -33,6 +33,7 @@ export default function StocktakeReportPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [locations, setLocations] = useState<Record<string, string>>({});
   const [finder, setFinder] = useState<ReportPiece | null>(null);
+  const [finderError, setFinderError] = useState("");
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/rfid/stocktake/${id}/report`);
@@ -47,7 +48,7 @@ export default function StocktakeReportPage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  async function resolve(piece: ReportPiece, resolution: "found" | "still_missing") {
+  async function resolve(piece: ReportPiece, resolution: "found" | "still_missing"): Promise<string | null> {
     setBusyId(piece.pieceId);
     setError("");
     const res = await fetch(`/api/rfid/stocktake/${id}/resolve`, {
@@ -62,10 +63,12 @@ export default function StocktakeReportPage() {
     const json = await res.json().catch(() => ({}));
     setBusyId(null);
     if (!res.ok) {
-      setError(json.error || "Could not save that");
-      return;
+      const message = json.error || "Could not save that";
+      setError(message);
+      return message;
     }
     await load();
+    return null;
   }
 
   const session = report?.stocktake;
@@ -154,7 +157,20 @@ export default function StocktakeReportPage() {
           pieceId={finder.pieceId}
           epc={finder.epc}
           tray={trayCode(finder.locationLabel)}
-          onClose={() => setFinder(null)}
+          cantFindBusy={busyId === finder.pieceId}
+          cantFindError={finderError}
+          onClose={() => { setFinderError(""); setFinder(null); }}
+          onCantFind={() => {
+            const piece = finder;
+            setFinderError("");
+            void resolve(piece, "still_missing").then((message) => {
+              if (!message) {
+                setFinder(null);
+                return;
+              }
+              setFinderError(message);
+            });
+          }}
         />
       )}
       <style>{`

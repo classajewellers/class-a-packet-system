@@ -29,6 +29,7 @@ export default function ZoneDetailPage() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,17 +44,17 @@ export default function ZoneDetailPage() {
     return () => { cancelled = true; };
   }, [id]);
 
-  async function start() {
+  async function start(fresh: boolean) {
     setStarting(true);
     setError("");
     const res = await fetch("/api/rfid/stocktake", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ zone_id: id }),
+      body: JSON.stringify({ zone_id: id, fresh }),
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok || !json.id) {
-      setError(json.error || "Could not start the count");
+      setError(json.error || (fresh ? "Could not start a fresh count" : "Could not start the count"));
       setStarting(false);
       return;
     }
@@ -61,6 +62,9 @@ export default function ZoneDetailPage() {
   }
 
   const when = countedOn(detail?.lastCountedAt ?? null);
+  const continueId = detail?.openZoneId || detail?.openLocations[0]?.sessionId || "";
+  const hasOpen = !!continueId;
+  const extraLocations = (detail?.openLocations ?? []).filter((row) => row.sessionId !== continueId);
 
   return (
     <div className="stocktake-page">
@@ -72,14 +76,34 @@ export default function ZoneDetailPage() {
           {when && <p style={{ margin: "0 0 12px", color: "#4B5563" }}>{when}</p>}
           <p style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: "#111827" }}>{detail.expected} pieces expected</p>
           <p style={{ margin: "0 0 16px", fontSize: 16, color: "#374151" }}>{detail.notTagged} not tagged</p>
-          {detail.openZoneId ? (
-            <Link href={`/rfid/stocktake/${detail.openZoneId}`} style={primaryLink}>Continue</Link>
+          {hasOpen ? (
+            <Link href={`/rfid/stocktake/${continueId}`} style={primaryLink}>Continue</Link>
           ) : (
-            <button type="button" disabled={starting} onClick={() => { void start(); }} style={primaryButton}>
+            <button type="button" disabled={starting} onClick={() => { void start(false); }} style={primaryButton}>
               {starting ? "Starting…" : "Start"}
             </button>
           )}
-          {detail.openLocations.map((row) => (
+          {hasOpen && (
+            <button type="button" disabled={starting} onClick={() => { setError(""); setConfirming(true); }} style={secondaryButton}>
+              Start fresh
+            </button>
+          )}
+          {confirming && (
+            <div role="group" aria-label="Start fresh" style={confirmBox}>
+              <p style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700, color: "#111827" }}>
+                Cancel the open count and start again?
+              </p>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button type="button" disabled={starting} onClick={() => { void start(true); }} style={confirmButton}>
+                  {starting ? "Starting…" : "Confirm"}
+                </button>
+                <button type="button" disabled={starting} onClick={() => setConfirming(false)} style={keepButton}>
+                  Keep it
+                </button>
+              </div>
+            </div>
+          )}
+          {extraLocations.map((row) => (
             <Link key={row.sessionId} href={`/rfid/stocktake/${row.sessionId}`} style={secondaryLink}>
               Continue {row.label}
             </Link>
@@ -111,6 +135,37 @@ const primaryLink: CSSProperties = {
   justifyContent: "center",
   textDecoration: "none",
   boxSizing: "border-box",
+};
+
+const secondaryButton: CSSProperties = {
+  ...primaryButton,
+  marginTop: 8,
+  background: "#fff",
+  color: "#111827",
+  border: "1px solid #111827",
+};
+
+const confirmBox: CSSProperties = {
+  marginTop: 12,
+  background: "#fff",
+  border: "1px solid #E5E7EB",
+  borderRadius: 12,
+  padding: 14,
+};
+
+const confirmButton: CSSProperties = {
+  ...primaryButton,
+  flex: 1,
+  minHeight: 52,
+  fontSize: 16,
+};
+
+const keepButton: CSSProperties = {
+  ...secondaryButton,
+  flex: 1,
+  marginTop: 0,
+  minHeight: 52,
+  fontSize: 16,
 };
 
 const secondaryLink: CSSProperties = {
