@@ -384,4 +384,4 @@ const cardLink: CSSProperties = {
   padding: "12px 14px",
   minHeight: 72,
 };
-const pageCss = `.stocktake-page { max-width: 720px; margin: 0 auto; overflow-x: hidden; padding-bottom: 96px; }`;
+const pageCss = `.stocktake-page { max-width: 720px; margin: 0 auto; overflow-x: hidden; padding-bottom: 128px; }`;

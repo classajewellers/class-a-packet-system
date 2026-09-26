@@ -14,6 +14,7 @@ import { formatLocationLabel, locationsForPicker } from "@/lib/location-label";
 import { movePieceToLocation } from "@/lib/move-piece-location";
 import {
   IN_STOCK_STATUS,
+  annotateSameZoneLines,
   assembleStocktake,
   buildStocktakeGroups,
   classifySnapshotRow,
@@ -39,6 +40,8 @@ import {
   type StocktakeUnit,
   type StoredLine,
   type StoredResult,
+  WHOLE_SHOP_PART_NOTE,
+  wholeShopProgressLabel,
 } from "@/lib/rfid-stocktake";
 import { compareLocations, isActiveLocation } from "@/lib/location-label";
 
@@ -442,7 +445,11 @@ export async function getStocktake(
     return { ok: false, status: 500, error: err instanceof Error ? err.message : "Could not load the count" };
   }
 
-  const lines = linesFromScans(scans, pieces, names);
+  let lines = linesFromScans(scans, pieces, names);
+  if (session.kind === "location" && session.location_id) {
+    const placeCatalogue = await loadZoneCatalogue(supabase, tenantId);
+    if (placeCatalogue.ok) lines = annotateSameZoneLines(lines, session.location_id, placeCatalogue.trays);
+  }
   const countLocationId = session.location_id ?? "";
   let scopeLocationIds: string[] | null = null;
   let moveTargets: MoveTarget[] | undefined;
@@ -657,6 +664,23 @@ export async function listStocktakes(
     if (!loadedCatalogue.ok) warnings.push(loadedCatalogue.error);
     else catalogue = loadedCatalogue;
   }
+  const startedByParent = new Map<string, number>();
+  const shopIds = uuidIds(sessions.filter((row) => row.kind === "whole_shop").map((row) => row.id));
+  if (shopIds.length) {
+    const childCount = await tenantScoped(supabase, tenantId)
+      .from("stocktake_sessions")
+      .select("parent_session_id, kind")
+      .in("parent_session_id", shopIds);
+    if (childCount.error) warnings.push(childCount.error.message);
+    else {
+      for (const row of childCount.data ?? []) {
+        if (row.kind !== "zone" || !row.parent_session_id) continue;
+        const parent = String(row.parent_session_id);
+        startedByParent.set(parent, (startedByParent.get(parent) ?? 0) + 1);
+      }
+    }
+  }
+  const activeZoneTotal = catalogue ? catalogue.zones.filter((zone) => zone.active).length : null;
 
   const stocktakes: ListedStocktake[] = sessions.map((session) => {
     const id = String(session.id);
@@ -725,7 +749,7 @@ export async function listStocktakes(
       zone_id: session.zone_id,
       parent_session_id: session.parent_session_id,
       location_name: session.kind === "whole_shop"
-        ? "Whole shop"
+        ? wholeShopProgressLabel(startedByParent.get(id) ?? 0, activeZoneTotal ?? (startedByParent.get(id) ?? 0))
         : session.kind === "zone"
           ? zoneLabel
           : (session.location_id ? names.get(session.location_id) ?? null : null),
@@ -1925,32 +1949,98 @@ function conflictMessage(error: { code?: string; message?: string } | null, fall
   return fallback;
 }
 
+function emptyCounts(): StocktakeCounts {
+  return buildStocktakeGroups([], [], "").counts;
+}
+
+type ShopChildRow = { id: string; kind: string | null; zone_id: string | null; location_id: string | null };
+
 async function presentWholeShop(
   supabase: SupabaseClient,
   tenantId: string,
   session: SessionRow,
   warnings: string[],
 ): Promise<{ ok: true; payload: StocktakePayload } | { ok: false; status: number; error: string; schema?: boolean }> {
+  const catalogueResult = await loadZoneCatalogue(supabase, tenantId);
+  const catalogue = catalogueResult.ok ? catalogueResult : null;
+  if (!catalogueResult.ok) warnings.push(catalogueResult.error);
   const { data, error } = await tenantScoped(supabase, tenantId)
     .from("stocktake_sessions")
-    .select("id")
+    .select("id, kind, zone_id, location_id")
     .eq("parent_session_id", session.id);
   if (error) return { ok: false, status: 500, error: error.message };
+  const children = (data ?? []) as ShopChildRow[];
   const units: StocktakeUnit[] = [];
-  for (const child of data ?? []) {
+  const used = new Set<string>();
+
+  async function pushChild(child: ShopChildRow, fallbackName: string, zoneId: string | null, locationId: string | null) {
+    used.add(String(child.id));
     const view = await getStocktake(supabase, tenantId, String(child.id));
     if (!view.ok) return view;
     units.push({
       id: view.payload.stocktake.id,
       kind: view.payload.stocktake.kind === "zone" ? "zone" : "location",
-      name: view.payload.stocktake.location_name || "Zone",
+      name: view.payload.stocktake.location_name || fallbackName,
       status: view.payload.stocktake.status,
       counts: view.payload.counts,
+      started: true,
+      zoneId,
+      locationId,
     });
+    return null;
+  }
+
+  for (const zone of (catalogue?.zones ?? []).filter((item) => item.active)) {
+    const child = children.find((row) => String(row.zone_id || "") === zone.id);
+    if (!child) {
+      units.push({
+        id: null,
+        kind: "zone",
+        name: zone.label,
+        status: "in_progress",
+        counts: emptyCounts(),
+        started: false,
+        zoneId: zone.id,
+        locationId: null,
+      });
+      continue;
+    }
+    const failed = await pushChild(child, zone.label, zone.id, null);
+    if (failed) return failed;
+  }
+  for (const tray of (catalogue?.trays ?? []).filter((item) => item.active && !item.zoneId)) {
+    const child = children.find((row) => row.kind !== "zone" && String(row.location_id || "") === tray.id);
+    if (!child) {
+      units.push({
+        id: null,
+        kind: "location",
+        name: tray.label,
+        status: "in_progress",
+        counts: emptyCounts(),
+        started: false,
+        zoneId: null,
+        locationId: tray.id,
+      });
+      continue;
+    }
+    const failed = await pushChild(child, tray.label, null, tray.id);
+    if (failed) return failed;
+  }
+  for (const child of children) {
+    if (used.has(String(child.id))) continue;
+    const failed = await pushChild(
+      child,
+      "Zone",
+      child.zone_id ? String(child.zone_id) : null,
+      child.location_id ? String(child.location_id) : null,
+    );
+    if (failed) return failed;
   }
   units.sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true, sensitivity: "base" }));
   const people = await nameMap(supabase, tenantId, [session.started_by, session.finished_by].filter((id): id is string => !!id));
   const blank = buildStocktakeGroups([], [], "");
+  const startedZones = units.filter((unit) => unit.kind === "zone" && unit.started).length;
+  const totalZones = catalogue ? catalogue.zones.filter((zone) => zone.active).length : startedZones;
   const stocktake: StocktakeSession = {
     id: session.id,
     status: asStatus(session.status),
@@ -1958,7 +2048,7 @@ async function presentWholeShop(
     location_id: null,
     zone_id: null,
     parent_session_id: null,
-    location_name: "Whole shop",
+    location_name: wholeShopProgressLabel(startedZones, totalZones),
     started_at: session.started_at,
     finished_at: session.finished_at,
     started_by_name: session.started_by ? people.get(session.started_by) ?? null : null,
@@ -2091,37 +2181,75 @@ export async function cancelStocktake(
   return { ok: true };
 }
 
-export async function createZoneStocktake(
+type ZoneStart =
+  | { ok: true; id: string; continued: boolean; started_at: string | null; note: string | null }
+  | { ok: false; status: number; error: string; schema?: boolean };
+
+async function findOpenZone(
+  supabase: SupabaseClient,
+  tenantId: string,
+  zoneId: string,
+): Promise<{ ok: true; row: { id: string; started_at: string | null; parent_session_id: string | null } | null } | { ok: false; status: number; error: string; schema?: boolean }> {
+  const { data, error } = await tenantScoped(supabase, tenantId)
+    .from("stocktake_sessions")
+    .select("id, started_at, parent_session_id")
+    .eq("zone_id", zoneId)
+    .eq("status", "in_progress")
+    .maybeSingle();
+  if (error) {
+    if (columnMissing(error, "zone_id") || columnMissing(error, "parent_session")) {
+      return { ok: false, status: 503, error: error.message, schema: true };
+    }
+    return { ok: false, status: 500, error: error.message };
+  }
+  if (!data?.id) return { ok: true, row: null };
+  return {
+    ok: true,
+    row: {
+      id: String(data.id),
+      started_at: data.started_at ? String(data.started_at) : null,
+      parent_session_id: data.parent_session_id ? String(data.parent_session_id) : null,
+    },
+  };
+}
+
+async function findOpenWholeShop(
+  supabase: SupabaseClient,
+  tenantId: string,
+): Promise<{ ok: true; id: string | null } | { ok: false; status: number; error: string; schema?: boolean }> {
+  const { data, error } = await tenantScoped(supabase, tenantId)
+    .from("stocktake_sessions")
+    .select("id")
+    .eq("kind", "whole_shop")
+    .eq("status", "in_progress")
+    .maybeSingle();
+  if (error) {
+    if (columnMissing(error, "kind")) return { ok: false, status: 503, error: error.message, schema: true };
+    return { ok: false, status: 500, error: error.message };
+  }
+  return { ok: true, id: data?.id ? String(data.id) : null };
+}
+
+function continuedZone(
+  row: { id: string; started_at: string | null; parent_session_id: string | null },
+): ZoneStart {
+  return {
+    ok: true,
+    id: row.id,
+    continued: true,
+    started_at: row.started_at,
+    note: row.parent_session_id ? WHOLE_SHOP_PART_NOTE : null,
+  };
+}
+
+async function insertZoneSession(
   supabase: SupabaseClient,
   tenantId: string,
   userId: string,
   zoneId: string,
-  options?: { fresh?: boolean },
-): Promise<
-  | { ok: true; id: string; continued: boolean; started_at: string | null }
-  | { ok: false; status: number; error: string; schema?: boolean }
-> {
-  const catalogue = await loadZoneCatalogue(supabase, tenantId);
-  if (!catalogue.ok) return catalogue;
-  const zone = catalogue.zones.find((item) => item.id === zoneId);
-  if (!zone || !zone.active) return { ok: false, status: 404, error: "Zone not found" };
-  const { data: existing, error: existingErr } = await tenantScoped(supabase, tenantId)
-    .from("stocktake_sessions")
-    .select("id, started_at")
-    .eq("zone_id", zoneId)
-    .eq("status", "in_progress")
-    .maybeSingle();
-  if (existingErr) {
-    if (columnMissing(existingErr, "zone_id")) return { ok: false, status: 503, error: existingErr.message, schema: true };
-    return { ok: false, status: 500, error: existingErr.message };
-  }
-  if (existing?.id && !options?.fresh) {
-    return { ok: true, id: String(existing.id), continued: true, started_at: existing.started_at ? String(existing.started_at) : null };
-  }
-  if (existing?.id && options?.fresh) {
-    const closed = await cancelSession(supabase, tenantId, userId, String(existing.id));
-    if (!closed.ok) return { ok: false, status: 500, error: closed.error };
-  }
+  parentId: string | null,
+  locationIds: string[],
+): Promise<ZoneStart> {
   const startedAt = new Date().toISOString();
   const { data: created, error } = await tenantScoped(supabase, tenantId)
     .from("stocktake_sessions")
@@ -2129,6 +2257,7 @@ export async function createZoneStocktake(
       kind: "zone",
       zone_id: zoneId,
       location_id: null,
+      parent_session_id: parentId,
       status: "in_progress",
       started_by: userId,
       started_at: startedAt,
@@ -2137,21 +2266,47 @@ export async function createZoneStocktake(
     .single();
   const conflict = conflictMessage(error, "This zone already has an open count.");
   if (conflict) {
-    const again = await tenantScoped(supabase, tenantId)
-      .from("stocktake_sessions")
-      .select("id, started_at")
-      .eq("zone_id", zoneId)
-      .eq("status", "in_progress")
-      .maybeSingle();
-    if (again.data?.id) return { ok: true, id: String(again.data.id), continued: true, started_at: again.data.started_at ? String(again.data.started_at) : null };
+    const again = await findOpenZone(supabase, tenantId, zoneId);
+    if (!again.ok) return again;
+    if (again.row) return continuedZone(again.row);
     return { ok: false, status: 409, error: conflict };
   }
   if (error) return { ok: false, status: 500, error: error.message };
   if (!created?.id) return { ok: false, status: 500, error: "Could not start the count" };
-  const scope = scopeForZone(zoneId, catalogue);
-  const snap = await writeSnapshot(supabase, tenantId, String(created.id), scope.locationIds);
+  const snap = await writeSnapshot(supabase, tenantId, String(created.id), locationIds);
   if (!snap.ok) return snap;
-  return { ok: true, id: String(created.id), continued: false, started_at: startedAt };
+  return {
+    ok: true,
+    id: String(created.id),
+    continued: false,
+    started_at: startedAt,
+    note: parentId ? WHOLE_SHOP_PART_NOTE : null,
+  };
+}
+
+export async function createZoneStocktake(
+  supabase: SupabaseClient,
+  tenantId: string,
+  userId: string,
+  zoneId: string,
+  options?: { fresh?: boolean },
+): Promise<ZoneStart> {
+  const catalogue = await loadZoneCatalogue(supabase, tenantId);
+  if (!catalogue.ok) return catalogue;
+  const zone = catalogue.zones.find((item) => item.id === zoneId);
+  if (!zone || !zone.active) return { ok: false, status: 404, error: "Zone not found" };
+  const existing = await findOpenZone(supabase, tenantId, zoneId);
+  if (!existing.ok) return existing;
+  if (existing.row?.parent_session_id) return continuedZone(existing.row);
+  if (existing.row && !options?.fresh) return continuedZone(existing.row);
+  if (existing.row && options?.fresh) {
+    const closed = await cancelSession(supabase, tenantId, userId, existing.row.id);
+    if (!closed.ok) return { ok: false, status: 500, error: closed.error };
+  }
+  const shop = await findOpenWholeShop(supabase, tenantId);
+  if (!shop.ok) return shop;
+  const scope = scopeForZone(zoneId, catalogue);
+  return insertZoneSession(supabase, tenantId, userId, zoneId, shop.id, scope.locationIds);
 }
 
 export async function createWholeShopStocktake(
@@ -2198,44 +2353,65 @@ export async function createWholeShopStocktake(
   const parentConflict = conflictMessage(error, "A whole-shop count is already open.");
   if (parentConflict) return { ok: false, status: 409, error: parentConflict };
   if (error || !created?.id) return { ok: false, status: 500, error: error?.message || "Could not start the whole-shop count" };
-  const parentId = String(created.id);
-  const units: { kind: "zone" | "location"; zoneId: string | null; locationId: string | null; locationIds: string[] }[] = [];
-  for (const zone of catalogue.zones) {
-    if (!zone.active) continue;
-    units.push({ kind: "zone", zoneId: zone.id, locationId: null, locationIds: scopeForZone(zone.id, catalogue).locationIds });
+  return { ok: true, id: String(created.id), continued: false, started_at: startedAt };
+}
+
+/** A tray with no zone, opened from the whole-shop screen. Location counts started on their own are left alone. */
+export async function openWholeShopLocationChild(
+  supabase: SupabaseClient,
+  tenantId: string,
+  userId: string,
+  parentId: string,
+  locationId: string,
+): Promise<ZoneStart> {
+  if (!isUuid(parentId) || !isUuid(locationId)) return { ok: false, status: 404, error: "Count not found" };
+  const parent = await loadSession(supabase, tenantId, parentId);
+  if (!parent.ok) return parent;
+  if (parent.session.kind !== "whole_shop" || parent.session.status !== "in_progress") {
+    return { ok: false, status: 409, error: "That whole-shop count is not open" };
   }
-  for (const tray of catalogue.trays) {
-    if (!tray.active || tray.zoneId) continue;
-    units.push({ kind: "location", zoneId: null, locationId: tray.id, locationIds: [tray.id] });
+  const { data: existing, error: existingErr } = await tenantScoped(supabase, tenantId)
+    .from("stocktake_sessions")
+    .select("id, started_at, parent_session_id")
+    .eq("parent_session_id", parentId)
+    .eq("location_id", locationId)
+    .eq("status", "in_progress")
+    .maybeSingle();
+  if (existingErr) return { ok: false, status: 500, error: existingErr.message };
+  if (existing?.id) {
+    return {
+      ok: true,
+      id: String(existing.id),
+      continued: true,
+      started_at: existing.started_at ? String(existing.started_at) : null,
+      note: WHOLE_SHOP_PART_NOTE,
+    };
   }
-  for (const unit of units) {
-    const { data: child, error: childErr } = await tenantScoped(supabase, tenantId)
-      .from("stocktake_sessions")
-      .insert({
-        kind: unit.kind,
-        zone_id: unit.zoneId,
-        location_id: unit.locationId,
-        parent_session_id: parentId,
-        status: "in_progress",
-        started_by: userId,
-        started_at: startedAt,
-      })
-      .select("id")
-      .single();
-    const childConflict = conflictMessage(childErr, unit.kind === "zone"
-      ? "This zone already has an open count."
-      : "This location already has an open count.");
-    if (childConflict || childErr || !child?.id) {
-      await deleteSession(supabase, tenantId, parentId);
-      return { ok: false, status: 409, error: childConflict || childErr?.message || "Could not open every zone" };
-    }
-    const snap = await writeSnapshot(supabase, tenantId, String(child.id), unit.locationIds);
-    if (!snap.ok) {
-      await deleteSession(supabase, tenantId, parentId);
-      return snap;
-    }
+  const startedAt = new Date().toISOString();
+  const { data: created, error } = await tenantScoped(supabase, tenantId)
+    .from("stocktake_sessions")
+    .insert({
+      kind: "location",
+      zone_id: null,
+      location_id: locationId,
+      parent_session_id: parentId,
+      status: "in_progress",
+      started_by: userId,
+      started_at: startedAt,
+    })
+    .select("id")
+    .single();
+  const conflict = conflictMessage(error, "This location already has an open count.");
+  if (conflict) {
+    const again = await openSession(supabase, tenantId, locationId);
+    if (!again.ok) return again;
+    if (again.id) return { ok: true, id: again.id, continued: true, started_at: again.started_at, note: null };
+    return { ok: false, status: 409, error: conflict };
   }
-  return { ok: true, id: parentId, continued: false, started_at: startedAt };
+  if (error || !created?.id) return { ok: false, status: 500, error: error?.message || "Could not open this location" };
+  const snap = await writeSnapshot(supabase, tenantId, String(created.id), [locationId]);
+  if (!snap.ok) return snap;
+  return { ok: true, id: String(created.id), continued: false, started_at: startedAt, note: WHOLE_SHOP_PART_NOTE };
 }
 
 export type ZoneAdmin = {

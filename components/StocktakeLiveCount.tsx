@@ -3,7 +3,7 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { liveProgress, trayCode } from "@/lib/stocktake-live";
 import { STOCKTAKE_MUTE_EVENT, setStocktakeMuted, stocktakeMuted } from "@/lib/stocktake-audio";
-import type { StocktakePayload, StocktakeRow } from "@/lib/rfid-stocktake";
+import type { MoveTarget, StocktakePayload, StocktakeRow } from "@/lib/rfid-stocktake";
 import { PieceThumb } from "@/components/PieceThumb";
 
 export function StocktakeLiveCount({
@@ -19,6 +19,13 @@ export function StocktakeLiveCount({
   movingId,
   onMoveHere,
   onFind,
+  confirmPieceId,
+  moveError,
+  moveTargetId,
+  moveTargets,
+  onMoveTargetId,
+  onConfirmMove,
+  onCancelMove,
 }: {
   payload: StocktakePayload;
   heardPieceIds: ReadonlySet<string>;
@@ -32,9 +39,20 @@ export function StocktakeLiveCount({
   movingId: string | null;
   onMoveHere: (row: StocktakeRow) => void;
   onFind: (row: StocktakeRow) => void;
+  confirmPieceId: string | null;
+  moveError: string;
+  moveTargetId: string;
+  moveTargets: MoveTarget[];
+  onMoveTargetId: (id: string) => void;
+  onConfirmMove: (row: StocktakeRow) => void;
+  onCancelMove: () => void;
 }) {
   const progress = liveProgress(payload, heardPieceIds);
   const [foundOpen, setFoundOpen] = useState(false);
+  const movedTick = progress.foundRows.some((row) => (row.detail || "").includes("✓"));
+  useEffect(() => {
+    if (movedTick) setFoundOpen(true);
+  }, [movedTick]);
   const [muted, setMuted] = useState(false);
   useEffect(() => {
     const sync = () => setMuted(stocktakeMuted());
@@ -105,6 +123,9 @@ export function StocktakeLiveCount({
       >
         Found ({progress.found}) {foundOpen ? "▾" : "▸"}
       </button>
+      {progress.groups.found.filter((row) => (row.detail || "").includes("✓") && !progress.foundRows.some((found) => found.pieceId && found.pieceId === row.pieceId)).map((row) => (
+        <StillRow key={row.key} row={row} tray={null} extra={row.detail} />
+      ))}
       {foundOpen && (
         <div style={{ display: "flex", flexDirection: "column" }}>
           {progress.foundRows.length === 0 && <p style={empty}>None yet.</p>}
@@ -124,6 +145,14 @@ export function StocktakeLiveCount({
         allowMove={allowMove}
         movingId={movingId}
         onMoveHere={onMoveHere}
+        confirmPieceId={confirmPieceId}
+        moveError={moveError}
+        zoneCount={zoneCount}
+        moveTargetId={moveTargetId}
+        moveTargets={moveTargets}
+        onMoveTargetId={onMoveTargetId}
+        onConfirmMove={onConfirmMove}
+        onCancelMove={onCancelMove}
       />
       <Extra title="Not in stock" rows={progress.groups.notInStock} />
       <Unknown rows={progress.groups.unknown} blank={progress.groups.blank} />
@@ -214,12 +243,28 @@ function Elsewhere({
   allowMove,
   movingId,
   onMoveHere,
+  confirmPieceId,
+  moveError,
+  zoneCount,
+  moveTargetId,
+  moveTargets,
+  onMoveTargetId,
+  onConfirmMove,
+  onCancelMove,
 }: {
   rows: StocktakeRow[];
   countLocationId: string | null;
   allowMove: boolean;
   movingId: string | null;
   onMoveHere: (row: StocktakeRow) => void;
+  confirmPieceId: string | null;
+  moveError: string;
+  zoneCount: boolean;
+  moveTargetId: string;
+  moveTargets: MoveTarget[];
+  onMoveTargetId: (id: string) => void;
+  onConfirmMove: (row: StocktakeRow) => void;
+  onCancelMove: () => void;
 }) {
   if (!rows.length) return null;
   return (
@@ -227,17 +272,46 @@ function Elsewhere({
       <h2 style={sectionTitle}>Somewhere else ({rows.length})</h2>
       {rows.map((row) => {
         const samePlace = !!countLocationId && row.locationId === countLocationId;
+        const confirming = !!row.pieceId && confirmPieceId === row.pieceId;
+        const busy = movingId === row.pieceId;
+        const sameZone = (row.detail || "").includes("(same zone)");
+        const place = row.detail || row.locationName || "No location";
         return (
-          <div key={row.key} style={rowStyle}>
+          <div key={row.key} style={{ ...rowStyle, flexWrap: "wrap" }}>
             <PieceThumb pieceId={row.pieceId} />
             <div style={{ flex: "1 1 0", minWidth: 0 }}>
               <div style={{ fontFamily: "monospace", fontSize: 16, fontWeight: 700 }}>{row.sku || row.epc || "—"}</div>
-              <div style={{ fontSize: 13, color: "#4B5563", marginTop: 2 }}>{row.locationName || "No location"}</div>
+              <div style={{ fontSize: 13, marginTop: 2, color: sameZone ? "#6B7280" : "#111827", fontWeight: sameZone ? 400 : 600 }}>{place}</div>
             </div>
-            {allowMove && row.pieceId && !row.movedHere && !samePlace && (
-              <button type="button" onClick={() => onMoveHere(row)} disabled={movingId === row.pieceId} style={seenButton}>
-                {movingId === row.pieceId ? "…" : "Move here"}
+            {allowMove && row.pieceId && !row.movedHere && !samePlace && !confirming && (
+              <button type="button" onClick={() => onMoveHere(row)} disabled={busy} style={seenButton}>
+                {busy ? "Moving…" : "Move here"}
               </button>
+            )}
+            {confirming && (
+              <div style={{ flex: "1 0 100%", display: "flex", flexDirection: "column", gap: 8, padding: "4px 0 8px" }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>Move {row.sku || "this piece"} here?</div>
+                {zoneCount && (
+                  <select aria-label="Tray" value={moveTargetId} onChange={(event) => onMoveTargetId(event.target.value)} style={{ width: "100%", minHeight: 48, fontSize: 16 }}>
+                    <option value="">Choose a tray</option>
+                    {moveTargets.map((target) => (
+                      <option key={target.id} value={target.id}>{target.label}</option>
+                    ))}
+                  </select>
+                )}
+                {moveError && <div style={{ background: "#FEF2F2", color: "#991B1B", borderRadius: 8, padding: "8px 10px", fontSize: 14 }}>{moveError}</div>}
+                <button
+                  type="button"
+                  disabled={busy || (zoneCount && !moveTargetId)}
+                  onClick={() => onConfirmMove(row)}
+                  style={{ ...seenButton, background: "#111827", color: "#fff", minHeight: 48 }}
+                >
+                  {busy ? "Moving…" : "Confirm move"}
+                </button>
+                <button type="button" disabled={busy} onClick={onCancelMove} style={{ ...seenButton, minHeight: 48 }}>
+                  Cancel
+                </button>
+              </div>
             )}
           </div>
         );

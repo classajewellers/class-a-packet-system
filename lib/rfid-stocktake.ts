@@ -121,12 +121,30 @@ export type StocktakeSession = {
 };
 
 export type StocktakeUnit = {
-  id: string;
+  /** Null until this zone or tray is opened and its snapshot is taken. */
+  id: string | null;
   kind: "location" | "zone";
   name: string;
   status: StocktakeStatus;
   counts: StocktakeCounts;
+  started: boolean;
+  zoneId?: string | null;
+  locationId?: string | null;
 };
+
+export const WHOLE_SHOP_PART_NOTE = "Part of the whole-shop count";
+
+export function wholeShopProgressLabel(started: number, total: number): string {
+  return `Whole shop · ${started} of ${total} zones started`;
+}
+
+export function sameZonePlaceDetail(place: string): string {
+  return `In ${place} (same zone) — probably not moved`;
+}
+
+export function movedHereDetail(place: string): string {
+  return `Moved to ${place} ✓`;
+}
 
 export type MoveTarget = { id: string; label: string };
 
@@ -189,6 +207,24 @@ export function classifyStocktakeHit(input: {
   if (input.status !== IN_STOCK_STATUS) return "not_in_stock";
   if (input.locationId === input.countLocationId) return "found";
   return "wrong_location";
+}
+
+/** Softer label when a location-count read is still inside the counted zone. */
+export function annotateSameZoneLines(
+  lines: StoredLine[],
+  countLocationId: string,
+  trays: readonly { id: string; code: string | null; zoneId: string | null }[],
+): StoredLine[] {
+  const byId = new Map(trays.map((tray) => [tray.id, tray]));
+  const zoneId = byId.get(countLocationId)?.zoneId ?? null;
+  if (!zoneId) return lines;
+  return lines.map((line) => {
+    if (line.result !== "wrong_location" || !line.locationId || line.detail) return line;
+    const tray = byId.get(line.locationId);
+    if (!tray?.zoneId || tray.zoneId !== zoneId) return line;
+    const place = (tray.code || "").trim() || "this tray";
+    return { ...line, detail: sameZonePlaceDetail(place) };
+  });
 }
 
 /** A zone read is found on any tray in the zone. A different tray is wrong_tray. */
@@ -530,6 +566,68 @@ function storedFromGroup(rows: StocktakeRow[] | undefined, result: StoredResult)
     locationId: row.locationId,
     detail: row.detail ?? null,
   }));
+}
+
+/**
+ * A successful Move here updates the open count before the next full load.
+ * The piece leaves Somewhere else and shows up under Found with a clear tick.
+ */
+export function noteMovedHere(
+  payload: StocktakePayload,
+  pieceId: string,
+  destination: { id: string | null; label: string },
+): StocktakePayload {
+  const detail = movedHereDetail(destination.label);
+  const lines = linesFromGroups(payload.groups).map((line) => {
+    if (line.pieceId !== pieceId) return line;
+    if (line.result !== "wrong_location" && line.result !== "nearby_zone") return line;
+    return {
+      ...line,
+      result: "found" as const,
+      locationId: destination.id,
+      locationName: destination.label,
+      detail,
+    };
+  });
+  const snapshot = payload.snapshot
+    ? payload.snapshot.map((piece) => (
+      piece.pieceId === pieceId
+        ? {
+          ...piece,
+          liveLocationId: destination.id,
+          liveLocationLabel: destination.label,
+          resolvedLocationId: destination.id,
+        }
+        : piece
+    ))
+    : payload.snapshot;
+  if (snapshot) {
+    const view = assembleStocktake({
+      lines,
+      countLocationId: payload.stocktake.location_id ?? "",
+      snapshot,
+      v1Missing: [],
+      scopeLocationIds: payload.scopeLocationIds,
+    });
+    return { ...payload, groups: view.groups, counts: view.counts, snapshot };
+  }
+  const scanned = new Set<string>();
+  for (const line of lines) {
+    if (line.pieceId) scanned.add(line.pieceId);
+  }
+  const missing: ExpectedPiece[] = [];
+  for (const row of payload.groups.missing) {
+    if (!row.pieceId || scanned.has(row.pieceId)) continue;
+    missing.push({
+      pieceId: row.pieceId,
+      sku: row.sku,
+      metal: row.metal,
+      status: row.status,
+      locationName: row.locationName,
+    });
+  }
+  const view = buildStocktakeGroups(lines, missing, payload.stocktake.location_id ?? "");
+  return { ...payload, groups: view.groups, counts: view.counts, snapshot: null };
 }
 
 export function linesFromGroups(groups: StocktakeGroups): StoredLine[] {

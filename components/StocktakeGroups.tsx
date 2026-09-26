@@ -2,7 +2,7 @@
 
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { FALLBACK_STATUS_OPTIONS } from "@/lib/pieceResolution";
-import { formatNotTaggedSummary, formatResolvedSummary, formatStocktakeCounts, NEARBY_READ_DETAIL, type StocktakeCounts, type StocktakeGroups, type StocktakeRow } from "@/lib/rfid-stocktake";
+import { formatNotTaggedSummary, formatResolvedSummary, formatStocktakeCounts, NEARBY_READ_DETAIL, type MoveTarget, type StocktakeCounts, type StocktakeGroups, type StocktakeRow } from "@/lib/rfid-stocktake";
 
 function statusLabel(value: string | null): string {
   if (!value) return "";
@@ -68,6 +68,14 @@ export function StocktakeGroupsView({
   seeingId,
   onSeen,
   onFind,
+  confirmPieceId,
+  moveError,
+  zoneCount,
+  moveTargetId,
+  moveTargets,
+  onMoveTargetId,
+  onConfirmMove,
+  onCancelMove,
 }: {
   groups: StocktakeGroups;
   counts: StocktakeCounts;
@@ -79,6 +87,14 @@ export function StocktakeGroupsView({
   seeingId?: string | null;
   onSeen?: (row: StocktakeRow, seen: boolean) => void;
   onFind?: (row: StocktakeRow) => void;
+  confirmPieceId?: string | null;
+  moveError?: string;
+  zoneCount?: boolean;
+  moveTargetId?: string;
+  moveTargets?: MoveTarget[];
+  onMoveTargetId?: (id: string) => void;
+  onConfirmMove?: (row: StocktakeRow) => void;
+  onCancelMove?: () => void;
 }) {
   const notTagged = groups.notTagged ?? [];
   const soldDuring = groups.soldDuring ?? [];
@@ -167,20 +183,43 @@ export function StocktakeGroupsView({
         {groups.elsewhere.map((row) => {
           const where = row.locationName || "No location";
           const samePlace = !!countLocationId && row.locationId === countLocationId;
+          const sameZone = (row.detail || "").includes("(same zone)");
+          const confirming = !!row.pieceId && confirmPieceId === row.pieceId;
+          const busy = movingId === row.pieceId;
+          const place = row.movedHere ? `Was ${where}. Moved here.` : (row.detail || `Vault: ${where}`);
           return (
             <PieceRow
               key={row.key}
               row={row}
-              extra={row.movedHere ? `Was ${where}. Moved here.` : `Vault: ${where}`}
+              extra={place}
               action={allowMove && row.pieceId && !row.movedHere && !samePlace ? (
-                <button
-                  type="button"
-                  onClick={() => onMoveHere?.(row)}
-                  disabled={movingId === row.pieceId}
-                  style={moveButton}
-                >
-                  {movingId === row.pieceId ? "Moving…" : "Move here"}
-                </button>
+                confirming ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: sameZone ? "#6B7280" : "#111827" }}>Move {row.sku || "this piece"} here?</div>
+                    {zoneCount && (
+                      <select aria-label="Tray" value={moveTargetId || ""} onChange={(event) => onMoveTargetId?.(event.target.value)} style={{ width: "100%", minHeight: 48, fontSize: 16 }}>
+                        <option value="">Choose a tray</option>
+                        {(moveTargets ?? []).map((target) => (
+                          <option key={target.id} value={target.id}>{target.label}</option>
+                        ))}
+                      </select>
+                    )}
+                    {moveError && <div style={{ background: "#FEF2F2", color: "#991B1B", borderRadius: 8, padding: "8px 10px", fontSize: 14 }}>{moveError}</div>}
+                    <button type="button" disabled={busy || (zoneCount && !moveTargetId)} onClick={() => onConfirmMove?.(row)} style={moveButton}>
+                      {busy ? "Moving…" : "Confirm move"}
+                    </button>
+                    <button type="button" disabled={busy} onClick={() => onCancelMove?.()} style={undoButton}>Cancel</button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onMoveHere?.(row)}
+                    disabled={busy}
+                    style={moveButton}
+                  >
+                    {busy ? "Moving…" : "Move here"}
+                  </button>
+                )
               ) : null}
             />
           );

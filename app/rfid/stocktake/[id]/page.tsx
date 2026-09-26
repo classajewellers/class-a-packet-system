@@ -7,7 +7,7 @@ import { useUser } from "@/context/UserContext";
 import { canManage } from "@/lib/userTypes";
 import { splitScanBuffer } from "@/lib/rfid-scan";
 import { useScanBatch } from "@/lib/useRfidScan";
-import { absorbStocktakeScans, applyUntaggedSeen, formatStocktakeCounts, type SnapshotPiece, type StocktakePayload, type StoredLine, type StocktakeRow } from "@/lib/rfid-stocktake";
+import { absorbStocktakeScans, applyUntaggedSeen, formatStocktakeCounts, movedHereDetail, noteMovedHere, WHOLE_SHOP_PART_NOTE, type SnapshotPiece, type StocktakePayload, type StocktakeUnit, type StoredLine, type StocktakeRow } from "@/lib/rfid-stocktake";
 import { StocktakeGroupsView } from "@/components/StocktakeGroups";
 import { StocktakeLiveCount } from "@/components/StocktakeLiveCount";
 import { StocktakeFinder } from "@/components/StocktakeFinder";
@@ -34,6 +34,8 @@ export default function StocktakeCountPage() {
   const [finishing, setFinishing] = useState(false);
   const [movingId, setMovingId] = useState<string | null>(null);
   const [pendingMove, setPendingMove] = useState<StocktakeRow | null>(null);
+  const [moveError, setMoveError] = useState("");
+  const [openingKey, setOpeningKey] = useState<string | null>(null);
   const [moveTargetId, setMoveTargetId] = useState("");
   const [seeingId, setSeeingId] = useState<string | null>(null);
   const [startingFresh, setStartingFresh] = useState(false);
@@ -178,10 +180,17 @@ export default function StocktakeCountPage() {
     setDraft(rest);
   }
 
+  function destinationLabel(toLocationId: string): string {
+    const target = payloadRef.current?.moveTargets?.find((item) => item.id === toLocationId)?.label;
+    const named = target || payloadRef.current?.stocktake.location_name || "";
+    return trayCode(named) || named || "here";
+  }
+
   async function moveHere(row: StocktakeRow, toLocationId: string) {
     if (!payload || !row.pieceId || !toLocationId) return;
     setMovingId(row.pieceId);
     setError("");
+    setMoveError("");
     const res = await fetch("/api/rfid/stocktake/move", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -194,11 +203,47 @@ export default function StocktakeCountPage() {
     const json = await res.json().catch(() => ({}));
     setMovingId(null);
     if (!res.ok) {
-      setError(json.error || "Could not move the piece");
+      const message = json.error || "Could not move the piece";
+      setError(message);
+      setMoveError(message);
       return;
     }
+    const label = destinationLabel(toLocationId);
+    const pieceId = row.pieceId;
+    setPayload((prev) => {
+      if (!prev) return prev;
+      const next = noteMovedHere(prev, pieceId, { id: toLocationId, label });
+      payloadRef.current = next;
+      return next;
+    });
     setPendingMove(null);
-    await load();
+    setToast(movedHereDetail(label));
+    window.setTimeout(() => setToast(""), 2200);
+  }
+
+  async function openUnit(unit: StocktakeUnit) {
+    if (unit.started && unit.id) {
+      router.push(`/rfid/stocktake/${unit.id}`);
+      return;
+    }
+    const key = unit.zoneId || unit.locationId || unit.name;
+    setOpeningKey(key);
+    setError("");
+    const body = unit.kind === "zone"
+      ? { zone_id: unit.zoneId }
+      : { location_id: unit.locationId, shop_parent: id };
+    const res = await fetch("/api/rfid/stocktake", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json.id) {
+      setError(json.error || "Could not open this zone");
+      setOpeningKey(null);
+      return;
+    }
+    router.push(`/rfid/stocktake/${json.id}`);
   }
 
   async function markSeen(row: StocktakeRow, seen: boolean) {
@@ -318,7 +363,9 @@ export default function StocktakeCountPage() {
         <p key={warning} style={{ background: "#FFFBEB", color: "#92400E", borderRadius: 10, padding: "12px 14px" }}>{warning}</p>
       ))}
       {session?.parent_session_id && (
-        <p style={{ margin: "0 0 12px" }}>
+        <p style={{ margin: "0 0 12px", color: "#374151" }}>
+          {WHOLE_SHOP_PART_NOTE}
+          {" · "}
           <Link href={`/rfid/stocktake/${session.parent_session_id}`} style={{ color: "#111827", fontWeight: 700 }}>Back to whole-shop count</Link>
         </p>
       )}
@@ -380,38 +427,30 @@ export default function StocktakeCountPage() {
       )}
       {wholeShop && payload?.units && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {payload.units.map((unit) => (
-            <Link key={unit.id} href={`/rfid/stocktake/${unit.id}`} style={unitCard}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{unit.name}</div>
-              <div style={{ fontSize: 14, color: "#374151", marginTop: 4 }}>{formatStocktakeCounts(unit.counts)}</div>
-            </Link>
-          ))}
+          {payload.units.map((unit) => {
+            const key = unit.id || unit.zoneId || unit.locationId || unit.name;
+            if (unit.started && unit.id) {
+              return (
+                <Link key={key} href={`/rfid/stocktake/${unit.id}`} style={unitCard}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{unit.name}</div>
+                  <div style={{ fontSize: 14, color: "#374151", marginTop: 4 }}>{formatStocktakeCounts(unit.counts)}</div>
+                </Link>
+              );
+            }
+            return (
+              <button
+                key={key}
+                type="button"
+                disabled={!open || openingKey === key}
+                onClick={() => { void openUnit(unit); }}
+                style={{ ...unitCard, textAlign: "left", width: "100%", cursor: "pointer" }}
+              >
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{unit.name}</div>
+                <div style={{ fontSize: 14, color: "#6B7280", marginTop: 4 }}>{openingKey === key ? "Opening…" : "Not started"}</div>
+              </button>
+            );
+          })}
           {payload.units.length === 0 && <p style={{ color: "#6B7280" }}>No zones to count.</p>}
-        </div>
-      )}
-      {pendingMove && (
-        <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 12, padding: 14, marginBottom: 12 }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>Move {pendingMove.sku || "this piece"} here?</div>
-          <p style={{ fontSize: 14, color: "#374151", margin: "8px 0" }}>This writes a movement. The piece status does not change.</p>
-          {session?.kind === "zone" && (
-            <select aria-label="Tray" value={moveTargetId} onChange={(event) => setMoveTargetId(event.target.value)} style={{ width: "100%", minHeight: 48, fontSize: 16, marginBottom: 8 }}>
-              <option value="">Choose a tray</option>
-              {(payload?.moveTargets ?? []).map((target) => (
-                <option key={target.id} value={target.id}>{target.label}</option>
-              ))}
-            </select>
-          )}
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <button
-              type="button"
-              disabled={!pendingMove || movingId === pendingMove.pieceId || (session?.kind === "zone" ? !moveTargetId : !session?.location_id)}
-              onClick={() => { void moveHere(pendingMove, session?.kind === "zone" ? moveTargetId : (session?.location_id || "")); }}
-              style={{ ...primaryButton, width: "100%" }}
-            >
-              {movingId ? "Moving…" : "Confirm move"}
-            </button>
-            <button type="button" onClick={() => setPendingMove(null)} style={{ ...secondaryButton, width: "100%" }}>Cancel</button>
-          </div>
         </div>
       )}
       {payload && !wholeShop && Array.isArray(payload.snapshot) && (
@@ -426,7 +465,14 @@ export default function StocktakeCountPage() {
           onSeen={(row, seen) => { void markSeen(row, seen); }}
           allowMove={open}
           movingId={movingId}
-          onMoveHere={(row) => { setPendingMove(row); setMoveTargetId(""); }}
+          onMoveHere={(row) => { setPendingMove(row); setMoveTargetId(""); setMoveError(""); }}
+          confirmPieceId={pendingMove?.pieceId ?? null}
+          moveError={moveError}
+          moveTargetId={moveTargetId}
+          moveTargets={payload.moveTargets ?? []}
+          onMoveTargetId={setMoveTargetId}
+          onConfirmMove={(row) => { void moveHere(row, session?.kind === "zone" ? moveTargetId : (session?.location_id || "")); }}
+          onCancelMove={() => { setPendingMove(null); setMoveError(""); }}
           onFind={openFinder}
         />
       )}
@@ -437,7 +483,15 @@ export default function StocktakeCountPage() {
           countLocationId={session?.location_id ?? null}
           allowMove={open}
           movingId={movingId}
-          onMoveHere={(row) => { setPendingMove(row); setMoveTargetId(""); }}
+          onMoveHere={(row) => { setPendingMove(row); setMoveTargetId(""); setMoveError(""); }}
+          confirmPieceId={pendingMove?.pieceId ?? null}
+          moveError={moveError}
+          zoneCount={session?.kind === "zone"}
+          moveTargetId={moveTargetId}
+          moveTargets={payload.moveTargets ?? []}
+          onMoveTargetId={setMoveTargetId}
+          onConfirmMove={(row) => { void moveHere(row, session?.kind === "zone" ? moveTargetId : (session?.location_id || "")); }}
+          onCancelMove={() => { setPendingMove(null); setMoveError(""); }}
           allowSeen={open}
           seeingId={seeingId}
           onSeen={(row, seen) => { void markSeen(row, seen); }}
@@ -463,7 +517,7 @@ export default function StocktakeCountPage() {
           <p style={{ marginTop: 20, color: "#4B5563", fontSize: 15 }}>A manager finishes the count.</p>
         )
       )}
-      <style>{`.stocktake-page { max-width: 720px; margin: 0 auto; overflow-x: hidden; padding-bottom: 96px; } .stocktake-skel { background: #E5E7EB; border-radius: 10px; animation: stocktake-pulse 1.2s ease-in-out infinite; } @keyframes stocktake-pulse { 50% { opacity: 0.45; } }`}</style>
+      <style>{`.stocktake-page { max-width: 720px; margin: 0 auto; overflow-x: hidden; padding-bottom: 128px; } .stocktake-skel { background: #E5E7EB; border-radius: 10px; animation: stocktake-pulse 1.2s ease-in-out infinite; } @keyframes stocktake-pulse { 50% { opacity: 0.45; } }`}</style>
     </div>
   );
 }

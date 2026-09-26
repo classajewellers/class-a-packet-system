@@ -5,7 +5,17 @@
 import assert from "node:assert/strict";
 import { classifyRead, expectedEpcSet, liveProgress, proximityGapMs, readsPerSecond, trayCode } from "../lib/stocktake-live.ts";
 import { epcsFromLines } from "../lib/rfid-scan.ts";
-import { assembleStocktake, type SnapshotPiece, type StocktakePayload } from "../lib/rfid-stocktake.ts";
+import {
+  annotateSameZoneLines,
+  assembleStocktake,
+  movedHereDetail,
+  noteMovedHere,
+  sameZonePlaceDetail,
+  wholeShopProgressLabel,
+  type SnapshotPiece,
+  type StocktakePayload,
+  type StoredLine,
+} from "../lib/rfid-stocktake.ts";
 
 const epc = (n: number) => n.toString(16).padStart(24, "0");
 
@@ -93,5 +103,55 @@ assert.ok(proximityGapMs(0) > proximityGapMs(2));
 assert.ok(proximityGapMs(2) > proximityGapMs(8));
 const repeated = epcsFromLines([epc(1), epc(1), epc(2)]);
 assert.deepEqual(repeated, [epc(1), epc(1), epc(2)]);
+
+assert.equal(wholeShopProgressLabel(0, 32), "Whole shop · 0 of 32 zones started");
+assert.equal(wholeShopProgressLabel(32, 32), "Whole shop · 32 of 32 zones started");
+assert.equal(sameZonePlaceDetail("HA1"), "In HA1 (same zone) — probably not moved");
+assert.equal(movedHereDetail("HA2"), "Moved to HA2 ✓");
+
+const trays = [
+  { id: "ha1", code: "HA1", zoneId: "ha" },
+  { id: "ha2", code: "HA2", zoneId: "ha" },
+  { id: "hb1", code: "HB1", zoneId: "hb" },
+];
+const elsewhereLine: StoredLine = {
+  id: "scan-1",
+  epc: epc(9),
+  sku: "RING-02",
+  pieceId: "ring-02",
+  result: "wrong_location",
+  metal: null,
+  status: "in_stock",
+  locationName: "HA1 · Horseshoe A1",
+  locationId: "ha1",
+};
+const farLine: StoredLine = { ...elsewhereLine, id: "scan-2", pieceId: "ring-far", sku: "FAR", locationId: "hb1", locationName: "HB1" };
+const annotated = annotateSameZoneLines([elsewhereLine, farLine], "ha2", trays);
+assert.equal(annotated[0].detail, "In HA1 (same zone) — probably not moved");
+assert.equal(annotated[1].detail, undefined);
+
+const movePayload: StocktakePayload = {
+  stocktake: {
+    id: "count",
+    status: "in_progress",
+    kind: "location",
+    location_id: "ha2",
+    location_name: "HA2 · Horseshoe A2",
+    started_at: "2026-09-26T01:00:00.000Z",
+    finished_at: null,
+    started_by_name: null,
+    finished_by_name: null,
+  },
+  groups: assembleStocktake({ lines: [elsewhereLine], countLocationId: "ha2", snapshot: [], v1Missing: [] }).groups,
+  counts: assembleStocktake({ lines: [elsewhereLine], countLocationId: "ha2", snapshot: [], v1Missing: [] }).counts,
+  warnings: [],
+  snapshot: [],
+};
+assert.equal(movePayload.groups.elsewhere.length, 1);
+const moved = noteMovedHere(movePayload, "ring-02", { id: "ha2", label: "HA2" });
+assert.equal(moved.groups.elsewhere.length, 0);
+assert.equal(moved.groups.found.length, 1);
+assert.equal(moved.groups.found[0].detail, "Moved to HA2 ✓");
+assert.equal(moved.groups.found[0].sku, "RING-02");
 
 console.log("stocktake-live-test: ok");

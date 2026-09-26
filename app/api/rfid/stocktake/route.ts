@@ -3,7 +3,7 @@ import { requireAuth } from "@/lib/require-auth";
 import { createTenantSupabaseClient } from "@/lib/supabase-server";
 import { STOCKTAKE_SETUP_MESSAGE } from "@/lib/rfid-stocktake";
 import { isUuid } from "@/lib/load-locations";
-import { cancelStocktake, createStocktake, createWholeShopStocktake, createZoneStocktake, listStocktakes } from "@/lib/rfid-stocktake-server";
+import { cancelStocktake, createStocktake, createWholeShopStocktake, createZoneStocktake, listStocktakes, openWholeShopLocationChild } from "@/lib/rfid-stocktake-server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -43,15 +43,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (!manager) return NextResponse.json({ error: "Only a manager can start a whole-shop count" }, { status: 403 });
     const result = await createWholeShopStocktake(supabase, auth.ctx.tenantId, auth.ctx.userId, { fresh });
     if (!result.ok) return fail(result);
-    return NextResponse.json({ id: result.id, continued: result.continued, started_at: result.started_at });
+    return NextResponse.json({ id: result.id, continued: result.continued, started_at: result.started_at, note: null });
   }
   const zoneId = isUuid(body?.zone_id) ? body.zone_id : "";
   if (zoneId) {
     const result = await createZoneStocktake(supabase, auth.ctx.tenantId, auth.ctx.userId, zoneId, { fresh });
     if (!result.ok) return fail(result);
-    return NextResponse.json({ id: result.id, continued: result.continued, started_at: result.started_at });
+    return NextResponse.json({ id: result.id, continued: result.continued, started_at: result.started_at, note: result.note });
   }
   const locationId = isUuid(body?.location_id) ? body.location_id : "";
+  const shopParent = isUuid(body?.shop_parent) ? body.shop_parent : "";
+  if (locationId && shopParent) {
+    const result = await openWholeShopLocationChild(supabase, auth.ctx.tenantId, auth.ctx.userId, shopParent, locationId);
+    if (!result.ok) return fail(result);
+    return NextResponse.json({ id: result.id, continued: result.continued, started_at: result.started_at, note: result.note });
+  }
   if (!locationId) return NextResponse.json({ error: "location_id is required" }, { status: 400 });
   const result = await createStocktake(supabase, auth.ctx.tenantId, auth.ctx.userId, locationId, { fresh });
   if (!result.ok) return fail(result);
